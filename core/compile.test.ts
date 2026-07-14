@@ -11,6 +11,7 @@ function profile(overrides: Partial<Profile> = {}): Profile {
     shortLabel: 'T',
     color: '#2563eb',
     modifications: [],
+    filters: [],
     ...overrides,
   };
 }

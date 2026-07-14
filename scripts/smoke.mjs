@@ -24,7 +24,7 @@ function record(name, ok, detail) {
 
 async function startEchoServer() {
   const server = http.createServer((req, res) => {
-    if (req.url === '/headers') {
+    if (req.url.startsWith('/headers')) {
       res.setHeader('content-type', 'application/json');
       res.end(JSON.stringify(req.headers));
       return;
@@ -36,11 +36,14 @@ async function startEchoServer() {
   return { server, port: server.address().port };
 }
 
-async function fetchEchoHeaders(page) {
-  return page.evaluate(async () => {
-    const res = await fetch('/headers', { cache: 'no-store' });
-    return res.json();
-  });
+async function fetchEchoHeaders(page, path = '/headers', method = 'GET') {
+  return page.evaluate(
+    async ({ path, method }) => {
+      const res = await fetch(path, { cache: 'no-store', method });
+      return res.json();
+    },
+    { path, method },
+  );
 }
 
 async function pollSessionRuleCount(sw, expected, timeoutMs = 5000) {
@@ -274,6 +277,82 @@ try {
   headers = await fetchEchoHeaders(page);
   record('D4: Resume → 이전 활성 상태 그대로 복원', headers['x-conf'] === 'top-wins',
     `x-conf=${headers['x-conf']}`);
+
+  // ---------- E. 이슈 05: 네이티브 Filter ----------
+  const seedProfiles = (profiles) =>
+    sw.evaluate(async (p) => {
+      await chrome.storage.local.set({ state: { schemaVersion: 1, paused: false, profiles: p } });
+    }, profiles);
+
+  const baseProfile = (id, name, mods, filters) => ({
+    id,
+    name,
+    active: true,
+    shortLabel: name.charAt(0),
+    color: '#2563eb',
+    modifications: mods,
+    filters,
+  });
+
+  // E1: URL Filter가 적용 범위를 좁힌다
+  await seedProfiles([
+    baseProfile('p-url', 'UrlF',
+      [{ kind: 'request-header', id: 'm1', name: 'X-F5', value: 'on', enabled: true }],
+      [{ kind: 'url', id: 'f1', enabled: true, pattern: 'tagged' }]),
+  ]);
+  await pollSessionRuleCount(sw, 1);
+  const tagged = await fetchEchoHeaders(page, '/headers?tagged=1');
+  const untagged = await fetchEchoHeaders(page, '/headers');
+  record('E1: URL Filter — 매칭 요청에만 적용', tagged['x-f5'] === 'on' && untagged['x-f5'] === undefined,
+    `tagged=${tagged['x-f5']}, untagged=${untagged['x-f5']}`);
+
+  // E2: Exclude URL Filter + 하향 전파 — 아래 Profile의 수정까지 해당 URL에서 차단
+  await seedProfiles([
+    baseProfile('p-top', 'Top',
+      [{ kind: 'request-header', id: 't1', name: 'X-Top', value: '1', enabled: true }],
+      [{ kind: 'exclude-url', id: 'f1', enabled: true, pattern: 'blocked' }]),
+    baseProfile('p-bottom', 'Bot',
+      [{ kind: 'request-header', id: 'b1', name: 'X-Bottom', value: '1', enabled: true }],
+      []),
+  ]);
+  await pollSessionRuleCount(sw, 3); // allow 1 + modify 2
+  const normal = await fetchEchoHeaders(page, '/headers');
+  const excluded = await fetchEchoHeaders(page, '/headers?blocked=1');
+  record('E2: Exclude — 매칭 URL에서 자기+하위 Profile 수정 차단',
+    normal['x-top'] === '1' && normal['x-bottom'] === '1' &&
+    excluded['x-top'] === undefined && excluded['x-bottom'] === undefined,
+    `normal=[${normal['x-top']},${normal['x-bottom']}], excluded=[${excluded['x-top']},${excluded['x-bottom']}]`);
+
+  // E3: Request Method Filter
+  await seedProfiles([
+    baseProfile('p-method', 'Meth',
+      [{ kind: 'request-header', id: 'm1', name: 'X-Post-Only', value: 'on', enabled: true }],
+      [{ kind: 'request-method', id: 'f1', enabled: true, methods: ['post'] }]),
+  ]);
+  await pollSessionRuleCount(sw, 1);
+  const viaGet = await fetchEchoHeaders(page, '/headers');
+  const viaPost = await fetchEchoHeaders(page, '/headers', 'POST');
+  record('E3: Method Filter — POST에만 적용', viaGet['x-post-only'] === undefined && viaPost['x-post-only'] === 'on',
+    `GET=${viaGet['x-post-only']}, POST=${viaPost['x-post-only']}`);
+
+  // E4: 유효하지 않은 regex는 저장 시점(권위 경로)에 거부된다
+  const rejection = await popup.evaluate(async () => {
+    return chrome.runtime.sendMessage({
+      type: 'headerkit:command',
+      command: {
+        type: 'add-filter',
+        profileId: 'p-method',
+        filter: { kind: 'url', id: 'bad', enabled: true, pattern: '(unclosed' },
+      },
+    });
+  });
+  const stateAfter = await sw.evaluate(async () => {
+    const { state } = await chrome.storage.local.get('state');
+    return state.profiles[0].filters.length;
+  });
+  record('E4: invalid regex 명령이 오류로 거부되고 저장되지 않음',
+    rejection?.ok === false && /regex/i.test(rejection?.error ?? '') && stateAfter === 1,
+    `ok=${rejection?.ok}, error="${rejection?.error}", filters=${stateAfter}`);
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

@@ -1,4 +1,4 @@
-import type { Modification, Profile, StoredState } from './schema';
+import type { Filter, Modification, Profile, StoredState } from './schema';
 
 export interface ProfileMeta {
   name: string;
@@ -122,6 +122,31 @@ export function setPaused(state: StoredState, paused: boolean): StoredState {
   return { ...state, paused };
 }
 
+export function addFilter(state: StoredState, profileId: string, filter: Filter): StoredState {
+  return withProfile(state, profileId, (profile) => ({
+    ...profile,
+    filters: [...profile.filters, filter],
+  }));
+}
+
+export function updateFilter(state: StoredState, profileId: string, next: Filter): StoredState {
+  return withProfile(state, profileId, (profile) => ({
+    ...profile,
+    filters: profile.filters.map((f) => (f.id === next.id ? next : f)),
+  }));
+}
+
+export function removeFilter(
+  state: StoredState,
+  profileId: string,
+  filterId: string,
+): StoredState {
+  return withProfile(state, profileId, (profile) => ({
+    ...profile,
+    filters: profile.filters.filter((f) => f.id !== filterId),
+  }));
+}
+
 /**
  * UI·Import·Restore가 background(단일 writer)로 보내는 직렬화 가능한 명령.
  * 전이 로직은 위의 순수 함수들이고, 이 union은 그 메시지 표현이다.
@@ -136,7 +161,10 @@ export type Command =
   | { type: 'set-paused'; paused: boolean }
   | { type: 'add-modification'; profileId: string; modification: Modification }
   | { type: 'update-modification'; profileId: string; modification: Modification }
-  | { type: 'remove-modification'; profileId: string; modificationId: string };
+  | { type: 'remove-modification'; profileId: string; modificationId: string }
+  | { type: 'add-filter'; profileId: string; filter: Filter }
+  | { type: 'update-filter'; profileId: string; filter: Filter }
+  | { type: 'remove-filter'; profileId: string; filterId: string };
 
 export function applyCommand(state: StoredState, command: Command): StoredState {
   switch (command.type) {
@@ -160,6 +188,12 @@ export function applyCommand(state: StoredState, command: Command): StoredState 
       return updateModification(state, command.profileId, command.modification);
     case 'remove-modification':
       return removeModification(state, command.profileId, command.modificationId);
+    case 'add-filter':
+      return addFilter(state, command.profileId, command.filter);
+    case 'update-filter':
+      return updateFilter(state, command.profileId, command.filter);
+    case 'remove-filter':
+      return removeFilter(state, command.profileId, command.filterId);
     default:
       return command satisfies never;
   }

@@ -1,3 +1,5 @@
+import { ALL_RESOURCE_TYPES, REQUEST_METHODS, type RequestMethod, type ResourceType } from './rules';
+
 export const SCHEMA_VERSION = 1 as const;
 
 /**
@@ -19,6 +21,35 @@ export type Modification = RequestHeaderModification;
 
 export type ModificationKind = Modification['kind'];
 
+/**
+ * Filter도 kind 판별 union이다. 같은 kind끼리 OR, 다른 kind끼리 AND로
+ * 합성된다 (PRD Filter 의미론). Tab 계열·Time Filter는 이슈 06에서 추가된다.
+ */
+export type Filter =
+  | { kind: 'url'; id: string; enabled: boolean; pattern: string }
+  | { kind: 'exclude-url'; id: string; enabled: boolean; pattern: string }
+  | { kind: 'resource-type'; id: string; enabled: boolean; resourceTypes: ResourceType[] }
+  | { kind: 'request-method'; id: string; enabled: boolean; methods: RequestMethod[] }
+  | { kind: 'initiator-domain'; id: string; enabled: boolean; domain: string };
+
+export type FilterKind = Filter['kind'];
+
+export function createFilter(kind: FilterKind, id: string = crypto.randomUUID()): Filter {
+  switch (kind) {
+    case 'url':
+    case 'exclude-url':
+      return { kind, id, enabled: true, pattern: '' };
+    case 'resource-type':
+      return { kind, id, enabled: true, resourceTypes: [] };
+    case 'request-method':
+      return { kind, id, enabled: true, methods: [] };
+    case 'initiator-domain':
+      return { kind, id, enabled: true, domain: '' };
+    default:
+      return kind satisfies never;
+  }
+}
+
 export interface Profile {
   id: string;
   name: string;
@@ -29,6 +60,8 @@ export interface Profile {
   color: string;
   /** 종류를 가로지르는 단일 순서 — 충돌 의미론의 우선순위 세분에 쓰인다. */
   modifications: Modification[];
+  /** 이 Profile의 Modification이 적용될 요청 범위를 좁히는 조건들. */
+  filters: Filter[];
 }
 
 export interface StoredState {
@@ -57,6 +90,7 @@ export function createProfile(
     shortLabel: options.shortLabel ?? name.charAt(0).toUpperCase(),
     color: options.color ?? PROFILE_COLORS[0],
     modifications: [],
+    filters: [],
   };
 }
 
@@ -89,6 +123,33 @@ function isModification(value: unknown): value is Modification {
   );
 }
 
+function isResourceType(value: unknown): value is ResourceType {
+  return typeof value === 'string' && (ALL_RESOURCE_TYPES as readonly string[]).includes(value);
+}
+
+function isRequestMethod(value: unknown): value is RequestMethod {
+  return typeof value === 'string' && (REQUEST_METHODS as readonly string[]).includes(value);
+}
+
+function isFilter(value: unknown): value is Filter {
+  if (!isRecord(value) || typeof value.id !== 'string' || typeof value.enabled !== 'boolean') {
+    return false;
+  }
+  switch (value.kind) {
+    case 'url':
+    case 'exclude-url':
+      return typeof value.pattern === 'string';
+    case 'resource-type':
+      return Array.isArray(value.resourceTypes) && value.resourceTypes.every(isResourceType);
+    case 'request-method':
+      return Array.isArray(value.methods) && value.methods.every(isRequestMethod);
+    case 'initiator-domain':
+      return typeof value.domain === 'string';
+    default:
+      return false;
+  }
+}
+
 function isProfile(value: unknown): value is Profile {
   return (
     isRecord(value) &&
@@ -98,7 +159,9 @@ function isProfile(value: unknown): value is Profile {
     typeof value.shortLabel === 'string' &&
     typeof value.color === 'string' &&
     Array.isArray(value.modifications) &&
-    value.modifications.every(isModification)
+    value.modifications.every(isModification) &&
+    Array.isArray(value.filters) &&
+    value.filters.every(isFilter)
   );
 }
 
@@ -112,6 +175,7 @@ function backfillProfile(value: unknown): unknown {
     shortLabel:
       typeof value.name === 'string' ? value.name.charAt(0).toUpperCase() : '',
     color: PROFILE_COLORS[0],
+    filters: [],
     ...value,
   };
 }

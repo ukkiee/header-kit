@@ -20,15 +20,19 @@ export function onStateChanged(listener: () => void): void {
   });
 }
 
+export type CommandResult =
+  | { ok: true; state: StoredState }
+  | { ok: false; error: string };
+
 /** UI가 단일 writer(background)로 전이 명령을 보낸다. */
-export async function sendCommand(command: Command): Promise<StoredState> {
+export async function sendCommand(command: Command): Promise<CommandResult> {
   return (await browser.runtime.sendMessage({
     type: COMMAND_MESSAGE,
     command,
-  })) as StoredState;
+  })) as CommandResult;
 }
 
-/** background에서 명령 메시지를 구독한다. */
+/** background에서 명령 메시지를 구독한다. 거부·실패는 오류 응답으로 돌려준다. */
 export function onCommand(handler: (command: Command) => Promise<StoredState>): void {
   browser.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (
@@ -36,7 +40,14 @@ export function onCommand(handler: (command: Command) => Promise<StoredState>): 
       message !== null &&
       (message as { type?: unknown }).type === COMMAND_MESSAGE
     ) {
-      void handler((message as { command: Command }).command).then(sendResponse);
+      void handler((message as { command: Command }).command)
+        .then((state) => sendResponse({ ok: true, state } satisfies CommandResult))
+        .catch((error: unknown) =>
+          sendResponse({
+            ok: false,
+            error: error instanceof Error ? error.message : String(error),
+          } satisfies CommandResult),
+        );
       return true; // 비동기 응답
     }
     return undefined;

@@ -4,7 +4,14 @@ import type { StoredState } from './schema';
 export interface ExecutorDeps {
   load: () => Promise<StoredState>;
   save: (state: StoredState) => Promise<void>;
+  /**
+   * 명령의 저장 시점 검증 (예: regex 플랫폼 지원 여부). 오류 문자열을
+   * 반환하면 상태 변경 없이 그 명령만 거부된다 — 부분 수용은 없다.
+   */
+  validate?: (command: Command) => Promise<string | null>;
 }
+
+export class CommandRejectedError extends Error {}
 
 export interface CommandExecutor {
   /** 명령을 FIFO로 직렬 실행한다. 겹쳐 도착한 전이도 전부 최종 상태에 남는다. */
@@ -21,6 +28,9 @@ export function createCommandExecutor(deps: ExecutorDeps): CommandExecutor {
   return {
     execute(command: Command): Promise<StoredState> {
       const run = tail.then(async () => {
+        const error = deps.validate ? await deps.validate(command) : null;
+        if (error !== null) throw new CommandRejectedError(error);
+
         const state = await deps.load();
         const next = applyCommand(state, command);
         await deps.save(next);

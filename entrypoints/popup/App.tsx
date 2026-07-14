@@ -7,6 +7,7 @@ import { loadState, onStateChanged, sendCommand } from '@/storage/state';
 
 export function App() {
   const [state, setState] = useState<StoredState | null>(null);
+  const [commandError, setCommandError] = useState<string | null>(null);
 
   useEffect(() => {
     void loadState().then(setState);
@@ -16,7 +17,14 @@ export function App() {
   if (!state) return null;
 
   const dispatch = (command: Command) => {
-    void sendCommand(command).then(setState);
+    void sendCommand(command).then((result) => {
+      if (result.ok) {
+        setState(result.state);
+        setCommandError(null);
+      } else {
+        setCommandError(result.error);
+      }
+    });
   };
 
   return (
@@ -36,6 +44,15 @@ export function App() {
       {state.paused && (
         <p className="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-700 dark:bg-amber-950 dark:text-amber-300">
           Paused — no modifications are applied.
+        </p>
+      )}
+
+      {commandError && (
+        <p
+          role="alert"
+          className="rounded-md bg-red-50 px-2 py-1 text-xs text-red-700 dark:bg-red-950 dark:text-red-300"
+        >
+          {commandError}
         </p>
       )}
 

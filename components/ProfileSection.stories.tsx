@@ -23,6 +23,10 @@ const sampleProfile: Profile = {
     { kind: 'request-header', id: 'm1', name: 'Authorization', value: 'Bearer test-token', enabled: true },
     { kind: 'request-header', id: 'm2', name: 'X-Feature-Flag', value: 'beta', enabled: false },
   ],
+  filters: [
+    { kind: 'url', id: 'f1', enabled: true, pattern: 'api\\.staging\\.example\\.com' },
+    { kind: 'resource-type', id: 'f2', enabled: true, resourceTypes: ['xmlhttprequest', 'script'] },
+  ],
 };
 
 function InteractiveProfileSection({ initial }: { initial: Profile }) {
@@ -46,7 +50,7 @@ export const Active: Story = {
 
 export const Inactive: Story = {
   args: {
-    profile: { ...sampleProfile, active: false, modifications: [] },
+    profile: { ...sampleProfile, active: false, modifications: [], filters: [] },
     index: 0,
     profileCount: 1,
     onCommand: () => {},

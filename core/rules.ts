@@ -24,6 +24,18 @@ export const ALL_RESOURCE_TYPES = [
 
 export type ResourceType = (typeof ALL_RESOURCE_TYPES)[number];
 
+export const REQUEST_METHODS = [
+  'get',
+  'post',
+  'put',
+  'patch',
+  'delete',
+  'head',
+  'options',
+] as const;
+
+export type RequestMethod = (typeof REQUEST_METHODS)[number];
+
 export type HeaderOperation = 'set' | 'remove' | 'append';
 
 export interface HeaderInfo {
@@ -44,6 +56,8 @@ export interface NetRule {
     urlFilter?: string;
     regexFilter?: string;
     resourceTypes: ResourceType[];
+    requestMethods?: RequestMethod[];
+    initiatorDomains?: string[];
   };
 }
 
@@ -59,5 +73,20 @@ export type CompileWarning =
       code: 'header-overlap';
       header: string;
       profileIds: string[];
+      message: string;
+    }
+  | {
+      /** 단일 regex 패턴이 분할 불가능한 길이 한도를 초과해 건너뜀. */
+      code: 'regex-too-long';
+      profileId: string;
+      filterId: string;
+      message: string;
+    }
+  | {
+      /** 규칙 수 한도(총량 또는 regex 규칙 수) 초과로 일부 규칙이 제외됨. */
+      code: 'quota-exceeded';
+      quota: 'total-rules' | 'regex-rules';
+      profileId: string;
+      modificationId?: string;
       message: string;
     };

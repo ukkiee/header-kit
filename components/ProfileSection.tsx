@@ -2,11 +2,22 @@ import { Switch } from '@base-ui-components/react/switch';
 import { useEffect, useRef, useState } from 'react';
 import type { Command } from '@/core/commands';
 import {
+  createFilter,
   createRequestHeaderModification,
+  type FilterKind,
   type Profile,
 } from '@/core/schema';
 import { Button } from './Button';
+import { FilterRow } from './FilterRow';
 import { HeaderRow } from './HeaderRow';
+
+const FILTER_KINDS: Array<{ kind: FilterKind; label: string }> = [
+  { kind: 'url', label: 'URL filter' },
+  { kind: 'exclude-url', label: 'Exclude URL filter' },
+  { kind: 'resource-type', label: 'Resource type filter' },
+  { kind: 'request-method', label: 'Request method filter' },
+  { kind: 'initiator-domain', label: 'Initiator domain filter' },
+];
 
 export interface ProfileSectionProps {
   profile: Profile;
@@ -86,6 +97,23 @@ export function ProfileSection({ profile, index, profileCount, onCommand }: Prof
         )}
       </div>
 
+      {profile.filters.length > 0 && (
+        <div className="flex flex-col gap-1.5 border-t border-dashed border-zinc-200 pt-2 dark:border-zinc-800">
+          {profile.filters.map((filter) => (
+            <FilterRow
+              key={filter.id}
+              filter={filter}
+              onChange={(next) =>
+                onCommand({ type: 'update-filter', profileId: profile.id, filter: next })
+              }
+              onRemove={() =>
+                onCommand({ type: 'remove-filter', profileId: profile.id, filterId: filter.id })
+              }
+            />
+          ))}
+        </div>
+      )}
+
       <div className="flex items-center gap-1">
         <Button
           variant="ghost"
@@ -100,6 +128,24 @@ export function ProfileSection({ profile, index, profileCount, onCommand }: Prof
         >
           + Request header
         </Button>
+        <select
+          value=""
+          aria-label="Add filter"
+          onChange={(e) => {
+            const kind = e.target.value as FilterKind | '';
+            if (kind !== '') {
+              onCommand({ type: 'add-filter', profileId: profile.id, filter: createFilter(kind) });
+            }
+          }}
+          className="h-7 cursor-pointer rounded-md bg-transparent px-1 text-xs text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+        >
+          <option value="">+ Filter</option>
+          {FILTER_KINDS.map(({ kind, label }) => (
+            <option key={kind} value={kind}>
+              {label}
+            </option>
+          ))}
+        </select>
         <span className="flex-1" />
         <Button
           variant="ghost"

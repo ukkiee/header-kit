@@ -14,6 +14,10 @@ describe('parseStoredState', () => {
           shortLabel: 'P',
           color: '#2563eb',
           modifications: [{ kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true }],
+          filters: [
+            { kind: 'url', id: 'f1', enabled: true, pattern: 'api\\.example\\.com' },
+            { kind: 'resource-type', id: 'f2', enabled: true, resourceTypes: ['xmlhttprequest'] },
+          ],
         },
       ],
     };
