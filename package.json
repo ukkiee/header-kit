@@ -1,0 +1,39 @@
+{
+  "name": "header-kit",
+  "description": "Profile-based HTTP request/response modification extension for Chromium browsers",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "zip": "wxt zip",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "storybook": "storybook dev -p 6006",
+    "storybook:build": "storybook build",
+    "smoke": "node scripts/smoke.mjs",
+    "postinstall": "wxt prepare"
+  },
+  "dependencies": {
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "@base-ui-components/react": "1.0.0-rc.0",
+    "class-variance-authority": "^0.7.1"
+  },
+  "devDependencies": {
+    "@storybook/react-vite": "^10.5.0",
+    "@tailwindcss/vite": "^4.3.2",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@wxt-dev/module-react": "^1.2.2",
+    "playwright": "^1.61.1",
+    "storybook": "^10.5.0",
+    "tailwindcss": "^4.3.2",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10",
+    "wxt": "^0.20.27"
+  }
+}

@@ -33,3 +33,11 @@ Blocked by: None - can start immediately
 ## Blocked by
 
 None - can start immediately
+
+## Comments
+
+**2026-07-14 실브라우저 스모크 결과** (`bun run smoke`, Playwright + Chromium headless, 확장 로드 상태, 8/8 통과):
+
+- **검증 항목 ① (allow vs modifyHeaders)**: 확인됨. 같은 조건에서 allow(priority 2) + modifyHeaders(priority 1) → 헤더 미적용. priority를 뒤집으면(modify 2, allow 1) 헤더 적용됨. **Exclude Filter를 "자기 대역 상단 allow 규칙"으로 구현하는 설계 전제 성립.** 단, allow는 자기보다 낮은 priority의 모든 modifyHeaders를 무효화하므로 PRD의 하향 전파 의미론도 실기기와 일치.
+- **검증 항목 ② (5,000 규칙 전량 교체)**: 확인됨. 5,000개 modifyHeaders session rule 일괄 등록 596ms, 전량 교체(제거 5,000+재등록 5,000) 351ms, 전량 제거 23ms. **5,001번째 규칙은 "Session rule count exceeded" 오류로 거부** — session rule 상한은 정확히 5,000이며, quota 초과를 Compile 경고로 노출하는 PRD 결정이 필요함을 재확인.
+- 상태→규칙 경로: storage 변경 → 재조정 큐 → session rule 반영이 100ms 폴링 내 수렴, Profile off 시 즉시 원상복구 확인.
