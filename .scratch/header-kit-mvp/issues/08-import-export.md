@@ -13,7 +13,7 @@ Blocked by: 04, 06, 07
 
 - Export: Profile 다중 선택, 템플릿만 포함(실체화 상태 제외), 파일 다운로드.
 - Import: 파일 선택과 붙여넣기 모두 지원. 전체 검증 후 전량 수용 또는 전량 거부 — 부분 수용 없음. 거부 시 항목 단위의 명확한 오류 메시지.
-- 활성화 경계: 활성 플래그가 켜진 Profile을 Import 하면 비활성→활성 전환과 동일하게 모든 enabled Placeholder를 원자적으로 실체화한 뒤에야 규칙이 적용된다.
+- 활성화 경계: 활성 플래그가 켜진 Profile을 Import 하면 비활성→활성 전환과 동일하게 모든 enabled Placeholder를 원자적으로 실체화한 뒤에야 규칙이 적용된다. (이슈 07의 addProfile 훅이 이를 수행한다 — 단, 실체화 구역이 Modification id 전역 키이므로 **Import 시 Profile·Modification id를 반드시 재생성**해 기존 항목과의 id 충돌·실체화 값 공유를 차단할 것.)
 - Import 당시 존재하지 않는 탭·그룹·창을 가리키는 Tab 계열 Filter 값의 처리(무효 조건은 정리하고 알림)를 정의한다.
 
 ## Acceptance criteria

@@ -136,6 +136,26 @@ describe('실체화 수명주기 (활성화 경계)', () => {
   });
 });
 
+describe('재시작 유지 (persist → parse → compile)', () => {
+  it('직렬화 왕복 후에도 같은 실체화 값이 소비된다', async () => {
+    const { parseStoredState } = await import('./schema');
+    const { compile } = await import('./compile');
+    const deps = stubDeps();
+    const on = toggleProfile(state([profile()]), 'p1', true, deps);
+
+    // storage.local 왕복(JSON 직렬화)을 흉내낸다
+    const revived = parseStoredState(JSON.parse(JSON.stringify(on)));
+
+    const { rules } = compile(revived.profiles, {
+      paused: false,
+      tabs: [],
+      now: 0,
+      materialized: revived.materialized,
+    });
+    expect(rules[0]?.action.requestHeaders?.[0]?.value).toBe('trace-uuid-1');
+  });
+});
+
 describe('compile — 실체화 값 소비와 방어선', () => {
   const compileEnv = (materialized: Record<string, string>) => ({
     paused: false,

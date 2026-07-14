@@ -7,7 +7,11 @@ import {
 } from './placeholder';
 import type { Filter, Modification, Profile, StoredState } from './schema';
 
-/** Profile의 모든 Placeholder Modification을 실체화한 새 구역을 만든다. */
+/**
+ * Profile의 모든 Placeholder Modification을 실체화한 새 구역을 만든다.
+ * enabled 여부와 무관하게 전부 실체화한다(스펙의 "enabled 원자 실체화"의 상위집합) —
+ * 활성 중 disabled→enabled 전환 시 값이 이미 존재하도록 보장하기 위한 의도적 선택.
+ */
 function materializeProfile(
   materialized: Record<string, string>,
   profile: Profile,

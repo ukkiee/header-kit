@@ -47,7 +47,8 @@ export function HeaderRow({
       </div>
       {withPlaceholders && (
         <p className="pl-6 text-[10px] text-zinc-400">
-          New value each time the profile activates — constant while it stays on.
+          New value each time the profile activates — constant while it stays on, never
+          re-evaluated per request.
           {materializedValue !== undefined && (
             <span className="ml-1 font-mono text-zinc-500">→ {materializedValue}</span>
           )}

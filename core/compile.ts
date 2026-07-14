@@ -264,6 +264,9 @@ function emitModification(
         return;
       }
       // 값은 템플릿 그대로, Placeholder가 있으면 실체화 값을 소비한다.
+      // non-null 단언은 compile()이 이 함수를 부르기 전에 실행하는
+      // findMissingMaterialization 방어선이 보증한다 (enabled placeholder 누락
+      // 시 Profile 전체가 제외되어 여기 도달하지 않는다).
       const value = hasPlaceholders(modification.value)
         ? materialized[modification.id]!
         : modification.value;
