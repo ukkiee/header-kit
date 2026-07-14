@@ -3,6 +3,7 @@ import {
   addModification,
   addProfile,
   applyCommand,
+  duplicateProfile,
   moveProfile,
   removeModification,
   removeProfile,
@@ -67,6 +68,28 @@ describe('state transition commands', () => {
 
     const afterFirst = addProfile(state(), created, 'p1');
     expect(afterFirst.profiles.map((p) => p.id)).toEqual(['p1', 'p3', 'p2']);
+  });
+
+  it('duplicateProfile은 새 id의 비활성 사본을 원본 바로 뒤에 넣는다', () => {
+    const next = duplicateProfile(state(), 'p1');
+
+    expect(next.profiles).toHaveLength(3);
+    const copy = next.profiles[1]!;
+    expect(copy.name).toBe('One copy');
+    expect(copy.active).toBe(false);
+    expect(copy.id).not.toBe('p1');
+    expect(copy.modifications[0]?.id).not.toBe('m1');
+    expect(copy.modifications[0]?.name).toBe('X-A');
+  });
+
+  it('updateProfileMeta는 shortLabel을 2자로 강제한다 (권위 경로의 불변식)', () => {
+    const next = updateProfileMeta(state(), 'p1', {
+      name: 'One',
+      shortLabel: 'LONG',
+      color: '#dc2626',
+    });
+
+    expect(next.profiles[0]?.shortLabel).toBe('LO');
   });
 
   it('removeProfile은 해당 Profile만 제거한다', () => {

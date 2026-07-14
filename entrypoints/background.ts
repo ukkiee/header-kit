@@ -3,6 +3,7 @@ import { compile } from '@/core/compile';
 import { createCommandExecutor } from '@/core/executor';
 import { createReconciler } from '@/core/reconciler';
 import type { NetRule } from '@/core/rules';
+import type { StoredState } from '@/core/schema';
 import { loadState, onCommand, onStateChanged, persistState } from '@/storage/state';
 
 async function replaceSessionRules(rules: NetRule[]): Promise<void> {
@@ -13,11 +14,21 @@ async function replaceSessionRules(rules: NetRule[]): Promise<void> {
   });
 }
 
+async function applyBadge(state: StoredState): Promise<void> {
+  const badge = computeBadge(state);
+  await browser.action.setBadgeText({ text: badge.text });
+  await browser.action.setBadgeBackgroundColor({ color: badge.color });
+}
+
 export default defineBackground(() => {
   const reconciler = createReconciler({
     loadSnapshot: loadState,
     compile: (state) => compile(state.profiles, { paused: state.paused }),
-    apply: replaceSessionRules,
+    // 규칙과 배지를 같은 스냅샷·같은 세대 보증 아래 반영한다.
+    apply: async (rules, snapshot) => {
+      await replaceSessionRules(rules);
+      await applyBadge(snapshot);
+    },
     onError: (error) => console.error('[HeaderKit] reconcile failed', error),
   });
 
@@ -25,17 +36,7 @@ export default defineBackground(() => {
   const executor = createCommandExecutor({ load: loadState, save: persistState });
   onCommand((command) => executor.execute(command));
 
-  async function updateBadge(): Promise<void> {
-    const badge = computeBadge(await loadState());
-    await browser.action.setBadgeText({ text: badge.text });
-    await browser.action.setBadgeBackgroundColor({ color: badge.color });
-  }
-
-  const converge = () => {
-    void reconciler.requestReconcile();
-    void updateBadge();
-  };
-
+  const converge = () => void reconciler.requestReconcile();
   onStateChanged(converge);
   browser.runtime.onStartup.addListener(converge);
   browser.runtime.onInstalled.addListener(converge);

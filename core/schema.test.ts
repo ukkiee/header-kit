@@ -34,6 +34,34 @@ describe('parseStoredState', () => {
     expectDefaultState(parseStoredState(undefined));
   });
 
+  it('shortLabel/color가 없는 이전 v1 상태는 기본값으로 채워 보존한다 (전량 거부 금지)', () => {
+    const legacy = {
+      schemaVersion: SCHEMA_VERSION,
+      paused: false,
+      profiles: [
+        {
+          id: 'p1',
+          name: 'kept',
+          active: true,
+          modifications: [
+            { kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true },
+          ],
+        },
+      ],
+    };
+
+    const parsed = parseStoredState(legacy);
+
+    expect(parsed.profiles[0]).toMatchObject({
+      id: 'p1',
+      name: 'kept',
+      active: true,
+      shortLabel: 'K',
+    });
+    expect(typeof parsed.profiles[0]?.color).toBe('string');
+    expect(parsed.profiles[0]?.modifications).toHaveLength(1);
+  });
+
   it.each([
     ['버전 불일치', { schemaVersion: 999, paused: false, profiles: [] }],
     ['profiles가 배열이 아님', { schemaVersion: SCHEMA_VERSION, paused: false, profiles: 'x' }],

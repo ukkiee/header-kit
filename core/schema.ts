@@ -103,6 +103,20 @@ function isProfile(value: unknown): value is Profile {
 }
 
 /**
+ * v1 내부 반복 중 추가된 선택 필드를 기본값으로 채운다.
+ * 필드 추가가 기존 저장 상태를 전량 거부로 파괴하면 안 된다 (SSOT 보호).
+ */
+function backfillProfile(value: unknown): unknown {
+  if (!isRecord(value)) return value;
+  return {
+    shortLabel:
+      typeof value.name === 'string' ? value.name.charAt(0).toUpperCase() : '',
+    color: PROFILE_COLORS[0],
+    ...value,
+  };
+}
+
+/**
  * 저장소에서 읽은 알 수 없는 값을 StoredState로 검증한다.
  * 스키마 위반은 전량 거부하고 기본 상태로 대체한다 — 반쯤 깨진 상태로
  * 규칙을 컴파일하지 않는다. 이후 슬라이스가 variant 검증을 여기에 확장한다.
@@ -112,10 +126,12 @@ export function parseStoredState(value: unknown): StoredState {
     isRecord(value) &&
     value.schemaVersion === SCHEMA_VERSION &&
     typeof value.paused === 'boolean' &&
-    Array.isArray(value.profiles) &&
-    value.profiles.every(isProfile)
+    Array.isArray(value.profiles)
   ) {
-    return value as unknown as StoredState;
+    const profiles = value.profiles.map(backfillProfile);
+    if (profiles.every(isProfile)) {
+      return { ...value, profiles } as unknown as StoredState;
+    }
   }
   return createDefaultState();
 }

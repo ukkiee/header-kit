@@ -15,16 +15,6 @@ export interface ProfileSectionProps {
   onCommand: (command: Command) => void;
 }
 
-function duplicateOf(profile: Profile): Profile {
-  return {
-    ...profile,
-    id: crypto.randomUUID(),
-    name: `${profile.name} copy`,
-    active: false,
-    modifications: profile.modifications.map((m) => ({ ...m, id: crypto.randomUUID() })),
-  };
-}
-
 export function ProfileSection({ profile, index, profileCount, onCommand }: ProfileSectionProps) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const confirmTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -137,13 +127,7 @@ export function ProfileSection({ profile, index, profileCount, onCommand }: Prof
           variant="ghost"
           size="sm"
           aria-label="Duplicate profile"
-          onClick={() =>
-            onCommand({
-              type: 'add-profile',
-              profile: duplicateOf(profile),
-              afterProfileId: profile.id,
-            })
-          }
+          onClick={() => onCommand({ type: 'duplicate-profile', profileId: profile.id })}
         >
           ⧉
         </Button>

@@ -95,12 +95,27 @@ export function moveProfile(
   return { ...state, profiles };
 }
 
+export function duplicateProfile(state: StoredState, profileId: string): StoredState {
+  const source = state.profiles.find((p) => p.id === profileId);
+  if (!source) return state;
+  const copy: Profile = {
+    ...source,
+    id: crypto.randomUUID(),
+    name: `${source.name} copy`,
+    active: false,
+    modifications: source.modifications.map((m) => ({ ...m, id: crypto.randomUUID() })),
+  };
+  return addProfile(state, copy, profileId);
+}
+
 export function updateProfileMeta(
   state: StoredState,
   profileId: string,
   meta: ProfileMeta,
 ): StoredState {
-  return withProfile(state, profileId, (profile) => ({ ...profile, ...meta }));
+  // shortLabel 1–2자 불변식은 UI가 아니라 여기(권위 실행 경로)서 강제한다.
+  const normalized = { ...meta, shortLabel: meta.shortLabel.slice(0, 2) };
+  return withProfile(state, profileId, (profile) => ({ ...profile, ...normalized }));
 }
 
 export function setPaused(state: StoredState, paused: boolean): StoredState {
@@ -114,6 +129,7 @@ export function setPaused(state: StoredState, paused: boolean): StoredState {
 export type Command =
   | { type: 'toggle-profile'; profileId: string; active: boolean }
   | { type: 'add-profile'; profile: Profile; afterProfileId?: string }
+  | { type: 'duplicate-profile'; profileId: string }
   | { type: 'remove-profile'; profileId: string }
   | { type: 'move-profile'; profileId: string; toIndex: number }
   | { type: 'update-profile-meta'; profileId: string; meta: ProfileMeta }
@@ -128,6 +144,8 @@ export function applyCommand(state: StoredState, command: Command): StoredState 
       return toggleProfile(state, command.profileId, command.active);
     case 'add-profile':
       return addProfile(state, command.profile, command.afterProfileId);
+    case 'duplicate-profile':
+      return duplicateProfile(state, command.profileId);
     case 'remove-profile':
       return removeProfile(state, command.profileId);
     case 'move-profile':
