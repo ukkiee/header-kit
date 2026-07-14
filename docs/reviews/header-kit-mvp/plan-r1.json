@@ -1,0 +1,69 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "plan",
+  "verdict": "needs-attention",
+  "summary": "Do not ship this plan to issue slicing yet. Core lifecycle, conflict-resolution, and backup-recovery semantics remain undefined or contradictory.",
+  "planFile": "docs/reviews/header-kit-mvp/prd.md",
+  "planInDiff": true,
+  "reviewedFileCount": 2,
+  "target": "working tree diff",
+  "reviewedSha": "0671cde9903a3d069793814986dfa01e504db23f",
+  "reviewedTree": "0121085471ad69da82fb66c571e3189a6f3d0a42",
+  "headMovedDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 4,
+  "planFindingCount": 4,
+  "triage": "review-gate SKILL.md rules govern: render EVERY finding as a full table row, the human decides each row (accept/reject/defer/question — free text), echo back before applying, max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "Placeholder values change on unrelated recompilations",
+      "body": "The user story promises a new placeholder value when a Profile is enabled, but the plan substitutes placeholders on every Compile and recompiles on tab events and alarms. A tab navigation, tab closure, or timer can therefore silently rotate UUID/timestamp header values while the Profile remains enabled, breaking correlation and authentication scenarios. A competent implementation following these decisions would violate story 16.",
+      "file": "docs/reviews/header-kit-mvp/prd.md",
+      "line_start": 79,
+      "line_end": 84,
+      "confidence": 0.99,
+      "recommendation": "Define placeholder materialization as persisted activation state: generate values only on disabled→enabled transitions, retain them across unrelated recompiles and service-worker restarts, and add lifecycle tests covering tab/alarm-triggered recompilation.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "high",
+      "title": "Open question: conflicting active Profiles have no deterministic semantics",
+      "body": "The PRD supports multiple simultaneously active Profiles, but never defines precedence when they modify or redirect the same request. Profile ordering is presented only as a convenience, while DNR priority and conflict behavior are central to the compiled result. Implementers would have to invent whether conflicts follow profile order, modification order, action type, or rejection/warning rules, producing unpredictable traffic modification.",
+      "file": "docs/reviews/header-kit-mvp/prd.md",
+      "line_start": 79,
+      "line_end": 85,
+      "confidence": 0.97,
+      "recommendation": "Specify deterministic conflict semantics for every action combination, including header override/append/remove, redirect, CSP, and Exclude allow rules. Define stable rule-priority allocation and observable warnings, then cover overlapping Profiles in compiler and browser tests.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "high",
+      "title": "Recompile-and-replace lifecycle permits stale rule sets to win",
+      "body": "The plan triggers full recompilation from storage changes, startup, tab events, and alarms but gives no serialization, generation, or stale-result rejection rule. Concurrent asynchronous handlers can compile different snapshots and apply them out of order, allowing an older tab state or pre-Pause Profile state to overwrite the newest rules. That can leave traffic modification active after the user believes it has stopped.",
+      "file": "docs/reviews/header-kit-mvp/prd.md",
+      "line_start": 78,
+      "line_end": 82,
+      "confidence": 0.91,
+      "recommendation": "Define a single reconciliation queue with monotonic generations or cancellation, specify how the latest storage and tab snapshot is obtained, and require stress tests where Pause/profile edits race tab and alarm events.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "medium",
+      "title": "Automatic snapshot backup has no bounded retention or partial-write recovery",
+      "body": "The plan proposes automatic, chunked snapshots in a quota-limited store but does not define retention, snapshot commit atomicity, cleanup, or restoration behavior for missing/corrupt chunks. Repeated backups will eventually exhaust the stated quota, and an interrupted multi-item write can leave a snapshot visible but unrestorable. Round-trip testing alone does not exercise these failure modes.",
+      "file": "docs/reviews/header-kit-mvp/prd.md",
+      "line_start": 85,
+      "line_end": 88,
+      "confidence": 0.94,
+      "recommendation": "Specify a bounded retention policy, immutable snapshot IDs, manifest-last commit protocol, integrity metadata, cleanup after failed writes, and preservation of the last known-good snapshot. Test quota exhaustion and interrupted/corrupt chunk recovery.",
+      "isPlanFinding": true
+    }
+  ],
+  "next_steps": [
+    "Resolve these lifecycle and conflict decisions in the PRD before slicing implementation issues.",
+    "Turn each resolved invariant into compiler/store tests plus concrete real-browser scenarios."
+  ]
+}
