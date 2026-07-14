@@ -67,6 +67,7 @@ export default defineBackground(() => {
         paused: snapshot.state.paused,
         tabs: snapshot.tabs,
         now: snapshot.now,
+        materialized: snapshot.state.materialized,
       }),
     // 규칙·배지·만료 알람을 같은 스냅샷·같은 세대 보증 아래 반영한다.
     apply: async (rules, snapshot) => {

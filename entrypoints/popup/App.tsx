@@ -67,6 +67,7 @@ export function App() {
           profileCount={state.profiles.length}
           onCommand={dispatch}
           pickerOptions={pickerOptions}
+          materialized={state.materialized}
         />
       ))}
 

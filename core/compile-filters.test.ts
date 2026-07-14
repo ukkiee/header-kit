@@ -30,7 +30,7 @@ describe('compile — Filter 조건 합성', () => {
           ],
         }),
       ],
-      { paused: false, tabs: [], now: 0 },
+      { paused: false, tabs: [], now: 0, materialized: {} },
     );
 
     expect(rules).toHaveLength(1);
@@ -49,7 +49,7 @@ describe('compile — Filter 조건 합성', () => {
           ],
         }),
       ],
-      { paused: false, tabs: [], now: 0 },
+      { paused: false, tabs: [], now: 0, materialized: {} },
     );
 
     expect(rules[0]?.condition).toEqual({
@@ -72,7 +72,7 @@ describe('compile — Filter 조건 합성', () => {
           ],
         }),
       ],
-      { paused: false, tabs: [], now: 0 },
+      { paused: false, tabs: [], now: 0, materialized: {} },
     );
 
     expect(rules[0]?.condition.resourceTypes).toEqual(['script', 'stylesheet']);
@@ -89,7 +89,7 @@ describe('compile — Filter 조건 합성', () => {
           ],
         }),
       ],
-      { paused: false, tabs: [], now: 0 },
+      { paused: false, tabs: [], now: 0, materialized: {} },
     );
 
     expect(rules[0]?.condition.regexFilter).toBeUndefined();
@@ -103,7 +103,7 @@ describe('compile — Filter 조건 합성', () => {
           filters: [{ kind: 'exclude-url', id: 'f1', enabled: true, pattern: 'private' }],
         }),
       ],
-      { paused: false, tabs: [], now: 0 },
+      { paused: false, tabs: [], now: 0, materialized: {} },
     );
 
     const allow = rules.find((r) => r.action.type === 'allow');
@@ -125,7 +125,7 @@ describe('compile — Filter 조건 합성', () => {
         }),
         profile({ id: 'bottom', modifications: [mod('b1', 'X-B')] }),
       ],
-      { paused: false, tabs: [], now: 0 },
+      { paused: false, tabs: [], now: 0, materialized: {} },
     );
 
     const allow = rules.find((r) => r.action.type === 'allow')!;
@@ -147,7 +147,7 @@ describe('compile — Filter 조건 합성', () => {
           ],
         }),
       ],
-      { paused: false, tabs: [], now: 0 },
+      { paused: false, tabs: [], now: 0, materialized: {} },
     );
 
     expect(warnings).toEqual([]);
@@ -169,7 +169,7 @@ describe('compile — Filter 조건 합성', () => {
           ],
         }),
       ],
-      { paused: false, tabs: [], now: 0 },
+      { paused: false, tabs: [], now: 0, materialized: {} },
     );
 
     expect(warnings).toContainEqual(
@@ -184,6 +184,7 @@ describe('compile — Filter 조건 합성', () => {
       paused: false,
       tabs: [],
       now: 0,
+      materialized: {},
     });
 
     expect(rules.length).toBe(5000);
@@ -202,7 +203,7 @@ describe('compile — Filter 조건 합성', () => {
           filters: [{ kind: 'url', id: 'f1', enabled: true, pattern: 'example' }],
         }),
       ],
-      { paused: false, tabs: [], now: 0 },
+      { paused: false, tabs: [], now: 0, materialized: {} },
     );
 
     expect(rules.length).toBe(1000);

@@ -1,5 +1,46 @@
 import { isProfileExpired } from './expiry';
+import {
+  defaultMaterializeDeps,
+  hasPlaceholders,
+  materializeValue,
+  type MaterializeDeps,
+} from './placeholder';
 import type { Filter, Modification, Profile, StoredState } from './schema';
+
+/** Profile의 모든 Placeholder Modification을 실체화한 새 구역을 만든다. */
+function materializeProfile(
+  materialized: Record<string, string>,
+  profile: Profile,
+  deps: MaterializeDeps,
+): Record<string, string> {
+  const next = { ...materialized };
+  for (const modification of profile.modifications) {
+    if (hasPlaceholders(modification.value)) {
+      next[modification.id] = materializeValue(modification.value, deps);
+    }
+  }
+  return next;
+}
+
+function clearProfileMaterialization(
+  materialized: Record<string, string>,
+  profile: Profile,
+): Record<string, string> {
+  const next = { ...materialized };
+  for (const modification of profile.modifications) {
+    delete next[modification.id];
+  }
+  return next;
+}
+
+function withoutKey(
+  record: Record<string, string>,
+  key: string,
+): Record<string, string> {
+  if (!(key in record)) return record;
+  const { [key]: _removed, ...rest } = record;
+  return rest;
+}
 
 export interface ProfileMeta {
   name: string;
@@ -28,31 +69,78 @@ export function toggleProfile(
   state: StoredState,
   profileId: string,
   active: boolean,
+  deps: MaterializeDeps = defaultMaterializeDeps,
 ): StoredState {
-  // 비활성→활성 전환은 활성화 경계다: Placeholder 실체화가 이후 여기서 일어난다.
-  return withProfile(state, profileId, (profile) => ({ ...profile, active }));
+  const profile = state.profiles.find((p) => p.id === profileId);
+  if (!profile || profile.active === active) return state;
+
+  // 활성화 경계 (PRD 불변식): 비활성→활성은 모든 Placeholder를 원자적으로
+  // 실체화하고, 활성→비활성은 실체화 값을 삭제한다.
+  const base = withProfile(state, profileId, (p) => ({ ...p, active }));
+  return {
+    ...base,
+    materialized: active
+      ? materializeProfile(base.materialized, profile, deps)
+      : clearProfileMaterialization(base.materialized, profile),
+  };
 }
 
 export function addModification(
   state: StoredState,
   profileId: string,
   modification: Modification,
+  deps: MaterializeDeps = defaultMaterializeDeps,
 ): StoredState {
-  return withProfile(state, profileId, (profile) => ({
-    ...profile,
-    modifications: [...profile.modifications, modification],
+  const profile = state.profiles.find((p) => p.id === profileId);
+  const base = withProfile(state, profileId, (p) => ({
+    ...p,
+    modifications: [...p.modifications, modification],
   }));
+
+  // 활성 Profile에 들어오는 Placeholder는 불변식 유지를 위해 즉시 실체화한다.
+  if (profile?.active && hasPlaceholders(modification.value)) {
+    return {
+      ...base,
+      materialized: {
+        ...base.materialized,
+        [modification.id]: materializeValue(modification.value, deps),
+      },
+    };
+  }
+  return base;
 }
 
 export function updateModification(
   state: StoredState,
   profileId: string,
   next: Modification,
+  deps: MaterializeDeps = defaultMaterializeDeps,
 ): StoredState {
-  return withProfile(state, profileId, (profile) => ({
-    ...profile,
-    modifications: profile.modifications.map((m) => (m.id === next.id ? next : m)),
+  const profile = state.profiles.find((p) => p.id === profileId);
+  const previous = profile?.modifications.find((m) => m.id === next.id);
+  const base = withProfile(state, profileId, (p) => ({
+    ...p,
+    modifications: p.modifications.map((m) => (m.id === next.id ? next : m)),
   }));
+
+  if (!profile?.active || !previous) return base;
+
+  // 활성 중 템플릿 편집: 그 Modification만 재실체화. Placeholder가 사라지면 정리.
+  if (hasPlaceholders(next.value)) {
+    const templateChanged = previous.value !== next.value;
+    const missing = !(next.id in base.materialized);
+    if (templateChanged || missing) {
+      return {
+        ...base,
+        materialized: {
+          ...base.materialized,
+          [next.id]: materializeValue(next.value, deps),
+        },
+      };
+    }
+    return base;
+  }
+  return { ...base, materialized: withoutKey(base.materialized, next.id) };
 }
 
 export function removeModification(
@@ -60,27 +148,40 @@ export function removeModification(
   profileId: string,
   modificationId: string,
 ): StoredState {
-  return withProfile(state, profileId, (profile) => ({
+  const base = withProfile(state, profileId, (profile) => ({
     ...profile,
     modifications: profile.modifications.filter((m) => m.id !== modificationId),
   }));
+  return { ...base, materialized: withoutKey(base.materialized, modificationId) };
 }
 
 export function addProfile(
   state: StoredState,
   profile: Profile,
   afterProfileId?: string,
+  deps: MaterializeDeps = defaultMaterializeDeps,
 ): StoredState {
   const index = afterProfileId
     ? state.profiles.findIndex((p) => p.id === afterProfileId)
     : -1;
   const profiles = [...state.profiles];
   profiles.splice(index === -1 ? profiles.length : index + 1, 0, profile);
-  return { ...state, profiles };
+  const base = { ...state, profiles };
+
+  // 활성 상태로 들어오는 Profile(Import·복원 경로)은 활성화 경계다 —
+  // 규칙이 적용되기 전에 모든 Placeholder를 원자적으로 실체화한다.
+  if (profile.active) {
+    return { ...base, materialized: materializeProfile(base.materialized, profile, deps) };
+  }
+  return base;
 }
 
 export function removeProfile(state: StoredState, profileId: string): StoredState {
-  return { ...state, profiles: state.profiles.filter((p) => p.id !== profileId) };
+  const profile = state.profiles.find((p) => p.id === profileId);
+  const base = { ...state, profiles: state.profiles.filter((p) => p.id !== profileId) };
+  return profile
+    ? { ...base, materialized: clearProfileMaterialization(base.materialized, profile) }
+    : base;
 }
 
 export function moveProfile(
@@ -128,10 +229,14 @@ export function setPaused(state: StoredState, paused: boolean): StoredState {
  * 반드시 toggleProfile을 경유한다 — 활성→비활성 전이의 부수 규칙
  * (이슈 07의 실체화 정리 등)이 만료 경로에서도 동일하게 적용되도록.
  */
-export function expireProfiles(state: StoredState, now: number): StoredState {
+export function expireProfiles(
+  state: StoredState,
+  now: number,
+  deps: MaterializeDeps = defaultMaterializeDeps,
+): StoredState {
   return state.profiles
     .filter((profile) => isProfileExpired(profile, now))
-    .reduce((acc, profile) => toggleProfile(acc, profile.id, false), state);
+    .reduce((acc, profile) => toggleProfile(acc, profile.id, false, deps), state);
 }
 
 export function addFilter(state: StoredState, profileId: string, filter: Filter): StoredState {

@@ -93,4 +93,14 @@ export type CompileWarning =
       profileId: string;
       modificationId?: string;
       message: string;
+    }
+  | {
+      /**
+       * 불변식 위반: 활성 Profile의 Placeholder Modification에 실체화 값이
+       * 없음 — 그 Profile 전체를 규칙에서 제외했다 (PRD 방어선).
+       */
+      code: 'missing-materialization';
+      profileId: string;
+      modificationId: string;
+      message: string;
     };

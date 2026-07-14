@@ -20,6 +20,7 @@ describe('parseStoredState', () => {
           ],
         },
       ],
+      materialized: { m1: 'trace-abc' },
     };
 
     expect(parseStoredState(state)).toEqual(state);

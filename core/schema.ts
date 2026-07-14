@@ -85,6 +85,11 @@ export interface StoredState {
   schemaVersion: typeof SCHEMA_VERSION;
   paused: boolean;
   profiles: Profile[];
+  /**
+   * Placeholder 실체화 값의 활성 상태 구역 — Modification id 키.
+   * 값 필드(템플릿)를 절대 덮어쓰지 않으며, Export에 포함되지 않는다.
+   */
+  materialized: Record<string, string>;
 }
 
 export const PROFILE_COLORS = [
@@ -122,6 +127,7 @@ export function createDefaultState(): StoredState {
     schemaVersion: SCHEMA_VERSION,
     paused: false,
     profiles: [{ ...createProfile('Default Profile'), active: true }],
+    materialized: {},
   };
 }
 
@@ -211,6 +217,12 @@ function backfillProfile(value: unknown): unknown {
  * 스키마 위반은 전량 거부하고 기본 상태로 대체한다 — 반쯤 깨진 상태로
  * 규칙을 컴파일하지 않는다. 이후 슬라이스가 variant 검증을 여기에 확장한다.
  */
+function isMaterializedRecord(value: unknown): value is Record<string, string> {
+  return (
+    isRecord(value) && Object.values(value).every((entry) => typeof entry === 'string')
+  );
+}
+
 export function parseStoredState(value: unknown): StoredState {
   if (
     isRecord(value) &&
@@ -219,8 +231,9 @@ export function parseStoredState(value: unknown): StoredState {
     Array.isArray(value.profiles)
   ) {
     const profiles = value.profiles.map(backfillProfile);
-    if (profiles.every(isProfile)) {
-      return { ...value, profiles } as unknown as StoredState;
+    const materialized = value.materialized ?? {};
+    if (profiles.every(isProfile) && isMaterializedRecord(materialized)) {
+      return { ...value, profiles, materialized } as unknown as StoredState;
     }
   }
   return createDefaultState();

@@ -464,6 +464,60 @@ try {
     beforeExpiry['x-timed'] === 'on' && turnedOff && afterExpiry['x-timed'] === undefined && expiredBadge === '',
     `before=${beforeExpiry['x-timed']}, off=${turnedOff}, after=${afterExpiry['x-timed']}, badge="${expiredBadge}"`);
 
+  // ---------- G. 이슈 07: Placeholder 실체화 수명주기 ----------
+  const UUID_RE = /^req-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+  // 비활성으로 심고, 활성화는 실제 팝업 토글(활성화 경계 = 명령 경로)로 수행한다.
+  await seedProfiles([
+    {
+      ...baseProfile('p-ph', 'Ph',
+        [{ kind: 'request-header', id: 'm1', name: 'X-Trace-Id', value: 'req-{{uuid}}', enabled: true }],
+        []),
+      active: false,
+    },
+  ]);
+  await popup.reload();
+  const phToggle = popup.getByRole('switch', { name: 'Toggle Ph' });
+
+  await phToggle.click();
+  await pollSessionRuleCount(sw, 1);
+  const first = (await fetchEchoHeaders(pageB, '/headers'))['x-trace-id'];
+  record('G1: 활성화 경계에서 실체화된 uuid가 실요청에 적용', UUID_RE.test(first ?? ''),
+    `value=${first}`);
+
+  // 탭 이벤트(재컴파일 트리거) 후에도 값 불변 — Compile은 소비만
+  const tempTab = await context.newPage();
+  await tempTab.goto(origin);
+  await tempTab.close();
+  await new Promise((r) => setTimeout(r, 400));
+  const afterTabEvent = (await fetchEchoHeaders(pageB, '/headers'))['x-trace-id'];
+  record('G2: 탭 이벤트 재컴파일에도 값 불변', afterTabEvent === first, `value=${afterTabEvent}`);
+
+  // 재활성화 → 새 값
+  await phToggle.click();
+  await pollSessionRuleCount(sw, 0);
+  await phToggle.click();
+  await pollSessionRuleCount(sw, 1);
+  const reactivated = (await fetchEchoHeaders(pageB, '/headers'))['x-trace-id'];
+  record('G3: 재활성화가 새 값을 만든다', UUID_RE.test(reactivated ?? '') && reactivated !== first,
+    `old=${first}, new=${reactivated}`);
+
+  // 활성 중 템플릿 편집 → 그 항목만 즉시 재실체화
+  const editResult = await popup.evaluate(async () => {
+    return chrome.runtime.sendMessage({
+      type: 'headerkit:command',
+      command: {
+        type: 'update-modification',
+        profileId: 'p-ph',
+        modification: { kind: 'request-header', id: 'm1', name: 'X-Trace-Id', value: 'edit-{{uuid}}', enabled: true },
+      },
+    });
+  });
+  await new Promise((r) => setTimeout(r, 400));
+  const afterEdit = (await fetchEchoHeaders(pageB, '/headers'))['x-trace-id'];
+  record('G4: 활성 중 템플릿 편집 → 즉시 재실체화', editResult?.ok === true && /^edit-/.test(afterEdit ?? ''),
+    `value=${afterEdit}`);
+
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
   process.exitCode = failed.length === 0 ? 0 : 1;

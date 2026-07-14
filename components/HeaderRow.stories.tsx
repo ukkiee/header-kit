@@ -39,3 +39,26 @@ export const Empty: Story = {
   },
   render: (args) => <InteractiveHeaderRow initial={args.modification} />,
 };
+
+export const WithPlaceholder: Story = {
+  args: {
+    modification: {
+      kind: 'request-header',
+      id: 'm3',
+      name: 'X-Trace-Id',
+      value: 'req-{{uuid}}',
+      enabled: true,
+    },
+    onChange: () => {},
+    onRemove: () => {},
+    materializedValue: 'req-4f1c2b3a-8e9d-4a5b-9c6d-7e8f9a0b1c2d',
+  },
+  render: (args) => (
+    <HeaderRow
+      modification={args.modification}
+      onChange={() => {}}
+      onRemove={() => {}}
+      materializedValue={args.materializedValue}
+    />
+  ),
+};

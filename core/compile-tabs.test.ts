@@ -26,7 +26,7 @@ const TABS: TabInfo[] = [
 ];
 
 function env(overrides: Partial<Parameters<typeof compile>[1]> = {}) {
-  return { paused: false, tabs: TABS, now: 1_000, ...overrides };
+  return { paused: false, tabs: TABS, now: 1_000, materialized: {}, ...overrides };
 }
 
 const f = {

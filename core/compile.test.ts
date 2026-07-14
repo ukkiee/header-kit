@@ -27,7 +27,7 @@ describe('compile', () => {
           ],
         }),
       ],
-      { paused: false, tabs: [], now: 0 },
+      { paused: false, tabs: [], now: 0, materialized: {} },
     );
 
     expect(warnings).toEqual([]);
@@ -60,7 +60,7 @@ describe('compile', () => {
           modifications: [{ kind: 'request-header', id: 'm2', name: 'X-B', value: '2', enabled: false }],
         }),
       ],
-      { paused: false, tabs: [], now: 0 },
+      { paused: false, tabs: [], now: 0, materialized: {} },
     );
 
     expect(rules).toEqual([]);
@@ -69,7 +69,7 @@ describe('compile', () => {
   it('Pause 상태에서는 규칙이 없다', () => {
     const { rules } = compile(
       [profile({ modifications: [{ kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true }] })],
-      { paused: true, tabs: [], now: 0 },
+      { paused: true, tabs: [], now: 0, materialized: {} },
     );
 
     expect(rules).toEqual([]);
@@ -85,7 +85,7 @@ describe('compile', () => {
           ],
         }),
       ],
-      { paused: false, tabs: [], now: 0 },
+      { paused: false, tabs: [], now: 0, materialized: {} },
     );
 
     expect(rules).toHaveLength(1);
@@ -101,7 +101,7 @@ describe('compile', () => {
   it('빈 값은 빈 문자열 set으로 컴파일된다 (의미 세분화는 후속 슬라이스)', () => {
     const { rules } = compile(
       [profile({ modifications: [{ kind: 'request-header', id: 'm1', name: 'X-Empty', value: '', enabled: true }] })],
-      { paused: false, tabs: [], now: 0 },
+      { paused: false, tabs: [], now: 0, materialized: {} },
     );
 
     expect(rules[0]?.action.requestHeaders).toEqual([
@@ -126,7 +126,7 @@ describe('compile', () => {
           ],
         }),
       ],
-      { paused: false, tabs: [], now: 0 },
+      { paused: false, tabs: [], now: 0, materialized: {} },
     );
 
     expect(rules).toHaveLength(3);
@@ -157,7 +157,7 @@ describe('compile', () => {
           ],
         }),
       ],
-      { paused: false, tabs: [], now: 0 },
+      { paused: false, tabs: [], now: 0, materialized: {} },
     );
     const alone = compile(
       [
@@ -168,7 +168,7 @@ describe('compile', () => {
           ],
         }),
       ],
-      { paused: false, tabs: [], now: 0 },
+      { paused: false, tabs: [], now: 0, materialized: {} },
     );
 
     expect(active.rules.map((r) => r.priority)).toEqual(alone.rules.map((r) => r.priority));
@@ -190,7 +190,7 @@ describe('compile', () => {
           ],
         }),
       ],
-      { paused: false, tabs: [], now: 0 },
+      { paused: false, tabs: [], now: 0, materialized: {} },
     );
 
     expect(warnings).toHaveLength(1);
@@ -226,7 +226,7 @@ describe('compile', () => {
           ],
         }),
       ],
-      { paused: false, tabs: [], now: 0 },
+      { paused: false, tabs: [], now: 0, materialized: {} },
     );
 
     expect(warnings).toEqual([]);
@@ -236,8 +236,8 @@ describe('compile', () => {
     const profiles = [
       profile({ modifications: [{ kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true }] }),
     ];
-    const a = compile(profiles, { paused: false, tabs: [], now: 0 });
-    const b = compile(profiles, { paused: false, tabs: [], now: 0 });
+    const a = compile(profiles, { paused: false, tabs: [], now: 0, materialized: {} });
+    const b = compile(profiles, { paused: false, tabs: [], now: 0, materialized: {} });
 
     expect(a).toEqual(b);
   });

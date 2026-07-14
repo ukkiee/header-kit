@@ -31,6 +31,8 @@ export interface ProfileSectionProps {
   profileCount: number;
   onCommand: (command: Command) => void;
   pickerOptions?: TabPickerOptions;
+  /** Placeholder 실체화 구역 — Modification id 키. */
+  materialized?: Record<string, string>;
 }
 
 export function ProfileSection({
@@ -39,6 +41,7 @@ export function ProfileSection({
   profileCount,
   onCommand,
   pickerOptions,
+  materialized,
 }: ProfileSectionProps) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const confirmTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -91,6 +94,7 @@ export function ProfileSection({
             <HeaderRow
               key={modification.id}
               modification={modification}
+              materializedValue={materialized?.[modification.id]}
               onChange={(next) =>
                 onCommand({
                   type: 'update-modification',

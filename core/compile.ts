@@ -1,4 +1,5 @@
 import { isProfileExpired } from './expiry';
+import { hasPlaceholders } from './placeholder';
 import type { Filter, Modification, Profile } from './schema';
 import { UNSET_ID } from './schema';
 import {
@@ -24,6 +25,8 @@ export interface CompileEnv {
   tabs: TabInfo[];
   /** 현재 시각(ms) — Time Filter 만료 방어층에 쓰인다. */
   now: number;
+  /** Placeholder 실체화 구역 — Compile은 소비만 하고 절대 생성하지 않는다. */
+  materialized: Record<string, string>;
 }
 
 export interface CompileResult {
@@ -245,6 +248,7 @@ function emitModification(
   priority: number,
   profileId: string,
   compiled: CompiledFilters,
+  materialized: Record<string, string>,
   emitter: Emitter,
 ): void {
   switch (modification.kind) {
@@ -259,6 +263,10 @@ function emitModification(
         });
         return;
       }
+      // 값은 템플릿 그대로, Placeholder가 있으면 실체화 값을 소비한다.
+      const value = hasPlaceholders(modification.value)
+        ? materialized[modification.id]!
+        : modification.value;
       for (const join of compiled.regexJoins) {
         emitRule(
           emitter,
@@ -266,7 +274,7 @@ function emitModification(
             priority,
             action: {
               type: 'modifyHeaders',
-              requestHeaders: [{ header, operation: 'set', value: modification.value }],
+              requestHeaders: [{ header, operation: 'set', value }],
             },
             condition: conditionFor(compiled, join),
           },
@@ -278,6 +286,19 @@ function emitModification(
     default:
       modification.kind satisfies never;
   }
+}
+
+/**
+ * 불변식 검사: 활성 Profile의 enabled Placeholder Modification에 실체화 값이
+ * 빠져 있으면 그 Profile 전체를 규칙에서 제외한다 (PRD 방어선).
+ */
+function findMissingMaterialization(
+  profile: Profile,
+  materialized: Record<string, string>,
+): Modification | undefined {
+  return profile.modifications.find(
+    (m) => m.enabled && hasPlaceholders(m.value) && !(m.id in materialized),
+  );
 }
 
 /**
@@ -318,6 +339,18 @@ export function compile(profiles: Profile[], env: CompileEnv): CompileResult {
   const headerUse = new Map<string, string[]>();
 
   for (const profile of active) {
+    const missing = findMissingMaterialization(profile, env.materialized);
+    if (missing) {
+      emitter.warnings.push({
+        code: 'missing-materialization',
+        profileId: profile.id,
+        modificationId: missing.id,
+        message:
+          'An active profile has a placeholder without a materialized value; the whole profile was excluded from rules.',
+      });
+      continue;
+    }
+
     const enabled = profile.modifications.filter((m) => m.enabled);
     const base = bandBase.get(profile.id)!;
     const compiled = compileFilters(profile, tabs, emitter.warnings);
@@ -348,6 +381,7 @@ export function compile(profiles: Profile[], env: CompileEnv): CompileResult {
         base + enabled.length - 1 - index,
         profile.id,
         compiled,
+        env.materialized,
         emitter,
       );
       if (modification.kind === 'request-header') {
