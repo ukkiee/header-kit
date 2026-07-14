@@ -1,0 +1,35 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "plan",
+  "verdict": "needs-attention",
+  "summary": "R-1 is not fully resolved: the plan requires persistent placeholder materialization but its schema cannot represent both the template and active value.",
+  "planFile": "docs/reviews/header-kit-mvp/prd.md",
+  "planInDiff": true,
+  "reviewedFileCount": 2,
+  "target": "working tree diff",
+  "reviewedSha": "12eb6f4ccd3e04eab48fed8573ea96f37cb81273",
+  "reviewedTree": "f0dd05fbb98f6d4414e771473a8f19776d442ef2",
+  "headMovedDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 1,
+  "planFindingCount": 1,
+  "triage": "review-gate SKILL.md rules govern: render EVERY finding as a full table row, the human decides each row (accept/reject/defer/question — free text), echo back before applying, max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "Open question: placeholder materialization has no schema representation",
+      "body": "The plan says the materialized value persists as active state and Compile consumes it, but schema v1 defines only one Modification value field and no materialized-value state. A competent implementation must guess whether to overwrite the template (preventing fresh generation on the next activation), store undeclared parallel state, or recompute it after restart—reintroducing R-1. Import/export and deactivation behavior are consequently also undefined.",
+      "file": "docs/reviews/header-kit-mvp/prd.md",
+      "line_start": 86,
+      "line_end": 87,
+      "confidence": 0.97,
+      "recommendation": "Define separate persisted template and materialized-value fields, including creation on inactive→active, clearing on active→inactive, behavior when the template changes while active, and import/export handling. Add lifecycle tests covering restart, deactivate/reactivate, and active-profile editing.",
+      "isPlanFinding": true
+    }
+  ],
+  "next_steps": [
+    "Amend the schema and lifecycle/testing decisions for placeholder state, then re-run the R-1 gate."
+  ]
+}
