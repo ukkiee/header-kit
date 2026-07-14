@@ -1,10 +1,10 @@
-import { createDefaultState, type StoredState } from '@/core/schema';
+import { parseStoredState, type StoredState } from '@/core/schema';
 
 const STATE_KEY = 'state';
 
 export async function loadState(): Promise<StoredState> {
   const result = await browser.storage.local.get(STATE_KEY);
-  return (result[STATE_KEY] as StoredState | undefined) ?? createDefaultState();
+  return parseStoredState(result[STATE_KEY]);
 }
 
 export async function saveState(state: StoredState): Promise<void> {

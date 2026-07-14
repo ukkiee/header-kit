@@ -15,6 +15,10 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+async function tick() {
+  await new Promise((r) => setTimeout(r, 0));
+}
+
 function compileTag(snapshot: Snapshot): CompileResult {
   return {
     rules: [
@@ -33,7 +37,7 @@ function compileTag(snapshot: Snapshot): CompileResult {
 }
 
 describe('createReconciler', () => {
-  it('연속 요청을 직렬화하고, 로드 중 추월당한 세대는 적용하지 않는다', async () => {
+  it('로드 도중 새 세대에 추월당한 스냅샷은 적용되지 않는다', async () => {
     const loads: Array<ReturnType<typeof deferred<Snapshot>>> = [];
     const applied: string[] = [];
 
@@ -50,18 +54,18 @@ describe('createReconciler', () => {
     });
 
     const first = reconciler.requestReconcile();
-    const second = reconciler.requestReconcile();
+    await tick(); // 첫 요청의 로드가 시작된 상태에서
+    const second = reconciler.requestReconcile(); // 새 세대가 추월
 
-    // 첫 로드가 끝나기 전에 두 번째 요청이 들어왔다 → 첫 스냅샷은 stale
     loads[0]!.resolve({ tag: 'stale' });
-    await Promise.resolve();
+    await tick();
     loads[1]!.resolve({ tag: 'fresh' });
     await Promise.all([first, second]);
 
     expect(applied).toEqual(['fresh']);
   });
 
-  it('버스트 요청을 코얼레싱해 마지막 상태만 적용한다', async () => {
+  it('동기 버스트는 코얼레싱되어 마지막 세대만 로드·적용한다', async () => {
     let loadCount = 0;
     const applied: string[] = [];
 
@@ -79,8 +83,8 @@ describe('createReconciler', () => {
       reconciler.requestReconcile(),
     ]);
 
-    expect(applied.length).toBeLessThan(3);
-    expect(applied.at(-1)).toBe(`load-${loadCount}`);
+    expect(loadCount).toBe(1);
+    expect(applied).toEqual(['load-1']);
   });
 
   it('apply는 절대 겹쳐 실행되지 않는다', async () => {
@@ -98,32 +102,30 @@ describe('createReconciler', () => {
       },
     });
 
-    await Promise.all(
-      Array.from({ length: 5 }, () => reconciler.requestReconcile()),
-    );
-    await reconciler.requestReconcile();
+    const bursts = Array.from({ length: 5 }, async (_, i) => {
+      await new Promise((r) => setTimeout(r, i));
+      return reconciler.requestReconcile();
+    });
+    await Promise.all(bursts);
 
     expect(maxInFlight).toBe(1);
   });
 
-  it('적용 완료 시 onApplied가 최종 세대 정보와 함께 호출된다', async () => {
-    const generations: number[] = [];
+  it('요청 반환 promise는 해당 작업(또는 승계 확인)이 끝난 뒤 resolve된다', async () => {
+    const applied: string[] = [];
 
     const reconciler = createReconciler<Snapshot>({
-      loadSnapshot: async () => ({ tag: 't' }),
+      loadSnapshot: async () => ({ tag: 'final' }),
       compile: compileTag,
-      apply: async () => {},
-      onApplied: ({ generation }) => {
-        generations.push(generation);
+      apply: async (rules) => {
+        applied.push(rules[0]?.action.requestHeaders?.[0]?.value ?? '');
       },
     });
 
     await reconciler.requestReconcile();
-    await reconciler.requestReconcile();
+    expect(applied).toEqual(['final']);
 
-    expect(generations.length).toBeGreaterThanOrEqual(1);
-    const last = generations.at(-1)!;
-    expect(generations).toEqual([...generations].sort((a, b) => a - b));
-    expect(last).toBeGreaterThanOrEqual(2);
+    await reconciler.requestReconcile();
+    expect(applied).toEqual(['final', 'final']);
   });
 });

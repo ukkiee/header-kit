@@ -11,4 +11,5 @@ Tracker: local markdown — `.scratch/header-kit-mvp/`
 - rename: done — 슬러그/브랜치 header-kit-mvp, 새 세션이 컨덕터 인계
 - convention: 저장소 문서에는 레퍼런스 제품의 브랜드명을 쓰지 않는다 — 기능 중심으로 서술하고, 비교가 필요하면 "레퍼런스 제품"으로 지칭. 브랜드명·원출처 URL이 포함된 리서치 원본은 저장소 밖(세션 스크래치패드)에 보관.
 - stage 2 (prd): done — PRD 발행(.scratch/header-kit-mvp/spec.md, 스토리 42개 + 시임 2개 확정). plan 게이트 r1 4건 accept(Placeholder 실체화, 충돌 의미론, 재조정 큐, Backup 원자성) → r2 1건 accept(실체화 스키마 이원화) → r3 1건 accept(Import 활성화 경계) → r4 approve 0건. 결정 전부 decisions.md에 기록.
+- stage 4 issue 01 (walking skeleton): done — compile 시임+FIFO 재조정 큐+어댑터+팝업, 테스트 15/15, 실브라우저 스모크 8/8 (allow 우선순위 확인, session rule 상한 5,000 실측). 2축 코드리뷰 반영(팝업 실조작 스모크, C3/C4 단언, parseStoredState, lost-wakeup 제거). 다음: structure 게이트.
 - stage 3 (slice): done — 수직 슬라이스 11개 발행(.scratch/header-kit-mvp/issues/01~11, ready-for-agent). 사용자 브레이크다운 승인 후 적대적 검증 워크플로(검증 12 에이전트 중 7 완료, 5는 세션 한도로 미검증: 02/04/05/09/11 개별 심층검증 생략 — 전체 커버리지 감사는 완료). 반영: 01에 5,000 규칙 실기기 검증 추가, 06에 04 의존+편집 UI 명시, 08에 06 의존 추가, 11에 시크릿 실적용 확인 추가, 07 전이 의존 정리. 42개 스토리 전량 커버 확인, DAG 순환 없음.

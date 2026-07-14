@@ -1,6 +1,6 @@
 # 01 — 워킹 스켈레톤: 최소 Request Header 경로
 
-Status: ready-for-agent
+Status: done
 Blocked by: None - can start immediately
 
 ## Parent
@@ -41,3 +41,10 @@ None - can start immediately
 - **검증 항목 ① (allow vs modifyHeaders)**: 확인됨. 같은 조건에서 allow(priority 2) + modifyHeaders(priority 1) → 헤더 미적용. priority를 뒤집으면(modify 2, allow 1) 헤더 적용됨. **Exclude Filter를 "자기 대역 상단 allow 규칙"으로 구현하는 설계 전제 성립.** 단, allow는 자기보다 낮은 priority의 모든 modifyHeaders를 무효화하므로 PRD의 하향 전파 의미론도 실기기와 일치.
 - **검증 항목 ② (5,000 규칙 전량 교체)**: 확인됨. 5,000개 modifyHeaders session rule 일괄 등록 596ms, 전량 교체(제거 5,000+재등록 5,000) 351ms, 전량 제거 23ms. **5,001번째 규칙은 "Session rule count exceeded" 오류로 거부** — session rule 상한은 정확히 5,000이며, quota 초과를 Compile 경고로 노출하는 PRD 결정이 필요함을 재확인.
 - 상태→규칙 경로: storage 변경 → 재조정 큐 → session rule 반영이 100ms 폴링 내 수렴, Profile off 시 즉시 원상복구 확인.
+
+**2026-07-14 코드리뷰 반영** (Standards/Spec 2축):
+
+- 스모크 A를 실제 팝업 UI 조작(스위치 클릭)으로 교체 — 팝업→storage→규칙→실요청 전 구간이 이제 끝-끝으로 검증됨. C3/C4에 규칙 수 단언 추가(무단언 PASS 제거).
+- 재조정 큐를 FIFO 체인 + 세대 스킵 방식으로 재구현 — 리뷰가 지적한 microtask 창의 lost-wakeup 가능성 제거, 코드도 더 단순해짐.
+- `parseStoredState` 구조 검증 추가(전량 수용/거부, 위반 시 기본 상태) — 저장소 어댑터의 blind cast 제거, 이후 슬라이스가 확장할 검증 시임 마련.
+- 유지 판단: `tabs`/`alarms` 권한(이슈 명세의 고정 목록), Profile.active vs Modification.enabled 구분(PRD 용어 그대로), reconciler onApplied는 소비자가 없어 제거.
