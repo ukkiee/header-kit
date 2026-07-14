@@ -284,16 +284,30 @@ export type Command =
   | { type: 'add-modification'; profileId: string; modification: Modification }
   | { type: 'update-modification'; profileId: string; modification: Modification }
   | { type: 'remove-modification'; profileId: string; modificationId: string }
+  | { type: 'import-profiles'; profiles: Profile[] }
   | { type: 'add-filter'; profileId: string; filter: Filter }
   | { type: 'update-filter'; profileId: string; filter: Filter }
   | { type: 'remove-filter'; profileId: string; filterId: string };
 
-export function applyCommand(state: StoredState, command: Command): StoredState {
+/** Import된 Profile들을 끝에 덧붙인다 — 활성 Profile은 활성화 경계로 실체화된다. */
+export function importProfiles(
+  state: StoredState,
+  profiles: Profile[],
+  deps: MaterializeDeps = defaultMaterializeDeps,
+): StoredState {
+  return profiles.reduce((acc, profile) => addProfile(acc, profile, undefined, deps), state);
+}
+
+export function applyCommand(
+  state: StoredState,
+  command: Command,
+  deps: MaterializeDeps = defaultMaterializeDeps,
+): StoredState {
   switch (command.type) {
     case 'toggle-profile':
-      return toggleProfile(state, command.profileId, command.active);
+      return toggleProfile(state, command.profileId, command.active, deps);
     case 'add-profile':
-      return addProfile(state, command.profile, command.afterProfileId);
+      return addProfile(state, command.profile, command.afterProfileId, deps);
     case 'duplicate-profile':
       return duplicateProfile(state, command.profileId);
     case 'remove-profile':
@@ -305,11 +319,13 @@ export function applyCommand(state: StoredState, command: Command): StoredState 
     case 'set-paused':
       return setPaused(state, command.paused);
     case 'expire-profiles':
-      return expireProfiles(state, command.now);
+      return expireProfiles(state, command.now, deps);
+    case 'import-profiles':
+      return importProfiles(state, command.profiles, deps);
     case 'add-modification':
-      return addModification(state, command.profileId, command.modification);
+      return addModification(state, command.profileId, command.modification, deps);
     case 'update-modification':
-      return updateModification(state, command.profileId, command.modification);
+      return updateModification(state, command.profileId, command.modification, deps);
     case 'remove-modification':
       return removeModification(state, command.profileId, command.modificationId);
     case 'add-filter':

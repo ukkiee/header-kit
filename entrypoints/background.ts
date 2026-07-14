@@ -25,18 +25,34 @@ async function replaceSessionRules(rules: NetRule[]): Promise<void> {
   });
 }
 
-/** 저장 시점 검증: regex Filter는 플랫폼이 실제 지원하는지 확인 후에만 저장된다. */
-async function validateCommand(command: Command): Promise<string | null> {
-  if (command.type !== 'add-filter' && command.type !== 'update-filter') return null;
-  const filter = command.filter;
-  if (filter.kind !== 'url' && filter.kind !== 'exclude-url') return null;
-  const pattern = filter.pattern.trim();
-  if (pattern === '') return null;
-
+async function validateRegexPattern(pattern: string): Promise<string | null> {
+  const trimmed = pattern.trim();
+  if (trimmed === '') return null;
   const { isSupported, reason } = await browser.declarativeNetRequest.isRegexSupported({
-    regex: pattern,
+    regex: trimmed,
   });
   return isSupported ? null : `Invalid regex pattern (${reason ?? 'unsupported'})`;
+}
+
+/** 저장 시점 검증: regex Filter는 플랫폼이 실제 지원하는지 확인 후에만 저장된다. */
+async function validateCommand(command: Command): Promise<string | null> {
+  if (command.type === 'add-filter' || command.type === 'update-filter') {
+    const filter = command.filter;
+    if (filter.kind !== 'url' && filter.kind !== 'exclude-url') return null;
+    return validateRegexPattern(filter.pattern);
+  }
+
+  // Import도 전량 수용/거부 — regex 하나라도 플랫폼이 거부하면 전체를 거부한다.
+  if (command.type === 'import-profiles') {
+    for (const profile of command.profiles) {
+      for (const filter of profile.filters) {
+        if (filter.kind !== 'url' && filter.kind !== 'exclude-url') continue;
+        const error = await validateRegexPattern(filter.pattern);
+        if (error !== null) return `"${profile.name}": ${error}`;
+      }
+    }
+  }
+  return null;
 }
 
 async function applyBadge(state: StoredState): Promise<void> {

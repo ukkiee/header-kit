@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/Button';
 import { ProfileSection } from '@/components/ProfileSection';
+import { TransferPanel } from '@/components/TransferPanel';
 import type { Command } from '@/core/commands';
 import { createProfile, PROFILE_COLORS, type StoredState } from '@/core/schema';
 import { loadState, onStateChanged, sendCommand } from '@/storage/state';
@@ -86,6 +87,8 @@ export function App() {
       >
         + New profile
       </Button>
+
+      <TransferPanel state={state} onCommand={dispatch} />
     </main>
   );
 }

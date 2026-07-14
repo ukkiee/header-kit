@@ -135,7 +135,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-function isModification(value: unknown): value is Modification {
+export function isModification(value: unknown): value is Modification {
   return (
     isRecord(value) &&
     value.kind === 'request-header' &&
@@ -154,7 +154,7 @@ function isRequestMethod(value: unknown): value is RequestMethod {
   return typeof value === 'string' && (REQUEST_METHODS as readonly string[]).includes(value);
 }
 
-function isFilter(value: unknown): value is Filter {
+export function isFilter(value: unknown): value is Filter {
   if (!isRecord(value) || typeof value.id !== 'string' || typeof value.enabled !== 'boolean') {
     return false;
   }

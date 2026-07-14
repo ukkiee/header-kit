@@ -518,6 +518,59 @@ try {
   record('G4: 활성 중 템플릿 편집 → 즉시 재실체화', editResult?.ok === true && /^edit-/.test(afterEdit ?? ''),
     `value=${afterEdit}`);
 
+  // ---------- H. 이슈 08: Import/Export ----------
+  // 깨끗한 상태에서 시작해 팝업 UI로 Import를 수행한다.
+  await seedProfiles([]);
+  await pollSessionRuleCount(sw, 0);
+  await popup.reload();
+
+  const exportJson = JSON.stringify({
+    headerkit: 1,
+    profiles: [
+      {
+        id: 'src-p1',
+        name: 'Imported',
+        active: true,
+        shortLabel: 'IM',
+        color: '#9333ea',
+        modifications: [
+          { kind: 'request-header', id: 'src-m1', name: 'X-Imported-Id', value: 'imp-{{uuid}}', enabled: true },
+        ],
+        filters: [
+          { kind: 'tab', id: 'src-f1', enabled: true, tabId: 4242 },
+        ],
+      },
+    ],
+  });
+
+  await popup.getByRole('button', { name: 'Import…' }).click();
+  await popup.getByLabel('Import JSON').fill(exportJson);
+  await popup.getByRole('button', { name: 'Import', exact: true }).click();
+  await pollSessionRuleCount(sw, 1); // tab 참조가 정리(UNSET)됐으므로 규칙이 전 탭에 적용된다
+  const importedState = await sw.evaluate(async () => {
+    const { state } = await chrome.storage.local.get('state');
+    return state;
+  });
+  const importedProfile = importedState.profiles.find((p) => p.name === 'Imported');
+  const importedHeader = (await fetchEchoHeaders(pageB, '/headers'))['x-imported-id'];
+  record('H1: 활성 Import → id 재생성 + 탭 참조 정리 + 활성화 경계 실체화',
+    importedProfile !== undefined &&
+    importedProfile.id !== 'src-p1' &&
+    importedProfile.filters[0]?.tabId === -1 &&
+    /^imp-[0-9a-f-]{36}$/.test(importedHeader ?? ''),
+    `id=${importedProfile?.id?.slice(0, 8)}, tabId=${importedProfile?.filters[0]?.tabId}, header=${importedHeader}`);
+
+  await popup.getByRole('button', { name: 'Import…' }).click();
+  await popup.getByLabel('Import JSON').fill('{broken json');
+  await popup.getByRole('button', { name: 'Import', exact: true }).click();
+  const importError = await popup.getByRole('alert').textContent();
+  const profileCountAfter = await sw.evaluate(async () => {
+    const { state } = await chrome.storage.local.get('state');
+    return state.profiles.length;
+  });
+  record('H2: 깨진 Import는 거부되고 상태가 불변', /JSON/i.test(importError ?? '') && profileCountAfter === 1,
+    `error="${importError}", profiles=${profileCountAfter}`);
+
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
   process.exitCode = failed.length === 0 ? 0 : 1;
