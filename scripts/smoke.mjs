@@ -335,6 +335,37 @@ try {
   record('E3: Method Filter — POST에만 적용', viaGet['x-post-only'] === undefined && viaPost['x-post-only'] === 'on',
     `GET=${viaGet['x-post-only']}, POST=${viaPost['x-post-only']}`);
 
+  // E5: Resource Type Filter — main_frame 내비게이션에만 적용, XHR 제외
+  await seedProfiles([
+    baseProfile('p-rt', 'Rt',
+      [{ kind: 'request-header', id: 'm1', name: 'X-Doc-Only', value: 'on', enabled: true }],
+      [{ kind: 'resource-type', id: 'f1', enabled: true, resourceTypes: ['main_frame'] }]),
+  ]);
+  await pollSessionRuleCount(sw, 1);
+  const viaXhr = await fetchEchoHeaders(page, '/headers');
+  await page.goto(`${origin}/headers?nav=1`);
+  const viaNav = JSON.parse(await page.evaluate(() => document.body.innerText));
+  await page.goto(origin);
+  record('E5: Resource Type Filter — 문서 요청에만 적용',
+    viaXhr['x-doc-only'] === undefined && viaNav['x-doc-only'] === 'on',
+    `xhr=${viaXhr['x-doc-only']}, nav=${viaNav['x-doc-only']}`);
+
+  // E6: Initiator Domain Filter — 요청 출처가 매칭될 때만 적용
+  const idProfile = (domain) => [
+    baseProfile('p-id', 'Id',
+      [{ kind: 'request-header', id: 'm1', name: 'X-From-Local', value: 'on', enabled: true }],
+      [{ kind: 'initiator-domain', id: 'f1', enabled: true, domain }]),
+  ];
+  await seedProfiles(idProfile('127.0.0.1'));
+  await pollSessionRuleCount(sw, 1);
+  const matched = await fetchEchoHeaders(page, '/headers');
+  await seedProfiles(idProfile('nomatch.example'));
+  await new Promise((r) => setTimeout(r, 300));
+  const unmatched = await fetchEchoHeaders(page, '/headers');
+  record('E6: Initiator Domain Filter — 출처 도메인 매칭 시에만 적용',
+    matched['x-from-local'] === 'on' && unmatched['x-from-local'] === undefined,
+    `matched=${matched['x-from-local']}, unmatched=${unmatched['x-from-local']}`);
+
   // E4: 유효하지 않은 regex는 저장 시점(권위 경로)에 거부된다
   const rejection = await popup.evaluate(async () => {
     return chrome.runtime.sendMessage({

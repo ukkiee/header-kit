@@ -32,6 +32,8 @@ export const REQUEST_METHODS = [
   'delete',
   'head',
   'options',
+  'connect',
+  'other',
 ] as const;
 
 export type RequestMethod = (typeof REQUEST_METHODS)[number];

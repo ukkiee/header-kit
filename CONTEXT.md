@@ -13,7 +13,7 @@ Profile에 속한 개별 수정 항목. 종류는 Request Header, Response Heade
 _Avoid_: rule (브라우저의 net rule과 혼동), row, entry
 
 **Filter**:
-Profile의 Modification이 적용될 요청 범위를 좁히는 조건. 종류는 URL, Exclude URL, Initiator Domain, Resource Type, Tab, Tab Group, Window, Tab Domain, Time.
+Profile의 Modification이 적용될 요청 범위를 좁히는 조건. 종류는 URL, Exclude URL, Initiator Domain, Resource Type, Request Method, Tab, Tab Group, Window, Tab Domain, Time.
 _Avoid_: condition, matcher
 
 **Override / Append**:

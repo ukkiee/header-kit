@@ -1,6 +1,41 @@
+import { useEffect, useState } from 'react';
 import type { Filter } from '@/core/schema';
 import { ALL_RESOURCE_TYPES, REQUEST_METHODS } from '@/core/rules';
 import { Button } from './Button';
+
+/**
+ * 패턴류 입력은 로컬 초안으로 편집하고 blur/Enter에서만 커밋한다 —
+ * 저장 시점 regex 검증이 타이핑 중간 상태('(', '[' …)를 거부하면
+ * 통제 입력이 되돌아가 입력 자체가 불가능해지기 때문.
+ */
+function DraftInput({
+  value,
+  onCommit,
+  ...props
+}: { value: string; onCommit: (next: string) => void } & Omit<
+  React.InputHTMLAttributes<HTMLInputElement>,
+  'value' | 'onChange'
+>) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+
+  const commit = () => {
+    if (draft !== value) onCommit(draft);
+  };
+
+  return (
+    <input
+      type="text"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') commit();
+      }}
+      {...props}
+    />
+  );
+}
 
 export interface FilterRowProps {
   filter: Filter;
@@ -33,10 +68,9 @@ function FilterEditor({ filter, onChange }: Pick<FilterRowProps, 'filter' | 'onC
     case 'url':
     case 'exclude-url':
       return (
-        <input
-          type="text"
+        <DraftInput
           value={filter.pattern}
-          onChange={(e) => onChange({ ...filter, pattern: e.target.value })}
+          onCommit={(pattern) => onChange({ ...filter, pattern })}
           placeholder="regex pattern"
           aria-label={`${KIND_LABELS[filter.kind]} pattern`}
           className="h-7 min-w-0 flex-1 rounded-md border border-zinc-300 bg-white px-2 font-mono text-xs outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
@@ -77,10 +111,9 @@ function FilterEditor({ filter, onChange }: Pick<FilterRowProps, 'filter' | 'onC
     case 'initiator-domain':
       return (
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <input
-            type="text"
+          <DraftInput
             value={filter.domain}
-            onChange={(e) => onChange({ ...filter, domain: e.target.value })}
+            onCommit={(domain) => onChange({ ...filter, domain })}
             placeholder="example.com"
             aria-label="Initiator domain"
             className="h-7 rounded-md border border-zinc-300 bg-white px-2 text-xs outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900"

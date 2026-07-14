@@ -30,7 +30,7 @@ const TOTAL_RULE_LIMIT = 5000;
 /** regex 조건 규칙의 타입별 한도. */
 const REGEX_RULE_LIMIT = 1000;
 
-interface ProfileConditions {
+interface CompiledFilters {
   /** 각 원소가 규칙 하나의 regexFilter — URL Filter가 없으면 [undefined]. */
   regexJoins: Array<string | undefined>;
   resourceTypes: ResourceType[] | undefined;
@@ -71,7 +71,7 @@ function joinPatterns(
   return joins;
 }
 
-function buildConditions(profile: Profile, warnings: CompileWarning[]): ProfileConditions {
+function compileFilters(profile: Profile, warnings: CompileWarning[]): CompiledFilters {
   const enabled = profile.filters.filter((f) => f.enabled);
   const byKind = <K extends Filter['kind']>(kind: K) =>
     enabled.filter((f): f is Extract<Filter, { kind: K }> => f.kind === kind);
@@ -125,7 +125,9 @@ function emitRule(
         : null;
 
   if (quota) {
-    const key = `${quota}:${origin.profileId}`;
+    // 항목 단위 경고 — 어느 Modification이 빠졌는지 각각 알린다 (같은 항목의
+    // 분할 규칙 변형만 하나로 접는다).
+    const key = `${quota}:${origin.profileId}:${origin.modificationId ?? ''}`;
     if (!emitter.warned.has(key)) {
       emitter.warned.add(key);
       emitter.warnings.push({
@@ -147,14 +149,14 @@ function emitRule(
 }
 
 function conditionFor(
-  conditions: ProfileConditions,
+  compiled: CompiledFilters,
   regexFilter: string | undefined,
 ): NetRule['condition'] {
   return {
     ...(regexFilter !== undefined ? { regexFilter } : {}),
-    resourceTypes: conditions.resourceTypes ?? [...ALL_RESOURCE_TYPES],
-    ...(conditions.requestMethods ? { requestMethods: conditions.requestMethods } : {}),
-    ...(conditions.initiatorDomains ? { initiatorDomains: conditions.initiatorDomains } : {}),
+    resourceTypes: compiled.resourceTypes ?? [...ALL_RESOURCE_TYPES],
+    ...(compiled.requestMethods ? { requestMethods: compiled.requestMethods } : {}),
+    ...(compiled.initiatorDomains ? { initiatorDomains: compiled.initiatorDomains } : {}),
   };
 }
 
@@ -162,7 +164,7 @@ function emitModification(
   modification: Modification,
   priority: number,
   profileId: string,
-  conditions: ProfileConditions,
+  compiled: CompiledFilters,
   emitter: Emitter,
 ): void {
   switch (modification.kind) {
@@ -177,7 +179,7 @@ function emitModification(
         });
         return;
       }
-      for (const join of conditions.regexJoins) {
+      for (const join of compiled.regexJoins) {
         emitRule(
           emitter,
           {
@@ -186,7 +188,7 @@ function emitModification(
               type: 'modifyHeaders',
               requestHeaders: [{ header, operation: 'set', value: modification.value }],
             },
-            condition: conditionFor(conditions, join),
+            condition: conditionFor(compiled, join),
           },
           { profileId, modificationId: modification.id },
         );
@@ -237,12 +239,12 @@ export function compile(profiles: Profile[], env: CompileEnv): CompileResult {
   for (const profile of active) {
     const enabled = profile.modifications.filter((m) => m.enabled);
     const base = bandBase.get(profile.id)!;
-    const conditions = buildConditions(profile, emitter.warnings);
+    const compiled = compileFilters(profile, emitter.warnings);
 
     // Exclude allow 규칙이 quota 압력에서 살아남도록 Modification보다 먼저 낸다 —
     // 제외가 빠지는 것이 수정이 빠지는 것보다 위험하다.
     const allowPriority = base + enabled.length + EXCLUDE_ALLOW_SLOTS - 1;
-    for (const join of conditions.excludeJoins) {
+    for (const join of compiled.excludeJoins) {
       emitRule(
         emitter,
         {
@@ -259,7 +261,7 @@ export function compile(profiles: Profile[], env: CompileEnv): CompileResult {
         modification,
         base + enabled.length - 1 - index,
         profile.id,
-        conditions,
+        compiled,
         emitter,
       );
       if (modification.kind === 'request-header') {
