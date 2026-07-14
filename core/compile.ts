@@ -1,4 +1,4 @@
-import type { Profile } from './schema';
+import type { Modification, Profile } from './schema';
 import { ALL_RESOURCE_TYPES, type CompileWarning, type NetRule } from './rules';
 
 export interface CompileEnv {
@@ -8,6 +8,42 @@ export interface CompileEnv {
 export interface CompileResult {
   rules: NetRule[];
   warnings: CompileWarning[];
+}
+
+interface CompileContext {
+  profileId: string;
+  nextId: () => number;
+  rules: NetRule[];
+  warnings: CompileWarning[];
+}
+
+function compileModification(modification: Modification, ctx: CompileContext): void {
+  switch (modification.kind) {
+    case 'request-header': {
+      const header = modification.name.trim();
+      if (header === '') {
+        ctx.warnings.push({
+          code: 'empty-header-name',
+          profileId: ctx.profileId,
+          modificationId: modification.id,
+          message: 'Header name is empty; the modification was skipped.',
+        });
+        return;
+      }
+      ctx.rules.push({
+        id: ctx.nextId(),
+        priority: 1,
+        action: {
+          type: 'modifyHeaders',
+          requestHeaders: [{ header, operation: 'set', value: modification.value }],
+        },
+        condition: { resourceTypes: [...ALL_RESOURCE_TYPES] },
+      });
+      return;
+    }
+    default:
+      modification.kind satisfies never;
+  }
 }
 
 /**
@@ -22,33 +58,16 @@ export function compile(profiles: Profile[], env: CompileEnv): CompileResult {
     return { rules, warnings };
   }
 
-  let nextId = 1;
+  let id = 0;
+  const nextId = () => ++id;
+
   for (const profile of profiles) {
     if (!profile.active) continue;
 
-    for (const modification of profile.requestHeaders) {
+    const ctx: CompileContext = { profileId: profile.id, nextId, rules, warnings };
+    for (const modification of profile.modifications) {
       if (!modification.enabled) continue;
-
-      const header = modification.name.trim();
-      if (header === '') {
-        warnings.push({
-          code: 'empty-header-name',
-          profileId: profile.id,
-          modificationId: modification.id,
-          message: 'Header name is empty; the modification was skipped.',
-        });
-        continue;
-      }
-
-      rules.push({
-        id: nextId++,
-        priority: 1,
-        action: {
-          type: 'modifyHeaders',
-          requestHeaders: [{ header, operation: 'set', value: modification.value }],
-        },
-        condition: { resourceTypes: [...ALL_RESOURCE_TYPES] },
-      });
+      compileModification(modification, ctx);
     }
   }
 

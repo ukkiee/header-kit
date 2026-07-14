@@ -3,11 +3,13 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/Button';
 import { HeaderRow } from '@/components/HeaderRow';
 import {
-  createRequestHeaderModification,
-  type Profile,
-  type StoredState,
-} from '@/core/schema';
-import { loadState, onStateChanged, saveState } from '@/storage/state';
+  addModification,
+  removeModification,
+  toggleProfile,
+  updateModification,
+} from '@/core/commands';
+import { createRequestHeaderModification, type StoredState } from '@/core/schema';
+import { loadState, mutateState, onStateChanged } from '@/storage/state';
 
 export function App() {
   const [state, setState] = useState<StoredState | null>(null);
@@ -19,13 +21,8 @@ export function App() {
 
   if (!state) return null;
 
-  const updateProfile = (next: Profile) => {
-    const nextState: StoredState = {
-      ...state,
-      profiles: state.profiles.map((p) => (p.id === next.id ? next : p)),
-    };
-    setState(nextState);
-    void saveState(nextState);
+  const dispatch = (transition: (state: StoredState) => StoredState) => {
+    void mutateState(transition).then(setState);
   };
 
   return (
@@ -37,7 +34,7 @@ export function App() {
             <span className="text-sm font-medium">{profile.name}</span>
             <Switch.Root
               checked={profile.active}
-              onCheckedChange={(active) => updateProfile({ ...profile, active })}
+              onCheckedChange={(active) => dispatch((s) => toggleProfile(s, profile.id, active))}
               aria-label={`Toggle ${profile.name}`}
               className="flex h-5 w-9 rounded-full bg-zinc-300 p-0.5 transition-colors data-[checked]:bg-blue-600 dark:bg-zinc-700"
             >
@@ -46,28 +43,18 @@ export function App() {
           </div>
 
           <div className="flex flex-col gap-1.5">
-            {profile.requestHeaders.map((modification) => (
-              <HeaderRow
-                key={modification.id}
-                modification={modification}
-                onChange={(next) =>
-                  updateProfile({
-                    ...profile,
-                    requestHeaders: profile.requestHeaders.map((m) =>
-                      m.id === next.id ? next : m,
-                    ),
-                  })
-                }
-                onRemove={() =>
-                  updateProfile({
-                    ...profile,
-                    requestHeaders: profile.requestHeaders.filter(
-                      (m) => m.id !== modification.id,
-                    ),
-                  })
-                }
-              />
-            ))}
+            {profile.modifications.map((modification) =>
+              modification.kind === 'request-header' ? (
+                <HeaderRow
+                  key={modification.id}
+                  modification={modification}
+                  onChange={(next) => dispatch((s) => updateModification(s, profile.id, next))}
+                  onRemove={() =>
+                    dispatch((s) => removeModification(s, profile.id, modification.id))
+                  }
+                />
+              ) : null,
+            )}
           </div>
 
           <Button
@@ -75,13 +62,7 @@ export function App() {
             size="sm"
             className="self-start"
             onClick={() =>
-              updateProfile({
-                ...profile,
-                requestHeaders: [
-                  ...profile.requestHeaders,
-                  createRequestHeaderModification(),
-                ],
-              })
+              dispatch((s) => addModification(s, profile.id, createRequestHeaderModification()))
             }
           >
             + Request header

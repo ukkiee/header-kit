@@ -111,6 +111,60 @@ describe('createReconciler', () => {
     expect(maxInFlight).toBe(1);
   });
 
+  it('apply 도중 새 세대가 도착해도 stale 규칙이 잔류하지 않는다 (후속 태스크가 즉시 덮음)', async () => {
+    let currentTag = 'v1';
+    const applied: string[] = [];
+    const firstApplyGate = deferred<void>();
+    let applyCalls = 0;
+
+    const reconciler = createReconciler<Snapshot>({
+      loadSnapshot: async () => ({ tag: currentTag }),
+      compile: compileTag,
+      apply: async (rules) => {
+        applyCalls += 1;
+        const isFirst = applyCalls === 1;
+        applied.push(rules[0]?.action.requestHeaders?.[0]?.value ?? '');
+        if (isFirst) await firstApplyGate.promise; // 브라우저 API 호출이 오래 걸리는 상황
+      },
+    });
+
+    const first = reconciler.requestReconcile();
+    await tick(); // 첫 태스크가 apply('v1')에 진입
+    currentTag = 'v2'; // Pause/편집에 해당하는 상태 변화
+    const second = reconciler.requestReconcile(); // apply 도중 새 세대 도착
+    firstApplyGate.resolve();
+    await Promise.all([first, second]);
+
+    // stale('v1')은 설치될 수 있으나 최종 상태는 반드시 최신('v2')으로 수렴한다.
+    expect(applied).toEqual(['v1', 'v2']);
+  });
+
+  it('apply가 실패해도 큐는 멈추지 않고 다음 요청을 처리한다', async () => {
+    let failNext = true;
+    const errors: unknown[] = [];
+    const applied: string[] = [];
+
+    const reconciler = createReconciler<Snapshot>({
+      loadSnapshot: async () => ({ tag: 'ok' }),
+      compile: compileTag,
+      apply: async (rules) => {
+        if (failNext) {
+          failNext = false;
+          throw new Error('quota exceeded');
+        }
+        applied.push(rules[0]?.action.requestHeaders?.[0]?.value ?? '');
+      },
+      onError: (error) => errors.push(error),
+    });
+
+    await reconciler.requestReconcile();
+    expect(errors).toHaveLength(1);
+    expect(applied).toEqual([]);
+
+    await reconciler.requestReconcile();
+    expect(applied).toEqual(['ok']);
+  });
+
   it('요청 반환 promise는 해당 작업(또는 승계 확인)이 끝난 뒤 resolve된다', async () => {
     const applied: string[] = [];
 

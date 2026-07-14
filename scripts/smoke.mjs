@@ -83,8 +83,8 @@ try {
             id: 'p1',
             name: 'Smoke',
             active: false,
-            requestHeaders: [
-              { id: 'm1', name: 'X-HeaderKit-Smoke', value: 'ok', enabled: true },
+            modifications: [
+              { kind: 'request-header', id: 'm1', name: 'X-HeaderKit-Smoke', value: 'ok', enabled: true },
             ],
           },
         ],

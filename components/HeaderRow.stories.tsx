@@ -24,7 +24,7 @@ function InteractiveHeaderRow({ initial }: { initial: RequestHeaderModification 
 
 export const Filled: Story = {
   args: {
-    modification: { id: 'm1', name: 'X-Debug', value: 'on', enabled: true },
+    modification: { kind: 'request-header', id: 'm1', name: 'X-Debug', value: 'on', enabled: true },
     onChange: () => {},
     onRemove: () => {},
   },
@@ -33,7 +33,7 @@ export const Filled: Story = {
 
 export const Empty: Story = {
   args: {
-    modification: { id: 'm2', name: '', value: '', enabled: true },
+    modification: { kind: 'request-header', id: 'm2', name: '', value: '', enabled: true },
     onChange: () => {},
     onRemove: () => {},
   },

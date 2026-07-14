@@ -16,6 +16,7 @@ export default defineBackground(() => {
     loadSnapshot: loadState,
     compile: (state) => compile(state.profiles, { paused: state.paused }),
     apply: replaceSessionRules,
+    onError: (error) => console.error('[HeaderKit] reconcile failed', error),
   });
 
   onStateChanged(() => void reconciler.requestReconcile());

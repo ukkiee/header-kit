@@ -11,7 +11,7 @@ describe('parseStoredState', () => {
           id: 'p1',
           name: 'P',
           active: true,
-          requestHeaders: [{ id: 'm1', name: 'X-A', value: '1', enabled: true }],
+          modifications: [{ kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true }],
         },
       ],
     };
@@ -24,7 +24,7 @@ describe('parseStoredState', () => {
     expect(actual).toMatchObject({
       schemaVersion: SCHEMA_VERSION,
       paused: false,
-      profiles: [{ name: 'Default Profile', active: true, requestHeaders: [] }],
+      profiles: [{ name: 'Default Profile', active: true, modifications: [] }],
     });
   }
 
@@ -45,7 +45,7 @@ describe('parseStoredState', () => {
             id: 'p1',
             name: 'P',
             active: true,
-            requestHeaders: [{ id: 'm1', name: 'X', value: 1, enabled: true }],
+            modifications: [{ kind: 'request-header', id: 'm1', name: 'X', value: 1, enabled: true }],
           },
         ],
       },

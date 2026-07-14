@@ -1,0 +1,59 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "structure",
+  "verdict": "needs-attention",
+  "summary": "첫 슬라이스가 후속 증분의 핵심 계약을 잘못 고정하고 있어 아직 ship하면 안 됩니다. 특히 스키마 형태와 상태 전이 경계는 지금 바로잡지 않으면 이후 Modification·Placeholder·Import/Restore 구현에서 큰 재작업이 발생합니다.",
+  "planFile": "docs/reviews/header-kit-mvp/prd.md",
+  "planInDiff": null,
+  "reviewedFileCount": 50,
+  "target": "branch diff against main",
+  "reviewedSha": "6f834fb7e86fc6b99a28972c4eeb144656766828",
+  "reviewedTree": "c64d0ea78b0879eb5244af62c9e1ee3a5c8b8edf",
+  "headMovedDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 3,
+  "planFindingCount": 0,
+  "triage": "review-gate SKILL.md rules govern: render EVERY finding as a full table row, the human decides each row (accept/reject/defer/question — free text), echo back before applying, max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "스키마 v1이 Request Header 전용 구조를 공개 계약으로 고정합니다",
+      "body": "Profile이 ordered Modification 컬렉션 대신 `requestHeaders` 배열을 직접 보유합니다. 후속 이슈는 여섯 Modification 종류, 종류를 가로지르는 목록 순서와 priority, Modification ID 기반 실체화 상태, 단일 v1 Import/Export 형식을 요구합니다. 현재 구조를 확장하면 종류별 병렬 배열과 분기들이 compile/UI/store에 퍼지거나, 이미 저장된 schemaVersion 1 데이터를 다시 마이그레이션해야 합니다. 이 위험은 `compile.ts`와 팝업에도 이미 전파됐습니다.",
+      "file": "core/schema.ts",
+      "line_start": 3,
+      "line_end": 17,
+      "confidence": 0.98,
+      "recommendation": "지금 v1을 ordered discriminated union인 `modifications` 컬렉션으로 정의하고 Request Header를 첫 variant로 모델링하십시오. 이후 종류는 같은 공개 계약에 variant만 추가하도록 만드십시오.",
+      "isPlanFinding": false
+    },
+    {
+      "severity": "high",
+      "title": "UI가 저장 상태 전이 규칙을 우회해 직접 영속화합니다",
+      "body": "팝업이 임의의 `StoredState`를 조립해 raw `saveState`로 기록합니다. 후속 Placeholder·Import·Restore 증분은 활성화 시 원자적 실체화, 비활성화 시 정리, 활성 중 템플릿 변경 시 선택적 재실체화를 모든 쓰기 경로에서 동일하게 보장해야 합니다. 현재 경계를 그대로 복제하면 팝업·탭 앱·Import·Restore가 각각 이 불변식을 구현해야 하며, 한 경로라도 누락되면 불완전한 활성 Profile이 저장되고 규칙이 잘못 적용됩니다.",
+      "file": "entrypoints/popup/App.tsx",
+      "line_start": 22,
+      "line_end": 29,
+      "confidence": 0.96,
+      "recommendation": "브라우저 독립적인 state-transition/application 모듈을 추가해 toggle, edit, import, restore 명령과 검증을 중앙화하고 raw persistence는 그 경계 뒤로 숨기십시오.",
+      "isPlanFinding": false
+    },
+    {
+      "severity": "high",
+      "title": "새 세대가 apply 도중 도착하면 stale 규칙 적용을 막지 못합니다",
+      "body": "세대 검사는 `apply` 호출 직전에 끝납니다. `replaceSessionRules`가 브라우저 API를 기다리는 동안 Pause나 편집 트리거가 새 세대를 만들면 이전 세대의 규칙은 그대로 설치되고, 다음 큐 작업이 복구할 때까지 남습니다. 이는 PRD가 재조정 큐에서 명시적으로 막으려는 stale 규칙 부활이며, 후속 탭·알람 트리거가 추가될수록 경합 표면이 커집니다. 현재 테스트도 load 도중 추월만 고정합니다.",
+      "file": "core/reconciler.ts",
+      "line_start": 33,
+      "line_end": 43,
+      "confidence": 0.91,
+      "recommendation": "적용 커밋까지 세대 유효성을 보장하는 조정 방식을 설계하고, 최소한 apply 도중 새 Pause/편집 세대가 들어오는 경합 테스트로 stale 규칙이 관찰되지 않음을 고정하십시오.",
+      "isPlanFinding": false
+    }
+  ],
+  "next_steps": [
+    "스키마와 상태 전이 경계를 후속 이슈 착수 전에 수정하십시오.",
+    "apply 도중 세대 교체 시나리오를 재조정 공개 시임에서 검증하십시오.",
+    "검증 명령은 읽기 전용 환경에서 Vitest 임시 파일 생성이 EPERM으로 차단됐으므로 쓰기 가능한 환경에서 다시 실행하십시오."
+  ]
+}

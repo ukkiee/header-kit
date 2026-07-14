@@ -8,7 +8,7 @@ function profile(overrides: Partial<Profile> = {}): Profile {
     id: 'p1',
     name: 'Test Profile',
     active: true,
-    requestHeaders: [],
+    modifications: [],
     ...overrides,
   };
 }
@@ -18,9 +18,9 @@ describe('compile', () => {
     const { rules, warnings } = compile(
       [
         profile({
-          requestHeaders: [
-            { id: 'm1', name: 'X-Debug', value: 'on', enabled: true },
-            { id: 'm2', name: 'X-Trace', value: 'abc', enabled: true },
+          modifications: [
+            { kind: 'request-header', id: 'm1', name: 'X-Debug', value: 'on', enabled: true },
+            { kind: 'request-header', id: 'm2', name: 'X-Trace', value: 'abc', enabled: true },
           ],
         }),
       ],
@@ -49,11 +49,11 @@ describe('compile', () => {
       [
         profile({
           active: false,
-          requestHeaders: [{ id: 'm1', name: 'X-A', value: '1', enabled: true }],
+          modifications: [{ kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true }],
         }),
         profile({
           id: 'p2',
-          requestHeaders: [{ id: 'm2', name: 'X-B', value: '2', enabled: false }],
+          modifications: [{ kind: 'request-header', id: 'm2', name: 'X-B', value: '2', enabled: false }],
         }),
       ],
       { paused: false },
@@ -64,7 +64,7 @@ describe('compile', () => {
 
   it('Pause 상태에서는 규칙이 없다', () => {
     const { rules } = compile(
-      [profile({ requestHeaders: [{ id: 'm1', name: 'X-A', value: '1', enabled: true }] })],
+      [profile({ modifications: [{ kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true }] })],
       { paused: true },
     );
 
@@ -75,9 +75,9 @@ describe('compile', () => {
     const { rules, warnings } = compile(
       [
         profile({
-          requestHeaders: [
-            { id: 'm1', name: '  ', value: '1', enabled: true },
-            { id: 'm2', name: 'X-Ok', value: '2', enabled: true },
+          modifications: [
+            { kind: 'request-header', id: 'm1', name: '  ', value: '1', enabled: true },
+            { kind: 'request-header', id: 'm2', name: 'X-Ok', value: '2', enabled: true },
           ],
         }),
       ],
@@ -96,7 +96,7 @@ describe('compile', () => {
 
   it('빈 값은 빈 문자열 set으로 컴파일된다 (의미 세분화는 후속 슬라이스)', () => {
     const { rules } = compile(
-      [profile({ requestHeaders: [{ id: 'm1', name: 'X-Empty', value: '', enabled: true }] })],
+      [profile({ modifications: [{ kind: 'request-header', id: 'm1', name: 'X-Empty', value: '', enabled: true }] })],
       { paused: false },
     );
 
@@ -107,7 +107,7 @@ describe('compile', () => {
 
   it('같은 입력은 같은 출력을 낸다 (순수성 스모크)', () => {
     const profiles = [
-      profile({ requestHeaders: [{ id: 'm1', name: 'X-A', value: '1', enabled: true }] }),
+      profile({ modifications: [{ kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true }] }),
     ];
     const a = compile(profiles, { paused: false });
     const b = compile(profiles, { paused: false });

@@ -1,6 +1,12 @@
 export const SCHEMA_VERSION = 1 as const;
 
+/**
+ * Modification은 종류를 판별자(kind)로 갖는 discriminated union이다.
+ * 후속 슬라이스는 이 union에 variant를 추가할 뿐, Profile의 공개 계약
+ * (ordered modifications 컬렉션)은 바뀌지 않는다.
+ */
 export interface RequestHeaderModification {
+  kind: 'request-header';
   id: string;
   /** Header name, e.g. "X-Debug". */
   name: string;
@@ -9,11 +15,16 @@ export interface RequestHeaderModification {
   enabled: boolean;
 }
 
+export type Modification = RequestHeaderModification;
+
+export type ModificationKind = Modification['kind'];
+
 export interface Profile {
   id: string;
   name: string;
   active: boolean;
-  requestHeaders: RequestHeaderModification[];
+  /** 종류를 가로지르는 단일 순서 — 충돌 의미론의 우선순위 세분에 쓰인다. */
+  modifications: Modification[];
 }
 
 export interface StoredState {
@@ -23,13 +34,13 @@ export interface StoredState {
 }
 
 export function createProfile(name: string, id: string = crypto.randomUUID()): Profile {
-  return { id, name, active: false, requestHeaders: [] };
+  return { id, name, active: false, modifications: [] };
 }
 
 export function createRequestHeaderModification(
   id: string = crypto.randomUUID(),
 ): RequestHeaderModification {
-  return { id, name: '', value: '', enabled: true };
+  return { kind: 'request-header', id, name: '', value: '', enabled: true };
 }
 
 export function createDefaultState(): StoredState {
@@ -44,9 +55,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-function isRequestHeaderModification(value: unknown): value is RequestHeaderModification {
+function isModification(value: unknown): value is Modification {
   return (
     isRecord(value) &&
+    value.kind === 'request-header' &&
     typeof value.id === 'string' &&
     typeof value.name === 'string' &&
     typeof value.value === 'string' &&
@@ -60,15 +72,15 @@ function isProfile(value: unknown): value is Profile {
     typeof value.id === 'string' &&
     typeof value.name === 'string' &&
     typeof value.active === 'boolean' &&
-    Array.isArray(value.requestHeaders) &&
-    value.requestHeaders.every(isRequestHeaderModification)
+    Array.isArray(value.modifications) &&
+    value.modifications.every(isModification)
   );
 }
 
 /**
  * 저장소에서 읽은 알 수 없는 값을 StoredState로 검증한다.
  * 스키마 위반은 전량 거부하고 기본 상태로 대체한다 — 반쯤 깨진 상태로
- * 규칙을 컴파일하지 않는다. 이후 슬라이스가 필드 검증을 여기에 확장한다.
+ * 규칙을 컴파일하지 않는다. 이후 슬라이스가 variant 검증을 여기에 확장한다.
  */
 export function parseStoredState(value: unknown): StoredState {
   if (
