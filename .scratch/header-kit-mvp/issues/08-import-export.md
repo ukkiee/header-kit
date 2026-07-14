@@ -1,6 +1,6 @@
 # 08 — Import / Export
 
-Status: ready-for-agent
+Status: done
 Blocked by: 04, 06, 07
 
 ## Parent
@@ -29,3 +29,14 @@ Blocked by: 04, 06, 07
 - 04-profile-lifecycle.md
 - 06-filters-tab-time.md (Tab 계열 Filter 스키마가 있어야 무효 탭 참조 처리를 구현·검증 가능)
 - 07-placeholder.md
+
+## Comments
+
+**2026-07-15 구현 완료.** 테스트 99/99, 실브라우저 스모크 28/28 (H1 활성 Import → id 재생성·탭 참조 정리·활성화 경계 실체화 실측, H2 불량 거부·상태 불변).
+
+2축 코드리뷰 반영:
+- **권위 경로 강제 (hard)**: id 재생성·탭 참조 정리가 UI 측 parseImport에만 있어 다른 명령 생산자가 우회 가능하던 문제 — normalizeImportedProfiles를 importProfiles(단일 writer)가 항상 재실행하도록 이동. 페이로드 불신 테스트 추가.
+- **거부를 성공처럼 닫던 UI**: TransferPanel이 실행 결과를 await하도록 변경 — 권위 경로 거부 시 패널을 닫지 않고 항목 단위 오류 표시.
+- Import regex 검증을 첫 오류 중단에서 전 항목 수집으로 확장, color #rrggbb 검증, shortLabel 2자 강제, 신형 envelope(headerkit>1) 전용 안내, 알림 잔존 정리.
+
+기록: 파일 다운로드 UX는 headless 단언 불가 — 유닛(직렬화) + 수동 확인 대상.

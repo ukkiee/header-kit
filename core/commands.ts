@@ -1,4 +1,5 @@
 import { isProfileExpired } from './expiry';
+import { normalizeImportedProfiles } from './transfer';
 import {
   defaultMaterializeDeps,
   hasPlaceholders,
@@ -289,13 +290,18 @@ export type Command =
   | { type: 'update-filter'; profileId: string; filter: Filter }
   | { type: 'remove-filter'; profileId: string; filterId: string };
 
-/** Import된 Profile들을 끝에 덧붙인다 — 활성 Profile은 활성화 경계로 실체화된다. */
+/**
+ * Import된 Profile들을 끝에 덧붙인다 — 활성 Profile은 활성화 경계로 실체화된다.
+ * 페이로드를 신뢰하지 않는다: id 재생성·탭 참조 정리·라벨 불변식은 항상
+ * 여기(권위 실행 경로)서 다시 강제된다.
+ */
 export function importProfiles(
   state: StoredState,
   profiles: Profile[],
   deps: MaterializeDeps = defaultMaterializeDeps,
 ): StoredState {
-  return profiles.reduce((acc, profile) => addProfile(acc, profile, undefined, deps), state);
+  const { profiles: normalized } = normalizeImportedProfiles(profiles, deps.uuid);
+  return normalized.reduce((acc, profile) => addProfile(acc, profile, undefined, deps), state);
 }
 
 export function applyCommand(

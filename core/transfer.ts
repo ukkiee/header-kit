@@ -1,6 +1,7 @@
 import {
   isFilter,
   isModification,
+  isRecord,
   UNSET_ID,
   type Filter,
   type Profile,
@@ -33,10 +34,6 @@ export function serializeExport(file: ExportFile): string {
   return JSON.stringify(file, null, 2);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
 /** 항목 단위 오류 메시지 — 어느 항목이 왜 틀렸는지 (AC). */
 function validateProfileEntry(value: unknown, index: number): string[] {
   const path = `profiles[${index}]`;
@@ -47,6 +44,9 @@ function validateProfileEntry(value: unknown, index: number): string[] {
 
   for (const field of ['id', 'name', 'shortLabel', 'color'] as const) {
     if (typeof value[field] !== 'string') errors.push(`${label}.${field}: expected string`);
+  }
+  if (typeof value.color === 'string' && !/^#[0-9a-fA-F]{6}$/.test(value.color)) {
+    errors.push(`${label}.color: expected #rrggbb`);
   }
   if (typeof value.active !== 'boolean') errors.push(`${label}.active: expected boolean`);
 
@@ -107,9 +107,30 @@ function sanitizeFilter(
 }
 
 /**
- * Import 파싱 — 전체 검증 후 전량 수용 또는 전량 거부. 수용 시 Profile·
- * Modification·Filter id를 전부 재생성해 기존 상태와의 충돌(실체화 구역
- * 공유 포함)을 원천 차단한다.
+ * Import된 Profile들을 정규화한다: Profile·Modification·Filter id 전체 재생성
+ * (기존 상태·실체화 구역과의 충돌 원천 차단), 세션-로컬 탭 참조 정리,
+ * 배지 라벨 불변식(2자) 강제. 권위 실행 경로(import-profiles 명령)가
+ * 항상 이 함수를 다시 태우므로, UI가 우회해도 불변식은 유지된다.
+ */
+export function normalizeImportedProfiles(
+  profiles: Profile[],
+  newId: () => string = () => crypto.randomUUID(),
+): { profiles: Profile[]; notices: string[] } {
+  const notices: string[] = [];
+  return {
+    profiles: profiles.map((p) => ({
+      ...p,
+      id: newId(),
+      shortLabel: p.shortLabel.slice(0, 2),
+      modifications: p.modifications.map((m) => ({ ...m, id: newId() })),
+      filters: p.filters.map((f) => sanitizeFilter(f, p.name, newId, notices)),
+    })),
+    notices,
+  };
+}
+
+/**
+ * Import 파싱 — 전체 검증 후 전량 수용 또는 전량 거부.
  */
 export function parseImport(
   text: string,
@@ -122,7 +143,15 @@ export function parseImport(
     return { ok: false, errors: ['Not valid JSON.'] };
   }
 
-  if (!isRecord(raw) || raw.headerkit !== 1 || !Array.isArray(raw.profiles)) {
+  if (!isRecord(raw) || !Array.isArray(raw.profiles) || raw.headerkit !== 1) {
+    if (isRecord(raw) && typeof raw.headerkit === 'number' && raw.headerkit > 1) {
+      return {
+        ok: false,
+        errors: [
+          `This file was exported by a newer HeaderKit (format v${raw.headerkit}); this version reads v1 only.`,
+        ],
+      };
+    }
     return {
       ok: false,
       errors: ['Not a HeaderKit export file (expected { "headerkit": 1, "profiles": [...] }).'],
@@ -134,13 +163,6 @@ export function parseImport(
     return { ok: false, errors };
   }
 
-  const notices: string[] = [];
-  const profiles = (raw.profiles as Profile[]).map((p) => ({
-    ...p,
-    id: newId(),
-    modifications: p.modifications.map((m) => ({ ...m, id: newId() })),
-    filters: p.filters.map((f) => sanitizeFilter(f, p.name, newId, notices)),
-  }));
-
+  const { profiles, notices } = normalizeImportedProfiles(raw.profiles as Profile[], newId);
   return { ok: true, profiles, notices };
 }

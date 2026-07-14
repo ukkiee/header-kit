@@ -135,7 +135,41 @@ describe('parseImport', () => {
   });
 });
 
+describe('normalizeImportedProfiles', () => {
+  it('이미 미설정(UNSET_ID)인 탭 참조에는 알림을 만들지 않는다', async () => {
+    const { normalizeImportedProfiles } = await import('./transfer');
+    const clean = profile({
+      filters: [{ kind: 'tab', id: 'f', enabled: true, tabId: UNSET_ID }],
+    });
+
+    const { notices } = normalizeImportedProfiles([clean]);
+    expect(notices).toEqual([]);
+  });
+
+  it('배지 라벨 불변식(2자)을 강제한다', async () => {
+    const { normalizeImportedProfiles } = await import('./transfer');
+    const { profiles } = normalizeImportedProfiles([profile({ shortLabel: 'IMPORT' })]);
+
+    expect(profiles[0]?.shortLabel).toBe('IM');
+  });
+});
+
 describe('import-profiles 명령 (활성화 경계)', () => {
+  it('권위 경로는 페이로드를 신뢰하지 않는다 — 기존 id와 겹쳐도 재생성으로 충돌이 없다', () => {
+    const existing = profile({ id: 'dup', name: 'Existing' });
+    const payload = profile({ id: 'dup', name: 'Injected', shortLabel: 'LONGLABEL' });
+
+    const next = applyCommand(
+      state([existing]),
+      { type: 'import-profiles', profiles: [payload] },
+      stubDeps(),
+    );
+
+    const ids = next.profiles.map((p) => p.id);
+    expect(new Set(ids).size).toBe(2);
+    expect(next.profiles[1]?.shortLabel).toBe('LO');
+  });
+
   it('활성 상태로 Import된 Placeholder Profile은 원자적으로 실체화된다', () => {
     const text = serializeExport(exportProfiles(state([profile({ active: true })]), ['p1']));
     const parsed = parseImport(text);
@@ -149,6 +183,7 @@ describe('import-profiles 명령 (활성화 경계)', () => {
 
     expect(next.profiles.map((p) => p.name)).toEqual(['Existing', 'Alpha']);
     const importedMod = next.profiles[1]!.modifications[0]!;
-    expect(next.materialized[importedMod.id]).toBe('trace-uuid-1');
+    // id 재생성이 카운터를 소비하므로 정확한 순번 대신 실체화 형태를 고정한다
+    expect(next.materialized[importedMod.id]).toMatch(/^trace-uuid-\d+$/);
   });
 });

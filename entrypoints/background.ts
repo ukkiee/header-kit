@@ -42,15 +42,20 @@ async function validateCommand(command: Command): Promise<string | null> {
     return validateRegexPattern(filter.pattern);
   }
 
-  // Import도 전량 수용/거부 — regex 하나라도 플랫폼이 거부하면 전체를 거부한다.
+  // Import도 전량 수용/거부 — regex 하나라도 플랫폼이 거부하면 전체를 거부하되,
+  // 오류는 항목 단위로 전부 모아 알려준다.
   if (command.type === 'import-profiles') {
+    const errors: string[] = [];
     for (const profile of command.profiles) {
-      for (const filter of profile.filters) {
+      for (const [index, filter] of profile.filters.entries()) {
         if (filter.kind !== 'url' && filter.kind !== 'exclude-url') continue;
         const error = await validateRegexPattern(filter.pattern);
-        if (error !== null) return `"${profile.name}": ${error}`;
+        if (error !== null) {
+          errors.push(`"${profile.name}" ${filter.kind} filter #${index + 1}: ${error}`);
+        }
       }
     }
+    if (errors.length > 0) return errors.join('\n');
   }
   return null;
 }

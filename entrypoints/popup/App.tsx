@@ -31,6 +31,18 @@ export function App() {
     });
   };
 
+  // TransferPanel은 결과를 직접 받아 자기 자리에서 오류를 보여준다 (전역 배너 미사용).
+  const dispatchWithResult = async (
+    command: Command,
+  ): Promise<{ ok: boolean; error?: string }> => {
+    const result = await sendCommand(command);
+    if (result.ok) {
+      setState(result.state);
+      return { ok: true };
+    }
+    return { ok: false, error: result.error };
+  };
+
   return (
     <main className="flex flex-col gap-3 bg-white p-4 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
       <div className="flex items-center justify-between">
@@ -88,7 +100,7 @@ export function App() {
         + New profile
       </Button>
 
-      <TransferPanel state={state} onCommand={dispatch} />
+      <TransferPanel state={state} onCommand={dispatchWithResult} />
     </main>
   );
 }

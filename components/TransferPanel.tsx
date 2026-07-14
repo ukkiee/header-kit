@@ -6,7 +6,8 @@ import { Button } from './Button';
 
 export interface TransferPanelProps {
   state: StoredState;
-  onCommand: (command: Command) => void;
+  /** 권위 실행 결과를 돌려받아야 한다 — 거부된 Import를 성공처럼 닫지 않기 위해. */
+  onCommand: (command: Command) => Promise<{ ok: boolean; error?: string }>;
   /** 테스트·Storybook에서 다운로드를 가로채기 위한 주입 지점. */
   download?: (filename: string, text: string) => void;
 }
@@ -29,11 +30,12 @@ export function TransferPanel({ state, onCommand, download = browserDownload }: 
   const [errors, setErrors] = useState<string[]>([]);
   const [notices, setNotices] = useState<string[]>([]);
 
-  const reset = (nextMode: Mode) => {
+  const enterMode = (nextMode: Mode) => {
     setMode(nextMode);
     setSelected(new Set(state.profiles.map((p) => p.id)));
     setImportText('');
     setErrors([]);
+    setNotices([]);
   };
 
   const toggleSelected = (profile: Profile) => {
@@ -49,14 +51,19 @@ export function TransferPanel({ state, onCommand, download = browserDownload }: 
     setMode('idle');
   };
 
-  const runImport = () => {
-    const result = parseImport(importText);
-    if (!result.ok) {
-      setErrors(result.errors);
+  const runImport = async () => {
+    const parsed = parseImport(importText);
+    if (!parsed.ok) {
+      setErrors(parsed.errors);
       return;
     }
-    onCommand({ type: 'import-profiles', profiles: result.profiles });
-    setNotices(result.notices);
+    const result = await onCommand({ type: 'import-profiles', profiles: parsed.profiles });
+    if (!result.ok) {
+      // 권위 경로가 거부(예: 플랫폼 미지원 regex) — 패널을 닫지 않고 오류를 보여준다.
+      setErrors((result.error ?? 'Import rejected.').split('\n'));
+      return;
+    }
+    setNotices(parsed.notices);
     setMode('idle');
   };
 
@@ -65,10 +72,10 @@ export function TransferPanel({ state, onCommand, download = browserDownload }: 
       <div className="flex items-center gap-1">
         <span className="text-xs font-medium text-zinc-400">Profiles</span>
         <span className="flex-1" />
-        <Button variant="ghost" size="sm" onClick={() => reset(mode === 'export' ? 'idle' : 'export')}>
+        <Button variant="ghost" size="sm" onClick={() => enterMode(mode === 'export' ? 'idle' : 'export')}>
           Export…
         </Button>
-        <Button variant="ghost" size="sm" onClick={() => reset(mode === 'import' ? 'idle' : 'import')}>
+        <Button variant="ghost" size="sm" onClick={() => enterMode(mode === 'import' ? 'idle' : 'import')}>
           Import…
         </Button>
       </div>
@@ -136,7 +143,7 @@ export function TransferPanel({ state, onCommand, download = browserDownload }: 
             </ul>
           )}
           <div className="flex gap-1">
-            <Button size="sm" onClick={runImport} disabled={importText.trim() === ''}>
+            <Button size="sm" onClick={() => void runImport()} disabled={importText.trim() === ''}>
               Import
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setMode('idle')}>

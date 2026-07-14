@@ -43,7 +43,10 @@ const sampleState: StoredState = {
 
 function InteractiveTransferPanel() {
   const [state, setState] = useState(sampleState);
-  const onCommand = (command: Command) => setState((s) => applyCommand(s, command));
+  const onCommand = async (command: Command) => {
+    setState((s) => applyCommand(s, command));
+    return { ok: true };
+  };
   return (
     <div className="w-96">
       <TransferPanel state={state} onCommand={onCommand} download={() => {}} />
@@ -53,6 +56,6 @@ function InteractiveTransferPanel() {
 }
 
 export const Default: Story = {
-  args: { state: sampleState, onCommand: () => {} },
+  args: { state: sampleState, onCommand: async () => ({ ok: true }) },
   render: () => <InteractiveTransferPanel />,
 };
