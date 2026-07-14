@@ -1,7 +1,8 @@
 import { compile } from '@/core/compile';
+import { createCommandExecutor } from '@/core/executor';
 import { createReconciler } from '@/core/reconciler';
 import type { NetRule } from '@/core/rules';
-import { loadState, onStateChanged } from '@/storage/state';
+import { loadState, onCommand, onStateChanged, persistState } from '@/storage/state';
 
 async function replaceSessionRules(rules: NetRule[]): Promise<void> {
   const existing = await browser.declarativeNetRequest.getSessionRules();
@@ -18,6 +19,10 @@ export default defineBackground(() => {
     apply: replaceSessionRules,
     onError: (error) => console.error('[HeaderKit] reconcile failed', error),
   });
+
+  // 상태 전이의 단일 권위 실행자 — 모든 쓰기는 이 큐를 거친다.
+  const executor = createCommandExecutor({ load: loadState, save: persistState });
+  onCommand((command) => executor.execute(command));
 
   onStateChanged(() => void reconciler.requestReconcile());
   browser.runtime.onStartup.addListener(() => void reconciler.requestReconcile());

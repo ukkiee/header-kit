@@ -1,0 +1,35 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "structure",
+  "verdict": "needs-attention",
+  "summary": "ST-1과 ST-3는 해결됐지만, ST-2의 새 영속화 경계가 동시 전이를 원자적으로 처리하지 않아 아직 ship하면 안 됩니다.",
+  "planFile": "docs/reviews/header-kit-mvp/prd.md",
+  "planInDiff": null,
+  "reviewedFileCount": 53,
+  "target": "branch diff against main",
+  "reviewedSha": "3331614f5c239a81d555e97b02eb14d6ecbc340c",
+  "reviewedTree": "1585c48e8be3cf5a38a035170c06e12ab7211fac",
+  "headMovedDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 1,
+  "planFindingCount": 0,
+  "triage": "review-gate SKILL.md rules govern: render EVERY finding as a full table row, the human decides each row (accept/reject/defer/question — free text), echo back before applying, max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "동시 상태 전이가 서로의 변경을 유실할 수 있습니다",
+      "body": "`mutateState`는 각 호출이 저장 상태를 별도로 읽고 변환한 뒤 기록하는 비직렬 read-modify-write입니다. 팝업은 이를 await하지 않고 dispatch하므로 빠른 토글과 편집처럼 두 명령이 겹치면 둘 다 같은 이전 상태를 읽고, 마지막 write가 앞선 변경을 덮어쓸 수 있습니다. 이후 탭 앱·Import·Restore가 같은 경계를 사용하면 경합 범위가 더 커지고, 활성화와 Placeholder 실체화 같은 연관 전이가 분리되어 ST-2가 중앙화하려던 불변식까지 깨질 수 있습니다.",
+      "file": "storage/state.ts",
+      "line_start": 14,
+      "line_end": 20,
+      "confidence": 0.97,
+      "recommendation": "상태 명령을 단일 권위 실행자(예: background 메시지 핸들러)의 직렬 큐에서 적용하고 저장하십시오. 최소한 겹쳐 호출된 두 전이가 모두 최종 상태에 남는 공개 경계 테스트를 추가하십시오.",
+      "isPlanFinding": false
+    }
+  ],
+  "next_steps": [
+    "상태 전이의 단일-writer 직렬화를 구현한 뒤 ST-2만 다시 검증하십시오."
+  ]
+}

@@ -24,3 +24,8 @@
 - ST-1 accept — 스키마 v1이 Request Header 전용 구조를 공개 계약으로 고정 (modifications를 ordered discriminated union으로 재설계, kind='request-header' 첫 variant)
 - ST-2 accept — UI가 저장 상태 전이 규칙을 우회해 직접 영속화 (core/commands 전이 명령 모듈 신설, mutateState 단일 쓰기 경로, saveState 비공개화)
 - ST-3 accept — 새 세대가 apply 도중 도착하면 stale 규칙 적용을 막지 못함 (수렴 보증 방식: apply 중 추월 → 후속 태스크 즉시 덮음을 경합 테스트로 고정; 검토 중 발견된 체인 에러 전파로 인한 큐 영구 정지 버그도 태스크별 에러 격리로 수정)
+
+### structure r2
+
+- ST-1, ST-3 — 해결 확인 (재리뷰)
+- ST2-1 accept — 동시 상태 전이가 서로의 변경을 유실 가능 (단일 권위 실행자: Command를 직렬화 데이터로, background가 유일 writer로 FIFO 실행·영속, UI는 sendMessage; lost-update 차단 경계 테스트 3건 추가; 사용자 지시로 r3 재리뷰 실행)

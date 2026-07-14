@@ -58,3 +58,28 @@ export function removeModification(
     modifications: profile.modifications.filter((m) => m.id !== modificationId),
   }));
 }
+
+/**
+ * UI·Import·Restore가 background(단일 writer)로 보내는 직렬화 가능한 명령.
+ * 전이 로직은 위의 순수 함수들이고, 이 union은 그 메시지 표현이다.
+ */
+export type Command =
+  | { type: 'toggle-profile'; profileId: string; active: boolean }
+  | { type: 'add-modification'; profileId: string; modification: Modification }
+  | { type: 'update-modification'; profileId: string; modification: Modification }
+  | { type: 'remove-modification'; profileId: string; modificationId: string };
+
+export function applyCommand(state: StoredState, command: Command): StoredState {
+  switch (command.type) {
+    case 'toggle-profile':
+      return toggleProfile(state, command.profileId, command.active);
+    case 'add-modification':
+      return addModification(state, command.profileId, command.modification);
+    case 'update-modification':
+      return updateModification(state, command.profileId, command.modification);
+    case 'remove-modification':
+      return removeModification(state, command.profileId, command.modificationId);
+    default:
+      return command satisfies never;
+  }
+}
