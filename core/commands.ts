@@ -1,5 +1,11 @@
 import type { Modification, Profile, StoredState } from './schema';
 
+export interface ProfileMeta {
+  name: string;
+  shortLabel: string;
+  color: string;
+}
+
 /**
  * 저장 상태의 모든 전이는 이 명령들을 거친다 — UI·Import·Restore가 각자
  * StoredState를 조립하지 않는다. 활성화 경계 불변식(Placeholder 실체화,
@@ -59,12 +65,59 @@ export function removeModification(
   }));
 }
 
+export function addProfile(
+  state: StoredState,
+  profile: Profile,
+  afterProfileId?: string,
+): StoredState {
+  const index = afterProfileId
+    ? state.profiles.findIndex((p) => p.id === afterProfileId)
+    : -1;
+  const profiles = [...state.profiles];
+  profiles.splice(index === -1 ? profiles.length : index + 1, 0, profile);
+  return { ...state, profiles };
+}
+
+export function removeProfile(state: StoredState, profileId: string): StoredState {
+  return { ...state, profiles: state.profiles.filter((p) => p.id !== profileId) };
+}
+
+export function moveProfile(
+  state: StoredState,
+  profileId: string,
+  toIndex: number,
+): StoredState {
+  const from = state.profiles.findIndex((p) => p.id === profileId);
+  if (from === -1) return state;
+  const profiles = [...state.profiles];
+  const [moved] = profiles.splice(from, 1);
+  profiles.splice(Math.max(0, Math.min(toIndex, profiles.length)), 0, moved!);
+  return { ...state, profiles };
+}
+
+export function updateProfileMeta(
+  state: StoredState,
+  profileId: string,
+  meta: ProfileMeta,
+): StoredState {
+  return withProfile(state, profileId, (profile) => ({ ...profile, ...meta }));
+}
+
+export function setPaused(state: StoredState, paused: boolean): StoredState {
+  return { ...state, paused };
+}
+
 /**
  * UI·Import·Restore가 background(단일 writer)로 보내는 직렬화 가능한 명령.
  * 전이 로직은 위의 순수 함수들이고, 이 union은 그 메시지 표현이다.
  */
 export type Command =
   | { type: 'toggle-profile'; profileId: string; active: boolean }
+  | { type: 'add-profile'; profile: Profile; afterProfileId?: string }
+  | { type: 'remove-profile'; profileId: string }
+  | { type: 'move-profile'; profileId: string; toIndex: number }
+  | { type: 'update-profile-meta'; profileId: string; meta: ProfileMeta }
+  | { type: 'set-paused'; paused: boolean }
   | { type: 'add-modification'; profileId: string; modification: Modification }
   | { type: 'update-modification'; profileId: string; modification: Modification }
   | { type: 'remove-modification'; profileId: string; modificationId: string };
@@ -73,6 +126,16 @@ export function applyCommand(state: StoredState, command: Command): StoredState 
   switch (command.type) {
     case 'toggle-profile':
       return toggleProfile(state, command.profileId, command.active);
+    case 'add-profile':
+      return addProfile(state, command.profile, command.afterProfileId);
+    case 'remove-profile':
+      return removeProfile(state, command.profileId);
+    case 'move-profile':
+      return moveProfile(state, command.profileId, command.toIndex);
+    case 'update-profile-meta':
+      return updateProfileMeta(state, command.profileId, command.meta);
+    case 'set-paused':
+      return setPaused(state, command.paused);
     case 'add-modification':
       return addModification(state, command.profileId, command.modification);
     case 'update-modification':

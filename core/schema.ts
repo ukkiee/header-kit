@@ -23,6 +23,10 @@ export interface Profile {
   id: string;
   name: string;
   active: boolean;
+  /** 툴바 배지에 표시되는 1–2자 라벨. */
+  shortLabel: string;
+  /** 배지·UI 식별 색 (#rrggbb). */
+  color: string;
   /** 종류를 가로지르는 단일 순서 — 충돌 의미론의 우선순위 세분에 쓰인다. */
   modifications: Modification[];
 }
@@ -33,8 +37,27 @@ export interface StoredState {
   profiles: Profile[];
 }
 
-export function createProfile(name: string, id: string = crypto.randomUUID()): Profile {
-  return { id, name, active: false, modifications: [] };
+export const PROFILE_COLORS = [
+  '#2563eb',
+  '#16a34a',
+  '#d97706',
+  '#dc2626',
+  '#9333ea',
+  '#0891b2',
+] as const;
+
+export function createProfile(
+  name: string,
+  options: { id?: string; color?: string; shortLabel?: string } = {},
+): Profile {
+  return {
+    id: options.id ?? crypto.randomUUID(),
+    name,
+    active: false,
+    shortLabel: options.shortLabel ?? name.charAt(0).toUpperCase(),
+    color: options.color ?? PROFILE_COLORS[0],
+    modifications: [],
+  };
 }
 
 export function createRequestHeaderModification(
@@ -72,6 +95,8 @@ function isProfile(value: unknown): value is Profile {
     typeof value.id === 'string' &&
     typeof value.name === 'string' &&
     typeof value.active === 'boolean' &&
+    typeof value.shortLabel === 'string' &&
+    typeof value.color === 'string' &&
     Array.isArray(value.modifications) &&
     value.modifications.every(isModification)
   );

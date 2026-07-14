@@ -83,6 +83,8 @@ try {
             id: 'p1',
             name: 'Smoke',
             active: false,
+            shortLabel: 'S',
+            color: '#2563eb',
             modifications: [
               { kind: 'request-header', id: 'm1', name: 'X-HeaderKit-Smoke', value: 'ok', enabled: true },
             ],
@@ -206,6 +208,72 @@ try {
   );
   record('C4: 전량 제거로 원상복구', afterClear === 0,
     `count=${afterClear}, ${Date.now() - t2}ms`);
+
+  // ---------- D. 이슈 04: 충돌 의미론 · Pause · 배지 ----------
+  await sw.evaluate(async () => {
+    await chrome.storage.local.set({
+      state: {
+        schemaVersion: 1,
+        paused: false,
+        profiles: [
+          {
+            id: 'top',
+            name: 'Top',
+            active: true,
+            shortLabel: 'T',
+            color: '#d97706',
+            modifications: [
+              { kind: 'request-header', id: 't1', name: 'X-Conf', value: 'top-wins', enabled: true },
+            ],
+          },
+          {
+            id: 'bottom',
+            name: 'Bottom',
+            active: true,
+            shortLabel: 'B',
+            color: '#16a34a',
+            modifications: [
+              { kind: 'request-header', id: 'b1', name: 'X-Conf', value: 'bottom', enabled: true },
+            ],
+          },
+        ],
+      },
+    });
+  });
+  await pollSessionRuleCount(sw, 2);
+
+  headers = await fetchEchoHeaders(page);
+  record('D1: 두 활성 Profile이 같은 헤더 수정 시 목록 위쪽이 승리', headers['x-conf'] === 'top-wins',
+    `x-conf=${headers['x-conf']}`);
+
+  const pollBadge = async (expected, timeoutMs = 3000) => {
+    const start = Date.now();
+    let text = '';
+    while (Date.now() - start < timeoutMs) {
+      text = await sw.evaluate(() => chrome.action.getBadgeText({}));
+      if (text === expected) return text;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return text;
+  };
+
+  const multiBadge = await pollBadge('2');
+  record('D2: 다중 활성 시 배지에 활성 개수 표시', multiBadge === '2', `badge="${multiBadge}"`);
+
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Pause all' }).click();
+  await pollSessionRuleCount(sw, 0);
+  headers = await fetchEchoHeaders(page);
+  const pausedBadge = await pollBadge('II');
+  record('D3: 팝업 Pause → 즉시 전체 중단 + 배지 II',
+    headers['x-conf'] === undefined && pausedBadge === 'II',
+    `x-conf=${headers['x-conf']}, badge="${pausedBadge}"`);
+
+  await popup.getByRole('button', { name: 'Resume' }).click();
+  await pollSessionRuleCount(sw, 2);
+  headers = await fetchEchoHeaders(page);
+  record('D4: Resume → 이전 활성 상태 그대로 복원', headers['x-conf'] === 'top-wins',
+    `x-conf=${headers['x-conf']}`);
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

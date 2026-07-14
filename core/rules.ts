@@ -47,9 +47,17 @@ export interface NetRule {
   };
 }
 
-export interface CompileWarning {
-  code: 'empty-header-name';
-  profileId: string;
-  modificationId: string;
-  message: string;
-}
+export type CompileWarning =
+  | {
+      code: 'empty-header-name';
+      profileId: string;
+      modificationId: string;
+      message: string;
+    }
+  | {
+      /** 서로 다른 활성 Profile이 같은 헤더 이름을 수정하는 정적 겹침 (정보성). */
+      code: 'header-overlap';
+      header: string;
+      profileIds: string[];
+      message: string;
+    };

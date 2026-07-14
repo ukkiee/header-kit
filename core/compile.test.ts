@@ -8,6 +8,8 @@ function profile(overrides: Partial<Profile> = {}): Profile {
     id: 'p1',
     name: 'Test Profile',
     active: true,
+    shortLabel: 'T',
+    color: '#2563eb',
     modifications: [],
     ...overrides,
   };
@@ -31,7 +33,8 @@ describe('compile', () => {
     expect(rules).toHaveLength(2);
     expect(rules[0]).toEqual({
       id: 1,
-      priority: 1,
+      // 대역 폭 = enabled 2 + allow 슬롯 1, 앞선 Modification이 더 높다
+      priority: 2,
       action: {
         type: 'modifyHeaders',
         requestHeaders: [{ header: 'X-Debug', operation: 'set', value: 'on' }],
@@ -103,6 +106,129 @@ describe('compile', () => {
     expect(rules[0]?.action.requestHeaders).toEqual([
       { header: 'X-Empty', operation: 'set', value: '' },
     ]);
+  });
+
+  it('충돌 의미론: 목록 위쪽 Profile의 규칙이 더 높은 priority를 받는다', () => {
+    const { rules } = compile(
+      [
+        profile({
+          id: 'top',
+          modifications: [
+            { kind: 'request-header', id: 'a1', name: 'X-Conf', value: 'top-1', enabled: true },
+            { kind: 'request-header', id: 'a2', name: 'X-Other', value: 'top-2', enabled: true },
+          ],
+        }),
+        profile({
+          id: 'bottom',
+          modifications: [
+            { kind: 'request-header', id: 'b1', name: 'X-Conf', value: 'bottom-1', enabled: true },
+          ],
+        }),
+      ],
+      { paused: false },
+    );
+
+    expect(rules).toHaveLength(3);
+    const [a1, a2, b1] = rules;
+    // Profile 내부: 앞선 Modification이 더 높다
+    expect(a1!.priority).toBeGreaterThan(a2!.priority);
+    // 대역: 위 Profile의 가장 낮은 규칙도 아래 Profile의 가장 높은 규칙보다 높다
+    expect(a2!.priority).toBeGreaterThan(b1!.priority);
+    // 대역 사이에는 Exclude allow 슬롯이 예약되어 있다 (인접 priority가 아님)
+    expect(a2!.priority - b1!.priority).toBeGreaterThanOrEqual(2);
+    expect(b1!.priority).toBeGreaterThanOrEqual(1);
+  });
+
+  it('비활성 Profile은 priority 대역을 차지하지 않는다', () => {
+    const active = compile(
+      [
+        profile({
+          id: 'top',
+          active: false,
+          modifications: [
+            { kind: 'request-header', id: 'a1', name: 'X-A', value: '1', enabled: true },
+          ],
+        }),
+        profile({
+          id: 'bottom',
+          modifications: [
+            { kind: 'request-header', id: 'b1', name: 'X-B', value: '2', enabled: true },
+          ],
+        }),
+      ],
+      { paused: false },
+    );
+    const alone = compile(
+      [
+        profile({
+          id: 'bottom',
+          modifications: [
+            { kind: 'request-header', id: 'b1', name: 'X-B', value: '2', enabled: true },
+          ],
+        }),
+      ],
+      { paused: false },
+    );
+
+    expect(active.rules.map((r) => r.priority)).toEqual(alone.rules.map((r) => r.priority));
+  });
+
+  it('서로 다른 활성 Profile이 같은 헤더를 수정하면 겹침 경고를 반환한다', () => {
+    const { warnings } = compile(
+      [
+        profile({
+          id: 'top',
+          modifications: [
+            { kind: 'request-header', id: 'a1', name: 'X-Conf', value: 'a', enabled: true },
+          ],
+        }),
+        profile({
+          id: 'bottom',
+          modifications: [
+            { kind: 'request-header', id: 'b1', name: 'x-conf', value: 'b', enabled: true },
+          ],
+        }),
+      ],
+      { paused: false },
+    );
+
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatchObject({
+      code: 'header-overlap',
+      header: 'x-conf',
+      profileIds: ['top', 'bottom'],
+    });
+  });
+
+  it('겹침 경고는 비활성 Profile·disabled Modification·동일 Profile 내 중복을 무시한다', () => {
+    const { warnings } = compile(
+      [
+        profile({
+          id: 'top',
+          modifications: [
+            { kind: 'request-header', id: 'a1', name: 'X-Conf', value: 'a', enabled: true },
+            { kind: 'request-header', id: 'a2', name: 'X-Conf', value: 'a2', enabled: true },
+            { kind: 'request-header', id: 'a3', name: 'X-Off', value: 'x', enabled: true },
+          ],
+        }),
+        profile({
+          id: 'mid',
+          active: false,
+          modifications: [
+            { kind: 'request-header', id: 'c1', name: 'X-Conf', value: 'c', enabled: true },
+          ],
+        }),
+        profile({
+          id: 'bottom',
+          modifications: [
+            { kind: 'request-header', id: 'b1', name: 'X-Off', value: 'b', enabled: false },
+          ],
+        }),
+      ],
+      { paused: false },
+    );
+
+    expect(warnings).toEqual([]);
   });
 
   it('같은 입력은 같은 출력을 낸다 (순수성 스모크)', () => {

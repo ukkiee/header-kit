@@ -1,3 +1,4 @@
+import { computeBadge } from '@/core/badge';
 import { compile } from '@/core/compile';
 import { createCommandExecutor } from '@/core/executor';
 import { createReconciler } from '@/core/reconciler';
@@ -24,10 +25,21 @@ export default defineBackground(() => {
   const executor = createCommandExecutor({ load: loadState, save: persistState });
   onCommand((command) => executor.execute(command));
 
-  onStateChanged(() => void reconciler.requestReconcile());
-  browser.runtime.onStartup.addListener(() => void reconciler.requestReconcile());
-  browser.runtime.onInstalled.addListener(() => void reconciler.requestReconcile());
+  async function updateBadge(): Promise<void> {
+    const badge = computeBadge(await loadState());
+    await browser.action.setBadgeText({ text: badge.text });
+    await browser.action.setBadgeBackgroundColor({ color: badge.color });
+  }
+
+  const converge = () => {
+    void reconciler.requestReconcile();
+    void updateBadge();
+  };
+
+  onStateChanged(converge);
+  browser.runtime.onStartup.addListener(converge);
+  browser.runtime.onInstalled.addListener(converge);
 
   // Service worker가 깨어날 때마다 저장소 기준으로 수렴시킨다.
-  void reconciler.requestReconcile();
+  converge();
 });
