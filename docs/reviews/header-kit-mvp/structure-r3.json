@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "structure",
+  "verdict": "approve",
+  "summary": "Ship: ST2-1 is resolved. The background-owned executor serializes commands FIFO, reloads state after each prior save, preserves overlapping transitions, and isolates failed commands without stopping the queue. No production writer bypasses this path, and c2e16e7 introduced no new critical structural issue. All 25 tests and type-checking passed; the production build could not be rerun because the read-only sandbox blocked WXT from replacing an existing .output artifact.",
+  "planFile": "docs/reviews/header-kit-mvp/prd.md",
+  "planInDiff": null,
+  "reviewedFileCount": 56,
+  "target": "branch diff against main",
+  "reviewedSha": "c2e16e7711f389292a9c17300d67c09eeb8c0151",
+  "reviewedTree": "ca3e71013bc4feb8b4db97460df67baa667129b6",
+  "headMovedDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 0,
+  "planFindingCount": 0,
+  "triage": "Clean verdict: note it in your report and COMMIT this artifact with the next bookkeeping commit.",
+  "findings": [],
+  "next_steps": []
+}

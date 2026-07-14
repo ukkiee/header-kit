@@ -29,3 +29,7 @@
 
 - ST-1, ST-3 — 해결 확인 (재리뷰)
 - ST2-1 accept — 동시 상태 전이가 서로의 변경을 유실 가능 (단일 권위 실행자: Command를 직렬화 데이터로, background가 유일 writer로 FIFO 실행·영속, UI는 sendMessage; lost-update 차단 경계 테스트 3건 추가; 사용자 지시로 r3 재리뷰 실행)
+
+### structure r3
+
+- verdict: approve, 발견 0건 — 게이트 통과
