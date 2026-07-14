@@ -10,3 +10,7 @@
 ### plan r2
 
 - R2-1 accept — Placeholder materialization has no schema representation (값 필드는 항상 템플릿, 실체화 값은 Modification ID 키의 별도 활성 상태 구역, Export/Import에서 제외; 사용자 지시로 r3 재리뷰 실행)
+
+### plan r3
+
+- R3-1 accept — Imported active profiles have no materialized placeholder state (Import·복원을 활성화 경계로 정의, 불변식 "활성 Profile은 완전한 실체화 상태 동반" + Compile 방어선; 사용자 지시로 r4 재리뷰 실행)

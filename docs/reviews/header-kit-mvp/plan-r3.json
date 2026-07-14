@@ -1,0 +1,35 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "plan",
+  "verdict": "needs-attention",
+  "summary": "Do not ship the plan yet: R2-1 is only partially fixed because imported active profiles can lack the materialized values required by Compile.",
+  "planFile": "docs/reviews/header-kit-mvp/prd.md",
+  "planInDiff": true,
+  "reviewedFileCount": 2,
+  "target": "working tree diff",
+  "reviewedSha": "f58207de652836573b8140477e999d6a7e429434",
+  "reviewedTree": "1ca0c43a92334041df19188ae324793fa6ccc6c3",
+  "headMovedDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 1,
+  "planFindingCount": 1,
+  "triage": "review-gate SKILL.md rules govern: render EVERY finding as a full table row, the human decides each row (accept/reject/defer/question — free text), echo back before applying, max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "Open question: imported active profiles have no materialized placeholder state",
+      "body": "The schema retains each Profile's active flag, while Export omits materialized state and Import does not accept it. Therefore an exported active Profile can be imported as active without undergoing the inactive→active transition that creates `{{uuid}}`/`{{timestamp}}` values. Compile is specified to consume stored values only, so an engineer must guess whether to reject the import, disable the Profile, materialize it during import, or compile with missing values. This leaves R2-1 unresolved for a normal persistence path and can silently apply malformed headers immediately after import or restore.",
+      "file": "docs/reviews/header-kit-mvp/prd.md",
+      "line_start": 87,
+      "line_end": 87,
+      "confidence": 0.98,
+      "recommendation": "Specify the import/restore invariant explicitly. Prefer forcing imported Profiles inactive when materialized state is absent, or define import as an activation boundary that atomically materializes every enabled placeholder before rules can be applied. Add a test for exporting and importing an active Profile containing placeholders.",
+      "isPlanFinding": true
+    }
+  ],
+  "next_steps": [
+    "Amend the schema/import decision and placeholder lifecycle test matrix for active imported or restored Profiles."
+  ]
+}
