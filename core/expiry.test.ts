@@ -47,6 +47,12 @@ describe('expireProfiles', () => {
 
     expect(next.profiles[0]?.active).toBe(true);
   });
+
+  it('미설정(expiresAt 0)은 만료로 치지 않는다 — 추가 직후 즉시 꺼지는 사고 방지', () => {
+    const next = expireProfiles(state([profile('p', true, [timeFilter(0)])]), 5_000);
+
+    expect(next.profiles[0]?.active).toBe(true);
+  });
 });
 
 describe('nextExpiry', () => {

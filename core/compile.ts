@@ -1,4 +1,6 @@
+import { isProfileExpired } from './expiry';
 import type { Filter, Modification, Profile } from './schema';
+import { UNSET_ID } from './schema';
 import {
   ALL_RESOURCE_TYPES,
   type CompileWarning,
@@ -19,9 +21,9 @@ export interface TabInfo {
 export interface CompileEnv {
   paused: boolean;
   /** 열린 탭 스냅샷 — 탭 계열 Filter의 전개에 쓰인다. */
-  tabs?: TabInfo[];
+  tabs: TabInfo[];
   /** 현재 시각(ms) — Time Filter 만료 방어층에 쓰인다. */
-  now?: number;
+  now: number;
 }
 
 export interface CompileResult {
@@ -80,26 +82,22 @@ function expandTabIds(filters: Filter[], tabs: TabInfo[]): number[] | undefined 
   const byKind = <K extends Filter['kind']>(kind: K) =>
     filters.filter((f): f is Extract<Filter, { kind: K }> => f.kind === kind && f.enabled);
 
-  const tabFilters = byKind('tab');
-  if (tabFilters.length > 0) {
-    const wanted = new Set(tabFilters.map((f) => f.tabId));
-    sets.push(tabs.filter((t) => wanted.has(t.tabId)).map((t) => t.tabId));
+  // 미설정(UNSET_ID) 값은 빈 패턴·빈 도메인과 동일하게 무시한다 — 일관된 fail-open.
+  const idKinds = [
+    { wanted: byKind('tab').map((f) => f.tabId), key: (t: TabInfo) => t.tabId },
+    { wanted: byKind('tab-group').map((f) => f.groupId), key: (t: TabInfo) => t.groupId },
+    { wanted: byKind('window').map((f) => f.windowId), key: (t: TabInfo) => t.windowId },
+  ];
+  for (const { wanted, key } of idKinds) {
+    const ids = wanted.filter((id) => id !== UNSET_ID);
+    if (ids.length === 0) continue;
+    const set = new Set(ids);
+    sets.push(tabs.filter((t) => set.has(key(t))).map((t) => t.tabId));
   }
 
-  const groupFilters = byKind('tab-group');
-  if (groupFilters.length > 0) {
-    const wanted = new Set(groupFilters.map((f) => f.groupId));
-    sets.push(tabs.filter((t) => wanted.has(t.groupId)).map((t) => t.tabId));
-  }
-
-  const windowFilters = byKind('window');
-  if (windowFilters.length > 0) {
-    const wanted = new Set(windowFilters.map((f) => f.windowId));
-    sets.push(tabs.filter((t) => wanted.has(t.windowId)).map((t) => t.tabId));
-  }
-
-  const domainFilters = byKind('tab-domain');
-  const domains = domainFilters.map((f) => f.domain.trim()).filter((d) => d !== '');
+  const domains = byKind('tab-domain')
+    .map((f) => f.domain.trim())
+    .filter((d) => d !== '');
   if (domains.length > 0) {
     sets.push(
       tabs
@@ -115,12 +113,6 @@ function expandTabIds(filters: Filter[], tabs: TabInfo[]): number[] | undefined 
   return sets.reduce((acc, set) => acc.filter((id) => set.includes(id)));
 }
 
-/** 활성 Profile의 enabled Time Filter가 이미 만료됐는가 — 알람 경로의 방어층. */
-function isExpired(profile: Profile, now: number): boolean {
-  return profile.filters.some(
-    (f) => f.kind === 'time' && f.enabled && f.expiresAt <= now,
-  );
-}
 
 function joinPatterns(
   filters: Array<{ id: string; pattern: string }>,
@@ -311,9 +303,8 @@ export function compile(profiles: Profile[], env: CompileEnv): CompileResult {
     return { rules: emitter.rules, warnings: emitter.warnings };
   }
 
-  const tabs = env.tabs ?? [];
-  const now = env.now ?? 0;
-  const active = profiles.filter((p) => p.active && !isExpired(p, now));
+  const { tabs, now } = env;
+  const active = profiles.filter((p) => p.active && !isProfileExpired(p, now));
 
   const bandBase = new Map<string, number>();
   let cursor = 1;

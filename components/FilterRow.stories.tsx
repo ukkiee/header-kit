@@ -112,6 +112,15 @@ export const TabGroup: Story = {
   render: renderWithPicker,
 };
 
+export const Window: Story = {
+  args: {
+    filter: { kind: 'window', id: 'f10', enabled: true, windowId: 10 },
+    onChange: () => {},
+    onRemove: () => {},
+  },
+  render: renderWithPicker,
+};
+
 export const TabDomain: Story = {
   args: {
     filter: { kind: 'tab-domain', id: 'f8', enabled: true, domain: 'example.com' },

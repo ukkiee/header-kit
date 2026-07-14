@@ -1,3 +1,4 @@
+import { isProfileExpired } from './expiry';
 import type { Filter, Modification, Profile, StoredState } from './schema';
 
 export interface ProfileMeta {
@@ -123,19 +124,14 @@ export function setPaused(state: StoredState, paused: boolean): StoredState {
 }
 
 /**
- * 만료된 Time Filter를 가진 활성 Profile을 비활성으로 전환한다 —
- * 알람이 트리거하는 활성→비활성 전이도 단일 writer 경로를 지난다.
+ * 만료된 Time Filter를 가진 활성 Profile을 비활성으로 전환한다.
+ * 반드시 toggleProfile을 경유한다 — 활성→비활성 전이의 부수 규칙
+ * (이슈 07의 실체화 정리 등)이 만료 경로에서도 동일하게 적용되도록.
  */
 export function expireProfiles(state: StoredState, now: number): StoredState {
-  return {
-    ...state,
-    profiles: state.profiles.map((profile) =>
-      profile.active &&
-      profile.filters.some((f) => f.kind === 'time' && f.enabled && f.expiresAt <= now)
-        ? { ...profile, active: false }
-        : profile,
-    ),
-  };
+  return state.profiles
+    .filter((profile) => isProfileExpired(profile, now))
+    .reduce((acc, profile) => toggleProfile(acc, profile.id, false), state);
 }
 
 export function addFilter(state: StoredState, profileId: string, filter: Filter): StoredState {

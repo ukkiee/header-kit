@@ -30,7 +30,7 @@ describe('compile — Filter 조건 합성', () => {
           ],
         }),
       ],
-      { paused: false },
+      { paused: false, tabs: [], now: 0 },
     );
 
     expect(rules).toHaveLength(1);
@@ -49,7 +49,7 @@ describe('compile — Filter 조건 합성', () => {
           ],
         }),
       ],
-      { paused: false },
+      { paused: false, tabs: [], now: 0 },
     );
 
     expect(rules[0]?.condition).toEqual({
@@ -72,7 +72,7 @@ describe('compile — Filter 조건 합성', () => {
           ],
         }),
       ],
-      { paused: false },
+      { paused: false, tabs: [], now: 0 },
     );
 
     expect(rules[0]?.condition.resourceTypes).toEqual(['script', 'stylesheet']);
@@ -89,7 +89,7 @@ describe('compile — Filter 조건 합성', () => {
           ],
         }),
       ],
-      { paused: false },
+      { paused: false, tabs: [], now: 0 },
     );
 
     expect(rules[0]?.condition.regexFilter).toBeUndefined();
@@ -103,7 +103,7 @@ describe('compile — Filter 조건 합성', () => {
           filters: [{ kind: 'exclude-url', id: 'f1', enabled: true, pattern: 'private' }],
         }),
       ],
-      { paused: false },
+      { paused: false, tabs: [], now: 0 },
     );
 
     const allow = rules.find((r) => r.action.type === 'allow');
@@ -125,7 +125,7 @@ describe('compile — Filter 조건 합성', () => {
         }),
         profile({ id: 'bottom', modifications: [mod('b1', 'X-B')] }),
       ],
-      { paused: false },
+      { paused: false, tabs: [], now: 0 },
     );
 
     const allow = rules.find((r) => r.action.type === 'allow')!;
@@ -147,7 +147,7 @@ describe('compile — Filter 조건 합성', () => {
           ],
         }),
       ],
-      { paused: false },
+      { paused: false, tabs: [], now: 0 },
     );
 
     expect(warnings).toEqual([]);
@@ -169,7 +169,7 @@ describe('compile — Filter 조건 합성', () => {
           ],
         }),
       ],
-      { paused: false },
+      { paused: false, tabs: [], now: 0 },
     );
 
     expect(warnings).toContainEqual(
@@ -182,6 +182,8 @@ describe('compile — Filter 조건 합성', () => {
     const manyMods = Array.from({ length: 5001 }, (_, i) => mod(`m${i}`, `X-H-${i}`));
     const { rules, warnings } = compile([profile({ modifications: manyMods })], {
       paused: false,
+      tabs: [],
+      now: 0,
     });
 
     expect(rules.length).toBe(5000);
@@ -200,7 +202,7 @@ describe('compile — Filter 조건 합성', () => {
           filters: [{ kind: 'url', id: 'f1', enabled: true, pattern: 'example' }],
         }),
       ],
-      { paused: false },
+      { paused: false, tabs: [], now: 0 },
     );
 
     expect(rules.length).toBe(1000);

@@ -39,6 +39,9 @@ export type Filter =
 
 export type FilterKind = Filter['kind'];
 
+/** 탭·그룹·창 Filter의 "아직 선택되지 않음" 값 — 컴파일에서 무시된다. */
+export const UNSET_ID = -1;
+
 export function createFilter(kind: FilterKind, id: string = crypto.randomUUID()): Filter {
   switch (kind) {
     case 'url':
@@ -52,11 +55,11 @@ export function createFilter(kind: FilterKind, id: string = crypto.randomUUID())
     case 'tab-domain':
       return { kind, id, enabled: true, domain: '' };
     case 'tab':
-      return { kind, id, enabled: true, tabId: -1 };
+      return { kind, id, enabled: true, tabId: UNSET_ID };
     case 'tab-group':
-      return { kind, id, enabled: true, groupId: -1 };
+      return { kind, id, enabled: true, groupId: UNSET_ID };
     case 'window':
-      return { kind, id, enabled: true, windowId: -1 };
+      return { kind, id, enabled: true, windowId: UNSET_ID };
     case 'time':
       return { kind, id, enabled: true, expiresAt: 0 };
     default:

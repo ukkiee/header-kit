@@ -101,6 +101,33 @@ describe('compile — 탭 계열 Filter의 tabIds 전개', () => {
   });
 });
 
+describe('compile — 탭 상태 변화 추적', () => {
+  it('탭이 그룹·창을 옮기면 다음 컴파일에서 tabIds가 따라간다', () => {
+    const groupFilter = [f.group(5)];
+    const before = compile([profile({ filters: groupFilter })], env());
+    expect(before.rules[0]?.condition.tabIds).toEqual([2, 3]);
+
+    // 탭 1이 그룹 5로 이동, 탭 3이 그룹에서 이탈한 새 스냅샷
+    const moved: TabInfo[] = [
+      { tabId: 1, windowId: 10, groupId: 5, url: 'https://app.example.com/page' },
+      { tabId: 2, windowId: 10, groupId: 5, url: 'https://sub.example.com/x' },
+      { tabId: 3, windowId: 20, groupId: -1, url: 'https://other.com/' },
+    ];
+    const after = compile([profile({ filters: groupFilter })], env({ tabs: moved }));
+    expect(after.rules[0]?.condition.tabIds).toEqual([1, 2]);
+  });
+
+  it('미설정(UNSET_ID) 탭 계열 Filter는 무시된다 — 빈 패턴과 같은 fail-open', () => {
+    const { rules } = compile(
+      [profile({ filters: [{ kind: 'tab', id: 't', enabled: true, tabId: -1 }] })],
+      env(),
+    );
+
+    expect(rules).toHaveLength(1);
+    expect(rules[0]?.condition.tabIds).toBeUndefined();
+  });
+});
+
 describe('compile — Time Filter', () => {
   it('만료 전에는 규칙이 나오고, env.now가 만료를 지나면 나오지 않는다 (방어층)', () => {
     const before = compile([profile({ filters: [f.time(2_000)] })], env({ now: 1_000 }));

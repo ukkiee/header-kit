@@ -2,7 +2,7 @@ import { computeBadge } from '@/core/badge';
 import type { Command } from '@/core/commands';
 import { compile, type TabInfo } from '@/core/compile';
 import { createCommandExecutor } from '@/core/executor';
-import { nextExpiry } from '@/core/expiry';
+import { hasExpiredProfiles, nextExpiry } from '@/core/expiry';
 import { createReconciler } from '@/core/reconciler';
 import type { NetRule } from '@/core/rules';
 import type { StoredState } from '@/core/schema';
@@ -73,6 +73,14 @@ export default defineBackground(() => {
       await replaceSessionRules(rules);
       await applyBadge(snapshot.state);
       await scheduleExpiryAlarm(snapshot.state, snapshot.now);
+      // 이미 지난 만료(과거 시각 입력, SW 휴면 중 경과 등)는 알람을 기다리지
+      // 않고 즉시 만료 전이를 태운다 — 규칙만 죽고 토글·배지가 켜진 채
+      // 남는 거짓 상태를 방지 (만료 후에는 활성이 남지 않으므로 수렴).
+      if (hasExpiredProfiles(snapshot.state, snapshot.now)) {
+        void executor
+          .execute({ type: 'expire-profiles', now: snapshot.now })
+          .catch((error) => console.error('[HeaderKit] expiry failed', error));
+      }
     },
     onError: (error) => console.error('[HeaderKit] reconcile failed', error),
   });
