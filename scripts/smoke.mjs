@@ -385,6 +385,85 @@ try {
     rejection?.ok === false && /regex/i.test(rejection?.error ?? '') && stateAfter === 1,
     `ok=${rejection?.ok}, error="${rejection?.error}", filters=${stateAfter}`);
 
+  // ---------- F. 이슈 06: 탭 계열 Filter · Time Filter ----------
+  await page.close(); // 이전 섹션의 127.0.0.1 탭이 tab-domain 매칭을 오염시키지 않도록
+
+  // F1: Tab Filter — 지정 탭에만 적용, 탭 닫힘 시 자동 해제
+  const pageA = await context.newPage();
+  await pageA.goto(`${origin}/?who=A`);
+  const pageB = await context.newPage();
+  await pageB.goto(`${origin}/?who=B`);
+  const tabIdByUrl = (tabs, marker) =>
+    tabs.find((t) => t.url && t.url.includes(marker))?.id;
+  const openTabs = await sw.evaluate(async () => {
+    const tabs = await chrome.tabs.query({});
+    return tabs.map((t) => ({ id: t.id, url: t.url }));
+  });
+  const tabAId = tabIdByUrl(openTabs, 'who=A');
+
+  await seedProfiles([
+    baseProfile('p-tab', 'Tab',
+      [{ kind: 'request-header', id: 'm1', name: 'X-Tab-Only', value: 'on', enabled: true }],
+      [{ kind: 'tab', id: 'f1', enabled: true, tabId: tabAId }]),
+  ]);
+  await pollSessionRuleCount(sw, 1);
+  const inA = await fetchEchoHeaders(pageA, '/headers');
+  const inB = await fetchEchoHeaders(pageB, '/headers');
+  record('F1a: Tab Filter — 지정 탭에만 적용', inA['x-tab-only'] === 'on' && inB['x-tab-only'] === undefined,
+    `A=${inA['x-tab-only']}, B=${inB['x-tab-only']}`);
+
+  await pageA.close();
+  await pollSessionRuleCount(sw, 0);
+  const inBAfterClose = await fetchEchoHeaders(pageB, '/headers');
+  record('F1b: 대상 탭 닫힘 → 규칙 자동 해제', inBAfterClose['x-tab-only'] === undefined,
+    `rules=0, B=${inBAfterClose['x-tab-only']}`);
+
+  // F2: Tab Domain Filter — 탭의 도메인 기준, 이탈 시 자동 비활성
+  await seedProfiles([
+    baseProfile('p-td', 'Td',
+      [{ kind: 'request-header', id: 'm1', name: 'X-Tab-Domain', value: 'on', enabled: true }],
+      [{ kind: 'tab-domain', id: 'f1', enabled: true, domain: '127.0.0.1' }]),
+  ]);
+  await pollSessionRuleCount(sw, 1);
+  const onDomain = await fetchEchoHeaders(pageB, '/headers');
+  await pageB.goto(`http://localhost:${port}/`);
+  await pollSessionRuleCount(sw, 0); // 도메인 이탈 → 매칭 탭 없음 → 규칙 해제
+  const offDomain = await fetchEchoHeaders(pageB, '/headers');
+  record('F2: Tab Domain Filter — 도메인 안 적용, 이탈 시 자동 해제',
+    onDomain['x-tab-domain'] === 'on' && offDomain['x-tab-domain'] === undefined,
+    `on=${onDomain['x-tab-domain']}, off=${offDomain['x-tab-domain']}`);
+  await pageB.goto(origin);
+
+  // F3: Time Filter — 만료 알람이 Profile을 끄고 배지가 비워진다
+  await seedProfiles([
+    {
+      ...baseProfile('p-time', 'Ti',
+        [{ kind: 'request-header', id: 'm1', name: 'X-Timed', value: 'on', enabled: true }],
+        [{ kind: 'time', id: 'f1', enabled: true, expiresAt: Date.now() + 1500 }]),
+    },
+  ]);
+  await pollSessionRuleCount(sw, 1);
+  const beforeExpiry = await fetchEchoHeaders(pageB, '/headers');
+
+  const pollProfileOff = async (timeoutMs = 20_000) => {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const active = await sw.evaluate(async () => {
+        const { state } = await chrome.storage.local.get('state');
+        return state.profiles[0].active;
+      });
+      if (active === false) return true;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    return false;
+  };
+  const turnedOff = await pollProfileOff();
+  const afterExpiry = await fetchEchoHeaders(pageB, '/headers');
+  const expiredBadge = await sw.evaluate(() => chrome.action.getBadgeText({}));
+  record('F3: Time Filter 만료 → 알람이 Profile off + 규칙 해제 + 배지 비움',
+    beforeExpiry['x-timed'] === 'on' && turnedOff && afterExpiry['x-timed'] === undefined && expiredBadge === '',
+    `before=${beforeExpiry['x-timed']}, off=${turnedOff}, after=${afterExpiry['x-timed']}, badge="${expiredBadge}"`);
+
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
   process.exitCode = failed.length === 0 ? 0 : 1;

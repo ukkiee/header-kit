@@ -4,14 +4,17 @@ import { ProfileSection } from '@/components/ProfileSection';
 import type { Command } from '@/core/commands';
 import { createProfile, PROFILE_COLORS, type StoredState } from '@/core/schema';
 import { loadState, onStateChanged, sendCommand } from '@/storage/state';
+import { queryTabPickerOptions, type TabPickerOptions } from '@/storage/tabs';
 
 export function App() {
   const [state, setState] = useState<StoredState | null>(null);
   const [commandError, setCommandError] = useState<string | null>(null);
+  const [pickerOptions, setPickerOptions] = useState<TabPickerOptions | undefined>(undefined);
 
   useEffect(() => {
     void loadState().then(setState);
     onStateChanged(() => void loadState().then(setState));
+    void queryTabPickerOptions().then(setPickerOptions);
   }, []);
 
   if (!state) return null;
@@ -63,6 +66,7 @@ export function App() {
           index={index}
           profileCount={state.profiles.length}
           onCommand={dispatch}
+          pickerOptions={pickerOptions}
         />
       ))}
 

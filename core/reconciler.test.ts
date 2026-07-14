@@ -165,6 +165,37 @@ describe('createReconciler', () => {
     expect(applied).toEqual(['ok']);
   });
 
+  it('스트레스: 편집·Pause·탭·알람 트리거가 뒤엉켜도 최종 적용은 최신 상태와 일치하고 순서가 역전되지 않는다', async () => {
+    let version = 0;
+    const applied: number[] = [];
+
+    const reconciler = createReconciler<Snapshot>({
+      loadSnapshot: async () => {
+        // 트리거 종류별로 다른 로드 지연을 흉내낸다
+        await new Promise((r) => setTimeout(r, version % 3));
+        return { tag: String(version) };
+      },
+      compile: compileTag,
+      apply: async (rules) => {
+        await new Promise((r) => setTimeout(r, version % 2));
+        applied.push(Number(rules[0]?.action.requestHeaders?.[0]?.value ?? '-1'));
+      },
+    });
+
+    const bursts: Array<Promise<void>> = [];
+    for (let i = 0; i < 25; i += 1) {
+      version += 1;
+      bursts.push(reconciler.requestReconcile());
+      if (i % 4 === 0) await tick();
+      if (i % 7 === 0) await new Promise((r) => setTimeout(r, 1));
+    }
+    await Promise.all(bursts);
+
+    // 마지막 적용은 반드시 최종 상태(version 25)이고, 적용 순서는 단조 증가한다
+    expect(applied.at(-1)).toBe(25);
+    expect(applied).toEqual([...applied].sort((a, b) => a - b));
+  });
+
   it('요청 반환 promise는 해당 작업(또는 승계 확인)이 끝난 뒤 resolve된다', async () => {
     const applied: string[] = [];
 

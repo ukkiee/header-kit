@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Filter } from '@/core/schema';
 import { ALL_RESOURCE_TYPES, REQUEST_METHODS } from '@/core/rules';
+import type { TabPickerOptions } from '@/storage/tabs';
 import { Button } from './Button';
 
 /**
@@ -41,6 +42,8 @@ export interface FilterRowProps {
   filter: Filter;
   onChange: (next: Filter) => void;
   onRemove: () => void;
+  /** 탭 계열 Filter 선택기의 표시 옵션 — 팝업이 tabs API에서 로드해 내려준다. */
+  pickerOptions?: TabPickerOptions;
 }
 
 const KIND_LABELS: Record<Filter['kind'], string> = {
@@ -49,7 +52,59 @@ const KIND_LABELS: Record<Filter['kind'], string> = {
   'resource-type': 'Type',
   'request-method': 'Method',
   'initiator-domain': 'Initiator',
+  tab: 'Tab',
+  'tab-group': 'Group',
+  window: 'Window',
+  'tab-domain': 'Tab dom.',
+  time: 'Until',
 };
+
+function epochToLocalInput(ms: number): string {
+  if (ms <= 0) return '';
+  const date = new Date(ms - new Date(ms).getTimezoneOffset() * 60_000);
+  return date.toISOString().slice(0, 16);
+}
+
+function localInputToEpoch(value: string): number {
+  const ms = new Date(value).getTime();
+  return Number.isNaN(ms) ? 0 : ms;
+}
+
+function PickerSelect({
+  value,
+  options,
+  placeholder,
+  ariaLabel,
+  onSelect,
+}: {
+  value: number;
+  options: Array<{ value: number; label: string }>;
+  placeholder: string;
+  ariaLabel: string;
+  onSelect: (value: number) => void;
+}) {
+  const known = options.some((o) => o.value === value);
+  return (
+    <select
+      value={value}
+      aria-label={ariaLabel}
+      onChange={(e) => onSelect(Number(e.target.value))}
+      className="h-7 min-w-0 flex-1 cursor-pointer rounded-md border border-zinc-300 bg-white px-1 text-xs outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
+    >
+      <option value={-1} disabled>
+        {placeholder}
+      </option>
+      {!known && value !== -1 && (
+        <option value={value}>{`(closed) #${value}`}</option>
+      )}
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 function toggleItem<T>(list: readonly T[], item: T): T[] {
   return list.includes(item) ? list.filter((x) => x !== item) : [...list, item];
@@ -63,8 +118,72 @@ function chipClass(selected: boolean): string {
   }`;
 }
 
-function FilterEditor({ filter, onChange }: Pick<FilterRowProps, 'filter' | 'onChange'>) {
+function FilterEditor({
+  filter,
+  onChange,
+  pickerOptions,
+}: Pick<FilterRowProps, 'filter' | 'onChange' | 'pickerOptions'>) {
   switch (filter.kind) {
+    case 'tab':
+      return (
+        <PickerSelect
+          value={filter.tabId}
+          options={(pickerOptions?.tabs ?? []).map((t) => ({ value: t.tabId, label: t.label }))}
+          placeholder="Select a tab…"
+          ariaLabel="Tab"
+          onSelect={(tabId) => onChange({ ...filter, tabId })}
+        />
+      );
+    case 'tab-group':
+      return (
+        <PickerSelect
+          value={filter.groupId}
+          options={(pickerOptions?.groups ?? []).map((g) => ({ value: g.groupId, label: g.label }))}
+          placeholder="Select a tab group…"
+          ariaLabel="Tab group"
+          onSelect={(groupId) => onChange({ ...filter, groupId })}
+        />
+      );
+    case 'window':
+      return (
+        <PickerSelect
+          value={filter.windowId}
+          options={(pickerOptions?.windows ?? []).map((w) => ({ value: w.windowId, label: w.label }))}
+          placeholder="Select a window…"
+          ariaLabel="Window"
+          onSelect={(windowId) => onChange({ ...filter, windowId })}
+        />
+      );
+    case 'tab-domain':
+      return (
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <DraftInput
+            value={filter.domain}
+            onCommit={(domain) => onChange({ ...filter, domain })}
+            placeholder="example.com"
+            aria-label="Tab domain"
+            className="h-7 rounded-md border border-zinc-300 bg-white px-2 text-xs outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
+          />
+          <span className="text-[10px] text-zinc-400">
+            Applies to every request from tabs on this domain — third-party included.
+          </span>
+        </div>
+      );
+    case 'time':
+      return (
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <input
+            type="datetime-local"
+            value={epochToLocalInput(filter.expiresAt)}
+            onChange={(e) => onChange({ ...filter, expiresAt: localInputToEpoch(e.target.value) })}
+            aria-label="Expires at"
+            className="h-7 rounded-md border border-zinc-300 bg-white px-2 text-xs outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
+          />
+          <span className="text-[10px] text-zinc-400">
+            The profile turns off automatically at this time.
+          </span>
+        </div>
+      );
     case 'url':
     case 'exclude-url':
       return (
@@ -128,7 +247,7 @@ function FilterEditor({ filter, onChange }: Pick<FilterRowProps, 'filter' | 'onC
   }
 }
 
-export function FilterRow({ filter, onChange, onRemove }: FilterRowProps) {
+export function FilterRow({ filter, onChange, onRemove, pickerOptions }: FilterRowProps) {
   return (
     <div className="flex items-start gap-2">
       <input
@@ -141,7 +260,7 @@ export function FilterRow({ filter, onChange, onRemove }: FilterRowProps) {
       <span className="mt-1 w-14 shrink-0 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
         {KIND_LABELS[filter.kind]}
       </span>
-      <FilterEditor filter={filter} onChange={onChange} />
+      <FilterEditor filter={filter} onChange={onChange} pickerOptions={pickerOptions} />
       <Button variant="danger" size="sm" onClick={onRemove} aria-label="Remove filter">
         ✕
       </Button>

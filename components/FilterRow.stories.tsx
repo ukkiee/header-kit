@@ -73,3 +73,59 @@ export const InitiatorDomain: Story = {
   },
   render,
 };
+
+const samplePickerOptions = {
+  tabs: [
+    { tabId: 1, label: 'Dashboard — app.example.com' },
+    { tabId: 2, label: 'Docs — docs.example.com' },
+  ],
+  groups: [{ groupId: 5, label: 'Group 5 (2 tabs)' }],
+  windows: [{ windowId: 10, label: 'Window 10 (3 tabs)' }],
+};
+
+function renderWithPicker(args: { filter: Filter }) {
+  return (
+    <FilterRow
+      filter={args.filter}
+      onChange={() => {}}
+      onRemove={() => {}}
+      pickerOptions={samplePickerOptions}
+    />
+  );
+}
+
+export const Tab: Story = {
+  args: {
+    filter: { kind: 'tab', id: 'f6', enabled: true, tabId: 2 },
+    onChange: () => {},
+    onRemove: () => {},
+  },
+  render: renderWithPicker,
+};
+
+export const TabGroup: Story = {
+  args: {
+    filter: { kind: 'tab-group', id: 'f7', enabled: true, groupId: 5 },
+    onChange: () => {},
+    onRemove: () => {},
+  },
+  render: renderWithPicker,
+};
+
+export const TabDomain: Story = {
+  args: {
+    filter: { kind: 'tab-domain', id: 'f8', enabled: true, domain: 'example.com' },
+    onChange: () => {},
+    onRemove: () => {},
+  },
+  render,
+};
+
+export const Time: Story = {
+  args: {
+    filter: { kind: 'time', id: 'f9', enabled: true, expiresAt: 1789500000000 },
+    onChange: () => {},
+    onRemove: () => {},
+  },
+  render,
+};

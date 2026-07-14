@@ -7,8 +7,21 @@ import {
   type ResourceType,
 } from './rules';
 
+/** 탭 상태 스냅샷 — 어댑터가 tabs API에서 만들어 env로 주입한다. */
+export interface TabInfo {
+  tabId: number;
+  windowId: number;
+  /** 그룹 미소속은 -1. */
+  groupId: number;
+  url?: string;
+}
+
 export interface CompileEnv {
   paused: boolean;
+  /** 열린 탭 스냅샷 — 탭 계열 Filter의 전개에 쓰인다. */
+  tabs?: TabInfo[];
+  /** 현재 시각(ms) — Time Filter 만료 방어층에 쓰인다. */
+  now?: number;
 }
 
 export interface CompileResult {
@@ -36,8 +49,77 @@ interface CompiledFilters {
   resourceTypes: ResourceType[] | undefined;
   requestMethods: RequestMethod[] | undefined;
   initiatorDomains: string[] | undefined;
+  /**
+   * 탭 계열 Filter의 전개 결과. undefined = 탭 조건 없음,
+   * 빈 배열 = 매칭 탭 없음(Modification 규칙을 내지 않는다).
+   */
+  tabIds: number[] | undefined;
   /** Exclude Filter의 allow 규칙용 join들. */
   excludeJoins: string[];
+}
+
+function hostnameOf(url: string | undefined): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return null;
+  }
+}
+
+function domainMatches(hostname: string, domain: string): boolean {
+  return hostname === domain || hostname.endsWith(`.${domain}`);
+}
+
+/**
+ * 탭 계열 Filter 4종을 tabIds로 전개한다 — 같은 kind끼리 합집합(OR),
+ * kind 사이는 교집합(AND). 탭 조건이 하나도 없으면 undefined.
+ */
+function expandTabIds(filters: Filter[], tabs: TabInfo[]): number[] | undefined {
+  const sets: number[][] = [];
+  const byKind = <K extends Filter['kind']>(kind: K) =>
+    filters.filter((f): f is Extract<Filter, { kind: K }> => f.kind === kind && f.enabled);
+
+  const tabFilters = byKind('tab');
+  if (tabFilters.length > 0) {
+    const wanted = new Set(tabFilters.map((f) => f.tabId));
+    sets.push(tabs.filter((t) => wanted.has(t.tabId)).map((t) => t.tabId));
+  }
+
+  const groupFilters = byKind('tab-group');
+  if (groupFilters.length > 0) {
+    const wanted = new Set(groupFilters.map((f) => f.groupId));
+    sets.push(tabs.filter((t) => wanted.has(t.groupId)).map((t) => t.tabId));
+  }
+
+  const windowFilters = byKind('window');
+  if (windowFilters.length > 0) {
+    const wanted = new Set(windowFilters.map((f) => f.windowId));
+    sets.push(tabs.filter((t) => wanted.has(t.windowId)).map((t) => t.tabId));
+  }
+
+  const domainFilters = byKind('tab-domain');
+  const domains = domainFilters.map((f) => f.domain.trim()).filter((d) => d !== '');
+  if (domains.length > 0) {
+    sets.push(
+      tabs
+        .filter((t) => {
+          const hostname = hostnameOf(t.url);
+          return hostname !== null && domains.some((d) => domainMatches(hostname, d));
+        })
+        .map((t) => t.tabId),
+    );
+  }
+
+  if (sets.length === 0) return undefined;
+  return sets.reduce((acc, set) => acc.filter((id) => set.includes(id)));
+}
+
+/** 활성 Profile의 enabled Time Filter가 이미 만료됐는가 — 알람 경로의 방어층. */
+function isExpired(profile: Profile, now: number): boolean {
+  return profile.filters.some(
+    (f) => f.kind === 'time' && f.enabled && f.expiresAt <= now,
+  );
 }
 
 function joinPatterns(
@@ -71,7 +153,11 @@ function joinPatterns(
   return joins;
 }
 
-function compileFilters(profile: Profile, warnings: CompileWarning[]): CompiledFilters {
+function compileFilters(
+  profile: Profile,
+  tabs: TabInfo[],
+  warnings: CompileWarning[],
+): CompiledFilters {
   const enabled = profile.filters.filter((f) => f.enabled);
   const byKind = <K extends Filter['kind']>(kind: K) =>
     enabled.filter((f): f is Extract<Filter, { kind: K }> => f.kind === kind);
@@ -99,6 +185,7 @@ function compileFilters(profile: Profile, warnings: CompileWarning[]): CompiledF
     resourceTypes: resourceTypes.length > 0 ? resourceTypes : undefined,
     requestMethods: requestMethods.length > 0 ? requestMethods : undefined,
     initiatorDomains: initiatorDomains.length > 0 ? initiatorDomains : undefined,
+    tabIds: expandTabIds(enabled, tabs),
     excludeJoins: joinPatterns(excludeFilters, profile.id, warnings),
   };
 }
@@ -157,6 +244,7 @@ function conditionFor(
     resourceTypes: compiled.resourceTypes ?? [...ALL_RESOURCE_TYPES],
     ...(compiled.requestMethods ? { requestMethods: compiled.requestMethods } : {}),
     ...(compiled.initiatorDomains ? { initiatorDomains: compiled.initiatorDomains } : {}),
+    ...(compiled.tabIds !== undefined ? { tabIds: compiled.tabIds } : {}),
   };
 }
 
@@ -223,7 +311,9 @@ export function compile(profiles: Profile[], env: CompileEnv): CompileResult {
     return { rules: emitter.rules, warnings: emitter.warnings };
   }
 
-  const active = profiles.filter((p) => p.active);
+  const tabs = env.tabs ?? [];
+  const now = env.now ?? 0;
+  const active = profiles.filter((p) => p.active && !isExpired(p, now));
 
   const bandBase = new Map<string, number>();
   let cursor = 1;
@@ -239,7 +329,7 @@ export function compile(profiles: Profile[], env: CompileEnv): CompileResult {
   for (const profile of active) {
     const enabled = profile.modifications.filter((m) => m.enabled);
     const base = bandBase.get(profile.id)!;
-    const compiled = compileFilters(profile, emitter.warnings);
+    const compiled = compileFilters(profile, tabs, emitter.warnings);
 
     // Exclude allow 규칙이 quota 압력에서 살아남도록 Modification보다 먼저 낸다 —
     // 제외가 빠지는 것이 수정이 빠지는 것보다 위험하다.
@@ -255,6 +345,11 @@ export function compile(profiles: Profile[], env: CompileEnv): CompileResult {
         { profileId: profile.id },
       );
     }
+
+    // 탭 조건이 있는데 매칭 탭이 없으면(탭 닫힘 등) 이 Profile의 Modification은
+    // 어디에도 적용되지 않는다 — 규칙도 겹침 집계도 내지 않는다.
+    const noMatchingTabs = compiled.tabIds !== undefined && compiled.tabIds.length === 0;
+    if (noMatchingTabs) continue;
 
     enabled.forEach((modification, index) => {
       emitModification(

@@ -7,6 +7,7 @@ import {
   type FilterKind,
   type Profile,
 } from '@/core/schema';
+import type { TabPickerOptions } from '@/storage/tabs';
 import { Button } from './Button';
 import { FilterRow } from './FilterRow';
 import { HeaderRow } from './HeaderRow';
@@ -17,6 +18,11 @@ const FILTER_KINDS: Array<{ kind: FilterKind; label: string }> = [
   { kind: 'resource-type', label: 'Resource type filter' },
   { kind: 'request-method', label: 'Request method filter' },
   { kind: 'initiator-domain', label: 'Initiator domain filter' },
+  { kind: 'tab', label: 'Tab filter' },
+  { kind: 'tab-group', label: 'Tab group filter' },
+  { kind: 'window', label: 'Window filter' },
+  { kind: 'tab-domain', label: 'Tab domain filter' },
+  { kind: 'time', label: 'Time filter (auto-off)' },
 ];
 
 export interface ProfileSectionProps {
@@ -24,9 +30,16 @@ export interface ProfileSectionProps {
   index: number;
   profileCount: number;
   onCommand: (command: Command) => void;
+  pickerOptions?: TabPickerOptions;
 }
 
-export function ProfileSection({ profile, index, profileCount, onCommand }: ProfileSectionProps) {
+export function ProfileSection({
+  profile,
+  index,
+  profileCount,
+  onCommand,
+  pickerOptions,
+}: ProfileSectionProps) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const confirmTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(confirmTimer.current), []);
@@ -103,6 +116,7 @@ export function ProfileSection({ profile, index, profileCount, onCommand }: Prof
             <FilterRow
               key={filter.id}
               filter={filter}
+              pickerOptions={pickerOptions}
               onChange={(next) =>
                 onCommand({ type: 'update-filter', profileId: profile.id, filter: next })
               }

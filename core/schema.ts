@@ -30,7 +30,12 @@ export type Filter =
   | { kind: 'exclude-url'; id: string; enabled: boolean; pattern: string }
   | { kind: 'resource-type'; id: string; enabled: boolean; resourceTypes: ResourceType[] }
   | { kind: 'request-method'; id: string; enabled: boolean; methods: RequestMethod[] }
-  | { kind: 'initiator-domain'; id: string; enabled: boolean; domain: string };
+  | { kind: 'initiator-domain'; id: string; enabled: boolean; domain: string }
+  | { kind: 'tab'; id: string; enabled: boolean; tabId: number }
+  | { kind: 'tab-group'; id: string; enabled: boolean; groupId: number }
+  | { kind: 'window'; id: string; enabled: boolean; windowId: number }
+  | { kind: 'tab-domain'; id: string; enabled: boolean; domain: string }
+  | { kind: 'time'; id: string; enabled: boolean; expiresAt: number };
 
 export type FilterKind = Filter['kind'];
 
@@ -44,7 +49,16 @@ export function createFilter(kind: FilterKind, id: string = crypto.randomUUID())
     case 'request-method':
       return { kind, id, enabled: true, methods: [] };
     case 'initiator-domain':
+    case 'tab-domain':
       return { kind, id, enabled: true, domain: '' };
+    case 'tab':
+      return { kind, id, enabled: true, tabId: -1 };
+    case 'tab-group':
+      return { kind, id, enabled: true, groupId: -1 };
+    case 'window':
+      return { kind, id, enabled: true, windowId: -1 };
+    case 'time':
+      return { kind, id, enabled: true, expiresAt: 0 };
     default:
       return kind satisfies never;
   }
@@ -144,7 +158,16 @@ function isFilter(value: unknown): value is Filter {
     case 'request-method':
       return Array.isArray(value.methods) && value.methods.every(isRequestMethod);
     case 'initiator-domain':
+    case 'tab-domain':
       return typeof value.domain === 'string';
+    case 'tab':
+      return typeof value.tabId === 'number';
+    case 'tab-group':
+      return typeof value.groupId === 'number';
+    case 'window':
+      return typeof value.windowId === 'number';
+    case 'time':
+      return typeof value.expiresAt === 'number';
     default:
       return false;
   }

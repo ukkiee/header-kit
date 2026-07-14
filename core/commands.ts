@@ -122,6 +122,22 @@ export function setPaused(state: StoredState, paused: boolean): StoredState {
   return { ...state, paused };
 }
 
+/**
+ * 만료된 Time Filter를 가진 활성 Profile을 비활성으로 전환한다 —
+ * 알람이 트리거하는 활성→비활성 전이도 단일 writer 경로를 지난다.
+ */
+export function expireProfiles(state: StoredState, now: number): StoredState {
+  return {
+    ...state,
+    profiles: state.profiles.map((profile) =>
+      profile.active &&
+      profile.filters.some((f) => f.kind === 'time' && f.enabled && f.expiresAt <= now)
+        ? { ...profile, active: false }
+        : profile,
+    ),
+  };
+}
+
 export function addFilter(state: StoredState, profileId: string, filter: Filter): StoredState {
   return withProfile(state, profileId, (profile) => ({
     ...profile,
@@ -159,6 +175,7 @@ export type Command =
   | { type: 'move-profile'; profileId: string; toIndex: number }
   | { type: 'update-profile-meta'; profileId: string; meta: ProfileMeta }
   | { type: 'set-paused'; paused: boolean }
+  | { type: 'expire-profiles'; now: number }
   | { type: 'add-modification'; profileId: string; modification: Modification }
   | { type: 'update-modification'; profileId: string; modification: Modification }
   | { type: 'remove-modification'; profileId: string; modificationId: string }
@@ -182,6 +199,8 @@ export function applyCommand(state: StoredState, command: Command): StoredState 
       return updateProfileMeta(state, command.profileId, command.meta);
     case 'set-paused':
       return setPaused(state, command.paused);
+    case 'expire-profiles':
+      return expireProfiles(state, command.now);
     case 'add-modification':
       return addModification(state, command.profileId, command.modification);
     case 'update-modification':
