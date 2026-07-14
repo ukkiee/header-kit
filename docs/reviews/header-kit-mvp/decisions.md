@@ -14,3 +14,7 @@
 ### plan r3
 
 - R3-1 accept — Imported active profiles have no materialized placeholder state (Import·복원을 활성화 경계로 정의, 불변식 "활성 Profile은 완전한 실체화 상태 동반" + Compile 방어선; 사용자 지시로 r4 재리뷰 실행)
+
+### plan r4
+
+- verdict: approve, 발견 0건 — 게이트 통과

@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "plan",
+  "verdict": "approve",
+  "summary": "Ship the plan through the Round 4 gate. R3-1 is resolved: import and backup restore are explicit activation boundaries, materialization must complete atomically before rule application, Compile excludes invariant-breaking profiles, and both success and defense paths are test-covered. No new critical issue was introduced by this fix.",
+  "planFile": "docs/reviews/header-kit-mvp/prd.md",
+  "planInDiff": true,
+  "reviewedFileCount": 2,
+  "target": "working tree diff",
+  "reviewedSha": "8afc0f3eee32c887bf0945ef7159e35573f1390d",
+  "reviewedTree": "8c4125d1a47c8a57e6fe94e86485ece8aa6415b9",
+  "headMovedDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 0,
+  "planFindingCount": 0,
+  "triage": "Clean verdict: note it in your report and COMMIT this artifact with the next bookkeeping commit.",
+  "findings": [],
+  "next_steps": []
+}
