@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "release",
+  "verdict": "approve",
+  "summary": "Ship: RL2-1 is resolved. M2b–M2e exercise Cookie replacement/removal and Set-Cookie replacement/blocking against pre-existing values, and the verification evidence is correctly pinned to commit 9996407 and its tree. No new critical issue was introduced. Live rerun was unavailable because the review sandbox forbids binding the local echo server.",
+  "planFile": "docs/reviews/header-kit-mvp/prd.md",
+  "planInDiff": null,
+  "reviewedFileCount": 107,
+  "target": "branch diff against main",
+  "reviewedSha": "51f98f3f9b1210bd43cada178ea6b6ab74a044ab",
+  "reviewedTree": "8508c510539e42c8f0ebb7b0f9f07897e2cb92a1",
+  "headMovedDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 0,
+  "planFindingCount": 0,
+  "triage": "Clean verdict: note it in your report and COMMIT this artifact with the next bookkeeping commit.",
+  "findings": [],
+  "next_steps": []
+}

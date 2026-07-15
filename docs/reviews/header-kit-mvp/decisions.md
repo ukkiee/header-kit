@@ -45,3 +45,7 @@
 
 - RL-2, RL-3, RL-4 — 해결 확인 (재리뷰)
 - RL2-1 accept — RL-1의 브라우저 증거가 Cookie/Set-Cookie 연산의 절반만 커버 — Cookie override·remove, Set-Cookie override·block 실브라우저 스모크 4건 추가(사전 존재 값 대조 단언); 사용자 지시로 r3 재리뷰 실행
+
+### release r3
+
+- verdict: approve, 발견 0건 — 게이트 통과 (세 게이트 모두 통과)
