@@ -79,6 +79,25 @@ const en = {
   placeholderNote:
     'New value each time the profile activates — constant while it stays on, never re-evaluated per request.',
   pasteExportHere: 'Paste a HeaderKit export here…',
+  // FilterRow — 짧은 종류 라벨(KindLabel)·선택기 placeholder·힌트 (슬라이스 08)
+  filterShortUrl: 'URL',
+  filterShortExcludeUrl: 'Exclude',
+  filterShortResourceType: 'Type',
+  filterShortRequestMethod: 'Method',
+  filterShortInitiatorDomain: 'Initiator',
+  filterShortTab: 'Tab',
+  filterShortTabGroup: 'Group',
+  filterShortWindow: 'Window',
+  filterShortTabDomain: 'Tab dom.',
+  filterShortTime: 'Until',
+  filterSelectTab: 'Select a tab…',
+  filterSelectTabGroup: 'Select a tab group…',
+  filterSelectWindow: 'Select a window…',
+  filterRegexPattern: 'regex pattern',
+  filterClosed: '(closed)',
+  filterTabDomainNote: 'Applies to every request from tabs on this domain — third-party included.',
+  filterTimeNote: 'The profile turns off automatically at this time.',
+  filterInitiatorNote: "Matches the request's origin — not the tab's domain.",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -156,6 +175,24 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     placeholderNote:
       '프로필을 켤 때마다 새 값이 생성되고, 켜져 있는 동안 유지되며, 요청마다 재평가되지 않습니다.',
     pasteExportHere: 'HeaderKit 내보내기 JSON을 여기에 붙여넣으세요…',
+    filterShortUrl: 'URL',
+    filterShortExcludeUrl: '제외',
+    filterShortResourceType: '종류',
+    filterShortRequestMethod: '메서드',
+    filterShortInitiatorDomain: '출처',
+    filterShortTab: '탭',
+    filterShortTabGroup: '그룹',
+    filterShortWindow: '창',
+    filterShortTabDomain: '탭도메인',
+    filterShortTime: '까지',
+    filterSelectTab: '탭 선택…',
+    filterSelectTabGroup: '탭 그룹 선택…',
+    filterSelectWindow: '창 선택…',
+    filterRegexPattern: 'regex 패턴',
+    filterClosed: '(닫힘)',
+    filterTabDomainNote: '이 도메인의 탭에서 나가는 모든 요청에 적용됩니다 — 서드파티 포함.',
+    filterTimeNote: '이 시간에 프로필이 자동으로 꺼집니다.',
+    filterInitiatorNote: '요청의 출처(origin)와 매칭됩니다 — 탭의 도메인이 아닙니다.',
   },
 };
 
