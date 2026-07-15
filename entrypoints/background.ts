@@ -174,6 +174,14 @@ export default defineBackground(() => {
   onTabsChanged(converge);
   browser.runtime.onStartup.addListener(converge);
   browser.runtime.onInstalled.addListener(converge);
+  // 키보드 단축키: Pause 토글도 단일 writer 명령을 지난다.
+  browser.commands.onCommand.addListener((command) => {
+    if (command !== 'toggle-pause') return;
+    void loadState()
+      .then((state) => executor.execute({ type: 'set-paused', paused: !state.paused }))
+      .catch((error) => console.error('[HeaderKit] toggle-pause failed', error));
+  });
+
   browser.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name !== EXPIRY_ALARM) return;
     // 만료 전이도 단일 writer 경로를 지난다 — 저장 변경이 재컴파일·배지를 촉발한다.

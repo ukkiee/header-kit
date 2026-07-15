@@ -21,6 +21,7 @@ describe('parseStoredState', () => {
         },
       ],
       materialized: { m1: 'trace-abc' },
+      customHeaderNames: ['X-Custom'],
     };
 
     expect(parseStoredState(state)).toEqual(state);
@@ -29,6 +30,7 @@ describe('parseStoredState', () => {
   function expectDefaultState(actual: unknown) {
     // createDefaultState()는 호출마다 새 Profile id를 만들므로 형태로 비교한다.
     expect(actual).toMatchObject({
+      customHeaderNames: [],
       schemaVersion: SCHEMA_VERSION,
       paused: false,
       profiles: [{ name: 'Default Profile', active: true, modifications: [] }],

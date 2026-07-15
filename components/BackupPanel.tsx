@@ -58,7 +58,7 @@ export function BackupPanel({
       <div className="flex items-center gap-1">
         <span className="text-xs font-medium text-zinc-400">Backups</span>
         <span className="flex-1" />
-        <Button variant="ghost" size="sm" onClick={() => setOpen(!open)}>
+        <Button variant="ghost" size="sm" aria-label="Toggle backups" onClick={() => setOpen(!open)}>
           {open ? 'Hide' : 'Show'}
         </Button>
       </div>

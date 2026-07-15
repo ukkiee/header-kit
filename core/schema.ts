@@ -106,6 +106,8 @@ export interface StoredState {
    * 값 필드(템플릿)를 절대 덮어쓰지 않으며, Export에 포함되지 않는다.
    */
   materialized: Record<string, string>;
+  /** 헤더 이름 autocomplete에 더할 사용자 등록 항목. */
+  customHeaderNames: string[];
 }
 
 export const PROFILE_COLORS = [
@@ -161,6 +163,7 @@ export function createDefaultState(): StoredState {
     paused: false,
     profiles: [{ ...createProfile('Default Profile'), active: true }],
     materialized: {},
+    customHeaderNames: [],
   };
 }
 
@@ -277,8 +280,11 @@ export function parseStoredState(value: unknown): StoredState {
   ) {
     const profiles = value.profiles.map(backfillProfile);
     const materialized = value.materialized ?? {};
+    const customHeaderNames = Array.isArray(value.customHeaderNames)
+      ? value.customHeaderNames.filter((n): n is string => typeof n === 'string')
+      : [];
     if (profiles.every(isProfile) && isMaterializedRecord(materialized)) {
-      return { ...value, profiles, materialized } as unknown as StoredState;
+      return { ...value, profiles, materialized, customHeaderNames } as unknown as StoredState;
     }
   }
   return createDefaultState();

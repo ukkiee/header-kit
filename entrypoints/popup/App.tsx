@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { BackupPanel } from '@/components/BackupPanel';
 import { Button } from '@/components/Button';
+import { PreferencesPanel } from '@/components/PreferencesPanel';
 import { ProfileSection } from '@/components/ProfileSection';
 import { StatusSummary } from '@/components/StatusSummary';
 import { TransferPanel } from '@/components/TransferPanel';
 import type { Command } from '@/core/commands';
+import { resolveLocale, t, type Locale } from '@/core/i18n';
 import { createProfile, PROFILE_COLORS, type StoredState } from '@/core/schema';
 import type { StatusSummary as StatusSummaryData } from '@/core/summary';
 import {
@@ -24,6 +26,8 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
   const [commandError, setCommandError] = useState<string | null>(null);
   const [pickerOptions, setPickerOptions] = useState<TabPickerOptions | undefined>(undefined);
   const [summary, setSummary] = useState<StatusSummaryData | null>(null);
+  const [locale, setLocale] = useState<Locale>('en');
+  const [incognitoAllowed, setIncognitoAllowed] = useState<boolean | null>(null);
 
   useEffect(() => {
     // 요약은 background가 적용한 결과를 발행한 것을 읽기만 한다 (독립 재컴파일 없음).
@@ -32,6 +36,8 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
     onStateChanged(() => void loadState().then(setState));
     onSummaryChanged(() => void getSummary().then(setSummary));
     void queryTabPickerOptions().then(setPickerOptions);
+    setLocale(resolveLocale(browser.i18n.getUILanguage()));
+    void browser.extension.isAllowedIncognitoAccess().then(setIncognitoAllowed);
   }, []);
 
   if (!state) return null;
@@ -70,29 +76,35 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
       }`}
     >
       <div className="flex items-center justify-between">
-        <h1 className="text-base font-semibold">HeaderKit</h1>
+        <h1 className="text-base font-semibold">{t(locale, 'appName')}</h1>
         <div className="flex items-center gap-1">
           {surface === 'popup' && (
-            <Button variant="ghost" size="sm" aria-label="Open in tab" onClick={openTabApp}>
-              ⧉ Tab
+            <Button variant="ghost" size="sm" aria-label={t(locale, 'openInTab')} onClick={openTabApp}>
+              ⧉ {t(locale, 'openInTab')}
             </Button>
           )}
           <Button
             variant={state.paused ? 'primary' : 'ghost'}
             size="sm"
-            aria-label={state.paused ? 'Resume' : 'Pause all'}
+            aria-label={state.paused ? t(locale, 'resume') : t(locale, 'pause')}
             onClick={() => dispatch({ type: 'set-paused', paused: !state.paused })}
           >
-            {state.paused ? '▶ Resume' : 'II Pause'}
+            {state.paused ? `▶ ${t(locale, 'resume')}` : `II ${t(locale, 'pause')}`}
           </Button>
         </div>
       </div>
 
       {summary && <StatusSummary summary={summary} />}
 
+      {incognitoAllowed === false && (
+        <p className="rounded-md bg-blue-50 px-2 py-1 text-xs text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+          {t(locale, 'incognitoBlocked')}
+        </p>
+      )}
+
       {state.paused && (
         <p className="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-700 dark:bg-amber-950 dark:text-amber-300">
-          Paused — no modifications are applied.
+          {t(locale, 'pausedNote')}
         </p>
       )}
 
@@ -114,6 +126,7 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
           onCommand={dispatch}
           pickerOptions={pickerOptions}
           materialized={state.materialized}
+          userHeaders={state.customHeaderNames}
         />
       ))}
 
@@ -130,11 +143,17 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
           })
         }
       >
-        + New profile
+        + {t(locale, 'newProfile')}
       </Button>
 
       <TransferPanel state={state} onCommand={dispatchWithResult} />
       <BackupPanel onCommand={dispatchWithResult} />
+      <PreferencesPanel
+        customHeaderNames={state.customHeaderNames}
+        onCommand={dispatch}
+        incognitoAllowed={incognitoAllowed}
+        locale={locale}
+      />
     </main>
   );
 }

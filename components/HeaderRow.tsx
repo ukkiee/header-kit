@@ -2,6 +2,7 @@ import { hasPlaceholders } from '@/core/placeholder';
 import { isRequestAppendAllowed } from '@/core/rules';
 import type { Modification } from '@/core/schema';
 import { Button } from './Button';
+import { HeaderNameInput } from './HeaderNameInput';
 import { LargeEditor } from './LargeEditor';
 
 export interface HeaderRowProps {
@@ -10,6 +11,8 @@ export interface HeaderRowProps {
   onRemove: () => void;
   /** Placeholder가 실체화된 현재 값 — 활성 Profile에서만 존재한다. */
   materializedValue?: string;
+  /** 헤더 이름 autocomplete에 더할 사용자 등록 항목. */
+  userHeaders?: readonly string[];
 }
 
 function chip(active: boolean): string {
@@ -20,7 +23,13 @@ function chip(active: boolean): string {
   }`;
 }
 
-export function HeaderRow({ modification, onChange, onRemove, materializedValue }: HeaderRowProps) {
+export function HeaderRow({
+  modification,
+  onChange,
+  onRemove,
+  materializedValue,
+  userHeaders = [],
+}: HeaderRowProps) {
   const withPlaceholders = hasPlaceholders(modification.value);
   const isRequest = modification.kind === 'request-header';
   // 요청 헤더 append는 허용 목록 헤더에만 노출한다 (불가능한 상태를 만들지 않음).
@@ -59,12 +68,10 @@ export function HeaderRow({ modification, onChange, onRemove, materializedValue 
           <option value="request-header">Req</option>
           <option value="response-header">Res</option>
         </select>
-        <input
-          type="text"
+        <HeaderNameInput
           value={modification.name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Header name"
-          aria-label="Header name"
+          onChange={setName}
+          userHeaders={userHeaders}
           className="h-8 w-32 rounded-md border border-zinc-300 bg-white px-2 text-sm outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
         />
         <input

@@ -35,6 +35,7 @@ function InteractiveProfileSection({ initial }: { initial: Profile }) {
     paused: false,
     profiles: [initial],
     materialized: {},
+    customHeaderNames: [],
   });
   const profile = state.profiles[0];
   if (!profile) return <p className="text-sm">Profile deleted.</p>;

@@ -66,7 +66,12 @@ const origin = `http://127.0.0.1:${port}`;
 const context = await chromium.launchPersistentContext('', {
   channel: 'chromium',
   headless: true,
-  args: [`--disable-extensions-except=${EXT_PATH}`, `--load-extension=${EXT_PATH}`],
+  // UI 언어를 고정해 i18n 라벨(Pause/Open in tab…)이 결정적이게 한다.
+  args: [
+    `--disable-extensions-except=${EXT_PATH}`,
+    `--load-extension=${EXT_PATH}`,
+    '--lang=en-US',
+  ],
 });
 
 try {
@@ -264,7 +269,8 @@ try {
   record('D2: 다중 활성 시 배지에 활성 개수 표시', multiBadge === '2', `badge="${multiBadge}"`);
 
   await popup.reload();
-  await popup.getByRole('button', { name: 'Pause all' }).click();
+  // Pause/Resume 라벨은 i18n이라 로케일 독립 기호(II / ▶)로 선택한다.
+  await popup.locator('button', { hasText: 'II' }).first().click();
   await pollSessionRuleCount(sw, 0);
   headers = await fetchEchoHeaders(page);
   const pausedBadge = await pollBadge('II');
@@ -272,7 +278,7 @@ try {
     headers['x-conf'] === undefined && pausedBadge === 'II',
     `x-conf=${headers['x-conf']}, badge="${pausedBadge}"`);
 
-  await popup.getByRole('button', { name: 'Resume' }).click();
+  await popup.locator('button', { hasText: '▶' }).first().click();
   await pollSessionRuleCount(sw, 2);
   headers = await fetchEchoHeaders(page);
   record('D4: Resume → 이전 활성 상태 그대로 복원', headers['x-conf'] === 'top-wins',
@@ -603,7 +609,7 @@ try {
   await seedProfiles([]);
   await pollSessionRuleCount(sw, 0);
   await popup.reload();
-  await popup.getByRole('button', { name: 'Show' }).click();
+  await popup.getByRole('button', { name: 'Toggle backups' }).click();
   const restoreRow = popup.locator('li').filter({ hasText: 'profile' }).first();
   await restoreRow.getByRole('button', { name: 'Restore' }).click();
   await restoreRow.getByRole('button', { name: 'Replace all?' }).click();
@@ -722,6 +728,56 @@ try {
   const appended = (await fetchEchoHeaders(pageB, '/headers'))['accept-language'];
   record('K3: 허용 목록 요청 헤더 append가 기존 값에 누적', /ko/.test(appended ?? '') && (appended ?? '').includes(','),
     `accept-language=${appended}`);
+
+  // ---------- L. 이슈 11: 보조 UX 마감 ----------
+  // L1: Pause 단축키(toggle-pause)가 manifest에 등록돼 있고, 그 핸들러가 쓰는
+  //     set-paused 경로가 실제로 전체를 중단한다 (실제 키 입력은 headless 불가).
+  const shortcutRegistered = await sw.evaluate(
+    async () => (await chrome.commands.getAll()).some((c) => c.name === 'toggle-pause'),
+  );
+  await seedProfiles([
+    baseProfile('p-ux', 'Ux', [hdr({ id: 'm1', name: 'X-Ux', value: '1' })], []),
+  ]);
+  await pollSessionRuleCount(sw, 1);
+  await popup.reload();
+  await popup.locator('button', { hasText: 'II' }).first().click();
+  await pollSessionRuleCount(sw, 0);
+  record('L1: Pause 단축키 등록 + set-paused가 전체 중단', shortcutRegistered,
+    `toggle-pause 등록=${shortcutRegistered}, 규칙=0`);
+
+  // L2: autocomplete 사용자 항목 등록 → datalist 제안에 노출
+  await seedProfiles([
+    baseProfile('p-ac', 'Ac', [hdr({ id: 'm1', name: '', value: 'v' })], []),
+  ]);
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Toggle preferences' }).click();
+  await popup.getByLabel('New autocomplete header').fill('X-Team-Custom');
+  await popup.getByRole('button', { name: 'Add', exact: true }).click();
+  const savedCustom = await sw.evaluate(async () =>
+    (await chrome.storage.local.get('state')).state.customHeaderNames,
+  );
+  const datalistHasCustom = await popup.evaluate(async () => {
+    const nameInput = document.querySelector('input[aria-label="Header name"]');
+    if (!nameInput) return false;
+    nameInput.focus();
+    nameInput.value = 'X-Team';
+    nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 100));
+    const list = nameInput.getAttribute('list');
+    const options = list ? [...document.getElementById(list).options].map((o) => o.value) : [];
+    return options.includes('X-Team-Custom');
+  });
+  record('L2: autocomplete 사용자 항목이 등록되고 제안에 노출',
+    Array.isArray(savedCustom) && savedCustom.includes('X-Team-Custom') && datalistHasCustom,
+    `custom=${JSON.stringify(savedCustom)}, inDatalist=${datalistHasCustom}`);
+
+  // L3: 시크릿 안내가 노출된다 (기본 로드 확장은 시크릿 미허용)
+  const incognitoNote = await popup
+    .getByText(/incognito|시크릿/i)
+    .first()
+    .isVisible()
+    .catch(() => false);
+  record('L3: 시크릿 미허용 안내가 노출된다', incognitoNote, `visible=${incognitoNote}`);
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

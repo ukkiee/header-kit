@@ -229,6 +229,21 @@ export function setPaused(state: StoredState, paused: boolean): StoredState {
   return { ...state, paused };
 }
 
+export function addCustomHeaderName(state: StoredState, name: string): StoredState {
+  const trimmed = name.trim();
+  if (trimmed === '' || state.customHeaderNames.some((n) => n.toLowerCase() === trimmed.toLowerCase())) {
+    return state;
+  }
+  return { ...state, customHeaderNames: [...state.customHeaderNames, trimmed] };
+}
+
+export function removeCustomHeaderName(state: StoredState, name: string): StoredState {
+  return {
+    ...state,
+    customHeaderNames: state.customHeaderNames.filter((n) => n !== name),
+  };
+}
+
 /**
  * 만료된 Time Filter를 가진 활성 Profile을 비활성으로 전환한다.
  * 반드시 toggleProfile을 경유한다 — 활성→비활성 전이의 부수 규칙
@@ -282,6 +297,8 @@ export type Command =
   | { type: 'update-profile-meta'; profileId: string; meta: ProfileMeta }
   | { type: 'set-paused'; paused: boolean }
   | { type: 'expire-profiles'; now: number }
+  | { type: 'add-custom-header-name'; name: string }
+  | { type: 'remove-custom-header-name'; name: string }
   | { type: 'add-modification'; profileId: string; modification: Modification }
   | { type: 'update-modification'; profileId: string; modification: Modification }
   | { type: 'remove-modification'; profileId: string; modificationId: string }
@@ -342,6 +359,10 @@ export function applyCommand(
       return setPaused(state, command.paused);
     case 'expire-profiles':
       return expireProfiles(state, command.now, deps);
+    case 'add-custom-header-name':
+      return addCustomHeaderName(state, command.name);
+    case 'remove-custom-header-name':
+      return removeCustomHeaderName(state, command.name);
     case 'import-profiles':
       return importProfiles(state, command.profiles, deps);
     case 'restore-profiles':

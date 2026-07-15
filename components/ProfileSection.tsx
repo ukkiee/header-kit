@@ -33,6 +33,8 @@ export interface ProfileSectionProps {
   pickerOptions?: TabPickerOptions;
   /** Placeholder 실체화 구역 — Modification id 키. */
   materialized?: Record<string, string>;
+  /** 헤더 이름 autocomplete 사용자 항목. */
+  userHeaders?: readonly string[];
 }
 
 export function ProfileSection({
@@ -42,6 +44,7 @@ export function ProfileSection({
   onCommand,
   pickerOptions,
   materialized,
+  userHeaders,
 }: ProfileSectionProps) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const confirmTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -94,6 +97,7 @@ export function ProfileSection({
             key={modification.id}
             modification={modification}
             materializedValue={materialized?.[modification.id]}
+            userHeaders={userHeaders}
             onChange={(next) =>
               onCommand({
                 type: 'update-modification',

@@ -12,6 +12,7 @@ function initialState(): StoredState {
       { id: 'p2', name: 'Two', active: false, shortLabel: '2', color: '#16a34a', modifications: [], filters: [] },
     ],
     materialized: {},
+    customHeaderNames: [],
   };
 }
 

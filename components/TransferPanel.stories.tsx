@@ -39,6 +39,7 @@ const sampleState: StoredState = {
     },
   ],
   materialized: {},
+  customHeaderNames: [],
 };
 
 function InteractiveTransferPanel() {

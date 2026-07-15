@@ -17,7 +17,7 @@ function profile(overrides: Partial<Profile>): Profile {
 }
 
 function state(profiles: Profile[], paused = false): StoredState {
-  return { schemaVersion: SCHEMA_VERSION, paused, profiles, materialized: {} };
+  return { schemaVersion: SCHEMA_VERSION, paused, profiles, materialized: {}, customHeaderNames: [] };
 }
 
 describe('computeBadge', () => {

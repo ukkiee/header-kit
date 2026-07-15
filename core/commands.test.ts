@@ -28,6 +28,7 @@ function state(): StoredState {
       { id: 'p2', name: 'Two', active: false, shortLabel: '2', color: '#16a34a', modifications: [], filters: [] },
     ],
     materialized: {},
+    customHeaderNames: [],
   };
 }
 
@@ -119,6 +120,18 @@ describe('state transition commands', () => {
       active: false,
     });
     expect(next.profiles[0]?.modifications).toHaveLength(1);
+  });
+
+  it('add/removeCustomHeaderName은 중복 없이 사용자 항목을 관리한다', () => {
+    const added = applyCommand(state(), { type: 'add-custom-header-name', name: 'X-My' });
+    expect(added.customHeaderNames).toEqual(['X-My']);
+
+    // 대소문자 무시 중복은 무시
+    const dup = applyCommand(added, { type: 'add-custom-header-name', name: 'x-my' });
+    expect(dup.customHeaderNames).toEqual(['X-My']);
+
+    const removed = applyCommand(added, { type: 'remove-custom-header-name', name: 'X-My' });
+    expect(removed.customHeaderNames).toEqual([]);
   });
 
   it('setPaused는 Profile 상태를 건드리지 않는다', () => {

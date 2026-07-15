@@ -21,7 +21,7 @@ function profile(id: string, active: boolean, filters: Filter[]): Profile {
 }
 
 function state(profiles: Profile[]): StoredState {
-  return { schemaVersion: SCHEMA_VERSION, paused: false, profiles, materialized: {} };
+  return { schemaVersion: SCHEMA_VERSION, paused: false, profiles, materialized: {}, customHeaderNames: [] };
 }
 
 describe('expireProfiles', () => {
