@@ -1,4 +1,5 @@
-import { isRecord } from './schema';
+import { isRecord, type StoredState } from './schema';
+import { exportProfiles, serializeExport } from './transfer';
 
 /**
  * Backup — 브라우저 계정 동기화 저장소(storage.sync)에 Profile 스냅샷을
@@ -9,11 +10,22 @@ import { isRecord } from './schema';
 
 export const BACKUP_MANIFEST_KEY = 'bk:manifest';
 
-/** storage.sync 항목당 8,192B — 키 길이·JSON 인용 여유를 둔 보수적 청크 크기. */
-export const CHUNK_SIZE = 6_000;
-/** 전체 102,400B quota 아래의 보수적 예산 (매니페스트·오버헤드 여유 포함). */
+/**
+ * storage.sync 항목당 quota(8,192)는 키 + JSON.stringify(값)의 "바이트" 수다 —
+ * UTF-16 문자 수가 아니다 (한글 3바이트, 따옴표 이스케이프 2배). 모든 크기
+ * 계산은 이 인코딩 기준으로 한다.
+ */
+export const CHUNK_BYTE_LIMIT = 7_500;
+/** 전체 102,400B quota 아래의 보수적 예산 (매니페스트 항목 포함해 검사한다). */
 export const SYNC_BUDGET = 90_000;
 export const MAX_SNAPSHOTS = 5;
+
+const encoder = new TextEncoder();
+
+/** storage.sync가 과금하는 방식 그대로: JSON.stringify 직렬화의 UTF-8 바이트 수. */
+export function jsonBytes(value: unknown): number {
+  return encoder.encode(JSON.stringify(value)).length;
+}
 
 export interface ManifestEntry {
   id: string;
@@ -48,12 +60,41 @@ export function chunkKey(snapshotId: string, index: number): string {
   return `bk:${snapshotId}:${index}`;
 }
 
-export function chunkString(text: string, size: number = CHUNK_SIZE): string[] {
+/** Backup 페이로드 — Export와 동일 형식(템플릿만), 전체 Profile 대상. */
+export function backupPayload(state: StoredState): string {
+  return serializeExport(exportProfiles(state, state.profiles.map((p) => p.id)));
+}
+
+/**
+ * 청크의 JSON 직렬화 바이트가 한도를 넘지 않도록 분할한다.
+ * 각 청크의 최대 접두를 이진 탐색으로 찾는다 (서로게이트 쌍을 쪼개지 않는다).
+ */
+export function chunkString(text: string, maxBytes: number = CHUNK_BYTE_LIMIT): string[] {
+  if (text.length === 0) return [''];
+
   const chunks: string[] = [];
-  for (let i = 0; i < text.length; i += size) {
-    chunks.push(text.slice(i, i + size));
+  let offset = 0;
+  while (offset < text.length) {
+    let low = 1;
+    let high = text.length - offset;
+    while (low < high) {
+      const mid = Math.ceil((low + high) / 2);
+      if (jsonBytes(text.slice(offset, offset + mid)) <= maxBytes) low = mid;
+      else high = mid - 1;
+    }
+    let take = low;
+    // 서로게이트 쌍 경계 보호 — 쪼개면 인코딩이 깨진다
+    if (
+      take < text.length - offset &&
+      text.charCodeAt(offset + take - 1) >= 0xd800 &&
+      text.charCodeAt(offset + take - 1) <= 0xdbff
+    ) {
+      take = Math.max(1, take - 1);
+    }
+    chunks.push(text.slice(offset, offset + take));
+    offset += take;
   }
-  return chunks.length > 0 ? chunks : [''];
+  return chunks;
 }
 
 /** FNV-1a 32비트 — 손상 감지용 무결성 체크섬 (암호학적 용도 아님). */
@@ -92,8 +133,13 @@ function chunkKeysOf(entry: ManifestEntry): string[] {
 function snapshotBytes(entry: ManifestEntry, kv: SyncKV): number {
   return chunkKeysOf(entry).reduce((sum, key) => {
     const value = kv[key];
-    return sum + key.length + (typeof value === 'string' ? value.length : 0);
+    return sum + key.length + (typeof value === 'string' ? jsonBytes(value) : 0);
   }, 0);
+}
+
+/** 청크가 전부 남아 있는가 — 손상·유실 스냅샷은 링 슬롯을 차지하지 않는다. */
+function isIntact(entry: ManifestEntry, kv: SyncKV): boolean {
+  return chunkKeysOf(entry).every((key) => typeof kv[key] === 'string');
 }
 
 /**
@@ -123,14 +169,24 @@ export function planBackup(
     checksum: sum,
     profileCount: meta.profileCount,
   };
-  const newBytes = chunks.reduce((s, c, i) => s + c.length + chunkKey(entry.id, i).length, 0);
-  if (newBytes > SYNC_BUDGET) {
+  const newBytes = chunks.reduce(
+    (s, c, i) => s + jsonBytes(c) + chunkKey(entry.id, i).length,
+    0,
+  );
+  // 매니페스트 항목 자체도 quota를 먹는다 — 최대 보존 개수 기준으로 보수 추정.
+  const manifestBytes =
+    BACKUP_MANIFEST_KEY.length +
+    jsonBytes({ snapshots: Array.from({ length: MAX_SNAPSHOTS }, () => entry) });
+  if (newBytes + manifestBytes > SYNC_BUDGET) {
     return { kind: 'too-large' };
   }
 
-  const latest = existing[0];
+  // 손상·유실(청크 불완전) 스냅샷은 복원 불가이므로 링 후보에서 제외한다 —
+  // 링 슬롯을 영구 점유하는 "corrupt 좀비"를 만들지 않는다.
+  const intact = existing.filter((e) => isIntact(e, kv));
+  const latest = intact[0];
   const latestBytes = latest ? snapshotBytes(latest, kv) : 0;
-  if (latest && newBytes + latestBytes > SYNC_BUDGET) {
+  if (latest && newBytes + manifestBytes + latestBytes > SYNC_BUDGET) {
     // 전환 기간 동안 직전 정상본과 공존이 불가능 — 정상본을 지키고 실패한다.
     return { kind: 'too-large' };
   }
@@ -138,8 +194,8 @@ export function planBackup(
   // 링 보존 + 예산: 최신 것부터 유지 목록에 담는다. 새 항목과 직전 정상본이
   // 우선이고, 그 외 오래된 것은 공간이 남을 때만 살아남는다.
   const kept: ManifestEntry[] = [entry];
-  let used = newBytes;
-  for (const candidate of existing) {
+  let used = newBytes + manifestBytes;
+  for (const candidate of intact) {
     if (kept.length >= MAX_SNAPSHOTS) break;
     const bytes = snapshotBytes(candidate, kv);
     if (used + bytes > SYNC_BUDGET) {

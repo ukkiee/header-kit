@@ -32,6 +32,17 @@ describe('chunkString / checksum', () => {
     expect(chunks.join('')).toBe(text);
   });
 
+  it('한도는 JSON 직렬화의 UTF-8 바이트 기준이다 — 한글·이스케이프에서도 항목 quota를 넘지 않는다', async () => {
+    const { jsonBytes } = await import('./backup');
+    const korean = '한글값과 "따옴표" \\역슬래시\\ 를 섞은 페이로드 — '.repeat(500);
+    const chunks = chunkString(korean, 7_500);
+
+    expect(chunks.join('')).toBe(korean);
+    for (const chunk of chunks) {
+      expect(jsonBytes(chunk)).toBeLessThanOrEqual(7_500);
+    }
+  });
+
   it('checksum은 안정적이고 내용에 민감하다', () => {
     expect(checksum('abc')).toBe(checksum('abc'));
     expect(checksum('abc')).not.toBe(checksum('abd'));
@@ -104,6 +115,19 @@ describe('planBackup', () => {
     const huge = 'h'.repeat(200_000);
     const tooLarge = planBackup({}, huge, { profileCount: 1 }, deps());
     expect(tooLarge.kind).toBe('too-large');
+  });
+});
+
+describe('planBackup — 손상 스냅샷의 링 슬롯 점유 방지', () => {
+  it('청크가 유실된 스냅샷은 새 매니페스트에 승계되지 않고 잔여 청크가 정리된다', () => {
+    let kv = committedBackup({}, 'text-a', 'sa', 1);
+    kv = committedBackup(kv, 'text-b-longer', 'sb', 2);
+    delete kv[chunkKey('sa', 0)]; // sa가 유실됨 (크래시 잔해)
+
+    const plan = planBackup(kv, 'text-c', { profileCount: 1 }, deps('sc', 3));
+    if (plan.kind !== 'write') throw new Error('expected write plan');
+
+    expect(plan.manifest.snapshots.map((s) => s.id)).toEqual(['sc', 'sb']);
   });
 });
 

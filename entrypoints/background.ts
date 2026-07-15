@@ -6,10 +6,10 @@ import { hasExpiredProfiles, nextExpiry } from '@/core/expiry';
 import { createReconciler } from '@/core/reconciler';
 import type { NetRule } from '@/core/rules';
 import type { StoredState } from '@/core/schema';
+import { backupPayload } from '@/core/backup';
 import { loadState, onCommand, onStateChanged, persistState } from '@/storage/state';
 import { performBackup } from '@/storage/backupStore';
 import { onTabsChanged, queryTabInfos } from '@/storage/tabs';
-import { exportProfiles, serializeExport } from '@/core/transfer';
 
 const EXPIRY_ALARM = 'headerkit-expiry';
 
@@ -119,21 +119,29 @@ export default defineBackground(() => {
 
   const converge = () => void reconciler.requestReconcile();
 
-  // 자동 Backup — 변경 후 잠시 조용해지면 스냅샷을 만든다 (sync 쓰기 quota 보호).
-  // planBackup이 내용 동일 스냅샷을 스킵하므로 중복·루프는 없다.
+  // 자동 Backup — 재조정 apply가 아니라 별도 채널로 돈다: 탭 이벤트발
+  // 재컴파일마다 sync 쓰기를 태우지 않기 위한 의도적 예외이며, 실행 시점에
+  // 상태를 새로 읽으므로 세대 문제는 없다 (planBackup의 내용 동일 스킵이
+  // 중복·루프를 막는다).
+  // - 타이머는 코얼레싱한다(재예약 없음) → 연속 편집이 백업을 무한 연기하지 못한다.
+  // - 최소 30초 간격 → 시간당 sync 쓰기 quota(1,800) 안쪽으로 유지된다.
+  // - SW가 타이머와 함께 죽으면 다음 기동의 catch-up이 따라잡는다.
   let backupTimer: ReturnType<typeof setTimeout> | undefined;
+  let lastBackupAt = 0;
+  const runBackup = async () => {
+    backupTimer = undefined;
+    lastBackupAt = Date.now();
+    try {
+      const state = await loadState();
+      await performBackup(backupPayload(state), state.profiles.length);
+    } catch (error) {
+      console.error('[HeaderKit] backup failed', error);
+    }
+  };
   const scheduleBackup = () => {
-    clearTimeout(backupTimer);
-    backupTimer = setTimeout(() => {
-      void loadState()
-        .then((state) => {
-          const text = serializeExport(
-            exportProfiles(state, state.profiles.map((p) => p.id)),
-          );
-          return performBackup(text, state.profiles.length);
-        })
-        .catch((error) => console.error('[HeaderKit] backup failed', error));
-    }, 3_000);
+    if (backupTimer !== undefined) return; // 이미 예약됨 — 가장 이른 실행 유지
+    const delay = Math.max(3_000, lastBackupAt + 30_000 - Date.now());
+    backupTimer = setTimeout(() => void runBackup(), delay);
   };
 
   onStateChanged(() => {
@@ -151,6 +159,8 @@ export default defineBackground(() => {
       .catch((error) => console.error('[HeaderKit] expiry failed', error));
   });
 
-  // Service worker가 깨어날 때마다 저장소 기준으로 수렴시킨다.
+  // Service worker가 깨어날 때마다 저장소 기준으로 수렴시키고,
+  // 디바운스 중 SW가 죽어 유실된 백업을 catch-up 한다 (내용 동일이면 스킵됨).
   converge();
+  scheduleBackup();
 });

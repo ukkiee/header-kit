@@ -1,6 +1,6 @@
 # 09 — Backup / 복원
 
-Status: ready-for-agent
+Status: done
 Blocked by: 08
 
 ## Parent
@@ -28,3 +28,17 @@ Blocked by: 08
 ## Blocked by
 
 - 08-import-export.md
+
+## Comments
+
+**2026-07-15 구현 완료.** 테스트 111/111, 실브라우저 스모크 30/30 (I1 자동 Backup manifest-last 커밋, I2 복원 전체 교체+활성화 경계 재실체화).
+
+순수 코어(core/backup): 청크 분할·FNV-1a 체크섬·planBackup(pre정리→청크→manifest-last 커밋→post정리 3단계, 링 보존, 직전 정상본 pre 보호, too-large)·listSnapshots(손상 표시)·decode. 어댑터(storage/backupStore)는 단계 순서만 집행. restore-profiles는 Import와 동일 정규화·활성화 경계, Pause 보존.
+
+2축 코드리뷰 반영:
+- **quota 바이트 정직성 (핵심)**: CHUNK_SIZE가 UTF-16 문자 수를 셌으나 sync quota는 JSON.stringify UTF-8 바이트 기준 — 한글·이스케이프에서 초과 가능. jsonBytes 기반으로 청크 분할·예산·매니페스트 항목 크기를 전부 바이트로 재계산(이진 탐색 분할, 서로게이트 보호). 한글 페이로드 테스트 추가.
+- **손상 스냅샷 링 좀비 방지**: 청크 유실 스냅샷을 링 후보에서 제외(isIntact) — corrupt 항목이 슬롯을 영구 점유하지 않음. 테스트 추가.
+- **자동 백업 견고화**: 30초 최소 간격(시간당 sync 쓰기 1,800 quota 보호) + 코얼레싱(연속 편집이 백업을 무한 연기 못함) + SW 기동 시 catch-up(디바운스 중 SW 사망 대비). apply 밖 별도 채널인 이유 주석화.
+- backupPayload 공통화(중복 제거).
+
+기록: 파일 다운로드/복원 UX는 스모크로 커버, 링 슬롯당 near-duplicate(id 재생성으로 텍스트 변함)는 복원 빈도 고려 시 허용 수준으로 판단.

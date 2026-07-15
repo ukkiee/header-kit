@@ -572,8 +572,17 @@ try {
     `error="${importError}", profiles=${profileCountAfter}`);
 
   // ---------- I. 이슈 09: 자동 Backup · 복원 ----------
-  // H1의 Import가 상태를 바꿨으므로 디바운스(3s) 후 자동 백업이 생겨야 한다.
-  const pollBackupCount = async (min, timeoutMs = 15_000) => {
+  // 이전 섹션들의 누적 백업을 지우고 자족적으로 시작한다.
+  await sw.evaluate(async () => chrome.storage.sync.clear());
+  await seedProfiles([
+    baseProfile('p-bk', 'Backupable',
+      [{ kind: 'request-header', id: 'm1', name: 'X-Restored-Id', value: 'rst-{{uuid}}', enabled: true }],
+      []),
+  ]);
+  await pollSessionRuleCount(sw, 1);
+
+  // 자동 백업은 최소 간격(30s) 스로틀이 있으므로 그보다 넉넉히 기다린다.
+  const pollBackupCount = async (min, timeoutMs = 35_000) => {
     const start = Date.now();
     let count = 0;
     while (Date.now() - start < timeoutMs) {
@@ -590,12 +599,12 @@ try {
   record('I1: Profile 변경 후 자동 Backup 생성 (manifest-last 커밋)', backupCount >= 1,
     `snapshots=${backupCount}`);
 
-  // 상태를 비운 뒤, 1-profile 스냅샷으로 복원한다 (전체 교체 + 활성화 경계).
+  // 상태를 비운 뒤, 방금 만든 스냅샷으로 복원한다 (전체 교체 + 활성화 경계).
   await seedProfiles([]);
   await pollSessionRuleCount(sw, 0);
   await popup.reload();
   await popup.getByRole('button', { name: 'Show' }).click();
-  const restoreRow = popup.locator('li').filter({ hasText: '1 profile' }).first();
+  const restoreRow = popup.locator('li').filter({ hasText: 'profile' }).first();
   await restoreRow.getByRole('button', { name: 'Restore' }).click();
   await restoreRow.getByRole('button', { name: 'Replace all?' }).click();
 
@@ -606,15 +615,15 @@ try {
         const { state } = await chrome.storage.local.get('state');
         return state;
       });
-      if (state.profiles.length === 1 && state.profiles[0].name === 'Imported') return true;
+      if (state.profiles.length === 1 && state.profiles[0].name === 'Backupable') return true;
       await new Promise((r) => setTimeout(r, 300));
     }
     return false;
   })();
   await pollSessionRuleCount(sw, 1);
-  const restoredHeader = (await fetchEchoHeaders(pageB, '/headers'))['x-imported-id'];
+  const restoredHeader = (await fetchEchoHeaders(pageB, '/headers'))['x-restored-id'];
   record('I2: 스냅샷 복원 → 전체 교체 + 활성화 경계 재실체화',
-    restoredOk && /^imp-[0-9a-f-]{36}$/.test(restoredHeader ?? ''),
+    restoredOk && /^rst-[0-9a-f-]{36}$/.test(restoredHeader ?? ''),
     `restored=${restoredOk}, header=${restoredHeader}`);
 
   const failed = results.filter((r) => !r.ok);
