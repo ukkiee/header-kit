@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { Command } from '@/core/commands';
 import { Button } from '@/ui/button';
 import { Input } from '@/ui/input';
-import { PanelSection } from '@/ui/panel-section';
+import { CollapsiblePanel } from '@/ui/collapsible-panel';
 import { Pill } from '@/ui/pill';
 import { useT } from '@/ui/i18n-context';
 
@@ -30,17 +30,15 @@ export function PreferencesPanel({
   };
 
   return (
-    <PanelSection
+    <CollapsiblePanel
       title={t('preferences')}
-      actions={
-        <Button variant="ghost" size="sm" aria-label="Toggle preferences" onClick={() => setOpen(!open)}>
-          {open ? t('hide') : t('show')}
-        </Button>
-      }
+      open={open}
+      onOpenChange={setOpen}
+      showLabel={t('show')}
+      hideLabel={t('hide')}
+      toggleAriaLabel="Toggle preferences"
     >
-
-      {open && (
-        <div className="flex flex-col gap-2 text-xs">
+      <div className="flex flex-col gap-2 text-xs">
           <div className="flex flex-col gap-1">
             <span className="font-medium">{t('autocompleteHeaders')}</span>
             <div className="flex gap-1">
@@ -84,7 +82,6 @@ export function PreferencesPanel({
 
           {incognitoAllowed && <p className="text-zinc-500">{t('incognitoAllowed')}</p>}
         </div>
-      )}
-    </PanelSection>
+    </CollapsiblePanel>
   );
 }

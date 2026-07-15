@@ -5,7 +5,7 @@ import { parseImport } from '@/core/transfer';
 import { listBackupSnapshots, readSyncKV } from '@/platform/backupStore';
 import { Alert } from '@/ui/alert';
 import { Button } from '@/ui/button';
-import { PanelSection } from '@/ui/panel-section';
+import { CollapsiblePanel } from '@/ui/collapsible-panel';
 import { Pill } from '@/ui/pill';
 import { useT } from '@/ui/i18n-context';
 
@@ -59,26 +59,26 @@ export function BackupPanel({
   };
 
   return (
-    <PanelSection
+    <CollapsiblePanel
       title={t('backups')}
-      actions={
-        <Button variant="ghost" size="sm" aria-label="Toggle backups" onClick={() => setOpen(!open)}>
-          {open ? t('hide') : t('show')}
-        </Button>
+      open={open}
+      onOpenChange={setOpen}
+      showLabel={t('show')}
+      hideLabel={t('hide')}
+      toggleAriaLabel="Toggle backups"
+      banner={
+        error && (
+          <Alert as="p" severity="danger" size="xs" role="alert">
+            {error}
+          </Alert>
+        )
       }
     >
-      {error && (
-        <Alert as="p" severity="danger" size="xs" role="alert">
-          {error}
-        </Alert>
-      )}
-
-      {open &&
-        (snapshots.length === 0 ? (
-          <p className="text-xs text-zinc-400">{t('noBackupsYet')}</p>
-        ) : (
-          <ul className="flex flex-col gap-1">
-            {snapshots.map((snapshot) => (
+      {snapshots.length === 0 ? (
+        <p className="text-xs text-zinc-400">{t('noBackupsYet')}</p>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {snapshots.map((snapshot) => (
               <li key={snapshot.id} className="flex items-center gap-2 text-xs">
                 <span className="flex-1">
                   {new Date(snapshot.createdAt).toLocaleString()} · {snapshot.profileCount}{' '}
@@ -101,7 +101,7 @@ export function BackupPanel({
               </li>
             ))}
           </ul>
-        ))}
-    </PanelSection>
+        )}
+    </CollapsiblePanel>
   );
 }
