@@ -1,6 +1,6 @@
 # 03 — DS 씨앗: tokens + Button 이동 + Chip
 
-Status: ready-for-agent
+Status: done
 Blocked by: 01
 
 ## Parent
@@ -39,3 +39,15 @@ Blocked by: 01
 01 — src/ 루트. (02와 병렬 가능 — 서로 독립.)
 
 ## Comments
+
+**2026-07-15 구현 완료** (commit `a3ce1ec`)
+
+- `src/ui/` 개설: `tokens.ts`(fieldSolid/fieldFocus/ghostInteractive/accentBg), `Button.tsx` 이동+토큰 참조 리팩터(출력 동일)+stories, `Chip.tsx`(cva, aria-pressed)+stories.
+- 바이트 동일 헬퍼 `HeaderRow.chip()`·`FilterRow.chipClass()` **삭제** → 단일 `Chip` 6 호출부 채택(HeaderRow override/append/emptyMeans×2, FilterRow resource-type/method). `grep "chipClass\|function chip"` = 0.
+- Button importer 10곳 → `@/ui/Button`(Button.stories 동일 디렉토리 `./Button`만 정상 잔류).
+- **검증**: tsc 0 / test 151 / build / smoke 48/48 / storybook(UI/Button·UI/Chip 로드) green. Chip·Button 클래스 출력 리뷰로 바이트 동일 확인.
+- **코드리뷰 triage**(Standards 4 판단성 발견):
+  - #1 field 토큰 미소비(Speculative Generality) → **Defer**: 슬라이스 04(Input/Select)가 소비. 설계의 "토큰 먼저 추출" + 다음 슬라이스 소비라 수용.
+  - #2 Chip `defaultVariants:{active:false}` 도달불가(dead) → **Accept·수정**: 삭제(active가 required). 커밋에 반영.
+  - #3 Chip이 VariantProps 대신 `active:boolean` 수기 선언 → **Reject(의도)**: 설계 명시 required, 리뷰어도 defensible 인정.
+  - #4 aria-pressed 추가 → **Accept(의도된 a11y 개선)**: 설계·티켓 명시.

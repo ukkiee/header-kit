@@ -1,6 +1,6 @@
 # 02 — runtime/ 분리 + platform/ 리네임
 
-Status: ready-for-agent
+Status: done
 Blocked by: 01
 
 ## Parent
@@ -33,3 +33,11 @@ Blocked by: 01
 01 — src/ 루트가 존재해야 함.
 
 ## Comments
+
+**2026-07-15 구현 완료** (commit `416f5b2`)
+
+- `git mv`: executor·reconciler(+테스트) → `src/runtime/`, `src/storage/` → `src/platform/`, `state.ts` → `stateStore.ts`. backupStore/tabs 이름 유지.
+- import 치환: 이동 파일의 상대→`@/core/*`(executor `./commands`·`./schema`, reconciler `./compile`, 테스트 `./schema`; 동일 디렉토리 `./executor`·`./reconciler`는 상대 유지). importer 5곳(background·App·FilterRow·BackupPanel·ProfileSection) `@/storage/*`→`@/platform/*`·`@/core/{executor,reconciler}`→`@/runtime`.
+- 게이트: `grep -rn "@/storage/\|@/core/executor\|@/core/reconciler" src` = **0**.
+- **검증**: tsc 0 / test 151·19 / build / smoke 48/48 / storybook green. 동작 불변.
+- **코드리뷰**(02+03 합본, since 624dc58): Spec축 "슬라이스 02 계약 준수, 스코프크립 0". Standards축 위반 0.
