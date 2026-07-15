@@ -143,7 +143,7 @@ the reference design's whitespace is the product's pedestal. Every tile begins w
 | `{rounded.sm}` | 8px | Dark utility buttons (Sign In, Bag), inline card imagery |
 | `{rounded.md}` | 11px | White Pearl Button capsules |
 | `{rounded.lg}` | 18px | Store utility cards, accessories grid cards |
-| `{rounded.pill}` | 9999px | Primary blue pill CTAs, sub-nav buy button, configurator option chips, search input — the signature the reference design pill |
+| `{rounded.pill}` | 9999px | Primary blue pill CTAs, sub-nav buy button, configurator option chips, search input — the signature pill |
 | `{rounded.full}` | 9999px / 50% | Circular control chips floating over photography |
 
 ### Photography Geometry
@@ -163,7 +163,7 @@ the reference design's whitespace is the product's pedestal. Every tile begins w
 
 ### Buttons
 
-**`button-primary`** — The signature the reference design action. Background `{colors.primary}` (Action Blue #0066cc), text `{colors.on-primary}` in `{typography.body}` (the text typeface 17px / 400), rounded `{rounded.pill}` (full pill — capsule-shaped), padding 11px × 22px. The full-pill radius IS the brand action signal.
+**`button-primary`** — The signature action. Background `{colors.primary}` (Action Blue #0066cc), text `{colors.on-primary}` in `{typography.body}` (the text typeface 17px / 400), rounded `{rounded.pill}` (full pill — capsule-shaped), padding 11px × 22px. The full-pill radius IS the brand action signal.
 - Active state: `{component.button-primary-active}` — `transform: scale(0.95)` (the system-wide micro-interaction).
 - Focus state: `{component.button-primary-focus}` — 2px solid `{colors.primary-focus}` outline.
 
