@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "design",
+  "verdict": "approve",
+  "summary": "Ship from the scoped R-1 perspective: slice 1 now references files created by its directory moves, slices 2–6 preserve those valid paths, and slice 7 atomically hoists App/CSS while retargeting all three stylesheet consumers. No new critical path-existence issue was introduced.",
+  "planFile": "docs/reviews/arch-restructure/design.md",
+  "planInDiff": true,
+  "reviewedFileCount": 5,
+  "target": "working tree diff",
+  "reviewedSha": "266f26cca3cbe300dd2b31d6a17cf36410799916",
+  "reviewedTree": "7130999d8018536759f72223d5f3752816a2b509",
+  "headMovedDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 0,
+  "planFindingCount": 0,
+  "triage": "Clean verdict: note it in your report and COMMIT this artifact with the next bookkeeping commit.",
+  "findings": [],
+  "next_steps": []
+}

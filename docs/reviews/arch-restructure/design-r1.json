@@ -1,0 +1,47 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "design",
+  "verdict": "needs-attention",
+  "summary": "No-ship: the proposed slice order cannot keep every slice green, and the target architecture leaves the largest browser orchestration module inside the supposedly thin entrypoint layer.",
+  "planFile": "docs/reviews/arch-restructure/design.md",
+  "planInDiff": true,
+  "reviewedFileCount": 3,
+  "target": "working tree diff",
+  "reviewedSha": "266f26cca3cbe300dd2b31d6a17cf36410799916",
+  "reviewedTree": "7130999d8018536759f72223d5f3752816a2b509",
+  "headMovedDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 2,
+  "planFindingCount": 2,
+  "triage": "review-gate SKILL.md rules govern: render EVERY finding as a full table row, the human decides each row (accept/reject/defer/question — free text), echo back before applying, max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "Slice 1 points Storybook at a stylesheet that is not moved until slice 7",
+      "body": "Slice 1 requires `.storybook/preview.ts` to import `src/app/styles/global.css` while describing the operation as an intact move of the existing directories. The stylesheet and `App.tsx` are only moved into `src/app` in slice 7. Building slice 1 as designed therefore leaves the Storybook import unresolved, contradicting the invariant that every slice must remain green and making the tracer sequence infeasible without unplanned changes.",
+      "file": "docs/reviews/arch-restructure/design.md",
+      "line_start": 122,
+      "line_end": 128,
+      "confidence": 0.99,
+      "recommendation": "Either hoist `App.tsx` and `global.css` into `src/app` in slice 1 and update all importers atomically, or keep Storybook pointed at `src/entrypoints/popup/style.css` until slice 7. Rewrite the slice table so every referenced path exists at the end of each slice.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "medium",
+      "title": "The design declares thin entrypoints but leaves background orchestration there",
+      "body": "The target says `entrypoints` contains only three-line mounts, but the only planned background change is import-path rewriting. The current `entrypoints/background.ts` is a 212-line composition root containing regex validation, session-rule replacement, badge/alarm application, backup scheduling, event listeners, and reconciliation wiring. As designed, this logic remains in `src/entrypoints/background.ts`, so the claimed boundary is not achieved; future browser orchestration changes will continue to accumulate in the entrypoint and bypass the proposed runtime/platform seams.",
+      "file": "docs/reviews/arch-restructure/design.md",
+      "line_start": 60,
+      "line_end": 63,
+      "confidence": 0.98,
+      "recommendation": "Define a background application/bootstrap module outside `entrypoints`—with explicit dependencies on runtime and platform—and make `src/entrypoints/background.ts` only invoke that bootstrap. Add this extraction to a named slice and state which responsibilities belong to runtime, platform, and the composition root.",
+      "isPlanFinding": true
+    }
+  ],
+  "next_steps": [
+    "Correct the slice ordering/path transitions and re-run the design gate.",
+    "Specify and schedule the background composition-root extraction before implementation tickets are created."
+  ]
+}
