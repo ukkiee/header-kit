@@ -4,7 +4,7 @@ import { Button } from '@/ui/Button';
 import { Input } from '@/ui/Input';
 import { PanelSection } from '@/ui/PanelSection';
 import { Pill } from '@/ui/Pill';
-import { useT } from './i18n-context';
+import { useT } from '@/ui/i18n-context';
 
 export interface PreferencesPanelProps {
   customHeaderNames: readonly string[];

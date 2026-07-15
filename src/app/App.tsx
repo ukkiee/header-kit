@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
-import { BackupPanel } from '@/components/BackupPanel';
+import { BackupPanel } from '@/features/backup/BackupPanel';
+import { PreferencesPanel } from '@/features/preferences/PreferencesPanel';
+import { ProfileSection } from '@/features/profiles/ProfileSection';
+import { StatusSummary } from '@/features/status/StatusSummary';
+import { TransferPanel } from '@/features/transfer/TransferPanel';
 import { Alert } from '@/ui/Alert';
 import { Button } from '@/ui/Button';
-import { LocaleProvider } from '@/components/i18n-context';
-import { PreferencesPanel } from '@/components/PreferencesPanel';
-import { ProfileSection } from '@/components/ProfileSection';
-import { StatusSummary } from '@/components/StatusSummary';
-import { TransferPanel } from '@/components/TransferPanel';
+import { LocaleProvider } from '@/ui/i18n-context';
 import type { Command } from '@/core/commands';
 import { resolveLocale, t, type Locale } from '@/core/i18n';
 import { createProfile, PROFILE_COLORS, type StoredState } from '@/core/schema';

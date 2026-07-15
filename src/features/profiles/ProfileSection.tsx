@@ -16,11 +16,11 @@ import { Card } from '@/ui/Card';
 import { Input } from '@/ui/Input';
 import { Select } from '@/ui/Select';
 import { ToggleSwitch } from '@/ui/ToggleSwitch';
-import { CspRow } from './CspRow';
-import { FilterRow } from './FilterRow';
-import { HeaderRow } from './HeaderRow';
-import { RedirectRow } from './RedirectRow';
-import { useT } from './i18n-context';
+import { CspRow } from '@/features/modifications/CspRow';
+import { FilterRow } from '@/features/filters/FilterRow';
+import { HeaderRow } from '@/features/modifications/HeaderRow';
+import { RedirectRow } from '@/features/modifications/RedirectRow';
+import { useT } from '@/ui/i18n-context';
 
 const FILTER_KINDS: Array<{ kind: FilterKind; labelKey: MessageKey }> = [
   { kind: 'url', labelKey: 'filterUrl' },

@@ -5,7 +5,7 @@ import { Checkbox } from '@/ui/Checkbox';
 import { Input } from '@/ui/Input';
 import { KindLabel } from '@/ui/KindLabel';
 import { NoteText } from '@/ui/NoteText';
-import { useT } from './i18n-context';
+import { useT } from '@/ui/i18n-context';
 
 export interface RedirectRowProps {
   modification: RedirectModification;

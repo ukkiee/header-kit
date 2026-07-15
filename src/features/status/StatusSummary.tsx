@@ -1,7 +1,7 @@
 import type { StatusSummary as StatusSummaryData } from '@/core/summary';
 import { Alert } from '@/ui/Alert';
 import { Card } from '@/ui/Card';
-import { useT } from './i18n-context';
+import { useT } from '@/ui/i18n-context';
 
 export interface StatusSummaryProps {
   summary: StatusSummaryData;

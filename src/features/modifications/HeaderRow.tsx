@@ -10,8 +10,8 @@ import { KindLabel } from '@/ui/KindLabel';
 import { NoteText } from '@/ui/NoteText';
 import { Select } from '@/ui/Select';
 import { HeaderNameInput } from './HeaderNameInput';
-import { useT } from './i18n-context';
-import { LargeEditor } from './LargeEditor';
+import { useT } from '@/ui/i18n-context';
+import { LargeEditor } from '@/ui/LargeEditor';
 
 /** 값을 가진 Modification 종류 (header/cookie/set-cookie). */
 type ValueModification = Extract<Modification, { value: string }>;

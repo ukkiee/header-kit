@@ -7,7 +7,7 @@ import { Button } from '@/ui/Button';
 import { Checkbox } from '@/ui/Checkbox';
 import { TextArea } from '@/ui/Input';
 import { PanelSection } from '@/ui/PanelSection';
-import { useT } from './i18n-context';
+import { useT } from '@/ui/i18n-context';
 
 export interface TransferPanelProps {
   state: StoredState;

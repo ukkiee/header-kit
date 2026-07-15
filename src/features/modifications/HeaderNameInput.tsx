@@ -1,7 +1,7 @@
 import { useId, useState } from 'react';
 import { suggestHeaderNames } from '@/core/autocomplete';
 import { Input } from '@/ui/Input';
-import { useT } from './i18n-context';
+import { useT } from '@/ui/i18n-context';
 
 export interface HeaderNameInputProps {
   value: string;

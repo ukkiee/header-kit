@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ProfileSection } from './ProfileSection';
-import { StatusSummary } from './StatusSummary';
+import { ProfileSection } from '@/features/profiles/ProfileSection';
+import { StatusSummary } from '@/features/status/StatusSummary';
 import type { Profile } from '@/core/schema';
 
 /**

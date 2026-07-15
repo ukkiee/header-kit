@@ -7,7 +7,7 @@ import { Alert } from '@/ui/Alert';
 import { Button } from '@/ui/Button';
 import { PanelSection } from '@/ui/PanelSection';
 import { Pill } from '@/ui/Pill';
-import { useT } from './i18n-context';
+import { useT } from '@/ui/i18n-context';
 
 export interface BackupPanelProps {
   /** 권위 실행 결과를 돌려받는다 — 거부된 복원을 성공처럼 표시하지 않기 위해. */
