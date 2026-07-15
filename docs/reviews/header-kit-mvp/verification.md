@@ -16,9 +16,9 @@
 | `bun run test` (Vitest) | **151 passed** (0 failed) |
 | `bun run build` (wxt build, chrome-mv3) | 성공 |
 | `bun run storybook:build` | 성공 |
-| `bun run smoke` (Playwright, 확장 로드 실브라우저) | **44/44 passed** (2회 연속 확인) |
+| `bun run smoke` (Playwright, 확장 로드 실브라우저) | **48/48 passed** (3회 연속 확인) |
 
-## 실브라우저 스모크 커버리지 (44 checks, A–M)
+## 실브라우저 스모크 커버리지 (48 checks, A–M)
 
 - **A** 팝업 토글 → storage → session rule → 실요청 헤더 적용/해제
 - **B** allow vs modifyHeaders 우선순위 상호작용 (Exclude 설계 전제)
@@ -32,11 +32,11 @@
 - **J** 탭 앱 · 상태 요약(규칙 수·경고) · 대형 편집기
 - **K** Response Header · send-empty vs remove · Append 누적
 - **L** Pause 단축키 등록 · autocomplete 사용자 항목 · 시크릿 미허용 안내
-- **M** Request Cookie append · Set-Cookie 주입 · CSP 합성 · Redirect 캡처 그룹 치환 · invalid redirect 저장 거부
+- **M** Request Cookie append/override/remove · Set-Cookie 주입/override/block(사전 존재 값 대조) · CSP 합성 · Redirect 캡처 그룹 치환 · invalid redirect 저장 거부
 
 ## release 게이트 r1 반영 (RL-1~4)
 
-- **RL-1** Cookie/Set-Cookie/CSP/Redirect (이슈 03) 전 스택 구현 — 스모크 M으로 실브라우저 검증.
+- **RL-1** Cookie/Set-Cookie/CSP/Redirect (이슈 03) 전 스택 구현 — 스모크 M(9건, Cookie/Set-Cookie 4종 연산 실기기 대조 포함)으로 실브라우저 검증.
 - **RL-2** Exclude allow 규칙을 소유 Profile의 전체 Filter 스코프로 제한 (전역 누출 방지) — compile-tabs 골든 테스트로 고정.
 - **RL-3** 백업 skip 판정 전 최신 스냅샷 무결성 검증 + self-healing — backup 회귀 테스트 추가.
 - **RL-4** minimum_chrome_version 108 선언 — 빌드된 manifest에서 확인.

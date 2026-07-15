@@ -40,3 +40,8 @@
 - RL-2 accept — Exclude allow 규칙이 소유 Profile의 다른 Filter 스코프를 벗어나 전역 누출 — allow를 같은 조건 경로로 스코프하고 no-match-tabs 가드 뒤로 이동, 위험 테스트 교체
 - RL-3 accept — 손상된 최신 백업이 self-healing을 영구 억제 — skip 판정 전 최신 스냅샷 무결성 검증, 손상 시 재생성, 회귀 테스트
 - RL-4 accept — minimum_chrome_version 미선언 — 사용 DNR 기능 요구 버전으로 manifest에 선언
+
+### release r2
+
+- RL-2, RL-3, RL-4 — 해결 확인 (재리뷰)
+- RL2-1 accept — RL-1의 브라우저 증거가 Cookie/Set-Cookie 연산의 절반만 커버 — Cookie override·remove, Set-Cookie override·block 실브라우저 스모크 4건 추가(사전 존재 값 대조 단언); 사용자 지시로 r3 재리뷰 실행

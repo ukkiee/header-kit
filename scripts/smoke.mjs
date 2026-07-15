@@ -35,6 +35,13 @@ async function startEchoServer() {
       res.end(JSON.stringify({ cookie: req.headers.cookie ?? null }));
       return;
     }
+    if (req.url.startsWith('/withcookie')) {
+      // 서버가 기준 Set-Cookie를 내려준다 — override/block 대조용.
+      res.setHeader('set-cookie', 'server_cookie=base; Path=/');
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ ok: true }));
+      return;
+    }
     // path를 body로 반영해 redirect 착지 지점을 감지할 수 있게 한다.
     res.setHeader('content-type', 'text/html');
     res.end(`<!doctype html><title>echo</title>${req.url}`);
@@ -819,6 +826,81 @@ try {
   });
   record('M2: Set-Cookie 응답 헤더 주입 → 브라우저 쿠키 설정', /injected=1/.test(docCookie),
     `document.cookie=${docCookie}`);
+
+  // 쿠키 오염 방지: 이후 테스트 전에 document.cookie를 비운다.
+  const clearCookies = () =>
+    pageB.evaluate(() => {
+      for (const c of document.cookie.split(';')) {
+        const name = c.split('=')[0]?.trim();
+        if (name) document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+      }
+    });
+
+  // M2b: Request Cookie override는 기존 Cookie 헤더를 통째 교체한다
+  await clearCookies();
+  await pageB.evaluate(() => {
+    document.cookie = 'existing=preset; path=/';
+  });
+  await seedProfiles([
+    baseProfile('p-cko', 'Co',
+      [modBase('cookie', { name: 'session', value: 'new', mode: 'override', emptyMeans: 'remove' })],
+      []),
+  ]);
+  await pollSessionRuleCount(sw, 1);
+  const overridden = (await pageB.evaluate(async () => {
+    const res = await fetch('/setcookie', { cache: 'no-store' });
+    return res.json();
+  })).cookie;
+  record('M2b: Cookie override가 기존 Cookie 헤더를 통째 교체', overridden === 'session=new',
+    `cookie=${overridden}`);
+
+  // M2c: Request Cookie remove는 기존 Cookie가 있어도 헤더를 제거한다
+  await seedProfiles([
+    baseProfile('p-ckr', 'Cr',
+      [modBase('cookie', { name: 'anything', value: '', mode: 'override', emptyMeans: 'remove' })],
+      []),
+  ]);
+  await pollSessionRuleCount(sw, 1);
+  const removedCookie = (await pageB.evaluate(async () => {
+    const res = await fetch('/setcookie', { cache: 'no-store' });
+    return res.json();
+  })).cookie;
+  record('M2c: Cookie remove가 기존 Cookie 헤더를 제거', removedCookie === null || removedCookie === undefined,
+    `cookie=${removedCookie}`);
+
+  // M2d: Set-Cookie override는 서버가 보낸 Set-Cookie를 대체한다
+  await clearCookies();
+  await seedProfiles([
+    baseProfile('p-sco', 'So',
+      [modBase('set-cookie', { value: 'replaced=1; Path=/', mode: 'override', emptyMeans: 'remove' })],
+      []),
+  ]);
+  await pollSessionRuleCount(sw, 1);
+  const afterScOverride = await pageB.evaluate(async () => {
+    await fetch('/withcookie', { cache: 'no-store' });
+    await new Promise((r) => setTimeout(r, 100));
+    return document.cookie;
+  });
+  record('M2d: Set-Cookie override가 서버 Set-Cookie를 대체',
+    /replaced=1/.test(afterScOverride) && !/server_cookie=base/.test(afterScOverride),
+    `document.cookie=${afterScOverride}`);
+
+  // M2e: Set-Cookie block(빈 값+remove)은 서버 Set-Cookie를 차단한다
+  await clearCookies();
+  await seedProfiles([
+    baseProfile('p-scb', 'Sb',
+      [modBase('set-cookie', { value: '', mode: 'override', emptyMeans: 'remove' })],
+      []),
+  ]);
+  await pollSessionRuleCount(sw, 1);
+  const afterScBlock = await pageB.evaluate(async () => {
+    await fetch('/withcookie', { cache: 'no-store' });
+    await new Promise((r) => setTimeout(r, 100));
+    return document.cookie;
+  });
+  record('M2e: Set-Cookie block이 서버 Set-Cookie를 차단', !/server_cookie=base/.test(afterScBlock),
+    `document.cookie=${afterScBlock}`);
+  await clearCookies();
 
   // M3: CSP 응답 헤더 합성
   await seedProfiles([

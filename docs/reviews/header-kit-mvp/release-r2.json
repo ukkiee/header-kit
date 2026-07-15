@@ -1,0 +1,36 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "release",
+  "verdict": "needs-attention",
+  "summary": "Do not ship: RL-2, RL-3, and RL-4 are adequately fixed, but RL-1 remains only partially release-verified against its explicit browser acceptance criteria.",
+  "planFile": "docs/reviews/header-kit-mvp/prd.md",
+  "planInDiff": null,
+  "reviewedFileCount": 106,
+  "target": "branch diff against main",
+  "reviewedSha": "cfc2e8bfc90e14e93984809fd1663a7d31013a11",
+  "reviewedTree": "685c53bf6dbe1b1b0e7c3949ed18f3e86d393439",
+  "headMovedDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 1,
+  "planFindingCount": 0,
+  "triage": "review-gate SKILL.md rules govern: render EVERY finding as a full table row, the human decides each row (accept/reject/defer/question — free text), echo back before applying, max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "RL-1 browser evidence covers only half of the required Cookie operations",
+      "body": "Issue 03 requires real-browser verification of Cookie append, whole-header replacement, and removal, plus Set-Cookie append, replacement, and blocking. The new smoke suite exercises only Cookie append and Set-Cookie append; replacement/removal paths exist only as compiler-shape unit tests. Consequently, the claimed 44/44 browser evidence can pass even if Chromium rejects or behaves differently for four required DNR operations. This is especially material because RL-1 was originally raised for the entire missing slice and the issue explicitly names real-browser validation as acceptance criteria.",
+      "file": "scripts/smoke.mjs",
+      "line_start": 791,
+      "line_end": 821,
+      "confidence": 0.99,
+      "recommendation": "Add real-browser smoke cases for Cookie whole-header replacement and removal, and Set-Cookie replacement and blocking. Assert both replacement of pre-existing values and absence after removal/blocking, then rerun and commit the updated verification evidence.",
+      "isPlanFinding": false
+    }
+  ],
+  "next_steps": [
+    "Extend the issue 03 smoke coverage for the four missing Cookie/Set-Cookie operations.",
+    "Rerun the full browser smoke suite and update verification.md with the resulting evidence."
+  ]
+}
