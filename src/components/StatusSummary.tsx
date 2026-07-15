@@ -10,7 +10,7 @@ export interface StatusSummaryProps {
 export function StatusSummary({ summary }: StatusSummaryProps) {
   const t = useT();
   return (
-    <Card variant="filled" className="text-xs">
+    <Card as="section" variant="filled" className="text-xs">
       <div className="flex items-center gap-3">
         <span>
           <strong>{summary.ruleCount}</strong>{' '}

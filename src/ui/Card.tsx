@@ -1,5 +1,5 @@
 import { cva, type VariantProps } from 'class-variance-authority';
-import type { HTMLAttributes } from 'react';
+import type { ElementType, HTMLAttributes } from 'react';
 
 /**
  * 컨테이너 표면 — outlined(프로필 카드) / filled(요약 카드) / row(수정 행 hover 컨테이너).
@@ -16,8 +16,10 @@ const card = cva('flex flex-col', {
   defaultVariants: { variant: 'outlined' },
 });
 
-export interface CardProps extends HTMLAttributes<HTMLDivElement>, VariantProps<typeof card> {}
+export interface CardProps extends HTMLAttributes<HTMLDivElement>, VariantProps<typeof card> {
+  as?: ElementType;
+}
 
-export function Card({ variant, className, ...props }: CardProps) {
-  return <div className={card({ variant, className })} {...props} />;
+export function Card({ as: Tag = 'div', variant, className, ...props }: CardProps) {
+  return <Tag className={card({ variant, className })} {...props} />;
 }

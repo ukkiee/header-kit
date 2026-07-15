@@ -66,7 +66,7 @@ export function ProfileSection({
     onCommand({ type: 'update-profile-meta', profileId: profile.id, meta: { ...meta, ...patch } });
 
   return (
-    <Card variant="outlined">
+    <Card as="section" variant="outlined">
       <div className="flex items-center gap-2">
         <input
           type="color"
