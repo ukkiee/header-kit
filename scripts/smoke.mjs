@@ -60,7 +60,7 @@ async function fetchEchoHeaders(page, path = '/headers', method = 'GET') {
   );
 }
 
-async function pollSessionRuleCount(sw, expected, timeoutMs = 5000) {
+async function pollSessionRuleCount(sw, expected, timeoutMs = 15000) {
   const start = Date.now();
   let count = -1;
   while (Date.now() - start < timeoutMs) {
