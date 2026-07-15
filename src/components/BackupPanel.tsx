@@ -3,7 +3,7 @@ import { decodeSnapshotText, type SnapshotStatus } from '@/core/backup';
 import type { Command } from '@/core/commands';
 import { parseImport } from '@/core/transfer';
 import { listBackupSnapshots, readSyncKV } from '@/platform/backupStore';
-import { Button } from './Button';
+import { Button } from '@/ui/Button';
 import { useT } from './i18n-context';
 
 export interface BackupPanelProps {

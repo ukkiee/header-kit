@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { BackupPanel } from '@/components/BackupPanel';
-import { Button } from '@/components/Button';
+import { Button } from '@/ui/Button';
 import { LocaleProvider } from '@/components/i18n-context';
 import { PreferencesPanel } from '@/components/PreferencesPanel';
 import { ProfileSection } from '@/components/ProfileSection';

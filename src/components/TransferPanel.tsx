@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { Command } from '@/core/commands';
 import type { Profile, StoredState } from '@/core/schema';
 import { exportProfiles, parseImport, serializeExport } from '@/core/transfer';
-import { Button } from './Button';
+import { Button } from '@/ui/Button';
 import { useT } from './i18n-context';
 
 export interface TransferPanelProps {

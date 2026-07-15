@@ -12,7 +12,7 @@ import {
 } from '@/core/schema';
 import type { MessageKey } from '@/core/i18n';
 import type { TabPickerOptions } from '@/platform/tabs';
-import { Button } from './Button';
+import { Button } from '@/ui/Button';
 import { CspRow } from './CspRow';
 import { FilterRow } from './FilterRow';
 import { HeaderRow } from './HeaderRow';

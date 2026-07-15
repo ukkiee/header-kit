@@ -1,6 +1,6 @@
 import { Dialog } from '@base-ui-components/react/dialog';
 import { useState } from 'react';
-import { Button } from './Button';
+import { Button } from '@/ui/Button';
 import { useT } from './i18n-context';
 
 export interface LargeEditorProps {

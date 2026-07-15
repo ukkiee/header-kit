@@ -1,7 +1,8 @@
 import { hasPlaceholders } from '@/core/placeholder';
 import { isRequestAppendAllowed } from '@/core/rules';
 import type { Modification } from '@/core/schema';
-import { Button } from './Button';
+import { Button } from '@/ui/Button';
+import { Chip } from '@/ui/Chip';
 import { HeaderNameInput } from './HeaderNameInput';
 import { useT } from './i18n-context';
 import { LargeEditor } from './LargeEditor';
@@ -17,14 +18,6 @@ export interface HeaderRowProps {
   materializedValue?: string;
   /** 헤더 이름 autocomplete에 더할 사용자 등록 항목. */
   userHeaders?: readonly string[];
-}
-
-function chip(active: boolean): string {
-  return `cursor-pointer rounded px-1.5 py-0.5 text-[10px] transition-colors ${
-    active
-      ? 'bg-blue-600 text-white'
-      : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400'
-  }`;
 }
 
 export function HeaderRow({
@@ -112,39 +105,35 @@ export function HeaderRow({
       </div>
 
       <div className="flex flex-wrap items-center gap-1 pl-6">
-        <button
-          type="button"
-          className={chip(modification.mode === 'override')}
+        <Chip
+          active={modification.mode === 'override'}
           onClick={() => onChange({ ...modification, mode: 'override' })}
         >
           {t('override')}
-        </button>
+        </Chip>
         {appendAllowed && (
-          <button
-            type="button"
-            className={chip(modification.mode === 'append')}
+          <Chip
+            active={modification.mode === 'append'}
             onClick={() => onChange({ ...modification, mode: 'append' })}
           >
             {t('append')}
-          </button>
+          </Chip>
         )}
         {isEmpty && (
           <>
             <span className="ml-1 text-[10px] text-zinc-400">{t('emptyArrow')}</span>
-            <button
-              type="button"
-              className={chip(modification.emptyMeans === 'remove')}
+            <Chip
+              active={modification.emptyMeans === 'remove'}
               onClick={() => onChange({ ...modification, emptyMeans: 'remove' })}
             >
               {t('remove')}
-            </button>
-            <button
-              type="button"
-              className={chip(modification.emptyMeans === 'send-empty')}
+            </Chip>
+            <Chip
+              active={modification.emptyMeans === 'send-empty'}
               onClick={() => onChange({ ...modification, emptyMeans: 'send-empty' })}
             >
               {t('sendEmpty')}
-            </button>
+            </Chip>
           </>
         )}
         <input

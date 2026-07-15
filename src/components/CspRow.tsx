@@ -1,5 +1,5 @@
 import type { CspModification, Modification } from '@/core/schema';
-import { Button } from './Button';
+import { Button } from '@/ui/Button';
 import { useT } from './i18n-context';
 
 export interface CspRowProps {

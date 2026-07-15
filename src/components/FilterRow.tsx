@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import type { Filter } from '@/core/schema';
 import { ALL_RESOURCE_TYPES, REQUEST_METHODS } from '@/core/rules';
 import type { TabPickerOptions } from '@/platform/tabs';
-import { Button } from './Button';
+import { Button } from '@/ui/Button';
+import { Chip } from '@/ui/Chip';
 
 /**
  * 패턴류 입력은 로컬 초안으로 편집하고 blur/Enter에서만 커밋한다 —
@@ -110,14 +111,6 @@ function toggleItem<T>(list: readonly T[], item: T): T[] {
   return list.includes(item) ? list.filter((x) => x !== item) : [...list, item];
 }
 
-function chipClass(selected: boolean): string {
-  return `cursor-pointer rounded px-1.5 py-0.5 text-[10px] transition-colors ${
-    selected
-      ? 'bg-blue-600 text-white'
-      : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400'
-  }`;
-}
-
 function FilterEditor({
   filter,
   onChange,
@@ -199,16 +192,15 @@ function FilterEditor({
       return (
         <div className="flex flex-1 flex-wrap gap-1">
           {ALL_RESOURCE_TYPES.map((type) => (
-            <button
+            <Chip
               key={type}
-              type="button"
-              className={chipClass(filter.resourceTypes.includes(type))}
+              active={filter.resourceTypes.includes(type)}
               onClick={() =>
                 onChange({ ...filter, resourceTypes: toggleItem(filter.resourceTypes, type) })
               }
             >
               {type}
-            </button>
+            </Chip>
           ))}
         </div>
       );
@@ -216,14 +208,13 @@ function FilterEditor({
       return (
         <div className="flex flex-1 flex-wrap gap-1">
           {REQUEST_METHODS.map((method) => (
-            <button
+            <Chip
               key={method}
-              type="button"
-              className={chipClass(filter.methods.includes(method))}
+              active={filter.methods.includes(method)}
               onClick={() => onChange({ ...filter, methods: toggleItem(filter.methods, method) })}
             >
               {method.toUpperCase()}
-            </button>
+            </Chip>
           ))}
         </div>
       );

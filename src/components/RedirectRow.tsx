@@ -1,5 +1,5 @@
 import type { Modification, RedirectModification } from '@/core/schema';
-import { Button } from './Button';
+import { Button } from '@/ui/Button';
 import { useT } from './i18n-context';
 
 export interface RedirectRowProps {
