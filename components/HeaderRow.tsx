@@ -1,6 +1,7 @@
 import { hasPlaceholders } from '@/core/placeholder';
 import type { RequestHeaderModification } from '@/core/schema';
 import { Button } from './Button';
+import { LargeEditor } from './LargeEditor';
 
 export interface HeaderRowProps {
   modification: RequestHeaderModification;
@@ -41,6 +42,12 @@ export function HeaderRow({
         placeholder="Value"
         className="h-8 flex-1 rounded-md border border-zinc-300 bg-white px-2 text-sm outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
       />
+        <LargeEditor
+          title={`Value — ${modification.name || 'header'}`}
+          value={modification.value}
+          onCommit={(value) => onChange({ ...modification, value })}
+          triggerLabel="⤢"
+        />
         <Button variant="danger" size="sm" onClick={onRemove} aria-label="Remove modification">
           ✕
         </Button>

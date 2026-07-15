@@ -626,6 +626,54 @@ try {
     restoredOk && /^rst-[0-9a-f-]{36}$/.test(restoredHeader ?? ''),
     `restored=${restoredOk}, header=${restoredHeader}`);
 
+  // ---------- J. 이슈 10: 탭 앱 + 적용 상태 가시성 ----------
+  const extId = new URL(sw.url()).host;
+
+  // J1: 탭 앱이 열리고 팝업과 같은 상태를 본다
+  await seedProfiles([
+    baseProfile('p-app', 'AppView',
+      [
+        { kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true },
+        { kind: 'request-header', id: 'm2', name: 'X-B', value: '2', enabled: true },
+      ],
+      []),
+  ]);
+  await pollSessionRuleCount(sw, 2);
+
+  const tabApp = await context.newPage();
+  await tabApp.goto(`chrome-extension://${extId}/app.html`);
+  await tabApp.getByText('HeaderKit').waitFor();
+  const shownRuleCount = await tabApp.getByText(/active rule/).textContent();
+  record('J1: 탭 앱이 활성 규칙 수를 표시한다 (요약이 Compile과 일치)',
+    /2\s*active rule/.test(shownRuleCount ?? ''), `summary="${(shownRuleCount ?? '').trim()}"`);
+
+  // J2: 겹침 경고가 요약에 노출된다 (두 활성 Profile이 같은 헤더 수정)
+  await seedProfiles([
+    baseProfile('p-x', 'X', [{ kind: 'request-header', id: 'm1', name: 'X-Dup', value: 'a', enabled: true }], []),
+    baseProfile('p-y', 'Y', [{ kind: 'request-header', id: 'm2', name: 'X-Dup', value: 'b', enabled: true }], []),
+  ]);
+  await tabApp.reload();
+  const overlapShown = await tabApp
+    .getByText(/Overlapping header/i)
+    .isVisible()
+    .catch(() => false);
+  record('J2: 겹침 경고가 상태 요약에 노출된다', overlapShown, `visible=${overlapShown}`);
+
+  // J3: 대형 편집기로 긴 값을 저장하면 반영된다
+  await seedProfiles([
+    baseProfile('p-le', 'LE', [{ kind: 'request-header', id: 'm1', name: 'X-Long', value: 'short', enabled: true }], []),
+  ]);
+  await tabApp.reload();
+  await tabApp.getByRole('button', { name: /open large editor/i }).first().click();
+  const longValue = 'x'.repeat(300);
+  await tabApp.getByRole('textbox', { name: /Value —/ }).fill(longValue);
+  await tabApp.getByRole('button', { name: 'Save', exact: true }).click();
+  const savedValue = await sw.evaluate(async () => {
+    const { state } = await chrome.storage.local.get('state');
+    return state.profiles[0].modifications[0].value;
+  });
+  record('J3: 대형 편집기 저장이 값에 반영된다', savedValue === longValue, `len=${savedValue?.length}`);
+
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
   process.exitCode = failed.length === 0 ? 0 : 1;

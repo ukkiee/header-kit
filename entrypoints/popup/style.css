@@ -1,5 +1,10 @@
 @import 'tailwindcss';
 
+/* 팝업만 최소 폭을 강제한다 — 탭 앱은 전체 폭을 쓴다. */
+body:has(> #root > .max-w-3xl) {
+  min-width: 0;
+}
+
 body {
   min-width: 420px;
 }

@@ -20,6 +20,24 @@ export function onStateChanged(listener: () => void): void {
   });
 }
 
+const APPLY_ERROR_KEY = 'applyError';
+
+/** 어댑터의 규칙 적용 실패를 session 저장소에 남긴다 (SW 재기동에도 유지). */
+export async function setApplyError(message: string | null): Promise<void> {
+  await browser.storage.session.set({ [APPLY_ERROR_KEY]: message });
+}
+
+export async function getApplyError(): Promise<string | null> {
+  const result = await browser.storage.session.get(APPLY_ERROR_KEY);
+  return (result[APPLY_ERROR_KEY] as string | null | undefined) ?? null;
+}
+
+export function onApplyErrorChanged(listener: () => void): void {
+  browser.storage.onChanged.addListener((changes, area) => {
+    if (area === 'session' && APPLY_ERROR_KEY in changes) listener();
+  });
+}
+
 export type CommandResult =
   | { ok: true; state: StoredState }
   | { ok: false; error: string };

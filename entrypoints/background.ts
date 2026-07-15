@@ -7,7 +7,13 @@ import { createReconciler } from '@/core/reconciler';
 import type { NetRule } from '@/core/rules';
 import type { StoredState } from '@/core/schema';
 import { backupPayload } from '@/core/backup';
-import { loadState, onCommand, onStateChanged, persistState } from '@/storage/state';
+import {
+  loadState,
+  onCommand,
+  onStateChanged,
+  persistState,
+  setApplyError,
+} from '@/storage/state';
 import { performBackup } from '@/storage/backupStore';
 import { onTabsChanged, queryTabInfos } from '@/storage/tabs';
 
@@ -94,7 +100,14 @@ export default defineBackground(() => {
       }),
     // 규칙·배지·만료 알람을 같은 스냅샷·같은 세대 보증 아래 반영한다.
     apply: async (rules, snapshot) => {
-      await replaceSessionRules(rules);
+      // 규칙 적용은 실패해도(예: quota) 나머지 반영·요약을 막지 않는다 —
+      // 실패는 삼키지 않고 apply 오류 채널로 노출한다 (이슈 05 이연분).
+      try {
+        await replaceSessionRules(rules);
+        await setApplyError(null);
+      } catch (error) {
+        await setApplyError(error instanceof Error ? error.message : String(error));
+      }
       await applyBadge(snapshot.state);
       await scheduleExpiryAlarm(snapshot.state, snapshot.now);
       // 이미 지난 만료(과거 시각 입력, SW 휴면 중 경과 등)는 알람을 기다리지

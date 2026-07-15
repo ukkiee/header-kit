@@ -2,20 +2,57 @@ import { useEffect, useState } from 'react';
 import { BackupPanel } from '@/components/BackupPanel';
 import { Button } from '@/components/Button';
 import { ProfileSection } from '@/components/ProfileSection';
+import { StatusSummary } from '@/components/StatusSummary';
 import { TransferPanel } from '@/components/TransferPanel';
+import { compile } from '@/core/compile';
 import type { Command } from '@/core/commands';
 import { createProfile, PROFILE_COLORS, type StoredState } from '@/core/schema';
-import { loadState, onStateChanged, sendCommand } from '@/storage/state';
-import { queryTabPickerOptions, type TabPickerOptions } from '@/storage/tabs';
+import { summarizeCompile, type StatusSummary as StatusSummaryData } from '@/core/summary';
+import {
+  getApplyError,
+  loadState,
+  onApplyErrorChanged,
+  onStateChanged,
+  sendCommand,
+} from '@/storage/state';
+import { queryTabInfos, queryTabPickerOptions, type TabPickerOptions } from '@/storage/tabs';
 
-export function App() {
+/** popup은 컴팩트, tab 앱은 넓은 레이아웃 — 같은 컴포넌트를 다른 마운트로 쓴다. */
+export type AppSurface = 'popup' | 'tab';
+
+export function App({ surface = 'popup' }: { surface?: AppSurface }) {
   const [state, setState] = useState<StoredState | null>(null);
   const [commandError, setCommandError] = useState<string | null>(null);
   const [pickerOptions, setPickerOptions] = useState<TabPickerOptions | undefined>(undefined);
+  const [summary, setSummary] = useState<StatusSummaryData | null>(null);
 
   useEffect(() => {
-    void loadState().then(setState);
-    onStateChanged(() => void loadState().then(setState));
+    const refreshSummary = async () => {
+      const [current, applyError, tabs] = await Promise.all([
+        loadState(),
+        getApplyError(),
+        queryTabInfos(),
+      ]);
+      setSummary(
+        summarizeCompile(
+          compile(current.profiles, {
+            paused: current.paused,
+            tabs,
+            now: Date.now(),
+            materialized: current.materialized,
+          }),
+          { profiles: current.profiles, paused: current.paused, applyError },
+        ),
+      );
+    };
+
+    const refreshAll = () => {
+      void loadState().then(setState);
+      void refreshSummary();
+    };
+    refreshAll();
+    onStateChanged(refreshAll);
+    onApplyErrorChanged(() => void refreshSummary());
     void queryTabPickerOptions().then(setPickerOptions);
   }, []);
 
@@ -44,19 +81,36 @@ export function App() {
     return { ok: false, error: result.error };
   };
 
+  const openTabApp = () => {
+    void browser.tabs.create({ url: browser.runtime.getURL('/app.html') });
+  };
+
   return (
-    <main className="flex flex-col gap-3 bg-white p-4 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+    <main
+      className={`mx-auto flex flex-col gap-3 bg-white p-4 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100 ${
+        surface === 'tab' ? 'min-h-screen w-full max-w-3xl' : ''
+      }`}
+    >
       <div className="flex items-center justify-between">
         <h1 className="text-base font-semibold">HeaderKit</h1>
-        <Button
-          variant={state.paused ? 'primary' : 'ghost'}
-          size="sm"
-          aria-label={state.paused ? 'Resume' : 'Pause all'}
-          onClick={() => dispatch({ type: 'set-paused', paused: !state.paused })}
-        >
-          {state.paused ? '▶ Resume' : 'II Pause'}
-        </Button>
+        <div className="flex items-center gap-1">
+          {surface === 'popup' && (
+            <Button variant="ghost" size="sm" aria-label="Open in tab" onClick={openTabApp}>
+              ⧉ Tab
+            </Button>
+          )}
+          <Button
+            variant={state.paused ? 'primary' : 'ghost'}
+            size="sm"
+            aria-label={state.paused ? 'Resume' : 'Pause all'}
+            onClick={() => dispatch({ type: 'set-paused', paused: !state.paused })}
+          >
+            {state.paused ? '▶ Resume' : 'II Pause'}
+          </Button>
+        </div>
       </div>
+
+      {summary && <StatusSummary summary={summary} />}
 
       {state.paused && (
         <p className="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-700 dark:bg-amber-950 dark:text-amber-300">
