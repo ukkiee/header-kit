@@ -3,6 +3,7 @@ import type { Command } from '@/core/commands';
 import { Button } from '@/ui/Button';
 import { Input } from '@/ui/Input';
 import { PanelSection } from '@/ui/PanelSection';
+import { Pill } from '@/ui/Pill';
 import { useT } from './i18n-context';
 
 export interface PreferencesPanelProps {
@@ -61,10 +62,7 @@ export function PreferencesPanel({
             {customHeaderNames.length > 0 && (
               <ul className="flex flex-wrap gap-1">
                 {customHeaderNames.map((name) => (
-                  <li
-                    key={name}
-                    className="flex items-center gap-1 rounded bg-zinc-100 px-1.5 py-0.5 dark:bg-zinc-800"
-                  >
+                  <Pill as="li" key={name} tone="neutral">
                     {name}
                     <button
                       type="button"
@@ -74,7 +72,7 @@ export function PreferencesPanel({
                     >
                       ✕
                     </button>
-                  </li>
+                  </Pill>
                 ))}
               </ul>
             )}

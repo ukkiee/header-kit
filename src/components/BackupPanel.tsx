@@ -6,6 +6,7 @@ import { listBackupSnapshots, readSyncKV } from '@/platform/backupStore';
 import { Alert } from '@/ui/Alert';
 import { Button } from '@/ui/Button';
 import { PanelSection } from '@/ui/PanelSection';
+import { Pill } from '@/ui/Pill';
 import { useT } from './i18n-context';
 
 export interface BackupPanelProps {
@@ -84,12 +85,9 @@ export function BackupPanel({
                   {snapshot.profileCount === 1 ? t('activeProfile') : t('activeProfiles')}
                 </span>
                 {snapshot.status === 'corrupt' ? (
-                  <span
-                    className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] text-red-700 dark:bg-red-950 dark:text-red-300"
-                    title={snapshot.reason}
-                  >
+                  <Pill tone="danger" title={snapshot.reason}>
                     {t('corrupt')}
-                  </span>
+                  </Pill>
                 ) : (
                   <Button
                     variant={confirmingId === snapshot.id ? 'danger' : 'ghost'}

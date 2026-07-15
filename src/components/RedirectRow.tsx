@@ -1,7 +1,10 @@
 import type { Modification, RedirectModification } from '@/core/schema';
 import { Button } from '@/ui/Button';
 import { Card } from '@/ui/Card';
+import { Checkbox } from '@/ui/Checkbox';
 import { Input } from '@/ui/Input';
+import { KindLabel } from '@/ui/KindLabel';
+import { NoteText } from '@/ui/NoteText';
 import { useT } from './i18n-context';
 
 export interface RedirectRowProps {
@@ -16,16 +19,12 @@ export function RedirectRow({ modification, onChange, onRemove }: RedirectRowPro
   return (
     <Card variant="row">
       <div className="flex items-center gap-2">
-        <input
-          type="checkbox"
+        <Checkbox
           checked={modification.enabled}
           onChange={(e) => onChange({ ...modification, enabled: e.target.checked })}
           aria-label="Enable modification"
-          className="size-4 accent-blue-600"
         />
-        <span className="w-14 shrink-0 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
-          Redirect
-        </span>
+        <KindLabel>{t('modRedirect')}</KindLabel>
         <Input
           font="mono"
           value={modification.pattern}
@@ -47,7 +46,7 @@ export function RedirectRow({ modification, onChange, onRemove }: RedirectRowPro
           ✕
         </Button>
       </div>
-      <p className="pl-6 text-[10px] text-zinc-400">{t('redirectCaptureNote')}</p>
+      <NoteText indent="row">{t('redirectCaptureNote')}</NoteText>
     </Card>
   );
 }

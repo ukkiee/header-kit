@@ -1,4 +1,3 @@
-import { Switch } from '@base-ui-components/react/switch';
 import { useEffect, useRef, useState } from 'react';
 import type { Command } from '@/core/commands';
 import {
@@ -16,6 +15,7 @@ import { Button } from '@/ui/Button';
 import { Card } from '@/ui/Card';
 import { Input } from '@/ui/Input';
 import { Select } from '@/ui/Select';
+import { ToggleSwitch } from '@/ui/ToggleSwitch';
 import { CspRow } from './CspRow';
 import { FilterRow } from './FilterRow';
 import { HeaderRow } from './HeaderRow';
@@ -90,16 +90,13 @@ export function ProfileSection({
           maxLength={2}
           className="w-10"
         />
-        <Switch.Root
+        <ToggleSwitch
           checked={profile.active}
           onCheckedChange={(active) =>
             onCommand({ type: 'toggle-profile', profileId: profile.id, active })
           }
           aria-label={`Toggle ${profile.name}`}
-          className="flex h-5 w-9 shrink-0 rounded-full bg-zinc-300 p-0.5 transition-colors data-[checked]:bg-blue-600 dark:bg-zinc-700"
-        >
-          <Switch.Thumb className="size-4 rounded-full bg-white transition-transform data-[checked]:translate-x-4" />
-        </Switch.Root>
+        />
       </div>
 
       <div className="flex flex-col gap-1.5">

@@ -3,8 +3,11 @@ import type { Filter } from '@/core/schema';
 import { ALL_RESOURCE_TYPES, REQUEST_METHODS } from '@/core/rules';
 import type { TabPickerOptions } from '@/platform/tabs';
 import { Button } from '@/ui/Button';
+import { Checkbox } from '@/ui/Checkbox';
 import { Chip } from '@/ui/Chip';
 import { Input, type InputProps } from '@/ui/Input';
+import { KindLabel } from '@/ui/KindLabel';
+import { NoteText } from '@/ui/NoteText';
 import { Select } from '@/ui/Select';
 
 /**
@@ -157,9 +160,9 @@ function FilterEditor({
             aria-label="Tab domain"
             size="sm"
           />
-          <span className="text-[10px] text-zinc-400">
+          <NoteText as="span">
             Applies to every request from tabs on this domain — third-party included.
-          </span>
+          </NoteText>
         </div>
       );
     case 'time':
@@ -172,9 +175,9 @@ function FilterEditor({
             onChange={(e) => onChange({ ...filter, expiresAt: localInputToEpoch(e.target.value) })}
             aria-label="Expires at"
           />
-          <span className="text-[10px] text-zinc-400">
+          <NoteText as="span">
             The profile turns off automatically at this time.
-          </span>
+          </NoteText>
         </div>
       );
     case 'url':
@@ -230,9 +233,9 @@ function FilterEditor({
             aria-label="Initiator domain"
             size="sm"
           />
-          <span className="text-[10px] text-zinc-400">
+          <NoteText as="span">
             Matches the request&apos;s origin — not the tab&apos;s domain.
-          </span>
+          </NoteText>
         </div>
       );
     default:
@@ -243,16 +246,13 @@ function FilterEditor({
 export function FilterRow({ filter, onChange, onRemove, pickerOptions }: FilterRowProps) {
   return (
     <div className="flex items-start gap-2">
-      <input
-        type="checkbox"
+      <Checkbox
+        offset="row"
         checked={filter.enabled}
         onChange={(e) => onChange({ ...filter, enabled: e.target.checked })}
         aria-label="Enable filter"
-        className="mt-1.5 size-4 accent-blue-600"
       />
-      <span className="mt-1 w-14 shrink-0 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
-        {KIND_LABELS[filter.kind]}
-      </span>
+      <KindLabel offset="filter">{KIND_LABELS[filter.kind]}</KindLabel>
       <FilterEditor filter={filter} onChange={onChange} pickerOptions={pickerOptions} />
       <Button variant="danger" size="sm" onClick={onRemove} aria-label="Remove filter">
         ✕

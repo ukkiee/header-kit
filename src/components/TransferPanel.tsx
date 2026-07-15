@@ -4,6 +4,7 @@ import type { Profile, StoredState } from '@/core/schema';
 import { exportProfiles, parseImport, serializeExport } from '@/core/transfer';
 import { Alert } from '@/ui/Alert';
 import { Button } from '@/ui/Button';
+import { Checkbox } from '@/ui/Checkbox';
 import { TextArea } from '@/ui/Input';
 import { PanelSection } from '@/ui/PanelSection';
 import { useT } from './i18n-context';
@@ -98,11 +99,9 @@ export function TransferPanel({ state, onCommand, download = browserDownload }: 
         <div className="flex flex-col gap-1.5">
           {state.profiles.map((profile) => (
             <label key={profile.id} className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={selected.has(profile.id)}
                 onChange={() => toggleSelected(profile)}
-                className="size-4 accent-blue-600"
               />
               {profile.name}
             </label>

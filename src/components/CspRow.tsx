@@ -1,7 +1,9 @@
 import type { CspModification, Modification } from '@/core/schema';
 import { Button } from '@/ui/Button';
 import { Card } from '@/ui/Card';
+import { Checkbox } from '@/ui/Checkbox';
 import { Input } from '@/ui/Input';
+import { KindLabel } from '@/ui/KindLabel';
 import { useT } from './i18n-context';
 
 export interface CspRowProps {
@@ -19,16 +21,12 @@ export function CspRow({ modification, onChange, onRemove }: CspRowProps) {
   return (
     <Card variant="row">
       <div className="flex items-center gap-2">
-        <input
-          type="checkbox"
+        <Checkbox
           checked={modification.enabled}
           onChange={(e) => onChange({ ...modification, enabled: e.target.checked })}
           aria-label="Enable modification"
-          className="size-4 accent-blue-600"
         />
-        <span className="w-14 shrink-0 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
-          CSP
-        </span>
+        <KindLabel>CSP</KindLabel>
         <span className="flex-1 text-xs text-zinc-500">Content-Security-Policy</span>
         <Button variant="danger" size="sm" onClick={onRemove} aria-label="Remove modification">
           ✕
