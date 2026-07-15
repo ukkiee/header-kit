@@ -1,5 +1,42 @@
 @import 'tailwindcss';
 
+/*
+ * 디자인 시스템 테마 — Tailwind v4 @theme로 앱이 쓰는 색·radius·폰트 토큰을
+ * 재정의한다. 컴포넌트는 기존 유틸리티(zinc/blue/rounded)를 그대로 쓰고, 값만
+ * 여기서 바뀌므로 전체 UI가 한 곳의 변경으로 리테마된다. cva 프리미티브도 같은
+ * 토큰을 참조하므로 일관된다.
+ */
+@theme {
+  /* 타이포 — 시스템 스택(Apple 플랫폼에서 SF Pro, 그 외 네이티브로 해석) */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, 'Segoe UI', Roboto,
+    sans-serif;
+
+  /* Accent — 단일 blue 액션색(#0066cc), focus #0071e3. 두 번째 accent 없음. */
+  --color-blue-50: #eaf3fb;
+  --color-blue-300: #5ea8f0;
+  --color-blue-500: #0071e3;
+  --color-blue-600: #0066cc;
+  --color-blue-700: #0055b3;
+  --color-blue-950: #0a2540;
+
+  /* Neutrals — pearl / parchment / hairline / ink / near-black 램프 (light·dark 겸용) */
+  --color-zinc-50: #fafafc;
+  --color-zinc-100: #f5f5f7;
+  --color-zinc-200: #e0e0e0;
+  --color-zinc-300: #d2d2d7;
+  --color-zinc-400: #86868b;
+  --color-zinc-500: #6e6e73;
+  --color-zinc-600: #515154;
+  --color-zinc-700: #3a3a3c;
+  --color-zinc-800: #2a2a2c;
+  --color-zinc-900: #1d1d1f;
+  --color-zinc-950: #161618;
+
+  /* Radius — 유틸 8px, 카드 12px. pill(rounded-full)은 주 액션·칩 문법으로 예약. */
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+}
+
 /* 팝업만 최소 폭을 강제한다 — 탭 앱은 전체 폭을 쓴다. */
 body:has(> #root > .max-w-3xl) {
   min-width: 0;
@@ -7,4 +44,5 @@ body:has(> #root > .max-w-3xl) {
 
 body {
   min-width: 420px;
+  font-family: var(--font-sans);
 }
