@@ -7,7 +7,9 @@ import { createReconciler } from '@/core/reconciler';
 import type { NetRule } from '@/core/rules';
 import type { StoredState } from '@/core/schema';
 import { loadState, onCommand, onStateChanged, persistState } from '@/storage/state';
+import { performBackup } from '@/storage/backupStore';
 import { onTabsChanged, queryTabInfos } from '@/storage/tabs';
+import { exportProfiles, serializeExport } from '@/core/transfer';
 
 const EXPIRY_ALARM = 'headerkit-expiry';
 
@@ -117,7 +119,27 @@ export default defineBackground(() => {
 
   const converge = () => void reconciler.requestReconcile();
 
-  onStateChanged(converge);
+  // 자동 Backup — 변경 후 잠시 조용해지면 스냅샷을 만든다 (sync 쓰기 quota 보호).
+  // planBackup이 내용 동일 스냅샷을 스킵하므로 중복·루프는 없다.
+  let backupTimer: ReturnType<typeof setTimeout> | undefined;
+  const scheduleBackup = () => {
+    clearTimeout(backupTimer);
+    backupTimer = setTimeout(() => {
+      void loadState()
+        .then((state) => {
+          const text = serializeExport(
+            exportProfiles(state, state.profiles.map((p) => p.id)),
+          );
+          return performBackup(text, state.profiles.length);
+        })
+        .catch((error) => console.error('[HeaderKit] backup failed', error));
+    }, 3_000);
+  };
+
+  onStateChanged(() => {
+    converge();
+    scheduleBackup();
+  });
   onTabsChanged(converge);
   browser.runtime.onStartup.addListener(converge);
   browser.runtime.onInstalled.addListener(converge);

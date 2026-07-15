@@ -286,6 +286,7 @@ export type Command =
   | { type: 'update-modification'; profileId: string; modification: Modification }
   | { type: 'remove-modification'; profileId: string; modificationId: string }
   | { type: 'import-profiles'; profiles: Profile[] }
+  | { type: 'restore-profiles'; profiles: Profile[] }
   | { type: 'add-filter'; profileId: string; filter: Filter }
   | { type: 'update-filter'; profileId: string; filter: Filter }
   | { type: 'remove-filter'; profileId: string; filterId: string };
@@ -302,6 +303,21 @@ export function importProfiles(
 ): StoredState {
   const { profiles: normalized } = normalizeImportedProfiles(profiles, deps.uuid);
   return normalized.reduce((acc, profile) => addProfile(acc, profile, undefined, deps), state);
+}
+
+/**
+ * Backup 스냅샷으로의 복원 — 현재 Profile 전체를 스냅샷 내용으로 교체한다.
+ * Import와 동일한 활성화 경계를 지난다: 정규화(id 재생성·탭 참조 정리) 후
+ * 활성 Profile은 원자적으로 실체화된다. Pause 상태는 보존한다.
+ */
+export function restoreProfiles(
+  state: StoredState,
+  profiles: Profile[],
+  deps: MaterializeDeps = defaultMaterializeDeps,
+): StoredState {
+  const { profiles: normalized } = normalizeImportedProfiles(profiles, deps.uuid);
+  const emptied: StoredState = { ...state, profiles: [], materialized: {} };
+  return normalized.reduce((acc, profile) => addProfile(acc, profile, undefined, deps), emptied);
 }
 
 export function applyCommand(
@@ -328,6 +344,8 @@ export function applyCommand(
       return expireProfiles(state, command.now, deps);
     case 'import-profiles':
       return importProfiles(state, command.profiles, deps);
+    case 'restore-profiles':
+      return restoreProfiles(state, command.profiles, deps);
     case 'add-modification':
       return addModification(state, command.profileId, command.modification, deps);
     case 'update-modification':

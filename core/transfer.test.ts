@@ -154,6 +154,25 @@ describe('normalizeImportedProfiles', () => {
   });
 });
 
+describe('restore-profiles 명령 (교체 + 활성화 경계)', () => {
+  it('현재 Profile 전체를 교체하고, 활성 스냅샷은 새로 실체화되며, Pause는 보존된다', () => {
+    const current = state([profile({ id: 'cur', name: 'Current' })], { stale: 'x' });
+    const pausedCurrent = { ...current, paused: true };
+
+    const next = applyCommand(
+      pausedCurrent,
+      { type: 'restore-profiles', profiles: [profile({ active: true })] },
+      stubDeps(),
+    );
+
+    expect(next.profiles.map((p) => p.name)).toEqual(['Alpha']);
+    expect(next.paused).toBe(true);
+    expect(Object.keys(next.materialized)).toHaveLength(1);
+    expect(Object.values(next.materialized)[0]).toMatch(/^trace-uuid-\d+$/);
+    expect(next.materialized).not.toHaveProperty('stale');
+  });
+});
+
 describe('import-profiles 명령 (활성화 경계)', () => {
   it('권위 경로는 페이로드를 신뢰하지 않는다 — 기존 id와 겹쳐도 재생성으로 충돌이 없다', () => {
     const existing = profile({ id: 'dup', name: 'Existing' });

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { BackupPanel } from '@/components/BackupPanel';
 import { Button } from '@/components/Button';
 import { ProfileSection } from '@/components/ProfileSection';
 import { TransferPanel } from '@/components/TransferPanel';
@@ -101,6 +102,7 @@ export function App() {
       </Button>
 
       <TransferPanel state={state} onCommand={dispatchWithResult} />
+      <BackupPanel onCommand={dispatchWithResult} />
     </main>
   );
 }

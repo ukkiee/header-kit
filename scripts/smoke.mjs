@@ -571,6 +571,52 @@ try {
   record('H2: 깨진 Import는 거부되고 상태가 불변', /JSON/i.test(importError ?? '') && profileCountAfter === 1,
     `error="${importError}", profiles=${profileCountAfter}`);
 
+  // ---------- I. 이슈 09: 자동 Backup · 복원 ----------
+  // H1의 Import가 상태를 바꿨으므로 디바운스(3s) 후 자동 백업이 생겨야 한다.
+  const pollBackupCount = async (min, timeoutMs = 15_000) => {
+    const start = Date.now();
+    let count = 0;
+    while (Date.now() - start < timeoutMs) {
+      count = await sw.evaluate(async () => {
+        const kv = await chrome.storage.sync.get('bk:manifest');
+        return kv['bk:manifest']?.snapshots?.length ?? 0;
+      });
+      if (count >= min) return count;
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    return count;
+  };
+  const backupCount = await pollBackupCount(1);
+  record('I1: Profile 변경 후 자동 Backup 생성 (manifest-last 커밋)', backupCount >= 1,
+    `snapshots=${backupCount}`);
+
+  // 상태를 비운 뒤, 1-profile 스냅샷으로 복원한다 (전체 교체 + 활성화 경계).
+  await seedProfiles([]);
+  await pollSessionRuleCount(sw, 0);
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Show' }).click();
+  const restoreRow = popup.locator('li').filter({ hasText: '1 profile' }).first();
+  await restoreRow.getByRole('button', { name: 'Restore' }).click();
+  await restoreRow.getByRole('button', { name: 'Replace all?' }).click();
+
+  const restoredOk = await (async () => {
+    const start = Date.now();
+    while (Date.now() - start < 8_000) {
+      const state = await sw.evaluate(async () => {
+        const { state } = await chrome.storage.local.get('state');
+        return state;
+      });
+      if (state.profiles.length === 1 && state.profiles[0].name === 'Imported') return true;
+      await new Promise((r) => setTimeout(r, 300));
+    }
+    return false;
+  })();
+  await pollSessionRuleCount(sw, 1);
+  const restoredHeader = (await fetchEchoHeaders(pageB, '/headers'))['x-imported-id'];
+  record('I2: 스냅샷 복원 → 전체 교체 + 활성화 경계 재실체화',
+    restoredOk && /^imp-[0-9a-f-]{36}$/.test(restoredHeader ?? ''),
+    `restored=${restoredOk}, header=${restoredHeader}`);
+
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
   process.exitCode = failed.length === 0 ? 0 : 1;
