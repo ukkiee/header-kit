@@ -1,7 +1,7 @@
 import type { StorybookConfig } from '@storybook/react-vite';
 
 const config: StorybookConfig = {
-  stories: ['../components/**/*.stories.tsx'],
+  stories: ['../src/**/*.stories.tsx'],
   framework: '@storybook/react-vite',
   viteFinal: async (config) => {
     const { default: tailwindcss } = await import('@tailwindcss/vite');
@@ -11,7 +11,8 @@ const config: StorybookConfig = {
       ...config.resolve,
       alias: {
         ...config.resolve?.alias,
-        '@': fileURLToPath(new URL('..', import.meta.url)),
+        '@': fileURLToPath(new URL('../src', import.meta.url)),
+        '~': fileURLToPath(new URL('../src', import.meta.url)),
       },
     };
     return config;
