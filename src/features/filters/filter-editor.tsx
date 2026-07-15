@@ -149,7 +149,7 @@ export function FilterEditor({ filter, onChange, pickerOptions }: FilterEditorPr
           value={filter.pattern}
           onCommit={(pattern) => onChange({ ...filter, pattern })}
           placeholder={t('filterRegexPattern')}
-          aria-label={`${t(KIND_LABEL_KEYS[filter.kind])} pattern`}
+          aria-label={`${filter.kind === 'url' ? 'URL' : 'Exclude'} pattern`}
           size="sm"
           font="mono"
           className="min-w-0 flex-1"

@@ -48,6 +48,14 @@ export interface BackgroundDeps {
  * browser 효과를 채워 이 함수를 호출하기만 한다.
  */
 export function bootstrap(deps: BackgroundDeps): void {
+  // 상태 전이의 단일 권위 실행자 — 모든 쓰기는 이 큐를 거친다. reconciler.apply의
+  // 만료 재전이가 이 실행자를 참조하므로 먼저 선언한다.
+  const executor = createCommandExecutor({
+    load: deps.loadState,
+    save: deps.persistState,
+    validate: deps.validateCommand,
+  });
+
   const reconciler = createReconciler<Snapshot>({
     loadSnapshot: async () => ({
       state: await deps.loadState(),
@@ -91,12 +99,6 @@ export function bootstrap(deps: BackgroundDeps): void {
     onError: (error) => deps.logError('reconcile failed', error),
   });
 
-  // 상태 전이의 단일 권위 실행자 — 모든 쓰기는 이 큐를 거친다.
-  const executor = createCommandExecutor({
-    load: deps.loadState,
-    save: deps.persistState,
-    validate: deps.validateCommand,
-  });
   deps.onCommand((command) => executor.execute(command));
 
   const converge = () => void reconciler.requestReconcile();

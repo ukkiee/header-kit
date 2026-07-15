@@ -122,4 +122,45 @@ describe('background bootstrap', () => {
     expect(result.paused).toBe(true);
     expect(persisted?.paused).toBe(true);
   });
+
+  it('onTogglePause가 실행자를 지나 pause를 뒤집는다 (persist)', async () => {
+    const base = createDefaultState(); // paused: false
+    let togglePause = () => {};
+    let persisted: StoredState | undefined;
+    bootstrap(
+      fakeDeps({
+        loadState: async () => base,
+        onTogglePause: (cb) => {
+          togglePause = cb;
+        },
+        persistState: async (state) => {
+          persisted = state;
+        },
+      }),
+    );
+    await flush();
+    togglePause();
+    await flush();
+    expect(persisted?.paused).toBe(true);
+  });
+
+  it('onExpiryAlarm이 실행자를 지나 만료 전이를 태운다 (persist)', async () => {
+    let expiryAlarm = () => {};
+    let persistCalls = 0;
+    bootstrap(
+      fakeDeps({
+        onExpiryAlarm: (cb) => {
+          expiryAlarm = cb;
+        },
+        persistState: async () => {
+          persistCalls += 1;
+        },
+      }),
+    );
+    await flush();
+    const before = persistCalls;
+    expiryAlarm();
+    await flush();
+    expect(persistCalls).toBeGreaterThan(before);
+  });
 });
