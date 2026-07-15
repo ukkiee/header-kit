@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Command } from '@/core/commands';
 import { Button } from '@/ui/Button';
 import { Input } from '@/ui/Input';
+import { PanelSection } from '@/ui/PanelSection';
 import { useT } from './i18n-context';
 
 export interface PreferencesPanelProps {
@@ -28,14 +29,14 @@ export function PreferencesPanel({
   };
 
   return (
-    <section className="flex flex-col gap-2 border-t border-zinc-200 pt-2 dark:border-zinc-800">
-      <div className="flex items-center gap-1">
-        <span className="text-xs font-medium text-zinc-400">{t('preferences')}</span>
-        <span className="flex-1" />
+    <PanelSection
+      title={t('preferences')}
+      actions={
         <Button variant="ghost" size="sm" aria-label="Toggle preferences" onClick={() => setOpen(!open)}>
           {open ? t('hide') : t('show')}
         </Button>
-      </div>
+      }
+    >
 
       {open && (
         <div className="flex flex-col gap-2 text-xs">
@@ -86,6 +87,6 @@ export function PreferencesPanel({
           {incognitoAllowed && <p className="text-zinc-500">{t('incognitoAllowed')}</p>}
         </div>
       )}
-    </section>
+    </PanelSection>
   );
 }

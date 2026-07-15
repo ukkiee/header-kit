@@ -13,6 +13,7 @@ import {
 import type { MessageKey } from '@/core/i18n';
 import type { TabPickerOptions } from '@/platform/tabs';
 import { Button } from '@/ui/Button';
+import { Card } from '@/ui/Card';
 import { Input } from '@/ui/Input';
 import { Select } from '@/ui/Select';
 import { CspRow } from './CspRow';
@@ -65,7 +66,7 @@ export function ProfileSection({
     onCommand({ type: 'update-profile-meta', profileId: profile.id, meta: { ...meta, ...patch } });
 
   return (
-    <section className="flex flex-col gap-2 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+    <Card variant="outlined">
       <div className="flex items-center gap-2">
         <input
           type="color"
@@ -267,6 +268,6 @@ export function ProfileSection({
           {confirmingDelete ? 'Delete?' : '✕'}
         </Button>
       </div>
-    </section>
+    </Card>
   );
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { BackupPanel } from '@/components/BackupPanel';
+import { Alert } from '@/ui/Alert';
 import { Button } from '@/ui/Button';
 import { LocaleProvider } from '@/components/i18n-context';
 import { PreferencesPanel } from '@/components/PreferencesPanel';
@@ -100,25 +101,14 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
 
       {summary && <StatusSummary summary={summary} />}
 
-      {incognitoAllowed === false && (
-        <p className="rounded-md bg-blue-50 px-2 py-1 text-xs text-blue-700 dark:bg-blue-950 dark:text-blue-300">
-          {t(locale, 'incognitoBlocked')}
-        </p>
-      )}
+      {incognitoAllowed === false && <Alert severity="info">{t(locale, 'incognitoBlocked')}</Alert>}
 
-      {state.paused && (
-        <p className="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-700 dark:bg-amber-950 dark:text-amber-300">
-          {t(locale, 'pausedNote')}
-        </p>
-      )}
+      {state.paused && <Alert severity="warn">{t(locale, 'pausedNote')}</Alert>}
 
       {commandError && (
-        <p
-          role="alert"
-          className="rounded-md bg-red-50 px-2 py-1 text-xs text-red-700 dark:bg-red-950 dark:text-red-300"
-        >
+        <Alert severity="danger" role="alert">
           {commandError}
-        </p>
+        </Alert>
       )}
 
       {state.profiles.map((profile, index) => (

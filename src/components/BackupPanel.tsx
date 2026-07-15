@@ -3,7 +3,9 @@ import { decodeSnapshotText, type SnapshotStatus } from '@/core/backup';
 import type { Command } from '@/core/commands';
 import { parseImport } from '@/core/transfer';
 import { listBackupSnapshots, readSyncKV } from '@/platform/backupStore';
+import { Alert } from '@/ui/Alert';
 import { Button } from '@/ui/Button';
+import { PanelSection } from '@/ui/PanelSection';
 import { useT } from './i18n-context';
 
 export interface BackupPanelProps {
@@ -56,19 +58,18 @@ export function BackupPanel({
   };
 
   return (
-    <section className="flex flex-col gap-2 border-t border-zinc-200 pt-2 dark:border-zinc-800">
-      <div className="flex items-center gap-1">
-        <span className="text-xs font-medium text-zinc-400">{t('backups')}</span>
-        <span className="flex-1" />
+    <PanelSection
+      title={t('backups')}
+      actions={
         <Button variant="ghost" size="sm" aria-label="Toggle backups" onClick={() => setOpen(!open)}>
           {open ? t('hide') : t('show')}
         </Button>
-      </div>
-
+      }
+    >
       {error && (
-        <p role="alert" className="rounded-md bg-red-50 px-2 py-1 text-[11px] text-red-700 dark:bg-red-950 dark:text-red-300">
+        <Alert as="p" severity="danger" size="xs" role="alert">
           {error}
-        </p>
+        </Alert>
       )}
 
       {open &&
@@ -103,6 +104,6 @@ export function BackupPanel({
             ))}
           </ul>
         ))}
-    </section>
+    </PanelSection>
   );
 }

@@ -1,5 +1,6 @@
 import type { Modification, RedirectModification } from '@/core/schema';
 import { Button } from '@/ui/Button';
+import { Card } from '@/ui/Card';
 import { Input } from '@/ui/Input';
 import { useT } from './i18n-context';
 
@@ -13,7 +14,7 @@ export interface RedirectRowProps {
 export function RedirectRow({ modification, onChange, onRemove }: RedirectRowProps) {
   const t = useT();
   return (
-    <div className="flex flex-col gap-1 rounded-md border border-transparent px-1 py-1 hover:border-zinc-200 dark:hover:border-zinc-800">
+    <Card variant="row">
       <div className="flex items-center gap-2">
         <input
           type="checkbox"
@@ -47,6 +48,6 @@ export function RedirectRow({ modification, onChange, onRemove }: RedirectRowPro
         </Button>
       </div>
       <p className="pl-6 text-[10px] text-zinc-400">{t('redirectCaptureNote')}</p>
-    </div>
+    </Card>
   );
 }

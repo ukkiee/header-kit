@@ -1,5 +1,6 @@
 import type { CspModification, Modification } from '@/core/schema';
 import { Button } from '@/ui/Button';
+import { Card } from '@/ui/Card';
 import { Input } from '@/ui/Input';
 import { useT } from './i18n-context';
 
@@ -16,7 +17,7 @@ export function CspRow({ modification, onChange, onRemove }: CspRowProps) {
     onChange({ ...modification, directives });
 
   return (
-    <div className="flex flex-col gap-1 rounded-md border border-transparent px-1 py-1 hover:border-zinc-200 dark:hover:border-zinc-800">
+    <Card variant="row">
       <div className="flex items-center gap-2">
         <input
           type="checkbox"
@@ -85,6 +86,6 @@ export function CspRow({ modification, onChange, onRemove }: CspRowProps) {
           + {t('addDirective')}
         </Button>
       </div>
-    </div>
+    </Card>
   );
 }

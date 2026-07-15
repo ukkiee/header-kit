@@ -2,6 +2,7 @@ import { hasPlaceholders } from '@/core/placeholder';
 import { isRequestAppendAllowed } from '@/core/rules';
 import type { Modification } from '@/core/schema';
 import { Button } from '@/ui/Button';
+import { Card } from '@/ui/Card';
 import { Chip } from '@/ui/Chip';
 import { Input } from '@/ui/Input';
 import { Select } from '@/ui/Select';
@@ -55,7 +56,7 @@ export function HeaderRow({
   const label = isCookie ? 'Cookie' : kind === 'set-cookie' ? 'Set-Cookie' : null;
 
   return (
-    <div className="flex flex-col gap-1 rounded-md border border-transparent px-1 py-1 hover:border-zinc-200 dark:hover:border-zinc-800">
+    <Card variant="row">
       <div className="flex items-center gap-2">
         <input
           type="checkbox"
@@ -160,6 +161,6 @@ export function HeaderRow({
           )}
         </p>
       )}
-    </div>
+    </Card>
   );
 }

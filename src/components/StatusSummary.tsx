@@ -1,4 +1,6 @@
 import type { StatusSummary as StatusSummaryData } from '@/core/summary';
+import { Alert } from '@/ui/Alert';
+import { Card } from '@/ui/Card';
 import { useT } from './i18n-context';
 
 export interface StatusSummaryProps {
@@ -8,7 +10,7 @@ export interface StatusSummaryProps {
 export function StatusSummary({ summary }: StatusSummaryProps) {
   const t = useT();
   return (
-    <section className="flex flex-col gap-1.5 rounded-lg bg-zinc-50 p-2.5 text-xs dark:bg-zinc-900">
+    <Card variant="filled" className="text-xs">
       <div className="flex items-center gap-3">
         <span>
           <strong>{summary.ruleCount}</strong>{' '}
@@ -29,21 +31,26 @@ export function StatusSummary({ summary }: StatusSummaryProps) {
       </div>
 
       {summary.applyError && (
-        <p role="alert" className="rounded bg-red-100 px-2 py-1 text-red-700 dark:bg-red-950 dark:text-red-300">
+        <Alert as="p" severity="danger" role="alert">
           {t('rulesCouldNotApply')} {summary.applyError}
-        </p>
+        </Alert>
       )}
 
       {summary.warnings.length > 0 && (
         <ul className="flex flex-col gap-1">
           {summary.warnings.map((warning, i) => (
-            <li key={`${warning.code}-${i}`} className="flex flex-col rounded bg-amber-50 px-2 py-1 dark:bg-amber-950">
+            <Alert
+              as="li"
+              key={`${warning.code}-${i}`}
+              severity="warn"
+              className="flex flex-col"
+            >
               <span className="font-medium text-amber-700 dark:text-amber-300">{warning.label}</span>
               <span className="text-amber-600 dark:text-amber-400">{warning.detail}</span>
-            </li>
+            </Alert>
           ))}
         </ul>
       )}
-    </section>
+    </Card>
   );
 }

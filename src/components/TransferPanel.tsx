@@ -2,8 +2,10 @@ import { useState } from 'react';
 import type { Command } from '@/core/commands';
 import type { Profile, StoredState } from '@/core/schema';
 import { exportProfiles, parseImport, serializeExport } from '@/core/transfer';
+import { Alert } from '@/ui/Alert';
 import { Button } from '@/ui/Button';
 import { TextArea } from '@/ui/Input';
+import { PanelSection } from '@/ui/PanelSection';
 import { useT } from './i18n-context';
 
 export interface TransferPanelProps {
@@ -71,24 +73,25 @@ export function TransferPanel({ state, onCommand, download = browserDownload }: 
   };
 
   return (
-    <section className="flex flex-col gap-2 border-t border-zinc-200 pt-2 dark:border-zinc-800">
-      <div className="flex items-center gap-1">
-        <span className="text-xs font-medium text-zinc-400">{t('profiles')}</span>
-        <span className="flex-1" />
-        <Button variant="ghost" size="sm" onClick={() => enterMode(mode === 'export' ? 'idle' : 'export')}>
-          {t('export')}
-        </Button>
-        <Button variant="ghost" size="sm" onClick={() => enterMode(mode === 'import' ? 'idle' : 'import')}>
-          {t('import')}
-        </Button>
-      </div>
-
+    <PanelSection
+      title={t('profiles')}
+      actions={
+        <>
+          <Button variant="ghost" size="sm" onClick={() => enterMode(mode === 'export' ? 'idle' : 'export')}>
+            {t('export')}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => enterMode(mode === 'import' ? 'idle' : 'import')}>
+            {t('import')}
+          </Button>
+        </>
+      }
+    >
       {notices.length > 0 && (
-        <ul className="rounded-md bg-blue-50 px-2 py-1 text-[11px] text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+        <Alert as="ul" severity="info" size="xs">
           {notices.map((notice) => (
             <li key={notice}>{notice}</li>
           ))}
-        </ul>
+        </Alert>
       )}
 
       {mode === 'export' && (
@@ -137,14 +140,11 @@ export function TransferPanel({ state, onCommand, download = browserDownload }: 
             }}
           />
           {errors.length > 0 && (
-            <ul
-              role="alert"
-              className="rounded-md bg-red-50 px-2 py-1 text-[11px] text-red-700 dark:bg-red-950 dark:text-red-300"
-            >
+            <Alert as="ul" severity="danger" size="xs" role="alert">
               {errors.map((error) => (
                 <li key={error}>{error}</li>
               ))}
-            </ul>
+            </Alert>
           )}
           <div className="flex gap-1">
             <Button
@@ -161,6 +161,6 @@ export function TransferPanel({ state, onCommand, download = browserDownload }: 
           </div>
         </div>
       )}
-    </section>
+    </PanelSection>
   );
 }
