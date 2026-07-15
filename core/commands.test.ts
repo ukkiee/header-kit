@@ -12,10 +12,10 @@ import {
   updateModification,
   updateProfileMeta,
 } from './commands';
-import type { Modification, StoredState } from './schema';
+import type { RequestHeaderModification, StoredState } from './schema';
 import { SCHEMA_VERSION } from './schema';
 
-function modification(id: string, name = 'X-A'): Modification {
+function modification(id: string, name = 'X-A'): RequestHeaderModification {
   return { kind: 'request-header', id, name, value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' };
 }
 
@@ -53,7 +53,8 @@ describe('state transition commands', () => {
       value: 'changed',
     });
 
-    expect(next.profiles[0]?.modifications[0]?.value).toBe('changed');
+    const updatedMod = next.profiles[0]?.modifications[0];
+    expect(updatedMod?.kind === 'request-header' && updatedMod.value).toBe('changed');
   });
 
   it('removeModification은 해당 항목만 제거한다', () => {
@@ -81,7 +82,8 @@ describe('state transition commands', () => {
     expect(copy.active).toBe(false);
     expect(copy.id).not.toBe('p1');
     expect(copy.modifications[0]?.id).not.toBe('m1');
-    expect(copy.modifications[0]?.name).toBe('X-A');
+    const copiedMod = copy.modifications[0];
+    expect(copiedMod?.kind === 'request-header' && copiedMod.name).toBe('X-A');
   });
 
   it('updateProfileMeta는 shortLabel을 2자로 강제한다 (권위 경로의 불변식)', () => {

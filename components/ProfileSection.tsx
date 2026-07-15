@@ -4,14 +4,19 @@ import type { Command } from '@/core/commands';
 import {
   createFilter,
   createHeaderModification,
+  createModification,
   type FilterKind,
+  type Modification,
+  type ModificationKind,
   type Profile,
 } from '@/core/schema';
 import type { MessageKey } from '@/core/i18n';
 import type { TabPickerOptions } from '@/storage/tabs';
 import { Button } from './Button';
+import { CspRow } from './CspRow';
 import { FilterRow } from './FilterRow';
 import { HeaderRow } from './HeaderRow';
+import { RedirectRow } from './RedirectRow';
 import { useT } from './i18n-context';
 
 const FILTER_KINDS: Array<{ kind: FilterKind; labelKey: MessageKey }> = [
@@ -95,28 +100,36 @@ export function ProfileSection({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        {profile.modifications.map((modification) => (
-          <HeaderRow
-            key={modification.id}
-            modification={modification}
-            materializedValue={materialized?.[modification.id]}
-            userHeaders={userHeaders}
-            onChange={(next) =>
-              onCommand({
-                type: 'update-modification',
-                profileId: profile.id,
-                modification: next,
-              })
-            }
-            onRemove={() =>
-              onCommand({
-                type: 'remove-modification',
-                profileId: profile.id,
-                modificationId: modification.id,
-              })
-            }
-          />
-        ))}
+        {profile.modifications.map((modification) => {
+          const onChange = (next: Modification) =>
+            onCommand({ type: 'update-modification', profileId: profile.id, modification: next });
+          const onRemove = () =>
+            onCommand({
+              type: 'remove-modification',
+              profileId: profile.id,
+              modificationId: modification.id,
+            });
+          if (modification.kind === 'csp') {
+            return (
+              <CspRow key={modification.id} modification={modification} onChange={onChange} onRemove={onRemove} />
+            );
+          }
+          if (modification.kind === 'redirect') {
+            return (
+              <RedirectRow key={modification.id} modification={modification} onChange={onChange} onRemove={onRemove} />
+            );
+          }
+          return (
+            <HeaderRow
+              key={modification.id}
+              modification={modification}
+              materializedValue={materialized?.[modification.id]}
+              userHeaders={userHeaders}
+              onChange={onChange}
+              onRemove={onRemove}
+            />
+          );
+        })}
       </div>
 
       {profile.filters.length > 0 && (
@@ -164,6 +177,27 @@ export function ProfileSection({
         >
           + {t('responseHeader')}
         </Button>
+        <select
+          value=""
+          aria-label="Add modification"
+          onChange={(e) => {
+            const kind = e.target.value as ModificationKind | '';
+            if (kind !== '') {
+              onCommand({
+                type: 'add-modification',
+                profileId: profile.id,
+                modification: createModification(kind),
+              });
+            }
+          }}
+          className="h-7 cursor-pointer rounded-md bg-transparent px-1 text-xs text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+        >
+          <option value="">+ {t('moreModification')}</option>
+          <option value="cookie">{t('modCookie')}</option>
+          <option value="set-cookie">{t('modSetCookie')}</option>
+          <option value="csp">{t('modCsp')}</option>
+          <option value="redirect">{t('modRedirect')}</option>
+        </select>
         <select
           value=""
           aria-label="Add filter"

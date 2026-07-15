@@ -1,0 +1,71 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "release",
+  "verdict": "needs-attention",
+  "summary": "Do not ship: a full MVP slice is absent, and Exclude filtering can disable unrelated profiles outside its declared scope. The committed tests partly encode that unsafe behavior rather than catch it.",
+  "planFile": "docs/reviews/header-kit-mvp/prd.md",
+  "planInDiff": null,
+  "reviewedFileCount": 100,
+  "target": "branch diff against main",
+  "reviewedSha": "69051925dcb29c0d761455cc5bdd008a8aa475b1",
+  "reviewedTree": "4d45054c434f748d3ad4d90e25bdc46a5867d4d9",
+  "headMovedDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 4,
+  "planFindingCount": 0,
+  "triage": "review-gate SKILL.md rules govern: render EVERY finding as a full table row, the human decides each row (accept/reject/defer/question — free text), echo back before applying, max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "Cookie, Set-Cookie, CSP, and Redirect are entirely missing from the MVP",
+      "body": "The final schema exposes only request-header and response-header modifications. Request Cookie, Set-Cookie, directive-level CSP, and capture-group Redirect are required by the PRD, while issue 03 remains ready-for-agent with every acceptance criterion unchecked. The release evidence contains no coverage for them, so 137 passing tests and 39 smoke checks do not establish completion of the advertised MVP.",
+      "file": "core/schema.ts",
+      "line_start": 28,
+      "line_end": 36,
+      "confidence": 1,
+      "recommendation": "Implement issue 03 end-to-end across schema, commands, compiler, UI, import/export, golden tests, and real-browser smoke tests, or explicitly remove these stories from the release PRD before merging.",
+      "isPlanFinding": false
+    },
+    {
+      "severity": "high",
+      "title": "Exclude rules escape the owning Profile's other Filter scope",
+      "body": "The Exclude allow rule is emitted with only regexFilter and all resource types, discarding request method, initiator, resource-type, and tab constraints. It is also emitted before the no-matching-tabs guard. Consequently, an Exclude belonging to a Profile scoped to one tab or POST requests can globally allow the URL and suppress every lower-priority Profile. The test at core/compile-tabs.test.ts:85 intentionally expects this unsafe result, despite the PRD saying different Filter kinds compose with AND semantics.",
+      "file": "core/compile.ts",
+      "line_start": 389,
+      "line_end": 409,
+      "confidence": 0.99,
+      "recommendation": "Build the allow condition through the same scoped condition path as Modification rules and skip it when tab constraints have no matches. Replace the current test with cross-profile cases proving Exclude propagation occurs only inside the owning Profile's complete Filter scope.",
+      "isPlanFinding": false
+    },
+    {
+      "severity": "medium",
+      "title": "A corrupted newest backup can permanently suppress self-healing",
+      "body": "The unchanged fast path compares only the newest manifest checksum and returns before confirming that its chunks exist and pass integrity checks. If sync loses a chunk after the manifest was committed, every later backup of unchanged profiles is skipped, leaving the newest snapshot corrupt indefinitely and preventing cleanup or replacement until profile content changes.",
+      "file": "core/backup.ts",
+      "line_start": 158,
+      "line_end": 162,
+      "confidence": 0.97,
+      "recommendation": "Only return unchanged after decodeSnapshotText or equivalent integrity validation succeeds. If the matching snapshot is corrupt, create a replacement and clean the damaged chunks; add an adapter-level regression test for a matching checksum with a missing or altered chunk.",
+      "isPlanFinding": false
+    },
+    {
+      "severity": "medium",
+      "title": "Required minimum Chromium version is not declared",
+      "body": "The PRD requires the manifest to declare the minimum version needed by the selected DNR features, but the manifest has no minimum_chrome_version. Older Chromium releases can therefore install the extension even when its response-header and DNR API semantics are unsupported, producing runtime or rule-application failures instead of an installation guard.",
+      "file": "wxt.config.ts",
+      "line_start": 9,
+      "line_end": 24,
+      "confidence": 0.98,
+      "recommendation": "Derive the minimum Chromium version from every used DNR/API feature, add minimum_chrome_version to the manifest configuration, and verify the generated MV3 manifest in the build or smoke suite.",
+      "isPlanFinding": false
+    }
+  ],
+  "next_steps": [
+    "Complete or formally descope issue 03.",
+    "Fix scoped Exclude compilation and replace the test that codifies global leakage.",
+    "Repair backup integrity handling and declare the supported Chromium floor.",
+    "Rerun the full unit, build, Storybook, and real-browser smoke evidence after these changes."
+  ]
+}

@@ -29,8 +29,15 @@ async function startEchoServer() {
       res.end(JSON.stringify(req.headers));
       return;
     }
+    if (req.url.startsWith('/setcookie')) {
+      // 요청의 Cookie 헤더를 되비춰 준다 (쿠키 수정 스모크).
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ cookie: req.headers.cookie ?? null }));
+      return;
+    }
+    // path를 body로 반영해 redirect 착지 지점을 감지할 수 있게 한다.
     res.setHeader('content-type', 'text/html');
-    res.end('<!doctype html><title>echo</title>ok');
+    res.end(`<!doctype html><title>echo</title>${req.url}`);
   });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   return { server, port: server.address().port };
@@ -778,6 +785,83 @@ try {
     .isVisible()
     .catch(() => false);
   record('L3: 시크릿 미허용 안내가 노출된다', incognitoNote, `visible=${incognitoNote}`);
+
+  // ---------- M. 이슈 03: Cookie/Set-Cookie/CSP/Redirect ----------
+  const modBase = (kind, extra) => ({ kind, id: `m-${kind}`, comment: '', enabled: true, ...extra });
+
+  // M1: Request Cookie append → Cookie 헤더에 name=value 누적
+  await seedProfiles([
+    baseProfile('p-ck', 'Ck',
+      [modBase('cookie', { name: 'smoke_sid', value: 'xyz', mode: 'append', emptyMeans: 'remove' })],
+      []),
+  ]);
+  await pollSessionRuleCount(sw, 1);
+  const cookieEcho = await pageB.evaluate(async () => {
+    const res = await fetch('/setcookie', { cache: 'no-store' });
+    return res.json();
+  });
+  record('M1: Request Cookie append가 Cookie 헤더에 반영', /smoke_sid=xyz/.test(cookieEcho.cookie ?? ''),
+    `cookie=${cookieEcho.cookie}`);
+
+  // M2: Set-Cookie 응답 헤더 주입
+  await seedProfiles([
+    baseProfile('p-sc', 'Sc',
+      [modBase('set-cookie', { value: 'injected=1; Path=/', mode: 'append', emptyMeans: 'remove' })],
+      []),
+  ]);
+  await pollSessionRuleCount(sw, 1);
+  // 브라우저는 fetch 응답의 Set-Cookie를 JS에 숨기므로, 실제 쿠키가 설정됐는지
+  // document.cookie로 확인한다 (DNR이 append한 Set-Cookie를 브라우저가 처리).
+  const docCookie = await pageB.evaluate(async () => {
+    await fetch('/headers', { cache: 'no-store' });
+    await new Promise((r) => setTimeout(r, 100));
+    return document.cookie;
+  });
+  record('M2: Set-Cookie 응답 헤더 주입 → 브라우저 쿠키 설정', /injected=1/.test(docCookie),
+    `document.cookie=${docCookie}`);
+
+  // M3: CSP 응답 헤더 합성
+  await seedProfiles([
+    baseProfile('p-csp', 'Cs',
+      [modBase('csp', { directives: [{ name: 'default-src', value: "'none'" }] })],
+      []),
+  ]);
+  await pollSessionRuleCount(sw, 1);
+  const cspHeader = await pageB.evaluate(async () => {
+    const res = await fetch('/headers', { cache: 'no-store' });
+    return res.headers.get('content-security-policy');
+  });
+  record('M3: CSP 디렉티브 합성 → 응답 헤더', cspHeader === "default-src 'none'", `csp=${cspHeader}`);
+
+  // M4: Redirect regex + 캡처 그룹 치환
+  await seedProfiles([
+    baseProfile('p-rd', 'Rd',
+      [modBase('redirect', {
+        pattern: `^http://127\\.0\\.0\\.1:${port}/redir-src(.*)`,
+        substitution: `http://127.0.0.1:${port}/redir-dst\\1`,
+      })],
+      []),
+  ]);
+  await pollSessionRuleCount(sw, 1);
+  const landed = await pageB.evaluate(async () => {
+    const res = await fetch('/redir-src?q=1', { cache: 'no-store', redirect: 'follow' });
+    return res.text();
+  });
+  record('M4: Redirect regex 캡처 그룹 치환', /\/redir-dst\?q=1/.test(landed), `landed=${landed}`);
+
+  // M5: 유효하지 않은 redirect 패턴은 저장 시점에 거부된다
+  const redirectReject = await popup.evaluate(async () => {
+    return chrome.runtime.sendMessage({
+      type: 'headerkit:command',
+      command: {
+        type: 'add-modification',
+        profileId: 'p-rd',
+        modification: { kind: 'redirect', id: 'bad', pattern: '(unclosed', substitution: 'x', comment: '', enabled: true },
+      },
+    });
+  });
+  record('M5: invalid redirect 패턴이 저장 시점에 거부', redirectReject?.ok === false && /regex/i.test(redirectReject?.error ?? ''),
+    `ok=${redirectReject?.ok}, error="${redirectReject?.error}"`);
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

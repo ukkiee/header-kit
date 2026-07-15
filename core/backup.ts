@@ -137,9 +137,12 @@ function snapshotBytes(entry: ManifestEntry, kv: SyncKV): number {
   }, 0);
 }
 
-/** 청크가 전부 남아 있는가 — 손상·유실 스냅샷은 링 슬롯을 차지하지 않는다. */
+/**
+ * 청크가 전부 남아 있고 체크섬까지 일치하는가 — 유실·변조된 스냅샷은 복원
+ * 불가이므로 링 슬롯을 차지하지 않고 정리된다 (RL-3 self-healing).
+ */
 function isIntact(entry: ManifestEntry, kv: SyncKV): boolean {
-  return chunkKeysOf(entry).every((key) => typeof kv[key] === 'string');
+  return decodeSnapshotText(kv, entry).ok;
 }
 
 /**
@@ -157,7 +160,11 @@ export function planBackup(
 ): BackupPlan {
   const existing = readManifest(kv).snapshots;
   const sum = checksum(text);
-  if (existing[0]?.checksum === sum) {
+  // 최신 스냅샷이 같은 내용이고 무결성까지 통과할 때만 스킵한다 — 최신 스냅샷의
+  // 청크가 유실·변조됐으면(RL-3) 스킵하지 않고 아래에서 온전한 대체본을 만들어
+  // self-healing 한다 (isIntact 필터가 손상본을 링에서 밀어내 정리한다).
+  const latest = existing[0];
+  if (latest && latest.checksum === sum && decodeSnapshotText(kv, latest).ok) {
     return { kind: 'skip', reason: 'unchanged' };
   }
 
@@ -184,9 +191,9 @@ export function planBackup(
   // 손상·유실(청크 불완전) 스냅샷은 복원 불가이므로 링 후보에서 제외한다 —
   // 링 슬롯을 영구 점유하는 "corrupt 좀비"를 만들지 않는다.
   const intact = existing.filter((e) => isIntact(e, kv));
-  const latest = intact[0];
-  const latestBytes = latest ? snapshotBytes(latest, kv) : 0;
-  if (latest && newBytes + manifestBytes + latestBytes > SYNC_BUDGET) {
+  const latestIntact = intact[0];
+  const latestIntactBytes = latestIntact ? snapshotBytes(latestIntact, kv) : 0;
+  if (latestIntact && newBytes + manifestBytes + latestIntactBytes > SYNC_BUDGET) {
     // 전환 기간 동안 직전 정상본과 공존이 불가능 — 정상본을 지키고 실패한다.
     return { kind: 'too-large' };
   }
@@ -199,7 +206,7 @@ export function planBackup(
     if (kept.length >= MAX_SNAPSHOTS) break;
     const bytes = snapshotBytes(candidate, kv);
     if (used + bytes > SYNC_BUDGET) {
-      if (candidate === latest) break; // 직전 정상본이 밀리면 그 뒤도 전부 밀린다
+      if (candidate === latestIntact) break; // 직전 정상본이 밀리면 그 뒤도 전부 밀린다
       continue;
     }
     kept.push(candidate);
@@ -208,7 +215,7 @@ export function planBackup(
 
   const keptKeys = new Set(kept.flatMap(chunkKeysOf));
   const newKeys = new Set(chunks.map((_, i) => chunkKey(entry.id, i)));
-  const latestKeys = new Set(latest ? chunkKeysOf(latest) : []);
+  const latestKeys = new Set(latestIntact ? chunkKeysOf(latestIntact) : []);
 
   const preRemoves: string[] = [];
   const postRemoves: string[] = [];

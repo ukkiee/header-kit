@@ -14,11 +14,12 @@ const COMPONENTS_DIR = join(import.meta.dirname, '.');
 // `Promise<...>` 같은 TypeScript 제네릭 오탐을 배제한다.
 const JSX_TEXT = />(\s*[A-Z][A-Za-z][A-Za-z ,.'…?-]{2,})<\//g;
 
-// 번역 대상이 아닌 것: 기술 리터럴·아이콘·코드.
+// 번역 대상이 아닌 것: 기술 리터럴·아이콘·코드·프로토콜 헤더 상수.
 const ALLOW = [
   /^HeaderKit$/,
   /^chrome:\/\//,
   /^X-/, // 예시 헤더 이름 (placeholder 아님)
+  /^[A-Z][A-Za-z]+(-[A-Z][A-Za-z]+)+$/, // 하이픈 헤더 상수 (Content-Security-Policy 등)
 ];
 
 function collectFiles(): string[] {

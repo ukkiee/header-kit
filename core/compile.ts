@@ -1,7 +1,10 @@
 import { isProfileExpired } from './expiry';
 import { hasPlaceholders } from './placeholder';
-import type { Filter, Modification, Profile } from './schema';
-import { UNSET_ID } from './schema';
+import type { Filter, HeaderMode, Modification, Profile } from './schema';
+import { placeholderTemplate, UNSET_ID } from './schema';
+
+/** 값·mode를 가진 Modification 종류 (header/cookie/set-cookie). */
+type ValueModification = Extract<Modification, { mode: HeaderMode }>;
 import {
   ALL_RESOURCE_TYPES,
   isRequestAppendAllowed,
@@ -246,6 +249,58 @@ function conditionFor(
   };
 }
 
+/** Placeholder가 있으면 실체화 값을, 없으면 템플릿을 소비한다 (방어선 보증). */
+function consumeValue(rawValue: string, id: string, emitter: Emitter): string {
+  return hasPlaceholders(rawValue) ? emitter.materialized[id]! : rawValue;
+}
+
+interface HeaderPlan {
+  header: string;
+  isRequest: boolean;
+  /** 빈 값 판정에 쓰는 사용자 값. */
+  userValue: string;
+  /** set/append에 실릴 실제 헤더 값. */
+  composedValue: string;
+  /** 비어 있으면 empty-header-name 경고 대상인 이름 (set-cookie는 항상 non-empty). */
+  nameForWarning: string;
+}
+
+/** header/cookie/set-cookie를 공통 HeaderPlan으로 정규화한다. */
+function planHeaderish(modification: ValueModification, emitter: Emitter): HeaderPlan {
+  const v = consumeValue(modification.value, modification.id, emitter);
+  switch (modification.kind) {
+    case 'request-header':
+    case 'response-header':
+      return {
+        header: modification.name.trim(),
+        isRequest: modification.kind === 'request-header',
+        userValue: v,
+        composedValue: v,
+        nameForWarning: modification.name.trim(),
+      };
+    case 'cookie': {
+      const cookieName = modification.name.trim();
+      return {
+        header: 'Cookie',
+        isRequest: true,
+        userValue: v,
+        composedValue: cookieName === '' ? v : `${cookieName}=${v}`,
+        nameForWarning: cookieName,
+      };
+    }
+    case 'set-cookie':
+      return {
+        header: 'Set-Cookie',
+        isRequest: false,
+        userValue: v,
+        composedValue: v,
+        nameForWarning: 'Set-Cookie',
+      };
+    default:
+      return modification satisfies never;
+  }
+}
+
 function emitModification(
   modification: Modification,
   priority: number,
@@ -253,8 +308,34 @@ function emitModification(
   compiled: CompiledFilters,
   emitter: Emitter,
 ): void {
-  const header = modification.name.trim();
-  if (header === '') {
+  switch (modification.kind) {
+    case 'request-header':
+    case 'response-header':
+    case 'cookie':
+    case 'set-cookie':
+      emitHeaderRule(modification, priority, profileId, compiled, emitter);
+      return;
+    case 'csp':
+      emitCspRule(modification, priority, profileId, compiled, emitter);
+      return;
+    case 'redirect':
+      emitRedirectRule(modification, priority, profileId, compiled, emitter);
+      return;
+    default:
+      modification satisfies never;
+  }
+}
+
+function emitHeaderRule(
+  modification: ValueModification,
+  priority: number,
+  profileId: string,
+  compiled: CompiledFilters,
+  emitter: Emitter,
+): void {
+  const plan = planHeaderish(modification, emitter);
+
+  if (plan.nameForWarning.trim() === '') {
     emitter.warnings.push({
       code: 'empty-header-name',
       profileId,
@@ -264,9 +345,7 @@ function emitModification(
     return;
   }
 
-  const isRequest = modification.kind === 'request-header';
-  const headerInfo = resolveHeaderInfo(modification, profileId, emitter);
-
+  const info = resolveHeaderInfo(plan, modification, profileId, emitter);
   for (const join of compiled.regexJoins) {
     emitRule(
       emitter,
@@ -274,9 +353,7 @@ function emitModification(
         priority,
         action: {
           type: 'modifyHeaders',
-          ...(isRequest
-            ? { requestHeaders: [headerInfo] }
-            : { responseHeaders: [headerInfo] }),
+          ...(plan.isRequest ? { requestHeaders: [info] } : { responseHeaders: [info] }),
         },
         condition: conditionFor(compiled, join),
       },
@@ -285,39 +362,89 @@ function emitModification(
   }
 }
 
-/** target/mode/emptyMeans를 DNR HeaderInfo 연산으로 변환한다. */
+/** mode/emptyMeans를 DNR HeaderInfo 연산으로 변환한다. */
 function resolveHeaderInfo(
-  modification: Modification,
+  plan: HeaderPlan,
+  modification: ValueModification,
   profileId: string,
   emitter: Emitter,
 ): HeaderInfo {
-  const header = modification.name.trim();
-  const isRequest = modification.kind === 'request-header';
-  // 값은 템플릿 그대로, Placeholder가 있으면 실체화 값을 소비한다 (방어선 보증).
-  const value = hasPlaceholders(modification.value)
-    ? emitter.materialized[modification.id]!
-    : modification.value;
-
   // 빈 값의 의미: remove(제거) vs send-empty(빈 문자열 전송).
-  if (value === '' && modification.emptyMeans === 'remove') {
-    return { header, operation: 'remove' };
+  if (plan.userValue === '' && modification.emptyMeans === 'remove') {
+    return { header: plan.header, operation: 'remove' };
   }
 
   if (modification.mode === 'append') {
     // 요청 헤더 append는 허용 목록에 있어야만 가능 — 밖이면 set으로 폴백하고 경고.
-    if (isRequest && !isRequestAppendAllowed(header)) {
+    if (plan.isRequest && !isRequestAppendAllowed(plan.header)) {
       emitter.warnings.push({
         code: 'append-not-allowed',
         profileId,
         modificationId: modification.id,
-        message: `Request header "${header}" cannot be appended; it was set instead.`,
+        message: `Request header "${plan.header}" cannot be appended; it was set instead.`,
       });
-      return { header, operation: 'set', value };
+      return { header: plan.header, operation: 'set', value: plan.composedValue };
     }
-    return { header, operation: 'append', value };
+    return { header: plan.header, operation: 'append', value: plan.composedValue };
   }
 
-  return { header, operation: 'set', value };
+  return { header: plan.header, operation: 'set', value: plan.composedValue };
+}
+
+function emitCspRule(
+  modification: Extract<Modification, { kind: 'csp' }>,
+  priority: number,
+  profileId: string,
+  compiled: CompiledFilters,
+  emitter: Emitter,
+): void {
+  const value = modification.directives
+    .map((d) => `${d.name.trim()} ${d.value.trim()}`.trim())
+    .filter((d) => d !== '')
+    .join('; ');
+  if (value === '') return; // 빈 CSP는 규칙을 만들지 않는다
+
+  for (const join of compiled.regexJoins) {
+    emitRule(
+      emitter,
+      {
+        priority,
+        action: {
+          type: 'modifyHeaders',
+          responseHeaders: [{ header: 'Content-Security-Policy', operation: 'set', value }],
+        },
+        condition: conditionFor(compiled, join),
+      },
+      { profileId, modificationId: modification.id },
+    );
+  }
+}
+
+function emitRedirectRule(
+  modification: Extract<Modification, { kind: 'redirect' }>,
+  priority: number,
+  profileId: string,
+  compiled: CompiledFilters,
+  emitter: Emitter,
+): void {
+  const pattern = modification.pattern.trim();
+  if (pattern === '') return; // 매칭 패턴이 없으면 규칙 없음
+
+  // redirect는 자기 pattern을 regexFilter로 쓰고, profile의 나머지 필터(메서드·
+  // initiator·resource type·탭)를 그대로 상속한다. profile의 URL 필터는 redirect
+  // 패턴이 URL 매칭 역할을 대신하므로 추가 결합하지 않는다.
+  emitRule(
+    emitter,
+    {
+      priority,
+      action: {
+        type: 'redirect',
+        redirect: { regexSubstitution: modification.substitution },
+      },
+      condition: conditionFor(compiled, pattern),
+    },
+    { profileId, modificationId: modification.id },
+  );
 }
 
 /**
@@ -328,9 +455,10 @@ function findMissingMaterialization(
   profile: Profile,
   materialized: Record<string, string>,
 ): Modification | undefined {
-  return profile.modifications.find(
-    (m) => m.enabled && hasPlaceholders(m.value) && !(m.id in materialized),
-  );
+  return profile.modifications.find((m) => {
+    const template = placeholderTemplate(m);
+    return m.enabled && template !== null && hasPlaceholders(template) && !(m.id in materialized);
+  });
 }
 
 /**
@@ -388,8 +516,15 @@ export function compile(profiles: Profile[], env: CompileEnv): CompileResult {
     const base = bandBase.get(profile.id)!;
     const compiled = compileFilters(profile, tabs, emitter.warnings);
 
-    // Exclude allow 규칙이 quota 압력에서 살아남도록 Modification보다 먼저 낸다 —
-    // 제외가 빠지는 것이 수정이 빠지는 것보다 위험하다.
+    // 탭 조건이 있는데 매칭 탭이 없으면(탭 닫힘 등) 이 Profile은 어디에도
+    // 적용되지 않는다 — Modification 규칙도, Exclude allow 규칙도 내지 않는다.
+    const noMatchingTabs = compiled.tabIds !== undefined && compiled.tabIds.length === 0;
+    if (noMatchingTabs) continue;
+
+    // Exclude allow 규칙은 소유 Profile의 전체 Filter 스코프(메서드·initiator·
+    // resource type·탭)를 그대로 쓴다 — Exclude가 자기 Profile의 조건을 벗어나
+    // 전역으로 다른 Profile까지 무효화하지 않도록 (RL-2). quota 압력에서
+    // 살아남도록 Modification보다 먼저 낸다.
     const allowPriority = base + enabled.length + EXCLUDE_ALLOW_SLOTS - 1;
     for (const join of compiled.excludeJoins) {
       emitRule(
@@ -397,16 +532,11 @@ export function compile(profiles: Profile[], env: CompileEnv): CompileResult {
         {
           priority: allowPriority,
           action: { type: 'allow' },
-          condition: { regexFilter: join, resourceTypes: [...ALL_RESOURCE_TYPES] },
+          condition: conditionFor(compiled, join),
         },
         { profileId: profile.id },
       );
     }
-
-    // 탭 조건이 있는데 매칭 탭이 없으면(탭 닫힘 등) 이 Profile의 Modification은
-    // 어디에도 적용되지 않는다 — 규칙도 겹침 집계도 내지 않는다.
-    const noMatchingTabs = compiled.tabIds !== undefined && compiled.tabIds.length === 0;
-    if (noMatchingTabs) continue;
 
     enabled.forEach((modification, index) => {
       emitModification(
@@ -416,13 +546,15 @@ export function compile(profiles: Profile[], env: CompileEnv): CompileResult {
         compiled,
         emitter,
       );
-      // 겹침 경고는 같은 target 안에서만 의미가 있으므로 target을 키에 포함한다.
-      const name = modification.name.trim().toLowerCase();
-      if (name !== '') {
-        const headerKey = `${modification.kind}:${name}`;
-        const users = headerUse.get(headerKey) ?? [];
-        if (!users.includes(profile.id)) users.push(profile.id);
-        headerUse.set(headerKey, users);
+      // 겹침 경고는 헤더 이름 있는 종류(request/response-header)에만 의미가 있다.
+      if (modification.kind === 'request-header' || modification.kind === 'response-header') {
+        const name = modification.name.trim().toLowerCase();
+        if (name !== '') {
+          const headerKey = `${modification.kind}:${name}`;
+          const users = headerUse.get(headerKey) ?? [];
+          if (!users.includes(profile.id)) users.push(profile.id);
+          headerUse.set(headerKey, users);
+        }
       }
     });
   }

@@ -1,6 +1,6 @@
 # 03 — 쿠키·CSP·Redirect Modification
 
-Status: ready-for-agent
+Status: done
 Blocked by: 02
 
 ## Parent
@@ -28,3 +28,14 @@ Blocked by: 02
 ## Blocked by
 
 - 02-header-modifications.md
+
+## Comments
+
+**2026-07-15 구현 완료 (release 게이트 RL-1로 누락 발견 후).** 테스트 151/151, 실브라우저 스모크 44/44 (M1 Cookie append, M2 Set-Cookie→document.cookie, M3 CSP 합성, M4 Redirect 캡처 그룹 치환, M5 invalid redirect 저장 거부).
+
+- 스키마: cookie/set-cookie/csp/redirect variant, discriminated union 확장, isModification kind별 검증, backfill(csp/redirect는 mode/emptyMeans 없음).
+- compile: emitHeaderRule(cookie=Cookie, set-cookie=Set-Cookie), emitCspRule(디렉티브 합성), emitRedirectRule(자기 pattern=regexFilter + profile 나머지 필터 상속). Placeholder는 값 있는 종류만(placeholderTemplate 헬퍼).
+- 저장 검증: redirect 패턴 isRegexSupported (add/update/import). NetRule에 redirect 액션 추가.
+- UI: HeaderRow가 cookie/set-cookie도 처리(대상 라벨·이름 조건부), CspRow(디렉티브 편집기), RedirectRow(패턴/치환), "+ More" 셀렉트로 4종 추가. Storybook.
+
+기록: cookie는 ADR-0001대로 헤더 레벨만(속성 보존 부분 수정·regex 매칭 없음). redirect는 자기 pattern이 URL 매칭을 대신하므로 profile의 URL 필터와 결합하지 않음(문서화). 이 슬라이스는 원래 이슈 순서에서 누락됐고 release 게이트 RL-1이 잡아냄.

@@ -83,9 +83,10 @@ export interface NetRule {
   id: number;
   priority: number;
   action: {
-    type: 'modifyHeaders' | 'allow';
+    type: 'modifyHeaders' | 'allow' | 'redirect';
     requestHeaders?: HeaderInfo[];
     responseHeaders?: HeaderInfo[];
+    redirect?: { regexSubstitution: string };
   };
   condition: {
     urlFilter?: string;

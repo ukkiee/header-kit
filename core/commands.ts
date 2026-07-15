@@ -6,7 +6,13 @@ import {
   materializeValue,
   type MaterializeDeps,
 } from './placeholder';
-import type { Filter, Modification, Profile, StoredState } from './schema';
+import { placeholderTemplate, type Filter, type Modification, type Profile, type StoredState } from './schema';
+
+/** Modification이 Placeholder를 담은 값을 가지면 그 템플릿, 아니면 null. */
+function templateWithPlaceholders(modification: Modification): string | null {
+  const template = placeholderTemplate(modification);
+  return template !== null && hasPlaceholders(template) ? template : null;
+}
 
 /**
  * Profile의 모든 Placeholder Modification을 실체화한 새 구역을 만든다.
@@ -20,8 +26,9 @@ function materializeProfile(
 ): Record<string, string> {
   const next = { ...materialized };
   for (const modification of profile.modifications) {
-    if (hasPlaceholders(modification.value)) {
-      next[modification.id] = materializeValue(modification.value, deps);
+    const template = templateWithPlaceholders(modification);
+    if (template !== null) {
+      next[modification.id] = materializeValue(template, deps);
     }
   }
   return next;
@@ -103,12 +110,13 @@ export function addModification(
   }));
 
   // 활성 Profile에 들어오는 Placeholder는 불변식 유지를 위해 즉시 실체화한다.
-  if (profile?.active && hasPlaceholders(modification.value)) {
+  const template = templateWithPlaceholders(modification);
+  if (profile?.active && template !== null) {
     return {
       ...base,
       materialized: {
         ...base.materialized,
-        [modification.id]: materializeValue(modification.value, deps),
+        [modification.id]: materializeValue(template, deps),
       },
     };
   }
@@ -131,15 +139,17 @@ export function updateModification(
   if (!profile?.active || !previous) return base;
 
   // 활성 중 템플릿 편집: 그 Modification만 재실체화. Placeholder가 사라지면 정리.
-  if (hasPlaceholders(next.value)) {
-    const templateChanged = previous.value !== next.value;
+  const nextTemplate = templateWithPlaceholders(next);
+  if (nextTemplate !== null) {
+    const prevTemplate = placeholderTemplate(previous);
+    const templateChanged = prevTemplate !== nextTemplate;
     const missing = !(next.id in base.materialized);
     if (templateChanged || missing) {
       return {
         ...base,
         materialized: {
           ...base.materialized,
-          [next.id]: materializeValue(next.value, deps),
+          [next.id]: materializeValue(nextTemplate, deps),
         },
       };
     }

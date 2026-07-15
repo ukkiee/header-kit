@@ -82,7 +82,7 @@ describe('compile — 탭 계열 Filter의 tabIds 전개', () => {
     expect(rules[0]?.condition.tabIds).toBeUndefined();
   });
 
-  it('Exclude allow 규칙은 탭 조건과 무관하게 유지된다 (URL 단위 하향 전파 의미론)', () => {
+  it('탭 매칭이 없으면 Exclude allow 규칙도 내지 않는다 (RL-2: 전역 누출 방지)', () => {
     const { rules } = compile(
       [
         profile({
@@ -95,9 +95,27 @@ describe('compile — 탭 계열 Filter의 tabIds 전개', () => {
       env(),
     );
 
-    expect(rules).toHaveLength(1);
-    expect(rules[0]?.action.type).toBe('allow');
-    expect(rules[0]?.condition.tabIds).toBeUndefined();
+    // 매칭 탭이 없는 Profile은 allow도 내지 않는다 — 다른 Profile을 전역 무효화하지 않는다.
+    expect(rules).toEqual([]);
+  });
+
+  it('Exclude allow 규칙은 소유 Profile의 탭 스코프를 그대로 상속한다 (RL-2)', () => {
+    const { rules } = compile(
+      [
+        profile({
+          filters: [
+            f.tab(2), // 탭 2에만 적용
+            { kind: 'exclude-url', id: 'x', enabled: true, pattern: 'private' },
+          ],
+        }),
+      ],
+      env(),
+    );
+
+    const allow = rules.find((r) => r.action.type === 'allow')!;
+    // allow는 URL만이 아니라 소유 Profile의 tabIds 스코프 안에서만 작동한다.
+    expect(allow.condition.tabIds).toEqual([2]);
+    expect(allow.condition.regexFilter).toBe('(?:private)');
   });
 });
 

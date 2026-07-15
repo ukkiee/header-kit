@@ -33,3 +33,10 @@
 ### structure r3
 
 - verdict: approve, 발견 0건 — 게이트 통과
+
+### release r1
+
+- RL-1 accept — Cookie/Set-Cookie/CSP/Redirect 누락 (이슈 03 미구현) — 이슈 03 전체 구현(스키마·컴파일·명령·UI·import/export·골든·스모크)
+- RL-2 accept — Exclude allow 규칙이 소유 Profile의 다른 Filter 스코프를 벗어나 전역 누출 — allow를 같은 조건 경로로 스코프하고 no-match-tabs 가드 뒤로 이동, 위험 테스트 교체
+- RL-3 accept — 손상된 최신 백업이 self-healing을 영구 억제 — skip 판정 전 최신 스냅샷 무결성 검증, 손상 시 재생성, 회귀 테스트
+- RL-4 accept — minimum_chrome_version 미선언 — 사용 DNR 기능 요구 버전으로 manifest에 선언

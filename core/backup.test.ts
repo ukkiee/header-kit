@@ -66,11 +66,30 @@ describe('planBackup', () => {
     expect(plan.postRemoves).toEqual([]);
   });
 
-  it('최신 스냅샷과 내용이 같으면 계획 없이 스킵한다', () => {
+  it('최신 스냅샷과 내용이 같고 무결하면 계획 없이 스킵한다', () => {
     const kv = committedBackup({}, 'same-text', 's1', 1);
     const plan = planBackup(kv, 'same-text', { profileCount: 1 }, deps('s2', 2));
 
     expect(plan.kind).toBe('skip');
+  });
+
+  it('내용은 같지만 최신 스냅샷 청크가 유실됐으면 스킵하지 않고 대체본을 만든다 (RL-3 self-healing)', () => {
+    const kv = committedBackup({}, 'same-text', 's1', 1);
+    delete kv[chunkKey('s1', 0)]; // 커밋 후 청크 유실
+
+    const plan = planBackup(kv, 'same-text', { profileCount: 1 }, deps('s2', 2));
+    expect(plan.kind).toBe('write');
+    if (plan.kind !== 'write') return;
+    // 손상된 s1은 새 매니페스트에 승계되지 않고, 온전한 s2만 남는다.
+    expect(plan.manifest.snapshots.map((s) => s.id)).toEqual(['s2']);
+  });
+
+  it('내용은 같지만 최신 스냅샷 청크가 변조됐으면(체크섬 불일치) 대체본을 만든다 (RL-3)', () => {
+    const kv = committedBackup({}, 'same-text', 's1', 1);
+    kv[chunkKey('s1', 0)] = 'tampered'; // 청크 내용 변조
+
+    const plan = planBackup(kv, 'same-text', { profileCount: 1 }, deps('s2', 2));
+    expect(plan.kind).toBe('write');
   });
 
   it('링 보존: 최대 개수를 넘으면 가장 오래된 스냅샷이 정리되고, 직전 정상본은 pre 단계에서 보호된다', () => {

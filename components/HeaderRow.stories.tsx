@@ -11,12 +11,14 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-function InteractiveHeaderRow({ initial }: { initial: Modification }) {
-  const [modification, setModification] = useState<Modification>(initial);
+type ValueModification = Extract<Modification, { value: string }>;
+
+function InteractiveHeaderRow({ initial }: { initial: ValueModification }) {
+  const [modification, setModification] = useState<ValueModification>(initial);
   return (
     <HeaderRow
       modification={modification}
-      onChange={setModification}
+      onChange={(next) => setModification(next as ValueModification)}
       onRemove={() => setModification({ ...modification, enabled: false })}
     />
   );

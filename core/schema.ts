@@ -33,7 +33,87 @@ export interface ResponseHeaderModification extends HeaderModificationBase {
   kind: 'response-header';
 }
 
-export type Modification = RequestHeaderModification | ResponseHeaderModification;
+/**
+ * Request Cookie — Cookie 요청 헤더를 수정한다 (ADR-0001: 헤더 레벨만).
+ * append: 기존 Cookie에 `name=value` 추가. override: Cookie 헤더를 통째 교체.
+ * 빈 값 + remove: Cookie 헤더 제거.
+ */
+export interface CookieModification {
+  kind: 'cookie';
+  id: string;
+  /** 쿠키 이름. append 시 `name=value`로 합성된다. */
+  name: string;
+  value: string;
+  mode: HeaderMode;
+  emptyMeans: EmptyValueMeaning;
+  comment: string;
+  enabled: boolean;
+}
+
+/**
+ * Set-Cookie — Set-Cookie 응답 헤더를 수정한다 (ADR-0001).
+ * append: 새 Set-Cookie 추가. override: 통째 교체. 빈 값 + remove: 차단(제거).
+ */
+export interface SetCookieModification {
+  kind: 'set-cookie';
+  id: string;
+  value: string;
+  mode: HeaderMode;
+  emptyMeans: EmptyValueMeaning;
+  comment: string;
+  enabled: boolean;
+}
+
+export interface CspDirective {
+  name: string;
+  value: string;
+}
+
+/** CSP — 디렉티브를 합성해 Content-Security-Policy 응답 헤더로 set 한다. */
+export interface CspModification {
+  kind: 'csp';
+  id: string;
+  directives: CspDirective[];
+  comment: string;
+  enabled: boolean;
+}
+
+/** Redirect — regex 매칭 + 캡처 그룹 치환으로 URL을 재작성한다. */
+export interface RedirectModification {
+  kind: 'redirect';
+  id: string;
+  /** 매칭 regex (regexFilter). */
+  pattern: string;
+  /** 치환 문자열. `\1`~`\9` 캡처 그룹 (regexSubstitution). */
+  substitution: string;
+  comment: string;
+  enabled: boolean;
+}
+
+export type Modification =
+  | RequestHeaderModification
+  | ResponseHeaderModification
+  | CookieModification
+  | SetCookieModification
+  | CspModification
+  | RedirectModification;
+
+/**
+ * Placeholder 실체화 대상이 되는 값 문자열 (없으면 null).
+ * 값이 있는 종류(header/cookie/set-cookie)만 Placeholder를 지원한다 —
+ * csp/redirect는 지원하지 않는다.
+ */
+export function placeholderTemplate(modification: Modification): string | null {
+  switch (modification.kind) {
+    case 'request-header':
+    case 'response-header':
+    case 'cookie':
+    case 'set-cookie':
+      return modification.value;
+    default:
+      return null;
+  }
+}
 
 export type ModificationKind = Modification['kind'];
 
@@ -150,6 +230,25 @@ export function createHeaderModification(
   };
 }
 
+export function createModification(kind: ModificationKind, id: string = crypto.randomUUID()): Modification {
+  const common = { id, comment: '', enabled: true };
+  switch (kind) {
+    case 'request-header':
+    case 'response-header':
+      return { kind, ...common, name: '', value: '', mode: 'override', emptyMeans: 'remove' };
+    case 'cookie':
+      return { kind, ...common, name: '', value: '', mode: 'append', emptyMeans: 'remove' };
+    case 'set-cookie':
+      return { kind, ...common, value: '', mode: 'append', emptyMeans: 'remove' };
+    case 'csp':
+      return { kind, ...common, directives: [] };
+    case 'redirect':
+      return { kind, ...common, pattern: '', substitution: '' };
+    default:
+      return kind satisfies never;
+  }
+}
+
 /** 기존 호출부 호환용 — Request Header 생성 단축. */
 export function createRequestHeaderModification(
   id: string = crypto.randomUUID(),
@@ -171,18 +270,43 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-export function isModification(value: unknown): value is Modification {
+function isHeaderish(value: Record<string, unknown>): boolean {
   return (
-    isRecord(value) &&
-    (value.kind === 'request-header' || value.kind === 'response-header') &&
-    typeof value.id === 'string' &&
-    typeof value.name === 'string' &&
     typeof value.value === 'string' &&
     (value.mode === 'override' || value.mode === 'append') &&
-    (value.emptyMeans === 'remove' || value.emptyMeans === 'send-empty') &&
-    typeof value.comment === 'string' &&
-    typeof value.enabled === 'boolean'
+    (value.emptyMeans === 'remove' || value.emptyMeans === 'send-empty')
   );
+}
+
+export function isModification(value: unknown): value is Modification {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== 'string' ||
+    typeof value.comment !== 'string' ||
+    typeof value.enabled !== 'boolean'
+  ) {
+    return false;
+  }
+  switch (value.kind) {
+    case 'request-header':
+    case 'response-header':
+      return typeof value.name === 'string' && isHeaderish(value);
+    case 'cookie':
+      return typeof value.name === 'string' && isHeaderish(value);
+    case 'set-cookie':
+      return isHeaderish(value);
+    case 'csp':
+      return (
+        Array.isArray(value.directives) &&
+        value.directives.every(
+          (d) => isRecord(d) && typeof d.name === 'string' && typeof d.value === 'string',
+        )
+      );
+    case 'redirect':
+      return typeof value.pattern === 'string' && typeof value.substitution === 'string';
+    default:
+      return false;
+  }
 }
 
 function isResourceType(value: unknown): value is ResourceType {
@@ -236,9 +360,13 @@ function isProfile(value: unknown): value is Profile {
   );
 }
 
-/** Modification에 이슈 02에서 추가된 필드를 기본값으로 채운다 (SSOT 보호). */
+/** Modification에 이후 슬라이스에서 추가된 필드를 기본값으로 채운다 (SSOT 보호). */
 export function backfillModification(value: unknown): unknown {
   if (!isRecord(value)) return value;
+  // csp/redirect는 mode/emptyMeans가 없다 — 헤더 계열(및 cookie/set-cookie)만 채운다.
+  if (value.kind === 'csp' || value.kind === 'redirect') {
+    return { comment: '', ...value };
+  }
   return { mode: 'override', emptyMeans: 'remove', comment: '', ...value };
 }
 
