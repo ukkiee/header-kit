@@ -1,5 +1,6 @@
 import type { Command } from '@/core/commands';
 import { parseStoredState, type StoredState } from '@/core/schema';
+import type { StatusSummary } from '@/core/summary';
 
 const STATE_KEY = 'state';
 const COMMAND_MESSAGE = 'headerkit:command';
@@ -20,21 +21,24 @@ export function onStateChanged(listener: () => void): void {
   });
 }
 
-const APPLY_ERROR_KEY = 'applyError';
+const SUMMARY_KEY = 'statusSummary';
 
-/** 어댑터의 규칙 적용 실패를 session 저장소에 남긴다 (SW 재기동에도 유지). */
-export async function setApplyError(message: string | null): Promise<void> {
-  await browser.storage.session.set({ [APPLY_ERROR_KEY]: message });
+/**
+ * background가 실제로 적용한 그 스냅샷에서 만든 상태 요약을 session에 발행한다.
+ * UI는 이 값을 읽기만 한다 — 독립 재컴파일로 적용분과 어긋나지 않게 한다.
+ */
+export async function publishSummary(summary: StatusSummary): Promise<void> {
+  await browser.storage.session.set({ [SUMMARY_KEY]: summary });
 }
 
-export async function getApplyError(): Promise<string | null> {
-  const result = await browser.storage.session.get(APPLY_ERROR_KEY);
-  return (result[APPLY_ERROR_KEY] as string | null | undefined) ?? null;
+export async function getSummary(): Promise<StatusSummary | null> {
+  const result = await browser.storage.session.get(SUMMARY_KEY);
+  return (result[SUMMARY_KEY] as StatusSummary | undefined) ?? null;
 }
 
-export function onApplyErrorChanged(listener: () => void): void {
+export function onSummaryChanged(listener: () => void): void {
   browser.storage.onChanged.addListener((changes, area) => {
-    if (area === 'session' && APPLY_ERROR_KEY in changes) listener();
+    if (area === 'session' && SUMMARY_KEY in changes) listener();
   });
 }
 

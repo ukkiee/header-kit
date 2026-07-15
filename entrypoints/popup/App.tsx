@@ -4,18 +4,17 @@ import { Button } from '@/components/Button';
 import { ProfileSection } from '@/components/ProfileSection';
 import { StatusSummary } from '@/components/StatusSummary';
 import { TransferPanel } from '@/components/TransferPanel';
-import { compile } from '@/core/compile';
 import type { Command } from '@/core/commands';
 import { createProfile, PROFILE_COLORS, type StoredState } from '@/core/schema';
-import { summarizeCompile, type StatusSummary as StatusSummaryData } from '@/core/summary';
+import type { StatusSummary as StatusSummaryData } from '@/core/summary';
 import {
-  getApplyError,
+  getSummary,
   loadState,
-  onApplyErrorChanged,
   onStateChanged,
+  onSummaryChanged,
   sendCommand,
 } from '@/storage/state';
-import { queryTabInfos, queryTabPickerOptions, type TabPickerOptions } from '@/storage/tabs';
+import { queryTabPickerOptions, type TabPickerOptions } from '@/storage/tabs';
 
 /** popup은 컴팩트, tab 앱은 넓은 레이아웃 — 같은 컴포넌트를 다른 마운트로 쓴다. */
 export type AppSurface = 'popup' | 'tab';
@@ -27,32 +26,11 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
   const [summary, setSummary] = useState<StatusSummaryData | null>(null);
 
   useEffect(() => {
-    const refreshSummary = async () => {
-      const [current, applyError, tabs] = await Promise.all([
-        loadState(),
-        getApplyError(),
-        queryTabInfos(),
-      ]);
-      setSummary(
-        summarizeCompile(
-          compile(current.profiles, {
-            paused: current.paused,
-            tabs,
-            now: Date.now(),
-            materialized: current.materialized,
-          }),
-          { profiles: current.profiles, paused: current.paused, applyError },
-        ),
-      );
-    };
-
-    const refreshAll = () => {
-      void loadState().then(setState);
-      void refreshSummary();
-    };
-    refreshAll();
-    onStateChanged(refreshAll);
-    onApplyErrorChanged(() => void refreshSummary());
+    // 요약은 background가 적용한 결과를 발행한 것을 읽기만 한다 (독립 재컴파일 없음).
+    void loadState().then(setState);
+    void getSummary().then(setSummary);
+    onStateChanged(() => void loadState().then(setState));
+    onSummaryChanged(() => void getSummary().then(setSummary));
     void queryTabPickerOptions().then(setPickerOptions);
   }, []);
 

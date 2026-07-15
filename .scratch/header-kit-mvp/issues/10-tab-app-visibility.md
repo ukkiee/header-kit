@@ -1,6 +1,6 @@
 # 10 — 탭 앱과 적용 상태 가시성
 
-Status: ready-for-agent
+Status: done
 Blocked by: 04
 
 ## Parent
@@ -26,3 +26,16 @@ Blocked by: 04
 ## Blocked by
 
 - 04-profile-lifecycle.md
+
+## Comments
+
+**2026-07-15 구현 완료.** 테스트 116/116, 실브라우저 스모크 33/33 (J1 요약 규칙 수 일치, J2 겹침 경고 노출, J3 대형 편집기 저장).
+
+탭 앱은 entrypoints/app가 공유 App을 surface='tab'로 마운트(넓은 레이아웃), 팝업 '탭에서 열기'. StatusSummary(규칙 수·활성 Profile·경고·apply 오류), LargeEditor(긴 값 다이얼로그). 이슈 05 이연분(apply 실패 채널) 종료: replaceSessionRules 실패를 삼키지 않고 요약의 applyError로 노출.
+
+2축 코드리뷰 반영:
+- **요약 불일치 위험 (핵심, 양쪽 지적)**: UI가 독립적으로 재컴파일하면 background 적용분과 어긋남(다른 tabs 스냅샷·now, apply 실패 시 "N개 적용됨" 거짓 표시). → 요약을 background의 apply가 실제 적용한 그 result·snapshot에서 만들어 storage.session에 발행하고, UI는 읽기만 하도록 변경. reconciler.apply 시그니처를 (rules)→(result)로. apply 실패 시 요약이 "not applied"로 표시.
+- **AC 24 (탭 앱 레이아웃 Storybook)**: StatusSummary만 있던 것에 AppLayout(탭 레이아웃)·LargeEditor 스토리 추가.
+- LargeEditor 다이얼로그 열림 버그(Base UI Trigger onClick 충돌) → 제어형 open+onOpenChange로 draft 초기화 분리. glossary 회피어(refresh) 명명 정리.
+
+기록: 요약이 background 발행값이므로 팝업/탭 앱 어느 마운트에서도 동일한 적용 상태를 본다.

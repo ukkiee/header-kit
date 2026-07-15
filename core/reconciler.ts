@@ -1,14 +1,13 @@
 import type { CompileResult } from './compile';
-import type { NetRule } from './rules';
 
 export interface ReconcilerDeps<S> {
   loadSnapshot: () => Promise<S>;
   compile: (snapshot: S) => CompileResult;
   /**
-   * 컴파일된 규칙과 그 입력 스냅샷을 함께 받는다 — 배지처럼 같은 스냅샷에서
-   * 파생되는 부수 반영도 동일한 직렬화·세대 보증 아래에서 일어난다.
+   * 컴파일 결과 전체와 그 입력 스냅샷을 함께 받는다 — 배지·상태 요약처럼 같은
+   * 스냅샷에서 파생되는 부수 반영도 동일한 직렬화·세대 보증 아래에서 일어난다.
    */
-  apply: (rules: NetRule[], snapshot: S) => Promise<void>;
+  apply: (result: CompileResult, snapshot: S) => Promise<void>;
   /** 태스크 실패는 큐를 멈추지 않고 이 채널로 보고된다. */
   onError?: (error: unknown) => void;
 }
@@ -50,7 +49,7 @@ export function createReconciler<S>(deps: ReconcilerDeps<S>): Reconciler {
           const result = deps.compile(snapshot);
           if (generation !== latestGeneration) return;
 
-          await deps.apply(result.rules, snapshot);
+          await deps.apply(result, snapshot);
         } catch (error) {
           deps.onError?.(error);
         }

@@ -7,12 +7,13 @@ import { createReconciler } from '@/core/reconciler';
 import type { NetRule } from '@/core/rules';
 import type { StoredState } from '@/core/schema';
 import { backupPayload } from '@/core/backup';
+import { summarizeCompile } from '@/core/summary';
 import {
   loadState,
   onCommand,
   onStateChanged,
   persistState,
-  setApplyError,
+  publishSummary,
 } from '@/storage/state';
 import { performBackup } from '@/storage/backupStore';
 import { onTabsChanged, queryTabInfos } from '@/storage/tabs';
@@ -98,18 +99,27 @@ export default defineBackground(() => {
         now: snapshot.now,
         materialized: snapshot.state.materialized,
       }),
-    // 규칙·배지·만료 알람을 같은 스냅샷·같은 세대 보증 아래 반영한다.
-    apply: async (rules, snapshot) => {
+    // 규칙·배지·만료 알람·상태 요약을 같은 스냅샷·같은 세대 보증 아래 반영한다.
+    apply: async (result, snapshot) => {
       // 규칙 적용은 실패해도(예: quota) 나머지 반영·요약을 막지 않는다 —
-      // 실패는 삼키지 않고 apply 오류 채널로 노출한다 (이슈 05 이연분).
+      // 실패는 삼키지 않고 요약의 applyError로 노출한다 (이슈 05 이연분).
+      let applyError: string | null = null;
       try {
-        await replaceSessionRules(rules);
-        await setApplyError(null);
+        await replaceSessionRules(result.rules);
       } catch (error) {
-        await setApplyError(error instanceof Error ? error.message : String(error));
+        applyError = error instanceof Error ? error.message : String(error);
       }
       await applyBadge(snapshot.state);
       await scheduleExpiryAlarm(snapshot.state, snapshot.now);
+      // 요약은 background가 실제 적용한 그 결과·스냅샷에서 만든다 — UI는 이걸
+      // 읽기만 하므로 독립 재컴파일로 인한 불일치가 없다.
+      await publishSummary(
+        summarizeCompile(result, {
+          profiles: snapshot.state.profiles,
+          paused: snapshot.state.paused,
+          applyError,
+        }),
+      );
       // 이미 지난 만료(과거 시각 입력, SW 휴면 중 경과 등)는 알람을 기다리지
       // 않고 즉시 만료 전이를 태운다 — 규칙만 죽고 토글·배지가 켜진 채
       // 남는 거짓 상태를 방지 (만료 후에는 활성이 남지 않으므로 수렴).

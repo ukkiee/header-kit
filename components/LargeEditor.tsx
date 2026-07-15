@@ -6,7 +6,7 @@ export interface LargeEditorProps {
   title: string;
   value: string;
   onCommit: (next: string) => void;
-  /** true면 넓은 화면용 큰 편집기, false면 컴팩트 트리거만. */
+  /** 트리거 버튼에 표시할 라벨. */
   triggerLabel?: string;
 }
 

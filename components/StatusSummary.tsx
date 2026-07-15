@@ -9,7 +9,8 @@ export function StatusSummary({ summary }: StatusSummaryProps) {
     <section className="flex flex-col gap-1.5 rounded-lg bg-zinc-50 p-2.5 text-xs dark:bg-zinc-900">
       <div className="flex items-center gap-3">
         <span>
-          <strong>{summary.ruleCount}</strong> active rule{summary.ruleCount === 1 ? '' : 's'}
+          <strong>{summary.ruleCount}</strong>{' '}
+          {summary.applyError ? 'rule(s) — not applied' : `active rule${summary.ruleCount === 1 ? '' : 's'}`}
         </span>
         <span>
           <strong>{summary.activeProfileCount}</strong> active profile

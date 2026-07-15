@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CompileResult } from './compile';
 import { createReconciler } from './reconciler';
-import type { NetRule } from './rules';
 
 interface Snapshot {
   tag: string;
@@ -48,7 +47,8 @@ describe('createReconciler', () => {
         return d.promise;
       },
       compile: compileTag,
-      apply: async (rules: NetRule[]) => {
+      apply: async (result) => {
+        const rules = result.rules;
         applied.push(rules[0]?.action.requestHeaders?.[0]?.value ?? '');
       },
     });
@@ -72,7 +72,8 @@ describe('createReconciler', () => {
     const reconciler = createReconciler<Snapshot>({
       loadSnapshot: async () => ({ tag: `load-${++loadCount}` }),
       compile: compileTag,
-      apply: async (rules) => {
+      apply: async (result) => {
+        const rules = result.rules;
         applied.push(rules[0]?.action.requestHeaders?.[0]?.value ?? '');
       },
     });
@@ -120,7 +121,8 @@ describe('createReconciler', () => {
     const reconciler = createReconciler<Snapshot>({
       loadSnapshot: async () => ({ tag: currentTag }),
       compile: compileTag,
-      apply: async (rules) => {
+      apply: async (result) => {
+        const rules = result.rules;
         applyCalls += 1;
         const isFirst = applyCalls === 1;
         applied.push(rules[0]?.action.requestHeaders?.[0]?.value ?? '');
@@ -147,7 +149,8 @@ describe('createReconciler', () => {
     const reconciler = createReconciler<Snapshot>({
       loadSnapshot: async () => ({ tag: 'ok' }),
       compile: compileTag,
-      apply: async (rules) => {
+      apply: async (result) => {
+        const rules = result.rules;
         if (failNext) {
           failNext = false;
           throw new Error('quota exceeded');
@@ -176,7 +179,8 @@ describe('createReconciler', () => {
         return { tag: String(version) };
       },
       compile: compileTag,
-      apply: async (rules) => {
+      apply: async (result) => {
+        const rules = result.rules;
         await new Promise((r) => setTimeout(r, version % 2));
         applied.push(Number(rules[0]?.action.requestHeaders?.[0]?.value ?? '-1'));
       },
@@ -202,7 +206,8 @@ describe('createReconciler', () => {
     const reconciler = createReconciler<Snapshot>({
       loadSnapshot: async () => ({ tag: 'final' }),
       compile: compileTag,
-      apply: async (rules) => {
+      apply: async (result) => {
+        const rules = result.rules;
         applied.push(rules[0]?.action.requestHeaders?.[0]?.value ?? '');
       },
     });
