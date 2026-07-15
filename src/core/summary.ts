@@ -1,5 +1,5 @@
 import type { CompileResult } from './compile';
-import type { CompileWarning } from './rules';
+import type { CompileWarning } from './compile-warnings';
 import type { Profile } from './schema';
 
 /**

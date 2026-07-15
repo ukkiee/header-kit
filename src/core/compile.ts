@@ -5,10 +5,10 @@ import { placeholderTemplate, UNSET_ID } from './schema';
 
 /** 값·mode를 가진 Modification 종류 (header/cookie/set-cookie). */
 type ValueModification = Extract<Modification, { mode: HeaderMode }>;
+import type { CompileWarning } from './compile-warnings';
 import {
   ALL_RESOURCE_TYPES,
   isRequestAppendAllowed,
-  type CompileWarning,
   type HeaderInfo,
   type NetRule,
   type RequestMethod,
