@@ -4,6 +4,7 @@ import type { Command } from '@/core/commands';
 import { parseImport } from '@/core/transfer';
 import { listBackupSnapshots, readSyncKV } from '@/storage/backupStore';
 import { Button } from './Button';
+import { useT } from './i18n-context';
 
 export interface BackupPanelProps {
   /** 권위 실행 결과를 돌려받는다 — 거부된 복원을 성공처럼 표시하지 않기 위해. */
@@ -23,6 +24,7 @@ export function BackupPanel({
   loadSnapshots = listBackupSnapshots,
   loadSnapshotText = defaultLoadSnapshotText,
 }: BackupPanelProps) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [snapshots, setSnapshots] = useState<SnapshotStatus[]>([]);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
@@ -56,10 +58,10 @@ export function BackupPanel({
   return (
     <section className="flex flex-col gap-2 border-t border-zinc-200 pt-2 dark:border-zinc-800">
       <div className="flex items-center gap-1">
-        <span className="text-xs font-medium text-zinc-400">Backups</span>
+        <span className="text-xs font-medium text-zinc-400">{t('backups')}</span>
         <span className="flex-1" />
         <Button variant="ghost" size="sm" aria-label="Toggle backups" onClick={() => setOpen(!open)}>
-          {open ? 'Hide' : 'Show'}
+          {open ? t('hide') : t('show')}
         </Button>
       </div>
 
@@ -71,29 +73,30 @@ export function BackupPanel({
 
       {open &&
         (snapshots.length === 0 ? (
-          <p className="text-xs text-zinc-400">No backups yet — they appear after profile changes.</p>
+          <p className="text-xs text-zinc-400">{t('noBackupsYet')}</p>
         ) : (
           <ul className="flex flex-col gap-1">
             {snapshots.map((snapshot) => (
               <li key={snapshot.id} className="flex items-center gap-2 text-xs">
                 <span className="flex-1">
                   {new Date(snapshot.createdAt).toLocaleString()} · {snapshot.profileCount}{' '}
-                  profile{snapshot.profileCount === 1 ? '' : 's'}
+                  {snapshot.profileCount === 1 ? t('activeProfile') : t('activeProfiles')}
                 </span>
                 {snapshot.status === 'corrupt' ? (
                   <span
                     className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] text-red-700 dark:bg-red-950 dark:text-red-300"
                     title={snapshot.reason}
                   >
-                    corrupt
+                    {t('corrupt')}
                   </span>
                 ) : (
                   <Button
                     variant={confirmingId === snapshot.id ? 'danger' : 'ghost'}
                     size="sm"
+                    aria-label={confirmingId === snapshot.id ? 'Confirm restore' : 'Restore backup'}
                     onClick={() => void restore(snapshot)}
                   >
-                    {confirmingId === snapshot.id ? 'Replace all?' : 'Restore'}
+                    {confirmingId === snapshot.id ? t('confirmReplaceAll') : t('restore')}
                   </Button>
                 )}
               </li>

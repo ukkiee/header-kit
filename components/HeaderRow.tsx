@@ -3,6 +3,7 @@ import { isRequestAppendAllowed } from '@/core/rules';
 import type { Modification } from '@/core/schema';
 import { Button } from './Button';
 import { HeaderNameInput } from './HeaderNameInput';
+import { useT } from './i18n-context';
 import { LargeEditor } from './LargeEditor';
 
 export interface HeaderRowProps {
@@ -30,6 +31,7 @@ export function HeaderRow({
   materializedValue,
   userHeaders = [],
 }: HeaderRowProps) {
+  const t = useT();
   const withPlaceholders = hasPlaceholders(modification.value);
   const isRequest = modification.kind === 'request-header';
   // 요청 헤더 append는 허용 목록 헤더에만 노출한다 (불가능한 상태를 만들지 않음).
@@ -65,8 +67,8 @@ export function HeaderRow({
           aria-label="Header target"
           className="h-8 cursor-pointer rounded-md border border-zinc-300 bg-white px-1 text-xs outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
         >
-          <option value="request-header">Req</option>
-          <option value="response-header">Res</option>
+          <option value="request-header">{t('requestHeaderShort')}</option>
+          <option value="response-header">{t('responseHeaderShort')}</option>
         </select>
         <HeaderNameInput
           value={modification.name}
@@ -78,7 +80,7 @@ export function HeaderRow({
           type="text"
           value={modification.value}
           onChange={(e) => onChange({ ...modification, value: e.target.value })}
-          placeholder="Value"
+          placeholder={t('value')}
           aria-label="Header value"
           className="h-8 flex-1 rounded-md border border-zinc-300 bg-white px-2 text-sm outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
         />
@@ -99,7 +101,7 @@ export function HeaderRow({
           className={chip(modification.mode === 'override')}
           onClick={() => onChange({ ...modification, mode: 'override' })}
         >
-          Override
+          {t('override')}
         </button>
         {appendAllowed && (
           <button
@@ -107,25 +109,25 @@ export function HeaderRow({
             className={chip(modification.mode === 'append')}
             onClick={() => onChange({ ...modification, mode: 'append' })}
           >
-            Append
+            {t('append')}
           </button>
         )}
         {isEmpty && (
           <>
-            <span className="ml-1 text-[10px] text-zinc-400">empty →</span>
+            <span className="ml-1 text-[10px] text-zinc-400">{t('emptyArrow')}</span>
             <button
               type="button"
               className={chip(modification.emptyMeans === 'remove')}
               onClick={() => onChange({ ...modification, emptyMeans: 'remove' })}
             >
-              Remove
+              {t('remove')}
             </button>
             <button
               type="button"
               className={chip(modification.emptyMeans === 'send-empty')}
               onClick={() => onChange({ ...modification, emptyMeans: 'send-empty' })}
             >
-              Send empty
+              {t('sendEmpty')}
             </button>
           </>
         )}
@@ -133,22 +135,18 @@ export function HeaderRow({
           type="text"
           value={modification.comment}
           onChange={(e) => onChange({ ...modification, comment: e.target.value })}
-          placeholder="comment"
+          placeholder={t('comment')}
           aria-label="Comment"
           className="ml-auto h-6 w-40 rounded border border-transparent bg-transparent px-1 text-[11px] text-zinc-500 outline-none focus:border-zinc-300 dark:focus:border-zinc-700"
         />
       </div>
 
       {!isRequest && (
-        <p className="pl-6 text-[10px] text-zinc-400">
-          Response header changes may not show in the DevTools Network panel, but they reach the
-          page.
-        </p>
+        <p className="pl-6 text-[10px] text-zinc-400">{t('responsePanelNote')}</p>
       )}
       {withPlaceholders && (
         <p className="pl-6 text-[10px] text-zinc-400">
-          New value each time the profile activates — constant while it stays on, never
-          re-evaluated per request.
+          {t('placeholderNote')}
           {materializedValue !== undefined && (
             <span className="ml-1 font-mono text-zinc-500">→ {materializedValue}</span>
           )}

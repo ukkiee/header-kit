@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { BackupPanel } from '@/components/BackupPanel';
 import { Button } from '@/components/Button';
+import { LocaleProvider } from '@/components/i18n-context';
 import { PreferencesPanel } from '@/components/PreferencesPanel';
 import { ProfileSection } from '@/components/ProfileSection';
 import { StatusSummary } from '@/components/StatusSummary';
@@ -36,7 +37,9 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
     onStateChanged(() => void loadState().then(setState));
     onSummaryChanged(() => void getSummary().then(setSummary));
     void queryTabPickerOptions().then(setPickerOptions);
-    setLocale(resolveLocale(browser.i18n.getUILanguage()));
+    // URL의 ?locale= 오버라이드를 우선하고(언어 강제), 없으면 브라우저 UI 언어.
+    const override = new URLSearchParams(window.location.search).get('locale');
+    setLocale(resolveLocale(override ?? browser.i18n.getUILanguage()));
     void browser.extension.isAllowedIncognitoAccess().then(setIncognitoAllowed);
   }, []);
 
@@ -70,6 +73,7 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
   };
 
   return (
+    <LocaleProvider locale={locale}>
     <main
       className={`mx-auto flex flex-col gap-3 bg-white p-4 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100 ${
         surface === 'tab' ? 'min-h-screen w-full max-w-3xl' : ''
@@ -152,8 +156,8 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
         customHeaderNames={state.customHeaderNames}
         onCommand={dispatch}
         incognitoAllowed={incognitoAllowed}
-        locale={locale}
       />
     </main>
+    </LocaleProvider>
   );
 }

@@ -1,6 +1,7 @@
 import { Dialog } from '@base-ui-components/react/dialog';
 import { useState } from 'react';
 import { Button } from './Button';
+import { useT } from './i18n-context';
 
 export interface LargeEditorProps {
   title: string;
@@ -12,6 +13,7 @@ export interface LargeEditorProps {
 
 /** 긴 regex·CSP·헤더 값을 넓은 다이얼로그에서 편집한다 (탭 앱·팝업 공용). */
 export function LargeEditor({ title, value, onCommit, triggerLabel = 'Expand' }: LargeEditorProps) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(value);
 
@@ -42,9 +44,9 @@ export function LargeEditor({ title, value, onCommit, triggerLabel = 'Expand' }:
             className="rounded-md border border-zinc-300 bg-white p-2 font-mono text-sm outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-950"
           />
           <div className="flex justify-end gap-2">
-            <Dialog.Close render={<Button variant="ghost" size="sm">Cancel</Button>} />
+            <Dialog.Close render={<Button variant="ghost" size="sm">{t('cancel')}</Button>} />
             <Dialog.Close
-              render={<Button size="sm">Save</Button>}
+              render={<Button size="sm" aria-label="Save large editor">{t('save')}</Button>}
               onClick={() => onCommit(draft)}
             />
           </div>

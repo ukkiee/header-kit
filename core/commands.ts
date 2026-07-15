@@ -229,6 +229,11 @@ export function setPaused(state: StoredState, paused: boolean): StoredState {
   return { ...state, paused };
 }
 
+/** 권위 상태 기준으로 Pause를 뒤집는다 — 단축키 연타의 lost-update를 막는다. */
+export function togglePause(state: StoredState): StoredState {
+  return { ...state, paused: !state.paused };
+}
+
 export function addCustomHeaderName(state: StoredState, name: string): StoredState {
   const trimmed = name.trim();
   if (trimmed === '' || state.customHeaderNames.some((n) => n.toLowerCase() === trimmed.toLowerCase())) {
@@ -296,6 +301,7 @@ export type Command =
   | { type: 'move-profile'; profileId: string; toIndex: number }
   | { type: 'update-profile-meta'; profileId: string; meta: ProfileMeta }
   | { type: 'set-paused'; paused: boolean }
+  | { type: 'toggle-pause' }
   | { type: 'expire-profiles'; now: number }
   | { type: 'add-custom-header-name'; name: string }
   | { type: 'remove-custom-header-name'; name: string }
@@ -357,6 +363,8 @@ export function applyCommand(
       return updateProfileMeta(state, command.profileId, command.meta);
     case 'set-paused':
       return setPaused(state, command.paused);
+    case 'toggle-pause':
+      return togglePause(state);
     case 'expire-profiles':
       return expireProfiles(state, command.now, deps);
     case 'add-custom-header-name':

@@ -1,30 +1,36 @@
 import type { StatusSummary as StatusSummaryData } from '@/core/summary';
+import { useT } from './i18n-context';
 
 export interface StatusSummaryProps {
   summary: StatusSummaryData;
 }
 
 export function StatusSummary({ summary }: StatusSummaryProps) {
+  const t = useT();
   return (
     <section className="flex flex-col gap-1.5 rounded-lg bg-zinc-50 p-2.5 text-xs dark:bg-zinc-900">
       <div className="flex items-center gap-3">
         <span>
           <strong>{summary.ruleCount}</strong>{' '}
-          {summary.applyError ? 'rule(s) — not applied' : `active rule${summary.ruleCount === 1 ? '' : 's'}`}
+          {summary.applyError
+            ? t('rulesNotApplied')
+            : summary.ruleCount === 1
+              ? t('activeRule')
+              : t('activeRules')}
         </span>
         <span>
-          <strong>{summary.activeProfileCount}</strong> active profile
-          {summary.activeProfileCount === 1 ? '' : 's'}
+          <strong>{summary.activeProfileCount}</strong>{' '}
+          {summary.activeProfileCount === 1 ? t('activeProfile') : t('activeProfiles')}
         </span>
-        {summary.paused && <span className="text-amber-600 dark:text-amber-400">paused</span>}
+        {summary.paused && <span className="text-amber-600 dark:text-amber-400">{t('paused')}</span>}
         {!summary.hasProblems && !summary.paused && (
-          <span className="text-green-600 dark:text-green-400">no issues</span>
+          <span className="text-green-600 dark:text-green-400">{t('noIssues')}</span>
         )}
       </div>
 
       {summary.applyError && (
         <p role="alert" className="rounded bg-red-100 px-2 py-1 text-red-700 dark:bg-red-950 dark:text-red-300">
-          Rules could not be applied: {summary.applyError}
+          {t('rulesCouldNotApply')} {summary.applyError}
         </p>
       )}
 

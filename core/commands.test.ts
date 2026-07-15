@@ -134,6 +134,13 @@ describe('state transition commands', () => {
     expect(removed.customHeaderNames).toEqual([]);
   });
 
+  it('togglePause는 권위 상태 기준으로 Pause를 뒤집는다 (lost-update 방지)', () => {
+    const off = applyCommand(state(), { type: 'toggle-pause' });
+    expect(off.paused).toBe(true);
+    const on = applyCommand(off, { type: 'toggle-pause' });
+    expect(on.paused).toBe(false);
+  });
+
   it('setPaused는 Profile 상태를 건드리지 않는다', () => {
     const activated = toggleProfile(state(), 'p1', true);
     const paused = setPaused(activated, true);

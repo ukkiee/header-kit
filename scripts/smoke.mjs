@@ -103,7 +103,7 @@ try {
   });
 
   const popup = await context.newPage();
-  await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+  await popup.goto(`chrome-extension://${extensionId}/popup.html?locale=en`);
   const toggle = popup.getByRole('switch', { name: 'Toggle Smoke' });
 
   await toggle.click();
@@ -551,7 +551,7 @@ try {
 
   await popup.getByRole('button', { name: 'Import…' }).click();
   await popup.getByLabel('Import JSON').fill(exportJson);
-  await popup.getByRole('button', { name: 'Import', exact: true }).click();
+  await popup.getByRole('button', { name: 'Run import' }).click();
   await pollSessionRuleCount(sw, 1); // tab 참조가 정리(UNSET)됐으므로 규칙이 전 탭에 적용된다
   const importedState = await sw.evaluate(async () => {
     const { state } = await chrome.storage.local.get('state');
@@ -568,7 +568,7 @@ try {
 
   await popup.getByRole('button', { name: 'Import…' }).click();
   await popup.getByLabel('Import JSON').fill('{broken json');
-  await popup.getByRole('button', { name: 'Import', exact: true }).click();
+  await popup.getByRole('button', { name: 'Run import' }).click();
   const importError = await popup.getByRole('alert').textContent();
   const profileCountAfter = await sw.evaluate(async () => {
     const { state } = await chrome.storage.local.get('state');
@@ -611,8 +611,8 @@ try {
   await popup.reload();
   await popup.getByRole('button', { name: 'Toggle backups' }).click();
   const restoreRow = popup.locator('li').filter({ hasText: 'profile' }).first();
-  await restoreRow.getByRole('button', { name: 'Restore' }).click();
-  await restoreRow.getByRole('button', { name: 'Replace all?' }).click();
+  await restoreRow.getByRole('button', { name: 'Restore backup' }).click();
+  await restoreRow.getByRole('button', { name: 'Confirm restore' }).click();
 
   const restoredOk = await (async () => {
     const start = Date.now();
@@ -647,8 +647,8 @@ try {
   await pollSessionRuleCount(sw, 2);
 
   const tabApp = await context.newPage();
-  await tabApp.goto(`chrome-extension://${extId}/app.html`);
-  await tabApp.getByText('HeaderKit').waitFor();
+  await tabApp.goto(`chrome-extension://${extId}/app.html?locale=en`);
+  await tabApp.getByRole('heading', { name: 'HeaderKit' }).waitFor();
   const shownRuleCount = await tabApp.getByText(/active rule/).textContent();
   record('J1: 탭 앱이 활성 규칙 수를 표시한다 (요약이 Compile과 일치)',
     /2\s*active rule/.test(shownRuleCount ?? ''), `summary="${(shownRuleCount ?? '').trim()}"`);
@@ -673,7 +673,7 @@ try {
   await tabApp.getByRole('button', { name: /open large editor/i }).first().click();
   const longValue = 'x'.repeat(300);
   await tabApp.getByRole('textbox', { name: /Value —/ }).fill(longValue);
-  await tabApp.getByRole('button', { name: 'Save', exact: true }).click();
+  await tabApp.getByRole('button', { name: 'Save large editor' }).click();
   const savedValue = await sw.evaluate(async () => {
     const { state } = await chrome.storage.local.get('state');
     return state.profiles[0].modifications[0].value;
@@ -752,7 +752,7 @@ try {
   await popup.reload();
   await popup.getByRole('button', { name: 'Toggle preferences' }).click();
   await popup.getByLabel('New autocomplete header').fill('X-Team-Custom');
-  await popup.getByRole('button', { name: 'Add', exact: true }).click();
+  await popup.getByRole('button', { name: 'Add autocomplete header' }).click();
   const savedCustom = await sw.evaluate(async () =>
     (await chrome.storage.local.get('state')).state.customHeaderNames,
   );

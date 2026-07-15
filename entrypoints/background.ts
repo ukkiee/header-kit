@@ -174,11 +174,12 @@ export default defineBackground(() => {
   onTabsChanged(converge);
   browser.runtime.onStartup.addListener(converge);
   browser.runtime.onInstalled.addListener(converge);
-  // 키보드 단축키: Pause 토글도 단일 writer 명령을 지난다.
+  // 키보드 단축키: Pause 토글은 권위 상태 기준으로 뒤집는 단일 writer 명령을
+  // 지난다 — 연타해도 lost-update가 없다.
   browser.commands.onCommand.addListener((command) => {
     if (command !== 'toggle-pause') return;
-    void loadState()
-      .then((state) => executor.execute({ type: 'set-paused', paused: !state.paused }))
+    void executor
+      .execute({ type: 'toggle-pause' })
       .catch((error) => console.error('[HeaderKit] toggle-pause failed', error));
   });
 

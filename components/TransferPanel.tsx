@@ -3,6 +3,7 @@ import type { Command } from '@/core/commands';
 import type { Profile, StoredState } from '@/core/schema';
 import { exportProfiles, parseImport, serializeExport } from '@/core/transfer';
 import { Button } from './Button';
+import { useT } from './i18n-context';
 
 export interface TransferPanelProps {
   state: StoredState;
@@ -24,6 +25,7 @@ function browserDownload(filename: string, text: string): void {
 type Mode = 'idle' | 'export' | 'import';
 
 export function TransferPanel({ state, onCommand, download = browserDownload }: TransferPanelProps) {
+  const t = useT();
   const [mode, setMode] = useState<Mode>('idle');
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [importText, setImportText] = useState('');
@@ -70,13 +72,13 @@ export function TransferPanel({ state, onCommand, download = browserDownload }: 
   return (
     <section className="flex flex-col gap-2 border-t border-zinc-200 pt-2 dark:border-zinc-800">
       <div className="flex items-center gap-1">
-        <span className="text-xs font-medium text-zinc-400">Profiles</span>
+        <span className="text-xs font-medium text-zinc-400">{t('profiles')}</span>
         <span className="flex-1" />
         <Button variant="ghost" size="sm" onClick={() => enterMode(mode === 'export' ? 'idle' : 'export')}>
-          Export…
+          {t('export')}
         </Button>
         <Button variant="ghost" size="sm" onClick={() => enterMode(mode === 'import' ? 'idle' : 'import')}>
-          Import…
+          {t('import')}
         </Button>
       </div>
 
@@ -103,10 +105,10 @@ export function TransferPanel({ state, onCommand, download = browserDownload }: 
           ))}
           <div className="flex gap-1">
             <Button size="sm" onClick={runExport} disabled={selected.size === 0}>
-              Export {selected.size} profile{selected.size === 1 ? '' : 's'}
+              {t('export')} ({selected.size})
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setMode('idle')}>
-              Cancel
+              {t('cancel')}
             </Button>
           </div>
         </div>
@@ -117,7 +119,7 @@ export function TransferPanel({ state, onCommand, download = browserDownload }: 
           <textarea
             value={importText}
             onChange={(e) => setImportText(e.target.value)}
-            placeholder="Paste a HeaderKit export here…"
+            placeholder={t('pasteExportHere')}
             aria-label="Import JSON"
             rows={5}
             className="rounded-md border border-zinc-300 bg-white p-2 font-mono text-xs outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
@@ -143,11 +145,16 @@ export function TransferPanel({ state, onCommand, download = browserDownload }: 
             </ul>
           )}
           <div className="flex gap-1">
-            <Button size="sm" onClick={() => void runImport()} disabled={importText.trim() === ''}>
-              Import
+            <Button
+              size="sm"
+              aria-label="Run import"
+              onClick={() => void runImport()}
+              disabled={importText.trim() === ''}
+            >
+              {t('importAction')}
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setMode('idle')}>
-              Cancel
+              {t('cancel')}
             </Button>
           </div>
         </div>

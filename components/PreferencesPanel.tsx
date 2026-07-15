@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import type { Command } from '@/core/commands';
-import { t, type Locale } from '@/core/i18n';
 import { Button } from './Button';
+import { useT } from './i18n-context';
 
 export interface PreferencesPanelProps {
   customHeaderNames: readonly string[];
   onCommand: (command: Command) => void;
+  /** null = 아직 조회 중. App이 시크릿 미허용 배너를 소유하므로 여기선 허용 시에만 확인 문구. */
   incognitoAllowed: boolean | null;
-  locale: Locale;
 }
 
 /** 보조 설정 — autocomplete 사용자 항목, 단축키·시크릿 안내. */
@@ -15,8 +15,8 @@ export function PreferencesPanel({
   customHeaderNames,
   onCommand,
   incognitoAllowed,
-  locale,
 }: PreferencesPanelProps) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState('');
 
@@ -29,17 +29,17 @@ export function PreferencesPanel({
   return (
     <section className="flex flex-col gap-2 border-t border-zinc-200 pt-2 dark:border-zinc-800">
       <div className="flex items-center gap-1">
-        <span className="text-xs font-medium text-zinc-400">Preferences</span>
+        <span className="text-xs font-medium text-zinc-400">{t('preferences')}</span>
         <span className="flex-1" />
         <Button variant="ghost" size="sm" aria-label="Toggle preferences" onClick={() => setOpen(!open)}>
-          {open ? 'Hide' : 'Show'}
+          {open ? t('hide') : t('show')}
         </Button>
       </div>
 
       {open && (
         <div className="flex flex-col gap-2 text-xs">
           <div className="flex flex-col gap-1">
-            <span className="font-medium">Autocomplete header names</span>
+            <span className="font-medium">{t('autocompleteHeaders')}</span>
             <div className="flex gap-1">
               <input
                 type="text"
@@ -52,8 +52,8 @@ export function PreferencesPanel({
                 aria-label="New autocomplete header"
                 className="h-7 flex-1 rounded-md border border-zinc-300 bg-white px-2 outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
               />
-              <Button size="sm" onClick={add} disabled={draft.trim() === ''}>
-                Add
+              <Button size="sm" aria-label="Add autocomplete header" onClick={add} disabled={draft.trim() === ''}>
+                {t('add')}
               </Button>
             </div>
             {customHeaderNames.length > 0 && (
@@ -79,15 +79,10 @@ export function PreferencesPanel({
           </div>
 
           <p className="text-zinc-500">
-            Keyboard shortcuts (Alt+Shift+H / Alt+Shift+P) can be changed at{' '}
-            <code>chrome://extensions/shortcuts</code>.
+            {t('shortcutsHint')} <code>chrome://extensions/shortcuts</code>.
           </p>
 
-          <p className="text-zinc-500">
-            {incognitoAllowed
-              ? t(locale, 'incognitoAllowed')
-              : t(locale, 'incognitoBlocked')}
-          </p>
+          {incognitoAllowed && <p className="text-zinc-500">{t('incognitoAllowed')}</p>}
         </div>
       )}
     </section>

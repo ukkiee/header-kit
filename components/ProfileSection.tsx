@@ -7,22 +7,24 @@ import {
   type FilterKind,
   type Profile,
 } from '@/core/schema';
+import type { MessageKey } from '@/core/i18n';
 import type { TabPickerOptions } from '@/storage/tabs';
 import { Button } from './Button';
 import { FilterRow } from './FilterRow';
 import { HeaderRow } from './HeaderRow';
+import { useT } from './i18n-context';
 
-const FILTER_KINDS: Array<{ kind: FilterKind; label: string }> = [
-  { kind: 'url', label: 'URL filter' },
-  { kind: 'exclude-url', label: 'Exclude URL filter' },
-  { kind: 'resource-type', label: 'Resource type filter' },
-  { kind: 'request-method', label: 'Request method filter' },
-  { kind: 'initiator-domain', label: 'Initiator domain filter' },
-  { kind: 'tab', label: 'Tab filter' },
-  { kind: 'tab-group', label: 'Tab group filter' },
-  { kind: 'window', label: 'Window filter' },
-  { kind: 'tab-domain', label: 'Tab domain filter' },
-  { kind: 'time', label: 'Time filter (auto-off)' },
+const FILTER_KINDS: Array<{ kind: FilterKind; labelKey: MessageKey }> = [
+  { kind: 'url', labelKey: 'filterUrl' },
+  { kind: 'exclude-url', labelKey: 'filterExcludeUrl' },
+  { kind: 'resource-type', labelKey: 'filterResourceType' },
+  { kind: 'request-method', labelKey: 'filterRequestMethod' },
+  { kind: 'initiator-domain', labelKey: 'filterInitiatorDomain' },
+  { kind: 'tab', labelKey: 'filterTab' },
+  { kind: 'tab-group', labelKey: 'filterTabGroup' },
+  { kind: 'window', labelKey: 'filterWindow' },
+  { kind: 'tab-domain', labelKey: 'filterTabDomain' },
+  { kind: 'time', labelKey: 'filterTime' },
 ];
 
 export interface ProfileSectionProps {
@@ -46,6 +48,7 @@ export function ProfileSection({
   materialized,
   userHeaders,
 }: ProfileSectionProps) {
+  const t = useT();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const confirmTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(confirmTimer.current), []);
@@ -146,7 +149,7 @@ export function ProfileSection({
             })
           }
         >
-          + Request header
+          + {t('requestHeader')}
         </Button>
         <Button
           variant="ghost"
@@ -159,7 +162,7 @@ export function ProfileSection({
             })
           }
         >
-          + Response header
+          + {t('responseHeader')}
         </Button>
         <select
           value=""
@@ -172,10 +175,10 @@ export function ProfileSection({
           }}
           className="h-7 cursor-pointer rounded-md bg-transparent px-1 text-xs text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
         >
-          <option value="">+ Filter</option>
-          {FILTER_KINDS.map(({ kind, label }) => (
+          <option value="">+ {t('addFilterMenu')}</option>
+          {FILTER_KINDS.map(({ kind, labelKey }) => (
             <option key={kind} value={kind}>
-              {label}
+              {t(labelKey)}
             </option>
           ))}
         </select>

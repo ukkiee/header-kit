@@ -32,18 +32,17 @@ function Interactive({ incognitoAllowed }: { incognitoAllowed: boolean }) {
         customHeaderNames={names}
         onCommand={onCommand}
         incognitoAllowed={incognitoAllowed}
-        locale="en"
       />
     </div>
   );
 }
 
 export const IncognitoBlocked: Story = {
-  args: { customHeaderNames: [], onCommand: () => {}, incognitoAllowed: false, locale: 'en' },
+  args: { customHeaderNames: [], onCommand: () => {}, incognitoAllowed: false },
   render: () => <Interactive incognitoAllowed={false} />,
 };
 
 export const IncognitoAllowed: Story = {
-  args: { customHeaderNames: [], onCommand: () => {}, incognitoAllowed: true, locale: 'en' },
+  args: { customHeaderNames: [], onCommand: () => {}, incognitoAllowed: true },
   render: () => <Interactive incognitoAllowed={true} />,
 };
