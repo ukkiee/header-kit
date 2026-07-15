@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Command } from '@/core/commands';
 import { Button } from '@/ui/Button';
+import { Input } from '@/ui/Input';
 import { useT } from './i18n-context';
 
 export interface PreferencesPanelProps {
@@ -41,8 +42,8 @@ export function PreferencesPanel({
           <div className="flex flex-col gap-1">
             <span className="font-medium">{t('autocompleteHeaders')}</span>
             <div className="flex gap-1">
-              <input
-                type="text"
+              <Input
+                size="sm"
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => {
@@ -50,7 +51,7 @@ export function PreferencesPanel({
                 }}
                 placeholder="X-My-Header"
                 aria-label="New autocomplete header"
-                className="h-7 flex-1 rounded-md border border-zinc-300 bg-white px-2 outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
+                className="flex-1"
               />
               <Button size="sm" aria-label="Add autocomplete header" onClick={add} disabled={draft.trim() === ''}>
                 {t('add')}

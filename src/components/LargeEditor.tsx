@@ -1,6 +1,7 @@
 import { Dialog } from '@base-ui-components/react/dialog';
 import { useState } from 'react';
 import { Button } from '@/ui/Button';
+import { TextArea } from '@/ui/Input';
 import { useT } from './i18n-context';
 
 export interface LargeEditorProps {
@@ -36,12 +37,12 @@ export function LargeEditor({ title, value, onCommit, triggerLabel = 'Expand' }:
         <Dialog.Backdrop className="fixed inset-0 bg-black/40" />
         <Dialog.Popup className="fixed left-1/2 top-1/2 flex w-[min(90vw,640px)] -translate-x-1/2 -translate-y-1/2 flex-col gap-3 rounded-lg bg-white p-4 shadow-xl dark:bg-zinc-900">
           <Dialog.Title className="text-sm font-semibold">{title}</Dialog.Title>
-          <textarea
+          <TextArea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             aria-label={title}
             rows={12}
-            className="rounded-md border border-zinc-300 bg-white p-2 font-mono text-sm outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-950"
+            font="mono"
           />
           <div className="flex justify-end gap-2">
             <Dialog.Close render={<Button variant="ghost" size="sm">{t('cancel')}</Button>} />

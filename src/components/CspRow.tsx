@@ -1,5 +1,6 @@
 import type { CspModification, Modification } from '@/core/schema';
 import { Button } from '@/ui/Button';
+import { Input } from '@/ui/Input';
 import { useT } from './i18n-context';
 
 export interface CspRowProps {
@@ -36,8 +37,8 @@ export function CspRow({ modification, onChange, onRemove }: CspRowProps) {
       <div className="flex flex-col gap-1 pl-6">
         {modification.directives.map((directive, i) => (
           <div key={i} className="flex items-center gap-1">
-            <input
-              type="text"
+            <Input
+              size="sm"
               value={directive.name}
               onChange={(e) =>
                 setDirectives(
@@ -48,10 +49,11 @@ export function CspRow({ modification, onChange, onRemove }: CspRowProps) {
               }
               placeholder="default-src"
               aria-label="CSP directive name"
-              className="h-7 w-32 rounded-md border border-zinc-300 bg-white px-2 text-xs outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
+              className="w-32"
             />
-            <input
-              type="text"
+            <Input
+              size="sm"
+              font="mono"
               value={directive.value}
               onChange={(e) =>
                 setDirectives(
@@ -62,7 +64,7 @@ export function CspRow({ modification, onChange, onRemove }: CspRowProps) {
               }
               placeholder="'self'"
               aria-label="CSP directive value"
-              className="h-7 flex-1 rounded-md border border-zinc-300 bg-white px-2 font-mono text-xs outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
+              className="flex-1"
             />
             <Button
               variant="danger"

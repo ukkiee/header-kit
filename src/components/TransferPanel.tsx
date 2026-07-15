@@ -3,6 +3,7 @@ import type { Command } from '@/core/commands';
 import type { Profile, StoredState } from '@/core/schema';
 import { exportProfiles, parseImport, serializeExport } from '@/core/transfer';
 import { Button } from '@/ui/Button';
+import { TextArea } from '@/ui/Input';
 import { useT } from './i18n-context';
 
 export interface TransferPanelProps {
@@ -116,13 +117,14 @@ export function TransferPanel({ state, onCommand, download = browserDownload }: 
 
       {mode === 'import' && (
         <div className="flex flex-col gap-1.5">
-          <textarea
+          <TextArea
             value={importText}
             onChange={(e) => setImportText(e.target.value)}
             placeholder={t('pasteExportHere')}
             aria-label="Import JSON"
             rows={5}
-            className="rounded-md border border-zinc-300 bg-white p-2 font-mono text-xs outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
+            font="mono"
+            size="sm"
           />
           <input
             type="file"

@@ -4,6 +4,8 @@ import { ALL_RESOURCE_TYPES, REQUEST_METHODS } from '@/core/rules';
 import type { TabPickerOptions } from '@/platform/tabs';
 import { Button } from '@/ui/Button';
 import { Chip } from '@/ui/Chip';
+import { Input, type InputProps } from '@/ui/Input';
+import { Select } from '@/ui/Select';
 
 /**
  * 패턴류 입력은 로컬 초안으로 편집하고 blur/Enter에서만 커밋한다 —
@@ -14,10 +16,7 @@ function DraftInput({
   value,
   onCommit,
   ...props
-}: { value: string; onCommit: (next: string) => void } & Omit<
-  React.InputHTMLAttributes<HTMLInputElement>,
-  'value' | 'onChange'
->) {
+}: { value: string; onCommit: (next: string) => void } & Omit<InputProps, 'value' | 'onChange'>) {
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
 
@@ -26,8 +25,7 @@ function DraftInput({
   };
 
   return (
-    <input
-      type="text"
+    <Input
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
@@ -86,11 +84,13 @@ function PickerSelect({
 }) {
   const known = options.some((o) => o.value === value);
   return (
-    <select
+    <Select
+      variant="bordered"
+      size="sm"
       value={value}
       aria-label={ariaLabel}
       onChange={(e) => onSelect(Number(e.target.value))}
-      className="h-7 min-w-0 flex-1 cursor-pointer rounded-md border border-zinc-300 bg-white px-1 text-xs outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
+      className="min-w-0 flex-1"
     >
       <option value={-1} disabled>
         {placeholder}
@@ -103,7 +103,7 @@ function PickerSelect({
           {o.label}
         </option>
       ))}
-    </select>
+    </Select>
   );
 }
 
@@ -155,7 +155,7 @@ function FilterEditor({
             onCommit={(domain) => onChange({ ...filter, domain })}
             placeholder="example.com"
             aria-label="Tab domain"
-            className="h-7 rounded-md border border-zinc-300 bg-white px-2 text-xs outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
+            size="sm"
           />
           <span className="text-[10px] text-zinc-400">
             Applies to every request from tabs on this domain — third-party included.
@@ -165,12 +165,12 @@ function FilterEditor({
     case 'time':
       return (
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <input
+          <Input
             type="datetime-local"
+            size="sm"
             value={epochToLocalInput(filter.expiresAt)}
             onChange={(e) => onChange({ ...filter, expiresAt: localInputToEpoch(e.target.value) })}
             aria-label="Expires at"
-            className="h-7 rounded-md border border-zinc-300 bg-white px-2 text-xs outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
           />
           <span className="text-[10px] text-zinc-400">
             The profile turns off automatically at this time.
@@ -185,7 +185,9 @@ function FilterEditor({
           onCommit={(pattern) => onChange({ ...filter, pattern })}
           placeholder="regex pattern"
           aria-label={`${KIND_LABELS[filter.kind]} pattern`}
-          className="h-7 min-w-0 flex-1 rounded-md border border-zinc-300 bg-white px-2 font-mono text-xs outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
+          size="sm"
+          font="mono"
+          className="min-w-0 flex-1"
         />
       );
     case 'resource-type':
@@ -226,7 +228,7 @@ function FilterEditor({
             onCommit={(domain) => onChange({ ...filter, domain })}
             placeholder="example.com"
             aria-label="Initiator domain"
-            className="h-7 rounded-md border border-zinc-300 bg-white px-2 text-xs outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
+            size="sm"
           />
           <span className="text-[10px] text-zinc-400">
             Matches the request&apos;s origin — not the tab&apos;s domain.

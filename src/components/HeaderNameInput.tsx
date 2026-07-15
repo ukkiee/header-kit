@@ -1,5 +1,6 @@
 import { useId, useState } from 'react';
 import { suggestHeaderNames } from '@/core/autocomplete';
+import { Input } from '@/ui/Input';
 import { useT } from './i18n-context';
 
 export interface HeaderNameInputProps {
@@ -18,8 +19,7 @@ export function HeaderNameInput({ value, onChange, userHeaders, className }: Hea
 
   return (
     <>
-      <input
-        type="text"
+      <Input
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onFocus={() => setFocused(true)}

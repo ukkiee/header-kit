@@ -13,6 +13,8 @@ import {
 import type { MessageKey } from '@/core/i18n';
 import type { TabPickerOptions } from '@/platform/tabs';
 import { Button } from '@/ui/Button';
+import { Input } from '@/ui/Input';
+import { Select } from '@/ui/Select';
 import { CspRow } from './CspRow';
 import { FilterRow } from './FilterRow';
 import { HeaderRow } from './HeaderRow';
@@ -79,13 +81,13 @@ export function ProfileSection({
           aria-label="Profile name"
           className="h-8 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 text-sm font-medium outline-none focus:border-blue-500"
         />
-        <input
-          type="text"
+        <Input
+          align="center"
           value={profile.shortLabel}
           onChange={(e) => updateMeta({ shortLabel: e.target.value.slice(0, 2) })}
           aria-label="Badge label"
           maxLength={2}
-          className="h-8 w-10 rounded-md border border-zinc-300 bg-white px-1 text-center text-xs outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
+          className="w-10"
         />
         <Switch.Root
           checked={profile.active}
@@ -177,7 +179,9 @@ export function ProfileSection({
         >
           + {t('responseHeader')}
         </Button>
-        <select
+        <Select
+          variant="ghost"
+          size="sm"
           value=""
           aria-label="Add modification"
           onChange={(e) => {
@@ -190,15 +194,16 @@ export function ProfileSection({
               });
             }
           }}
-          className="h-7 cursor-pointer rounded-md bg-transparent px-1 text-xs text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
         >
           <option value="">+ {t('moreModification')}</option>
           <option value="cookie">{t('modCookie')}</option>
           <option value="set-cookie">{t('modSetCookie')}</option>
           <option value="csp">{t('modCsp')}</option>
           <option value="redirect">{t('modRedirect')}</option>
-        </select>
-        <select
+        </Select>
+        <Select
+          variant="ghost"
+          size="sm"
           value=""
           aria-label="Add filter"
           onChange={(e) => {
@@ -207,7 +212,6 @@ export function ProfileSection({
               onCommand({ type: 'add-filter', profileId: profile.id, filter: createFilter(kind) });
             }
           }}
-          className="h-7 cursor-pointer rounded-md bg-transparent px-1 text-xs text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
         >
           <option value="">+ {t('addFilterMenu')}</option>
           {FILTER_KINDS.map(({ kind, labelKey }) => (
@@ -215,7 +219,7 @@ export function ProfileSection({
               {t(labelKey)}
             </option>
           ))}
-        </select>
+        </Select>
         <span className="flex-1" />
         <Button
           variant="ghost"

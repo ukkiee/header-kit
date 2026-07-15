@@ -3,6 +3,8 @@ import { isRequestAppendAllowed } from '@/core/rules';
 import type { Modification } from '@/core/schema';
 import { Button } from '@/ui/Button';
 import { Chip } from '@/ui/Chip';
+import { Input } from '@/ui/Input';
+import { Select } from '@/ui/Select';
 import { HeaderNameInput } from './HeaderNameInput';
 import { useT } from './i18n-context';
 import { LargeEditor } from './LargeEditor';
@@ -63,15 +65,16 @@ export function HeaderRow({
           className="size-4 accent-blue-600"
         />
         {isTogglableTarget ? (
-          <select
+          <Select
+            variant="bordered"
+            size="md"
             value={modification.kind}
             onChange={(e) => onChange({ ...modification, kind: e.target.value } as Modification)}
             aria-label="Header target"
-            className="h-8 cursor-pointer rounded-md border border-zinc-300 bg-white px-1 text-xs outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
           >
             <option value="request-header">{t('requestHeaderShort')}</option>
             <option value="response-header">{t('responseHeaderShort')}</option>
-          </select>
+          </Select>
         ) : (
           <span className="w-14 shrink-0 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
             {label}
@@ -82,16 +85,15 @@ export function HeaderRow({
             value={nameValue}
             onChange={setName}
             userHeaders={userHeaders}
-            className="h-8 w-32 rounded-md border border-zinc-300 bg-white px-2 text-sm outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
+            className="w-32"
           />
         )}
-        <input
-          type="text"
+        <Input
           value={modification.value}
           onChange={(e) => onChange({ ...modification, value: e.target.value })}
           placeholder={isCookie ? 'value' : t('value')}
           aria-label="Header value"
-          className="h-8 flex-1 rounded-md border border-zinc-300 bg-white px-2 text-sm outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
+          className="flex-1"
         />
         <LargeEditor
           title={`${t('value')} — ${label ?? (nameValue || 'header')}`}
@@ -136,13 +138,14 @@ export function HeaderRow({
             </Chip>
           </>
         )}
-        <input
-          type="text"
+        <Input
+          variant="ghost"
+          size="xs"
           value={modification.comment}
           onChange={(e) => onChange({ ...modification, comment: e.target.value })}
           placeholder={t('comment')}
           aria-label="Comment"
-          className="ml-auto h-6 w-40 rounded border border-transparent bg-transparent px-1 text-[11px] text-zinc-500 outline-none focus:border-zinc-300 dark:focus:border-zinc-700"
+          className="ml-auto w-40 text-zinc-500"
         />
       </div>
 

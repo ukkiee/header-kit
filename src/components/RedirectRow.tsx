@@ -1,5 +1,6 @@
 import type { Modification, RedirectModification } from '@/core/schema';
 import { Button } from '@/ui/Button';
+import { Input } from '@/ui/Input';
 import { useT } from './i18n-context';
 
 export interface RedirectRowProps {
@@ -24,22 +25,22 @@ export function RedirectRow({ modification, onChange, onRemove }: RedirectRowPro
         <span className="w-14 shrink-0 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
           Redirect
         </span>
-        <input
-          type="text"
+        <Input
+          font="mono"
           value={modification.pattern}
           onChange={(e) => onChange({ ...modification, pattern: e.target.value })}
           placeholder="^https://prod\\.example\\.com/(.*)"
           aria-label="Redirect pattern"
-          className="h-8 flex-1 rounded-md border border-zinc-300 bg-white px-2 font-mono text-xs outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
+          className="flex-1"
         />
         <span className="text-xs text-zinc-400">→</span>
-        <input
-          type="text"
+        <Input
+          font="mono"
           value={modification.substitution}
           onChange={(e) => onChange({ ...modification, substitution: e.target.value })}
           placeholder="http://localhost:3000/\\1"
           aria-label="Redirect substitution"
-          className="h-8 flex-1 rounded-md border border-zinc-300 bg-white px-2 font-mono text-xs outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
+          className="flex-1"
         />
         <Button variant="danger" size="sm" onClick={onRemove} aria-label="Remove modification">
           ✕
