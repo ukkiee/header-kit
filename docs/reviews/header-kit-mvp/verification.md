@@ -1,10 +1,10 @@
 # Verification — header-kit-mvp
 
 전체 브랜치를 릴리스하기 전, HEAD에서 검증 스위트 전체를 실행한 결과.
-(release 게이트 r1의 RL-1~4 반영 후 재검증.)
+(release 게이트 r1의 RL-1~4 + r2의 RL2-1 반영 후 재검증.)
 
-- **Reviewed SHA**: `417ce8c51230dc7704b211d7918fa767c804285a`
-- **Reviewed tree**: `0f2077798dd21c5783c784f4d2cca3278a9f2e80`
+- **Reviewed SHA**: `999640701a7e32ee53c4df1a0f3dc6ca6981b672`
+- **Reviewed tree**: `a1b4c4d8c2c2fcf2a8b5d35926e83e5449ba813b`
 - **Date**: 2026-07-15
 - **Toolchain**: Bun 1.3.11, Node 24.14.1, WXT 0.20.27, Chromium (Playwright)
 
