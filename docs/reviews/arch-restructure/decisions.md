@@ -13,3 +13,9 @@ DEFER — PanelSection이 티켓 05의 controlled CollapsiblePanel(open/onOpenCh
 
 ### code-review 08~09 (behavior-adjacent tail, since 5f804c0)
 슬라이스 09 배선 byte-faithful(발견 0). 슬라이스 08 accept·수정(commit 544c54a): url/exclude aria-label을 영어 불변으로 복원(ko 결합 회귀), background executor forward 참조 제거, 부트스트랩 테스트 2개(toggle-pause·expiry) 추가. BackgroundDeps 크기(19)·FilterEditorProps export는 수용(응집 capability set·정상 모듈 경계).
+
+### 이연 항목 해소 (2026-07-15)
+- controlled CollapsiblePanel (05 defer) → `54376a9`. Backup/Prefs 삼중 중복 흡수, Transfer는 PanelSection 유지.
+- schema.ts model/persist 분리 (map seam) → `907c49d`. barrel로 import 경로 불변.
+- CompileWarning → compile-warnings.ts 추출 (map seam) → `9151728`.
+남은 non-goal(ProfileSection→ProfileEditor 리네임, tabs 집계 core 이관)은 cosmetic — 미착수.
