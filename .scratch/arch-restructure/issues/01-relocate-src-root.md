@@ -1,6 +1,6 @@
 # 01 — 순수 이동: src/ 루트로 재배치 (워킹 스켈레톤)
 
-Status: ready-for-agent
+Status: done
 Blocked by: None - can start immediately
 
 ## Parent
@@ -36,3 +36,12 @@ Blocked by: None - can start immediately
 None - can start immediately. 다른 모든 슬라이스의 기반.
 
 ## Comments
+
+**2026-07-15 구현 완료** (commit `00df612` 이동 + `b8a5014` 플레이크 완화)
+
+- `git mv`로 67개 소스 파일을 `src/*`로 순수 이동(R100), `core/ storage/ components/ entrypoints/` 폴더명 유지.
+- 배선: `wxt.config.ts` `srcDir:'src'`(→ `.wxt` alias `../src` 자동 재생성, 미커밋), `vitest.config.ts` `include:['src/**/*.test.ts?(x)']`+`resolve.alias @,~→./src`, `.storybook/main.ts` glob+alias `../src`, `preview.ts` css 잠정 `../src/entrypoints/popup/style.css`(확정은 07). main/background import·tsconfig·package 무변경.
+- **검증**: tsc 0 / **test 151·19 (baseline 동일, vacuous 아님)** / build / **smoke 48/48 ×3 연속** / storybook 전부 green. diff = 순수 rename + 배선만(0 소스 diff).
+- **알려진 플레이크 해소**: 부하 시 리컴파일→세션규칙 수렴이 5s를 넘겨 smoke 라인 602(`pollSessionRuleCount(sw,1)`)가 count 0 오탐. 핸드오프 권고대로 폴 상한 5s→15s 상향(별도 커밋). 계통적 지연 아님 근거: 같은 빌드에서 앞선 15회 동일 폴이 5s 내 성공.
+- **코드리뷰**(`/code-review` since 5152e67): 하드 위반 0. 판단성 발견(미사용 `~` alias=WXT 패리티 의도적 유지, src 3중 하드코딩=툴링 경계세 수용, smoke 마스킹 caveat=15회 성공 근거로 해소) 모두 의식적 수용, 코드 변경 없음.
+- 프론티어 이동: **02·03** unblocked.
