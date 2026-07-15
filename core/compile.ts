@@ -265,7 +265,7 @@ function emitModification(
   }
 
   const isRequest = modification.kind === 'request-header';
-  const headerInfo = resolveHeaderInfo(header, modification, isRequest, profileId, emitter);
+  const headerInfo = resolveHeaderInfo(modification, profileId, emitter);
 
   for (const join of compiled.regexJoins) {
     emitRule(
@@ -287,12 +287,12 @@ function emitModification(
 
 /** target/mode/emptyMeans를 DNR HeaderInfo 연산으로 변환한다. */
 function resolveHeaderInfo(
-  header: string,
   modification: Modification,
-  isRequest: boolean,
   profileId: string,
   emitter: Emitter,
 ): HeaderInfo {
+  const header = modification.name.trim();
+  const isRequest = modification.kind === 'request-header';
   // 값은 템플릿 그대로, Placeholder가 있으면 실체화 값을 소비한다 (방어선 보증).
   const value = hasPlaceholders(modification.value)
     ? emitter.materialized[modification.id]!
@@ -417,8 +417,9 @@ export function compile(profiles: Profile[], env: CompileEnv): CompileResult {
         emitter,
       );
       // 겹침 경고는 같은 target 안에서만 의미가 있으므로 target을 키에 포함한다.
-      const headerKey = `${modification.kind}:${modification.name.trim().toLowerCase()}`;
-      if (!headerKey.endsWith(':')) {
+      const name = modification.name.trim().toLowerCase();
+      if (name !== '') {
+        const headerKey = `${modification.kind}:${name}`;
         const users = headerUse.get(headerKey) ?? [];
         if (!users.includes(profile.id)) users.push(profile.id);
         headerUse.set(headerKey, users);

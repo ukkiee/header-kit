@@ -29,6 +29,17 @@ export function HeaderRow({ modification, onChange, onRemove, materializedValue 
 
   const setKind = (kind: Modification['kind']) => onChange({ ...modification, kind });
 
+  // 이름을 바꿀 때, 요청 헤더 append가 허용 목록 밖으로 벗어나면 mode를 override로
+  // 되돌린다 — append 칩이 숨겨진 채 stale append 상태가 남지 않도록.
+  const setName = (name: string) => {
+    const stillAppendable = modification.kind !== 'request-header' || isRequestAppendAllowed(name);
+    onChange({
+      ...modification,
+      name,
+      mode: modification.mode === 'append' && !stillAppendable ? 'override' : modification.mode,
+    });
+  };
+
   return (
     <div className="flex flex-col gap-1 rounded-md border border-transparent px-1 py-1 hover:border-zinc-200 dark:hover:border-zinc-800">
       <div className="flex items-center gap-2">
@@ -51,7 +62,7 @@ export function HeaderRow({ modification, onChange, onRemove, materializedValue 
         <input
           type="text"
           value={modification.name}
-          onChange={(e) => onChange({ ...modification, name: e.target.value })}
+          onChange={(e) => setName(e.target.value)}
           placeholder="Header name"
           aria-label="Header name"
           className="h-8 w-32 rounded-md border border-zinc-300 bg-white px-2 text-sm outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900"

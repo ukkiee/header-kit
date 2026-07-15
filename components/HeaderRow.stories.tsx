@@ -83,3 +83,60 @@ export const ResponseHeader: Story = {
   },
   render: (args) => <InteractiveHeaderRow initial={args.modification} />,
 };
+
+// 허용 목록 헤더(Accept) — Append 칩이 노출된다.
+export const AppendAllowedRequest: Story = {
+  args: {
+    modification: {
+      kind: 'request-header',
+      id: 'm5',
+      name: 'Accept',
+      value: 'application/json',
+      mode: 'append',
+      emptyMeans: 'remove',
+      comment: '',
+      enabled: true,
+    },
+    onChange: () => {},
+    onRemove: () => {},
+  },
+  render: (args) => <InteractiveHeaderRow initial={args.modification} />,
+};
+
+// 허용 목록 밖 요청 헤더 — Append 칩이 숨겨진다.
+export const AppendHiddenRequest: Story = {
+  args: {
+    modification: {
+      kind: 'request-header',
+      id: 'm6',
+      name: 'X-Custom-Header',
+      value: 'v',
+      mode: 'override',
+      emptyMeans: 'remove',
+      comment: '',
+      enabled: true,
+    },
+    onChange: () => {},
+    onRemove: () => {},
+  },
+  render: (args) => <InteractiveHeaderRow initial={args.modification} />,
+};
+
+// 빈 값 — remove vs send-empty 칩이 노출된다.
+export const EmptyValueToggle: Story = {
+  args: {
+    modification: {
+      kind: 'request-header',
+      id: 'm7',
+      name: 'X-Maybe-Gone',
+      value: '',
+      mode: 'override',
+      emptyMeans: 'remove',
+      comment: '',
+      enabled: true,
+    },
+    onChange: () => {},
+    onRemove: () => {},
+  },
+  render: (args) => <InteractiveHeaderRow initial={args.modification} />,
+};
