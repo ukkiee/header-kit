@@ -89,7 +89,7 @@ try {
             shortLabel: 'S',
             color: '#2563eb',
             modifications: [
-              { kind: 'request-header', id: 'm1', name: 'X-HeaderKit-Smoke', value: 'ok', enabled: true },
+              { kind: 'request-header', id: 'm1', name: 'X-HeaderKit-Smoke', value: 'ok', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
             ],
           },
         ],
@@ -226,7 +226,7 @@ try {
             shortLabel: 'T',
             color: '#d97706',
             modifications: [
-              { kind: 'request-header', id: 't1', name: 'X-Conf', value: 'top-wins', enabled: true },
+              { kind: 'request-header', id: 't1', name: 'X-Conf', value: 'top-wins', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
             ],
           },
           {
@@ -236,7 +236,7 @@ try {
             shortLabel: 'B',
             color: '#16a34a',
             modifications: [
-              { kind: 'request-header', id: 'b1', name: 'X-Conf', value: 'bottom', enabled: true },
+              { kind: 'request-header', id: 'b1', name: 'X-Conf', value: 'bottom', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
             ],
           },
         ],
@@ -297,7 +297,7 @@ try {
   // E1: URL Filter가 적용 범위를 좁힌다
   await seedProfiles([
     baseProfile('p-url', 'UrlF',
-      [{ kind: 'request-header', id: 'm1', name: 'X-F5', value: 'on', enabled: true }],
+      [{ kind: 'request-header', id: 'm1', name: 'X-F5', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
       [{ kind: 'url', id: 'f1', enabled: true, pattern: 'tagged' }]),
   ]);
   await pollSessionRuleCount(sw, 1);
@@ -309,10 +309,10 @@ try {
   // E2: Exclude URL Filter + 하향 전파 — 아래 Profile의 수정까지 해당 URL에서 차단
   await seedProfiles([
     baseProfile('p-top', 'Top',
-      [{ kind: 'request-header', id: 't1', name: 'X-Top', value: '1', enabled: true }],
+      [{ kind: 'request-header', id: 't1', name: 'X-Top', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
       [{ kind: 'exclude-url', id: 'f1', enabled: true, pattern: 'blocked' }]),
     baseProfile('p-bottom', 'Bot',
-      [{ kind: 'request-header', id: 'b1', name: 'X-Bottom', value: '1', enabled: true }],
+      [{ kind: 'request-header', id: 'b1', name: 'X-Bottom', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
       []),
   ]);
   await pollSessionRuleCount(sw, 3); // allow 1 + modify 2
@@ -326,7 +326,7 @@ try {
   // E3: Request Method Filter
   await seedProfiles([
     baseProfile('p-method', 'Meth',
-      [{ kind: 'request-header', id: 'm1', name: 'X-Post-Only', value: 'on', enabled: true }],
+      [{ kind: 'request-header', id: 'm1', name: 'X-Post-Only', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
       [{ kind: 'request-method', id: 'f1', enabled: true, methods: ['post'] }]),
   ]);
   await pollSessionRuleCount(sw, 1);
@@ -338,7 +338,7 @@ try {
   // E5: Resource Type Filter — main_frame 내비게이션에만 적용, XHR 제외
   await seedProfiles([
     baseProfile('p-rt', 'Rt',
-      [{ kind: 'request-header', id: 'm1', name: 'X-Doc-Only', value: 'on', enabled: true }],
+      [{ kind: 'request-header', id: 'm1', name: 'X-Doc-Only', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
       [{ kind: 'resource-type', id: 'f1', enabled: true, resourceTypes: ['main_frame'] }]),
   ]);
   await pollSessionRuleCount(sw, 1);
@@ -353,7 +353,7 @@ try {
   // E6: Initiator Domain Filter — 요청 출처가 매칭될 때만 적용
   const idProfile = (domain) => [
     baseProfile('p-id', 'Id',
-      [{ kind: 'request-header', id: 'm1', name: 'X-From-Local', value: 'on', enabled: true }],
+      [{ kind: 'request-header', id: 'm1', name: 'X-From-Local', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
       [{ kind: 'initiator-domain', id: 'f1', enabled: true, domain }]),
   ];
   await seedProfiles(idProfile('127.0.0.1'));
@@ -403,7 +403,7 @@ try {
 
   await seedProfiles([
     baseProfile('p-tab', 'Tab',
-      [{ kind: 'request-header', id: 'm1', name: 'X-Tab-Only', value: 'on', enabled: true }],
+      [{ kind: 'request-header', id: 'm1', name: 'X-Tab-Only', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
       [{ kind: 'tab', id: 'f1', enabled: true, tabId: tabAId }]),
   ]);
   await pollSessionRuleCount(sw, 1);
@@ -421,7 +421,7 @@ try {
   // F2: Tab Domain Filter — 탭의 도메인 기준, 이탈 시 자동 비활성
   await seedProfiles([
     baseProfile('p-td', 'Td',
-      [{ kind: 'request-header', id: 'm1', name: 'X-Tab-Domain', value: 'on', enabled: true }],
+      [{ kind: 'request-header', id: 'm1', name: 'X-Tab-Domain', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
       [{ kind: 'tab-domain', id: 'f1', enabled: true, domain: '127.0.0.1' }]),
   ]);
   await pollSessionRuleCount(sw, 1);
@@ -438,7 +438,7 @@ try {
   await seedProfiles([
     {
       ...baseProfile('p-time', 'Ti',
-        [{ kind: 'request-header', id: 'm1', name: 'X-Timed', value: 'on', enabled: true }],
+        [{ kind: 'request-header', id: 'm1', name: 'X-Timed', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
         [{ kind: 'time', id: 'f1', enabled: true, expiresAt: Date.now() + 1500 }]),
     },
   ]);
@@ -633,8 +633,8 @@ try {
   await seedProfiles([
     baseProfile('p-app', 'AppView',
       [
-        { kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true },
-        { kind: 'request-header', id: 'm2', name: 'X-B', value: '2', enabled: true },
+        { kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+        { kind: 'request-header', id: 'm2', name: 'X-B', value: '2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
       ],
       []),
   ]);
@@ -649,8 +649,8 @@ try {
 
   // J2: 겹침 경고가 요약에 노출된다 (두 활성 Profile이 같은 헤더 수정)
   await seedProfiles([
-    baseProfile('p-x', 'X', [{ kind: 'request-header', id: 'm1', name: 'X-Dup', value: 'a', enabled: true }], []),
-    baseProfile('p-y', 'Y', [{ kind: 'request-header', id: 'm2', name: 'X-Dup', value: 'b', enabled: true }], []),
+    baseProfile('p-x', 'X', [{ kind: 'request-header', id: 'm1', name: 'X-Dup', value: 'a', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }], []),
+    baseProfile('p-y', 'Y', [{ kind: 'request-header', id: 'm2', name: 'X-Dup', value: 'b', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }], []),
   ]);
   await tabApp.reload();
   const overlapShown = await tabApp
@@ -661,7 +661,7 @@ try {
 
   // J3: 대형 편집기로 긴 값을 저장하면 반영된다
   await seedProfiles([
-    baseProfile('p-le', 'LE', [{ kind: 'request-header', id: 'm1', name: 'X-Long', value: 'short', enabled: true }], []),
+    baseProfile('p-le', 'LE', [{ kind: 'request-header', id: 'm1', name: 'X-Long', value: 'short', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }], []),
   ]);
   await tabApp.reload();
   await tabApp.getByRole('button', { name: /open large editor/i }).first().click();
@@ -673,6 +673,55 @@ try {
     return state.profiles[0].modifications[0].value;
   });
   record('J3: 대형 편집기 저장이 값에 반영된다', savedValue === longValue, `len=${savedValue?.length}`);
+
+  // ---------- K. 이슈 02: 헤더 Modification 완성 ----------
+  const hdr = (o) => ({
+    kind: 'request-header',
+    mode: 'override',
+    emptyMeans: 'remove',
+    comment: '',
+    enabled: true,
+    ...o,
+  });
+
+  // K1: Response Header 수정이 실응답에 반영된다
+  await seedProfiles([
+    baseProfile('p-res', 'Res',
+      [hdr({ kind: 'response-header', id: 'm1', name: 'X-Injected-Resp', value: 'yes' })],
+      []),
+  ]);
+  await pollSessionRuleCount(sw, 1);
+  const respHeader = await pageB.evaluate(async () => {
+    const res = await fetch('/headers', { cache: 'no-store' });
+    return res.headers.get('x-injected-resp');
+  });
+  record('K1: Response Header 수정이 실응답에 반영', respHeader === 'yes', `x-injected-resp=${respHeader}`);
+
+  // K2: send-empty는 빈 문자열을, remove는 헤더 자체를 없앤다 (직접 대조)
+  await seedProfiles([
+    baseProfile('p-se', 'Se', [hdr({ id: 'm1', name: 'X-Empty-Test', value: '', emptyMeans: 'send-empty' })], []),
+  ]);
+  await pollSessionRuleCount(sw, 1);
+  const sentEmpty = await fetchEchoHeaders(pageB, '/headers');
+  await seedProfiles([
+    baseProfile('p-rm3', 'Rm', [hdr({ id: 'm1', name: 'X-Empty-Test', value: '', emptyMeans: 'remove' })], []),
+  ]);
+  await new Promise((r) => setTimeout(r, 300));
+  const afterRemove = await fetchEchoHeaders(pageB, '/headers');
+  record('K2: send-empty는 빈 값 전송, remove는 헤더 없음',
+    sentEmpty['x-empty-test'] === '' && afterRemove['x-empty-test'] === undefined,
+    `send-empty="${sentEmpty['x-empty-test']}", remove=${afterRemove['x-empty-test']}`);
+
+  // K3: 허용 목록 요청 헤더의 append가 누적된다
+  await seedProfiles([
+    baseProfile('p-ap', 'Ap',
+      [hdr({ id: 'm1', name: 'Accept-Language', value: 'ko', mode: 'append' })],
+      []),
+  ]);
+  await pollSessionRuleCount(sw, 1);
+  const appended = (await fetchEchoHeaders(pageB, '/headers'))['accept-language'];
+  record('K3: 허용 목록 요청 헤더 append가 기존 값에 누적', /ko/.test(appended ?? '') && (appended ?? '').includes(','),
+    `accept-language=${appended}`);
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

@@ -16,7 +16,7 @@ import type { Modification, StoredState } from './schema';
 import { SCHEMA_VERSION } from './schema';
 
 function modification(id: string, name = 'X-A'): Modification {
-  return { kind: 'request-header', id, name, value: '1', enabled: true };
+  return { kind: 'request-header', id, name, value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' };
 }
 
 function state(): StoredState {

@@ -1,4 +1,5 @@
 import {
+  backfillModification,
   isFilter,
   isModification,
   isRecord,
@@ -54,7 +55,8 @@ function validateProfileEntry(value: unknown, index: number): string[] {
     errors.push(`${label}.modifications: expected array`);
   } else {
     value.modifications.forEach((m, i) => {
-      if (!isModification(m)) {
+      // 구버전 export(신규 필드 없음)도 backfill 후 검증한다.
+      if (!isModification(backfillModification(m))) {
         errors.push(`${label}.modifications[${i}]: invalid modification`);
       }
     });
@@ -163,6 +165,13 @@ export function parseImport(
     return { ok: false, errors };
   }
 
-  const { profiles, notices } = normalizeImportedProfiles(raw.profiles as Profile[], newId);
+  // 검증 통과분을 backfill해 신규 필드를 채운 뒤 정규화한다.
+  const backfilled = (raw.profiles as Profile[]).map((p) => ({
+    ...p,
+    modifications: p.modifications.map(
+      (m) => backfillModification(m) as Profile['modifications'][number],
+    ),
+  }));
+  const { profiles, notices } = normalizeImportedProfiles(backfilled, newId);
   return { ok: true, profiles, notices };
 }

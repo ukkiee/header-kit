@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import type { RequestHeaderModification } from '@/core/schema';
+import type { Modification } from '@/core/schema';
 import { HeaderRow } from './HeaderRow';
 
 const meta = {
@@ -11,8 +11,8 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-function InteractiveHeaderRow({ initial }: { initial: RequestHeaderModification }) {
-  const [modification, setModification] = useState(initial);
+function InteractiveHeaderRow({ initial }: { initial: Modification }) {
+  const [modification, setModification] = useState<Modification>(initial);
   return (
     <HeaderRow
       modification={modification}
@@ -24,7 +24,7 @@ function InteractiveHeaderRow({ initial }: { initial: RequestHeaderModification 
 
 export const Filled: Story = {
   args: {
-    modification: { kind: 'request-header', id: 'm1', name: 'X-Debug', value: 'on', enabled: true },
+    modification: { kind: 'request-header', id: 'm1', name: 'X-Debug', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
     onChange: () => {},
     onRemove: () => {},
   },
@@ -33,7 +33,7 @@ export const Filled: Story = {
 
 export const Empty: Story = {
   args: {
-    modification: { kind: 'request-header', id: 'm2', name: '', value: '', enabled: true },
+    modification: { kind: 'request-header', id: 'm2', name: '', value: '', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
     onChange: () => {},
     onRemove: () => {},
   },
@@ -47,6 +47,9 @@ export const WithPlaceholder: Story = {
       id: 'm3',
       name: 'X-Trace-Id',
       value: 'req-{{uuid}}',
+      mode: 'override',
+      emptyMeans: 'remove',
+      comment: '',
       enabled: true,
     },
     onChange: () => {},
@@ -61,4 +64,22 @@ export const WithPlaceholder: Story = {
       materializedValue={args.materializedValue}
     />
   ),
+};
+
+export const ResponseHeader: Story = {
+  args: {
+    modification: {
+      kind: 'response-header',
+      id: 'm4',
+      name: 'Access-Control-Allow-Origin',
+      value: '*',
+      mode: 'override',
+      emptyMeans: 'remove',
+      comment: 'loosen CORS for local dev',
+      enabled: true,
+    },
+    onChange: () => {},
+    onRemove: () => {},
+  },
+  render: (args) => <InteractiveHeaderRow initial={args.modification} />,
 };

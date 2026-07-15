@@ -3,7 +3,7 @@ import { compile, type TabInfo } from './compile';
 import type { Filter, Modification, Profile } from './schema';
 
 function mod(id: string, name: string): Modification {
-  return { kind: 'request-header', id, name, value: 'v', enabled: true };
+  return { kind: 'request-header', id, name, value: 'v', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' };
 }
 
 function profile(overrides: Partial<Profile> = {}): Profile {

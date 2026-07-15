@@ -4,7 +4,9 @@ import type { Filter, Modification, Profile } from './schema';
 import { UNSET_ID } from './schema';
 import {
   ALL_RESOURCE_TYPES,
+  isRequestAppendAllowed,
   type CompileWarning,
+  type HeaderInfo,
   type NetRule,
   type RequestMethod,
   type ResourceType,
@@ -191,6 +193,7 @@ interface Emitter {
   regexCount: number;
   warned: Set<string>;
   nextId: number;
+  materialized: Record<string, string>;
 }
 
 function emitRule(
@@ -248,47 +251,73 @@ function emitModification(
   priority: number,
   profileId: string,
   compiled: CompiledFilters,
-  materialized: Record<string, string>,
   emitter: Emitter,
 ): void {
-  switch (modification.kind) {
-    case 'request-header': {
-      const header = modification.name.trim();
-      if (header === '') {
-        emitter.warnings.push({
-          code: 'empty-header-name',
-          profileId,
-          modificationId: modification.id,
-          message: 'Header name is empty; the modification was skipped.',
-        });
-        return;
-      }
-      // 값은 템플릿 그대로, Placeholder가 있으면 실체화 값을 소비한다.
-      // non-null 단언은 compile()이 이 함수를 부르기 전에 실행하는
-      // findMissingMaterialization 방어선이 보증한다 (enabled placeholder 누락
-      // 시 Profile 전체가 제외되어 여기 도달하지 않는다).
-      const value = hasPlaceholders(modification.value)
-        ? materialized[modification.id]!
-        : modification.value;
-      for (const join of compiled.regexJoins) {
-        emitRule(
-          emitter,
-          {
-            priority,
-            action: {
-              type: 'modifyHeaders',
-              requestHeaders: [{ header, operation: 'set', value }],
-            },
-            condition: conditionFor(compiled, join),
-          },
-          { profileId, modificationId: modification.id },
-        );
-      }
-      return;
-    }
-    default:
-      modification.kind satisfies never;
+  const header = modification.name.trim();
+  if (header === '') {
+    emitter.warnings.push({
+      code: 'empty-header-name',
+      profileId,
+      modificationId: modification.id,
+      message: 'Header name is empty; the modification was skipped.',
+    });
+    return;
   }
+
+  const isRequest = modification.kind === 'request-header';
+  const headerInfo = resolveHeaderInfo(header, modification, isRequest, profileId, emitter);
+
+  for (const join of compiled.regexJoins) {
+    emitRule(
+      emitter,
+      {
+        priority,
+        action: {
+          type: 'modifyHeaders',
+          ...(isRequest
+            ? { requestHeaders: [headerInfo] }
+            : { responseHeaders: [headerInfo] }),
+        },
+        condition: conditionFor(compiled, join),
+      },
+      { profileId, modificationId: modification.id },
+    );
+  }
+}
+
+/** target/mode/emptyMeans를 DNR HeaderInfo 연산으로 변환한다. */
+function resolveHeaderInfo(
+  header: string,
+  modification: Modification,
+  isRequest: boolean,
+  profileId: string,
+  emitter: Emitter,
+): HeaderInfo {
+  // 값은 템플릿 그대로, Placeholder가 있으면 실체화 값을 소비한다 (방어선 보증).
+  const value = hasPlaceholders(modification.value)
+    ? emitter.materialized[modification.id]!
+    : modification.value;
+
+  // 빈 값의 의미: remove(제거) vs send-empty(빈 문자열 전송).
+  if (value === '' && modification.emptyMeans === 'remove') {
+    return { header, operation: 'remove' };
+  }
+
+  if (modification.mode === 'append') {
+    // 요청 헤더 append는 허용 목록에 있어야만 가능 — 밖이면 set으로 폴백하고 경고.
+    if (isRequest && !isRequestAppendAllowed(header)) {
+      emitter.warnings.push({
+        code: 'append-not-allowed',
+        profileId,
+        modificationId: modification.id,
+        message: `Request header "${header}" cannot be appended; it was set instead.`,
+      });
+      return { header, operation: 'set', value };
+    }
+    return { header, operation: 'append', value };
+  }
+
+  return { header, operation: 'set', value };
 }
 
 /**
@@ -321,6 +350,7 @@ export function compile(profiles: Profile[], env: CompileEnv): CompileResult {
     regexCount: 0,
     warned: new Set(),
     nextId: 1,
+    materialized: env.materialized,
   };
 
   if (env.paused) {
@@ -384,22 +414,21 @@ export function compile(profiles: Profile[], env: CompileEnv): CompileResult {
         base + enabled.length - 1 - index,
         profile.id,
         compiled,
-        env.materialized,
         emitter,
       );
-      if (modification.kind === 'request-header') {
-        const header = modification.name.trim().toLowerCase();
-        if (header !== '') {
-          const users = headerUse.get(header) ?? [];
-          if (!users.includes(profile.id)) users.push(profile.id);
-          headerUse.set(header, users);
-        }
+      // 겹침 경고는 같은 target 안에서만 의미가 있으므로 target을 키에 포함한다.
+      const headerKey = `${modification.kind}:${modification.name.trim().toLowerCase()}`;
+      if (!headerKey.endsWith(':')) {
+        const users = headerUse.get(headerKey) ?? [];
+        if (!users.includes(profile.id)) users.push(profile.id);
+        headerUse.set(headerKey, users);
       }
     });
   }
 
-  for (const [header, profileIds] of headerUse) {
+  for (const [headerKey, profileIds] of headerUse) {
     if (profileIds.length > 1) {
+      const header = headerKey.slice(headerKey.indexOf(':') + 1);
       emitter.warnings.push({
         code: 'header-overlap',
         header,

@@ -21,7 +21,7 @@ const profile: Profile = {
   shortLabel: 'ST',
   color: '#d97706',
   modifications: [
-    { kind: 'request-header', id: 'm1', name: 'Authorization', value: 'Bearer test', enabled: true },
+    { kind: 'request-header', id: 'm1', name: 'Authorization', value: 'Bearer test', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
   ],
   filters: [{ kind: 'url', id: 'f1', enabled: true, pattern: 'api\\.staging\\.example\\.com' }],
 };

@@ -7,17 +7,33 @@ export const SCHEMA_VERSION = 1 as const;
  * 후속 슬라이스는 이 union에 variant를 추가할 뿐, Profile의 공개 계약
  * (ordered modifications 컬렉션)은 바뀌지 않는다.
  */
-export interface RequestHeaderModification {
-  kind: 'request-header';
+/** 기존 값을 통째 대체(override)하거나 뒤에 덧붙인다(append). */
+export type HeaderMode = 'override' | 'append';
+/** 값이 비었을 때의 의미 — 헤더 제거 vs 빈 값 전송. */
+export type EmptyValueMeaning = 'remove' | 'send-empty';
+
+interface HeaderModificationBase {
   id: string;
   /** Header name, e.g. "X-Debug". */
   name: string;
-  /** Value template. Placeholder materialization arrives in a later slice. */
+  /** Value template. Placeholder는 활성화 경계에서 실체화된다. */
   value: string;
+  mode: HeaderMode;
+  /** 값이 빈 문자열일 때의 처리. */
+  emptyMeans: EmptyValueMeaning;
+  comment: string;
   enabled: boolean;
 }
 
-export type Modification = RequestHeaderModification;
+export interface RequestHeaderModification extends HeaderModificationBase {
+  kind: 'request-header';
+}
+
+export interface ResponseHeaderModification extends HeaderModificationBase {
+  kind: 'response-header';
+}
+
+export type Modification = RequestHeaderModification | ResponseHeaderModification;
 
 export type ModificationKind = Modification['kind'];
 
@@ -116,10 +132,27 @@ export function createProfile(
   };
 }
 
+export function createHeaderModification(
+  kind: 'request-header' | 'response-header',
+  id: string = crypto.randomUUID(),
+): Modification {
+  return {
+    kind,
+    id,
+    name: '',
+    value: '',
+    mode: 'override',
+    emptyMeans: 'remove',
+    comment: '',
+    enabled: true,
+  };
+}
+
+/** 기존 호출부 호환용 — Request Header 생성 단축. */
 export function createRequestHeaderModification(
   id: string = crypto.randomUUID(),
 ): RequestHeaderModification {
-  return { kind: 'request-header', id, name: '', value: '', enabled: true };
+  return createHeaderModification('request-header', id) as RequestHeaderModification;
 }
 
 export function createDefaultState(): StoredState {
@@ -138,10 +171,13 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 export function isModification(value: unknown): value is Modification {
   return (
     isRecord(value) &&
-    value.kind === 'request-header' &&
+    (value.kind === 'request-header' || value.kind === 'response-header') &&
     typeof value.id === 'string' &&
     typeof value.name === 'string' &&
     typeof value.value === 'string' &&
+    (value.mode === 'override' || value.mode === 'append') &&
+    (value.emptyMeans === 'remove' || value.emptyMeans === 'send-empty') &&
+    typeof value.comment === 'string' &&
     typeof value.enabled === 'boolean'
   );
 }
@@ -197,6 +233,12 @@ function isProfile(value: unknown): value is Profile {
   );
 }
 
+/** Modification에 이슈 02에서 추가된 필드를 기본값으로 채운다 (SSOT 보호). */
+export function backfillModification(value: unknown): unknown {
+  if (!isRecord(value)) return value;
+  return { mode: 'override', emptyMeans: 'remove', comment: '', ...value };
+}
+
 /**
  * v1 내부 반복 중 추가된 선택 필드를 기본값으로 채운다.
  * 필드 추가가 기존 저장 상태를 전량 거부로 파괴하면 안 된다 (SSOT 보호).
@@ -209,6 +251,9 @@ function backfillProfile(value: unknown): unknown {
     color: PROFILE_COLORS[0],
     filters: [],
     ...value,
+    modifications: Array.isArray(value.modifications)
+      ? value.modifications.map(backfillModification)
+      : value.modifications,
   };
 }
 

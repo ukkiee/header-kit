@@ -4,7 +4,7 @@ import { summarizeCompile } from './summary';
 import type { Modification, Profile } from './schema';
 
 function mod(id: string, name: string, value = 'v'): Modification {
-  return { kind: 'request-header', id, name, value, enabled: true };
+  return { kind: 'request-header', id, name, value, enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' };
 }
 
 function profile(overrides: Partial<Profile> = {}): Profile {

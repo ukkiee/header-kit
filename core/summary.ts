@@ -29,6 +29,7 @@ const WARNING_LABELS: Record<CompileWarning['code'], string> = {
   'regex-too-long': 'URL pattern too long',
   'quota-exceeded': 'Rule limit exceeded',
   'missing-materialization': 'Placeholder not materialized',
+  'append-not-allowed': 'Header cannot be appended',
 };
 
 function toView(warning: CompileWarning): WarningView {

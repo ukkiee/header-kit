@@ -11,7 +11,16 @@ function stubDeps(): MaterializeDeps {
 }
 
 function mod(id: string, value = 'v'): Modification {
-  return { kind: 'request-header', id, name: `X-${id}`, value, enabled: true };
+  return {
+    kind: 'request-header',
+    id,
+    name: `X-${id}`,
+    value,
+    mode: 'override',
+    emptyMeans: 'remove',
+    comment: '',
+    enabled: true,
+  };
 }
 
 function profile(overrides: Partial<Profile> = {}): Profile {

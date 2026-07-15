@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Command } from '@/core/commands';
 import {
   createFilter,
-  createRequestHeaderModification,
+  createHeaderModification,
   type FilterKind,
   type Profile,
 } from '@/core/schema';
@@ -89,29 +89,27 @@ export function ProfileSection({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        {profile.modifications.map((modification) =>
-          modification.kind === 'request-header' ? (
-            <HeaderRow
-              key={modification.id}
-              modification={modification}
-              materializedValue={materialized?.[modification.id]}
-              onChange={(next) =>
-                onCommand({
-                  type: 'update-modification',
-                  profileId: profile.id,
-                  modification: next,
-                })
-              }
-              onRemove={() =>
-                onCommand({
-                  type: 'remove-modification',
-                  profileId: profile.id,
-                  modificationId: modification.id,
-                })
-              }
-            />
-          ) : null,
-        )}
+        {profile.modifications.map((modification) => (
+          <HeaderRow
+            key={modification.id}
+            modification={modification}
+            materializedValue={materialized?.[modification.id]}
+            onChange={(next) =>
+              onCommand({
+                type: 'update-modification',
+                profileId: profile.id,
+                modification: next,
+              })
+            }
+            onRemove={() =>
+              onCommand({
+                type: 'remove-modification',
+                profileId: profile.id,
+                modificationId: modification.id,
+              })
+            }
+          />
+        ))}
       </div>
 
       {profile.filters.length > 0 && (
@@ -140,11 +138,24 @@ export function ProfileSection({
             onCommand({
               type: 'add-modification',
               profileId: profile.id,
-              modification: createRequestHeaderModification(),
+              modification: createHeaderModification('request-header'),
             })
           }
         >
           + Request header
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() =>
+            onCommand({
+              type: 'add-modification',
+              profileId: profile.id,
+              modification: createHeaderModification('response-header'),
+            })
+          }
+        >
+          + Response header
         </Button>
         <select
           value=""

@@ -20,8 +20,8 @@ const sampleProfile: Profile = {
   shortLabel: 'ST',
   color: '#d97706',
   modifications: [
-    { kind: 'request-header', id: 'm1', name: 'Authorization', value: 'Bearer test-token', enabled: true },
-    { kind: 'request-header', id: 'm2', name: 'X-Feature-Flag', value: 'beta', enabled: false },
+    { kind: 'request-header', id: 'm1', name: 'Authorization', value: 'Bearer test-token', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+    { kind: 'request-header', id: 'm2', name: 'X-Feature-Flag', value: 'beta', enabled: false, mode: 'override', emptyMeans: 'remove', comment: '' },
   ],
   filters: [
     { kind: 'url', id: 'f1', enabled: true, pattern: 'api\\.staging\\.example\\.com' },

@@ -13,7 +13,7 @@ describe('parseStoredState', () => {
           active: true,
           shortLabel: 'P',
           color: '#2563eb',
-          modifications: [{ kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true }],
+          modifications: [{ kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
           filters: [
             { kind: 'url', id: 'f1', enabled: true, pattern: 'api\\.example\\.com' },
             { kind: 'resource-type', id: 'f2', enabled: true, resourceTypes: ['xmlhttprequest'] },
@@ -49,7 +49,7 @@ describe('parseStoredState', () => {
           name: 'kept',
           active: true,
           modifications: [
-            { kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true },
+            { kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
           ],
         },
       ],
@@ -82,7 +82,7 @@ describe('parseStoredState', () => {
             active: true,
             shortLabel: 'P',
             color: '#2563eb',
-            modifications: [{ kind: 'request-header', id: 'm1', name: 'X', value: 1, enabled: true }],
+            modifications: [{ kind: 'request-header', id: 'm1', name: 'X', value: 1, enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
           },
         ],
       },
