@@ -1,6 +1,6 @@
 # 08 — (이연·behavior-adjacent) FilterRow 내부 분해 + i18n 수리
 
-Status: ready-for-agent
+Status: done
 Blocked by: 07
 
 ## Parent
@@ -32,3 +32,5 @@ Blocked by: 07
 07 — FilterRow가 `src/features/filters/`로 이동한 뒤.
 
 ## Comments
+
+**2026-07-15 완료** (commit `c8165d1`, 리뷰 반영 `544c54a`). DraftInput→ui/draft-input, PickerSelect+10종 FilterEditor+helper→features/filters/filter-editor, filter-row는 얇은 합성. 가시 문자열(짧은 라벨·placeholder·힌트)을 useT로, en/ko 키 18개 추가(tsc parity 강제). 검증 tsc0/test/build/smoke48(F1a·F2·F3)/storybook. 코드리뷰: url/exclude aria-label을 영어 불변으로 복원(하드코딩 aria 규약, ko 결합 회귀 수정).

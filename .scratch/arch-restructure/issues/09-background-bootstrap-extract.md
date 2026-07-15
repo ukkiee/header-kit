@@ -1,6 +1,6 @@
 # 09 — (이연·behavior-adjacent) background 컴포지션 루트 부트스트랩 추출
 
-Status: ready-for-agent
+Status: done
 Blocked by: 02
 
 ## Parent
@@ -34,3 +34,5 @@ Blocked by: 02
 02 — runtime/platform seam이 존재해야 함. (이연 tail: 07·08 이후 착수 권장.)
 
 ## Comments
+
+**2026-07-15 완료** (commit `b30825e`, 리뷰 반영 `544c54a`). 212줄 배선을 src/runtime/background-bootstrap.ts로 추출(BackgroundDeps 주입), background.ts는 browser 효과 래퍼 + defineBackground(() => bootstrap(realDeps))만. 부트스트랩 단위 테스트 6개(주입 deps, browser 0). 검증 tsc0/test157/build/**smoke48 실 배선 end-to-end**/storybook. 코드리뷰: 배선 byte-faithful 확인, executor forward 참조 제거 + toggle-pause·expiry-alarm 테스트 추가.
