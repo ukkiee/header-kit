@@ -1,9 +1,9 @@
 import { computeBadge } from '@/core/badge';
 import type { Command } from '@/core/commands';
 import { compile, type TabInfo } from '@/core/compile';
-import { createCommandExecutor } from '@/core/executor';
+import { createCommandExecutor } from '@/runtime/executor';
 import { hasExpiredProfiles, nextExpiry } from '@/core/expiry';
-import { createReconciler } from '@/core/reconciler';
+import { createReconciler } from '@/runtime/reconciler';
 import type { NetRule } from '@/core/rules';
 import type { StoredState } from '@/core/schema';
 import { backupPayload } from '@/core/backup';
@@ -14,9 +14,9 @@ import {
   onStateChanged,
   persistState,
   publishSummary,
-} from '@/storage/state';
-import { performBackup } from '@/storage/backupStore';
-import { onTabsChanged, queryTabInfos } from '@/storage/tabs';
+} from '@/platform/stateStore';
+import { performBackup } from '@/platform/backupStore';
+import { onTabsChanged, queryTabInfos } from '@/platform/tabs';
 
 const EXPIRY_ALARM = 'headerkit-expiry';
 

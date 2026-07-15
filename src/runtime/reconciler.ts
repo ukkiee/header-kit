@@ -1,4 +1,4 @@
-import type { CompileResult } from './compile';
+import type { CompileResult } from '@/core/compile';
 
 export interface ReconcilerDeps<S> {
   loadSnapshot: () => Promise<S>;

@@ -16,8 +16,8 @@ import {
   onStateChanged,
   onSummaryChanged,
   sendCommand,
-} from '@/storage/state';
-import { queryTabPickerOptions, type TabPickerOptions } from '@/storage/tabs';
+} from '@/platform/stateStore';
+import { queryTabPickerOptions, type TabPickerOptions } from '@/platform/tabs';
 
 /** popup은 컴팩트, tab 앱은 넓은 레이아웃 — 같은 컴포넌트를 다른 마운트로 쓴다. */
 export type AppSurface = 'popup' | 'tab';

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createCommandExecutor } from './executor';
-import type { StoredState } from './schema';
-import { SCHEMA_VERSION } from './schema';
+import type { StoredState } from '@/core/schema';
+import { SCHEMA_VERSION } from '@/core/schema';
 
 function initialState(): StoredState {
   return {

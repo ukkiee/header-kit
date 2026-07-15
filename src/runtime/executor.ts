@@ -1,5 +1,5 @@
-import { applyCommand, type Command } from './commands';
-import type { StoredState } from './schema';
+import { applyCommand, type Command } from '@/core/commands';
+import type { StoredState } from '@/core/schema';
 
 export interface ExecutorDeps {
   load: () => Promise<StoredState>;

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { decodeSnapshotText, type SnapshotStatus } from '@/core/backup';
 import type { Command } from '@/core/commands';
 import { parseImport } from '@/core/transfer';
-import { listBackupSnapshots, readSyncKV } from '@/storage/backupStore';
+import { listBackupSnapshots, readSyncKV } from '@/platform/backupStore';
 import { Button } from './Button';
 import { useT } from './i18n-context';
 

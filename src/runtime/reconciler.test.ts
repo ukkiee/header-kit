@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { CompileResult } from './compile';
+import type { CompileResult } from '@/core/compile';
 import { createReconciler } from './reconciler';
 
 interface Snapshot {

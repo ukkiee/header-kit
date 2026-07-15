@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Filter } from '@/core/schema';
 import { ALL_RESOURCE_TYPES, REQUEST_METHODS } from '@/core/rules';
-import type { TabPickerOptions } from '@/storage/tabs';
+import type { TabPickerOptions } from '@/platform/tabs';
 import { Button } from './Button';
 
 /**

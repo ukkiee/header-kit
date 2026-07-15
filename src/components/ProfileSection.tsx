@@ -11,7 +11,7 @@ import {
   type Profile,
 } from '@/core/schema';
 import type { MessageKey } from '@/core/i18n';
-import type { TabPickerOptions } from '@/storage/tabs';
+import type { TabPickerOptions } from '@/platform/tabs';
 import { Button } from './Button';
 import { CspRow } from './CspRow';
 import { FilterRow } from './FilterRow';
