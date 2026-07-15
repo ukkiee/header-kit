@@ -6,3 +6,7 @@ R-2 defer — "Design declares thin entrypoints but leaves background orchestrat
 
 ### design r2
 PASS — verdict `approve`, 발견 0건. R-1 수정(증분 App/css 배선) 재검증 완료, R-2는 이연대로 재제기 없음. 설계 게이트 통과 → 이슈 발행 진행.
+
+### code-review 04~06 (DS 체인, since ae5fb6f)
+Standards/Spec 2축. 대부분 수용·수정(commit aa263f2): Select ghost 포커스 outline·Card as·Pill 톤별 text·tokens 문서. forwardRef는 폼 프리미티브 관용으로 reject(유지).
+DEFER — PanelSection이 티켓 05의 controlled CollapsiblePanel(open/onOpenChange 흡수)보다 축소됨. 3패널 게이팅 모델이 달라(show/hide vs mode) 셸만 흡수하는 PanelSection으로 구현, open은 호출자 소유. Standards축이 명명 승인. Backup·Prefs의 show/hide 토글 중복 흡수(controlled 판)는 선택적 후속으로 이연 — 필요 시 별도 슬라이스.

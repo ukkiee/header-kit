@@ -1,6 +1,6 @@
 # 06 — 나머지 얇은 프리미티브 (Checkbox·ToggleSwitch·Pill·KindLabel·NoteText)
 
-Status: ready-for-agent
+Status: done
 Blocked by: 05
 
 ## Parent
@@ -30,3 +30,5 @@ Blocked by: 05
 05 — 같은 feature 파일 순차 수정.
 
 ## Comments
+
+**2026-07-15 완료** (commit `a33f191`, 리뷰 반영 `aa263f2`). Checkbox·ToggleSwitch·Pill·KindLabel·NoteText 신설, 카탈로그된 인라인 문자열 전부 흡수(잔여 0). KindLabel 인라인화로 노출된 RedirectRow 'Redirect' 하드코딩 갭을 기존 키 t('modRedirect')로 수정(카탈로그 무변경). 코드리뷰: Pill text-[10px]을 danger 톤으로(neutral 태그 가독성), tokens accentBg 문서 정정.

@@ -1,6 +1,6 @@
 # 04 — Input + Select recipe 채택
 
-Status: ready-for-agent
+Status: done
 Blocked by: 03
 
 ## Parent
@@ -36,3 +36,5 @@ Blocked by: 03
 03 — tokens.ts + ui/ 레이어 필요.
 
 ## Comments
+
+**2026-07-15 완료** (commit `1f83302`, 리뷰 반영 `aa263f2`). ui/Input(+TextArea)·Select 신설, 16 필드+4 select+2 textarea를 9컴포넌트 채택, HeaderNameInput 내부 Input 소비. fieldSolid/fieldFocus 토큰 소비. 검증 tsc0/test151/build/smoke48/storybook. 코드리뷰: Select ghost 포커스 outline 유지·bordered fieldFocus 재사용으로 수정.

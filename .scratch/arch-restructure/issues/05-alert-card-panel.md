@@ -1,6 +1,6 @@
 # 05 — Alert + Card + CollapsiblePanel
 
-Status: ready-for-agent
+Status: done
 Blocked by: 04
 
 ## Parent
@@ -37,3 +37,6 @@ Blocked by: 04
 04 — Input/Select 채택 이후(같은 feature 파일을 순차 수정해 충돌 회피).
 
 ## Comments
+
+**2026-07-15 완료** (commit `21acfc5`, 리뷰 반영 `aa263f2`). ui/Alert(polymorphic as)·Card(outlined/filled/row, as 추가)·PanelSection 신설. Alert 8곳(StatusSummary 드리프트 정규화 포함)·Card 5곳·PanelSection 3패널 채택. max-w-3xl 셸 마커 유지.
+**설계 편차(사용자 확인 필요)**: 티켓은 controlled `CollapsiblePanel`(open/onOpenChange가 show/hide 흡수)을 명세했으나, 3패널의 게이팅 모델이 달라(Backup/Prefs=show/hide, Transfer=mode) **셸만 흡수하는 `PanelSection`**으로 구현. 구조 중복은 흡수, open 상태는 호출자 소유. Backup·Prefs의 open 토글 중복 흡수는 선택적 후속(controlled 판) — decisions.md 참조.
