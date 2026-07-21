@@ -1,6 +1,22 @@
 @import 'tailwindcss';
 
 /*
+ * dark 변형 — 시스템(prefers-color-scheme) 연동이 기본. 앱은 테마 스위치를 두지
+ * 않는다(ADR 0004 스펙 결정). data-theme은 Storybook·진단 도구가 양 테마를 강제
+ * 렌더할 때만 쓰는 개발용 오버라이드다.
+ */
+@custom-variant dark {
+  @media (prefers-color-scheme: dark) {
+    &:not(:where([data-theme='light'], [data-theme='light'] *)) {
+      @slot;
+    }
+  }
+  &:where([data-theme='dark'], [data-theme='dark'] *) {
+    @slot;
+  }
+}
+
+/*
  * 디자인 시스템 테마 — Tailwind v4 @theme로 앱이 쓰는 색·radius·폰트 토큰을
  * 재정의한다. 컴포넌트는 기존 유틸리티(zinc/blue/rounded)를 그대로 쓰고, 값만
  * 여기서 바뀌므로 전체 UI가 한 곳의 변경으로 리테마된다. cva 프리미티브도 같은
@@ -45,4 +61,25 @@ body:has(> #root > .max-w-3xl) {
 body {
   min-width: 420px;
   font-family: var(--font-sans);
+}
+
+/*
+ * 네이티브 위젯(체크박스·셀렉트·스크롤바·date 입력) 테마 — dark 변형과 같은
+ * 조건(@variant dark = 시스템 + data-theme 오버라이드)을 공유한다. color-scheme은
+ * 상속되므로 [data-theme] 래퍼(Storybook) 안의 위젯도 강제 테마를 따른다.
+ */
+:root,
+[data-theme] {
+  color-scheme: light;
+  @variant dark {
+    color-scheme: dark;
+  }
+}
+
+/* body 배경을 main과 같은 토큰으로 — 탭 앱에서 본문 밖 여백이 어긋나지 않게. */
+body {
+  background-color: var(--color-white);
+  @variant dark {
+    background-color: var(--color-zinc-950);
+  }
 }

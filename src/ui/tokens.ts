@@ -19,3 +19,6 @@ export const ghostInteractive =
  * `accent-blue-600`, ToggleSwitch의 `data-[checked]:bg-blue-600`도 그 토큰을 통해 테마된다.
  */
 export const accentBg = 'bg-blue-600';
+
+/** 앱 캔버스(본문 배경+글자색) — App main / Storybook 프리뷰 래퍼가 공유한다. */
+export const canvas = 'bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100';

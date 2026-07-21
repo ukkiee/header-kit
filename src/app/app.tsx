@@ -13,6 +13,7 @@ import type { Command } from '@/core/commands';
 import { resolveLocale, t, type Locale } from '@/core/i18n';
 import { createProfile, PROFILE_COLORS, type StoredState } from '@/core/schema';
 import type { StatusSummary as StatusSummaryData } from '@/core/summary';
+import { canvas } from '@/ui/tokens';
 import {
   getSummary,
   loadState,
@@ -87,7 +88,7 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
   return (
     <LocaleProvider locale={locale}>
     <main
-      className={`mx-auto flex flex-col gap-3 bg-white p-4 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100 ${
+      className={`mx-auto flex flex-col gap-3 p-4 ${canvas} ${
         surface === 'tab' ? 'min-h-screen w-full max-w-3xl' : ''
       }`}
     >

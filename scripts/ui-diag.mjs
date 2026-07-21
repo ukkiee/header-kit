@@ -79,6 +79,17 @@ try {
   await tab.waitForTimeout(400);
   await tab.screenshot({ path: `${OUT}/diag-3-tabapp.png`, fullPage: true });
   console.log('shot 3: tab app (wide)');
+
+  // 다크 테마 — prefers-color-scheme 에뮬레이션으로 양 표면을 감사한다.
+  await popup.emulateMedia({ colorScheme: 'dark' });
+  await popup.waitForTimeout(200);
+  await popup.screenshot({ path: `${OUT}/diag-4-popup-dark.png`, fullPage: true });
+  console.log('shot 4: popup (dark)');
+
+  await tab.emulateMedia({ colorScheme: 'dark' });
+  await tab.waitForTimeout(200);
+  await tab.screenshot({ path: `${OUT}/diag-5-tabapp-dark.png`, fullPage: true });
+  console.log('shot 5: tab app (dark)');
 } finally {
   await context.close();
 }

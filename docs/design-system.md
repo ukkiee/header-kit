@@ -1,6 +1,6 @@
 # Design System — 참조 디자인 언어 (브랜드 중립)
 
-header-kit UI 테마의 토큰 출처. 한 제품 마케팅 사이트의 디자인 언어를 분석해 브랜드 중립적으로 정리한 참조 스펙이다. 실제 코드에 적용된 부분(accent #0066cc, 중립 램프, 시스템 폰트 스택, pill 액션, scale-95 press, 무그림자)은 `src/entrypoints/popup/style.css`의 `@theme` + `src/ui/` 프리미티브에 있다. 이 문서는 마케팅 레이아웃까지 포함한 전체 참조이며, 확장에는 토큰 시스템만 밀도에 맞춰 채택했다.
+header-kit UI 테마의 토큰 출처. 한 제품 마케팅 사이트의 디자인 언어를 분석해 브랜드 중립적으로 정리한 참조 스펙이다. 실제 코드에 적용된 부분(accent #0066cc, 중립 램프, 시스템 폰트 스택, pill 액션, scale-95 press, 무그림자)은 `src/app/styles/global.css`의 `@theme` + `src/ui/` 프리미티브에 있다. 이 문서는 마케팅 레이아웃까지 포함한 전체 참조이며, 확장에는 토큰 시스템만 밀도에 맞춰 채택했다.
 
 ## Overview
 
