@@ -15,6 +15,7 @@ import { Button } from '@/ui/button';
 import { Card } from '@/ui/card';
 import { Input } from '@/ui/input';
 import { Select } from '@/ui/select';
+import { Tab, TabList, TabPanel, Tabs } from '@/ui/tabs';
 import { ToggleSwitch } from '@/ui/toggle-switch';
 import { CspRow } from '@/features/modifications/csp-row';
 import { FilterRow } from '@/features/filters/filter-row';
@@ -35,6 +36,8 @@ const FILTER_KINDS: Array<{ kind: FilterKind; labelKey: MessageKey }> = [
   { kind: 'time', labelKey: 'filterTime' },
 ];
 
+export type ProfileTab = 'modifications' | 'filters';
+
 export interface ProfileSectionProps {
   profile: Profile;
   index: number;
@@ -45,6 +48,9 @@ export interface ProfileSectionProps {
   materialized?: Record<string, string>;
   /** 헤더 이름 autocomplete 사용자 항목. */
   userHeaders?: readonly string[];
+  /** 활성 탭 — 앱 레이어 뷰 상태(스펙 결정). 미지정 시 비제어(수정 탭 시작). */
+  activeTab?: ProfileTab;
+  onActiveTabChange?: (tab: ProfileTab) => void;
 }
 
 export function ProfileSection({
@@ -55,6 +61,8 @@ export function ProfileSection({
   pickerOptions,
   materialized,
   userHeaders,
+  activeTab,
+  onActiveTabChange,
 }: ProfileSectionProps) {
   const t = useT();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -99,41 +107,104 @@ export function ProfileSection({
         />
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        {profile.modifications.map((modification) => {
-          const onChange = (next: Modification) =>
-            onCommand({ type: 'update-modification', profileId: profile.id, modification: next });
-          const onRemove = () =>
-            onCommand({
-              type: 'remove-modification',
-              profileId: profile.id,
-              modificationId: modification.id,
-            });
-          if (modification.kind === 'csp') {
-            return (
-              <CspRow key={modification.id} modification={modification} onChange={onChange} onRemove={onRemove} />
-            );
-          }
-          if (modification.kind === 'redirect') {
-            return (
-              <RedirectRow key={modification.id} modification={modification} onChange={onChange} onRemove={onRemove} />
-            );
-          }
-          return (
-            <HeaderRow
-              key={modification.id}
-              modification={modification}
-              materializedValue={materialized?.[modification.id]}
-              userHeaders={userHeaders}
-              onChange={onChange}
-              onRemove={onRemove}
-            />
-          );
-        })}
-      </div>
+      <Tabs
+        defaultValue="modifications"
+        value={activeTab}
+        onValueChange={onActiveTabChange ? (v) => onActiveTabChange(v as ProfileTab) : undefined}
+      >
+        <TabList>
+          <Tab value="modifications" count={profile.modifications.length}>
+            {t('tabModifications')}
+          </Tab>
+          <Tab value="filters" count={profile.filters.length}>
+            {t('tabFilters')}
+          </Tab>
+        </TabList>
 
-      {profile.filters.length > 0 && (
-        <div className="flex flex-col gap-1.5 border-t border-dashed border-zinc-200 pt-2 dark:border-zinc-800">
+        <TabPanel value="modifications" className="flex flex-col gap-1.5 pt-2">
+          {profile.modifications.map((modification) => {
+            const onChange = (next: Modification) =>
+              onCommand({ type: 'update-modification', profileId: profile.id, modification: next });
+            const onRemove = () =>
+              onCommand({
+                type: 'remove-modification',
+                profileId: profile.id,
+                modificationId: modification.id,
+              });
+            if (modification.kind === 'csp') {
+              return (
+                <CspRow key={modification.id} modification={modification} onChange={onChange} onRemove={onRemove} />
+              );
+            }
+            if (modification.kind === 'redirect') {
+              return (
+                <RedirectRow key={modification.id} modification={modification} onChange={onChange} onRemove={onRemove} />
+              );
+            }
+            return (
+              <HeaderRow
+                key={modification.id}
+                modification={modification}
+                materializedValue={materialized?.[modification.id]}
+                userHeaders={userHeaders}
+                onChange={onChange}
+                onRemove={onRemove}
+              />
+            );
+          })}
+        <div className="flex flex-wrap items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              onCommand({
+                type: 'add-modification',
+                profileId: profile.id,
+                modification: createHeaderModification('request-header'),
+              })
+            }
+          >
+            + {t('addRequestHeader')}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              onCommand({
+                type: 'add-modification',
+                profileId: profile.id,
+                modification: createHeaderModification('response-header'),
+              })
+            }
+          >
+            + {t('addResponseHeader')}
+          </Button>
+          <Select
+            variant="ghost"
+            size="sm"
+            value=""
+            aria-label="Add modification"
+            onChange={(e) => {
+              const kind = e.target.value as ModificationKind | '';
+              if (kind !== '') {
+                onCommand({
+                  type: 'add-modification',
+                  profileId: profile.id,
+                  modification: createModification(kind),
+                });
+              }
+            }}
+          >
+            <option value="">+ {t('moreModification')}</option>
+            <option value="cookie">{t('modCookie')}</option>
+            <option value="set-cookie">{t('modSetCookie')}</option>
+            <option value="csp">{t('modCsp')}</option>
+            <option value="redirect">{t('modRedirect')}</option>
+          </Select>
+        </div>
+        </TabPanel>
+
+        <TabPanel value="filters" className="flex flex-col gap-1.5 pt-2">
           {profile.filters.map((filter) => (
             <FilterRow
               key={filter.id}
@@ -147,78 +218,30 @@ export function ProfileSection({
               }
             />
           ))}
-        </div>
-      )}
+          <Select
+            variant="ghost"
+            size="sm"
+            value=""
+            aria-label="Add filter"
+            className="self-start"
+            onChange={(e) => {
+              const kind = e.target.value as FilterKind | '';
+              if (kind !== '') {
+                onCommand({ type: 'add-filter', profileId: profile.id, filter: createFilter(kind) });
+              }
+            }}
+          >
+            <option value="">+ {t('addFilterMenu')}</option>
+            {FILTER_KINDS.map(({ kind, labelKey }) => (
+              <option key={kind} value={kind}>
+                {t(labelKey)}
+              </option>
+            ))}
+          </Select>
+        </TabPanel>
+      </Tabs>
 
-      <div className="flex flex-wrap items-center gap-1">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() =>
-            onCommand({
-              type: 'add-modification',
-              profileId: profile.id,
-              modification: createHeaderModification('request-header'),
-            })
-          }
-        >
-          + {t('addRequestHeader')}
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() =>
-            onCommand({
-              type: 'add-modification',
-              profileId: profile.id,
-              modification: createHeaderModification('response-header'),
-            })
-          }
-        >
-          + {t('addResponseHeader')}
-        </Button>
-        <Select
-          variant="ghost"
-          size="sm"
-          value=""
-          aria-label="Add modification"
-          onChange={(e) => {
-            const kind = e.target.value as ModificationKind | '';
-            if (kind !== '') {
-              onCommand({
-                type: 'add-modification',
-                profileId: profile.id,
-                modification: createModification(kind),
-              });
-            }
-          }}
-        >
-          <option value="">+ {t('moreModification')}</option>
-          <option value="cookie">{t('modCookie')}</option>
-          <option value="set-cookie">{t('modSetCookie')}</option>
-          <option value="csp">{t('modCsp')}</option>
-          <option value="redirect">{t('modRedirect')}</option>
-        </Select>
-        <Select
-          variant="ghost"
-          size="sm"
-          value=""
-          aria-label="Add filter"
-          onChange={(e) => {
-            const kind = e.target.value as FilterKind | '';
-            if (kind !== '') {
-              onCommand({ type: 'add-filter', profileId: profile.id, filter: createFilter(kind) });
-            }
-          }}
-        >
-          <option value="">+ {t('addFilterMenu')}</option>
-          {FILTER_KINDS.map(({ kind, labelKey }) => (
-            <option key={kind} value={kind}>
-              {t(labelKey)}
-            </option>
-          ))}
-        </Select>
-        <div className="ml-auto flex shrink-0 items-center gap-1">
+      <div className="flex items-center justify-end gap-1">
         <Button
           variant="ghost"
           size="sm"
@@ -264,7 +287,6 @@ export function ProfileSection({
         >
           {confirmingDelete ? 'Delete?' : '✕'}
         </Button>
-        </div>
       </div>
     </Card>
   );

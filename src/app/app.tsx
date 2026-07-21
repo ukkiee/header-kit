@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { BackupPanel } from '@/features/backup/backup-panel';
 import { PreferencesPanel } from '@/features/preferences/preferences-panel';
 import { ProfileChips } from '@/features/profiles/profile-chips';
-import { ProfileSection } from '@/features/profiles/profile-section';
+import { ProfileSection, type ProfileTab } from '@/features/profiles/profile-section';
 import { reconcileSelection } from '@/features/profiles/selection';
 import { StatusSummary } from '@/features/status/status-summary';
 import { TransferPanel } from '@/features/transfer/transfer-panel';
@@ -30,6 +30,8 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
   const [state, setState] = useState<StoredState | null>(null);
   // 단일 프로필 뷰(ADR 0004)의 선택 — 렌더마다 reconcileSelection으로 재조정된다.
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // 활성 탭(수정/필터)은 앱 레이어 뷰 상태 — 프로필을 전환해도 유지된다.
+  const [activeTab, setActiveTab] = useState<ProfileTab>('modifications');
   const [commandError, setCommandError] = useState<string | null>(null);
   const [pickerOptions, setPickerOptions] = useState<TabPickerOptions | undefined>(undefined);
   const [summary, setSummary] = useState<StatusSummaryData | null>(null);
@@ -154,6 +156,8 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
           pickerOptions={pickerOptions}
           materialized={state.materialized}
           userHeaders={state.customHeaderNames}
+          activeTab={activeTab}
+          onActiveTabChange={setActiveTab}
         />
       ) : (
         <p className="text-xs text-zinc-500 dark:text-zinc-400">{t(locale, 'noProfilesYet')}</p>

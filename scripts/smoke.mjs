@@ -1006,6 +1006,61 @@ try {
     .then(() => true, () => false);
   record('N4: 빈 목록 → 빈 상태 안내 표시', emptyShown, `visible=${emptyShown}`);
 
+  // N5: 탭 뱃지 개수 일치 + 탭 전환으로 필터 패널 진입 (슬라이스 03)
+  await seedProfiles([
+    baseProfile('n-tab', 'Tabbed',
+      [
+        { kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+        { kind: 'request-header', id: 'm2', name: 'X-B', value: '2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+      ],
+      [{ kind: 'url', id: 'f1', enabled: true, pattern: 'example\\.com' }]),
+  ]);
+  await popup.reload();
+  const modTabName = await popup.getByRole('tab', { name: /Modifications/ }).textContent();
+  const filterTabName = await popup.getByRole('tab', { name: /Filters/ }).textContent();
+  await popup.getByRole('tab', { name: /Filters/ }).click();
+  const urlPatternVisible = await popup
+    .getByLabel('URL pattern')
+    .waitFor({ timeout: 5000 })
+    .then(() => true, () => false);
+  // 키보드: 화살표로 이동하고 Enter로 활성화한다 (Base UI roving tabindex)
+  await popup.getByRole('tab', { name: /Filters/ }).focus();
+  await popup.keyboard.press('ArrowLeft');
+  await popup.keyboard.press('Enter');
+  const kbActivated = await popup
+    .getByRole('button', { name: '+ Request' })
+    .waitFor({ timeout: 5000 })
+    .then(() => true, () => false);
+  record('N5: 탭 뱃지 개수 + 필터 탭 전환 + 키보드 활성화',
+    /2/.test(modTabName ?? '') && /1/.test(filterTabName ?? '') && urlPatternVisible && kbActivated,
+    `mod="${modTabName}", filter="${filterTabName}", panel=${urlPatternVisible}, kb=${kbActivated}`);
+  await popup.getByRole('tab', { name: /Filters/ }).click();
+
+  // N6: 탭 경유 필터 추가·편집·삭제가 상태에 반영된다
+  await popup.getByLabel('Add filter').selectOption({ label: 'URL filter' });
+  await popup.getByLabel('URL pattern').nth(1).waitFor({ timeout: 5000 });
+  await popup.getByLabel('URL pattern').nth(1).fill('api\\.staging\\.example\\.com');
+  await popup.getByLabel('URL pattern').nth(1).blur();
+  const pollFilters = async (test, timeoutMs = 5000) => {
+    const start = Date.now();
+    let filters = [];
+    while (Date.now() - start < timeoutMs) {
+      filters = await sw.evaluate(async () => {
+        const { state } = await chrome.storage.local.get('state');
+        return state.profiles[0]?.filters ?? [];
+      });
+      if (test(filters)) return filters;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return filters;
+  };
+  const added = await pollFilters((f) => f.length === 2 && f[1]?.pattern === 'api\\.staging\\.example\\.com');
+  await popup.getByRole('button', { name: 'Remove filter' }).nth(1).click();
+  const removed = await pollFilters((f) => f.length === 1);
+  record('N6: 탭 경유 필터 추가·편집·삭제 반영',
+    added.length === 2 && added[1]?.pattern === 'api\\.staging\\.example\\.com' && removed.length === 1,
+    `added=${added.length}, pattern=${added[1]?.pattern}, after-remove=${removed.length}`);
+
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
   process.exitCode = failed.length === 0 ? 0 : 1;
