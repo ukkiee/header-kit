@@ -13,16 +13,35 @@ type Story = StoryObj<typeof meta>;
 
 type ValueModification = Extract<Modification, { value: string }>;
 
-function InteractiveHeaderRow({ initial }: { initial: ValueModification }) {
+function InteractiveHeaderRow({
+  initial,
+  initiallyExpanded = true,
+}: {
+  initial: ValueModification;
+  initiallyExpanded?: boolean;
+}) {
   const [modification, setModification] = useState<ValueModification>(initial);
+  const [expanded, setExpanded] = useState(initiallyExpanded);
   return (
     <HeaderRow
       modification={modification}
       onChange={(next) => setModification(next as ValueModification)}
       onRemove={() => setModification({ ...modification, enabled: false })}
+      expanded={expanded}
+      onToggleExpanded={() => setExpanded((v) => !v)}
     />
   );
 }
+
+// 기본 1줄 상태 — 옵션은 확장 시에만 보인다 (ADR 0004).
+export const Collapsed: Story = {
+  args: {
+    modification: { kind: 'request-header', id: 'm0', name: 'Authorization', value: 'Bearer eyJhbGciOiJIUzI1NiJ9.a-very-long-token-value-that-truncates-in-the-row', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+    onChange: () => {},
+    onRemove: () => {},
+  },
+  render: (args) => <InteractiveHeaderRow initial={args.modification} initiallyExpanded={false} />,
+};
 
 export const Filled: Story = {
   args: {
@@ -64,6 +83,8 @@ export const WithPlaceholder: Story = {
       onChange={() => {}}
       onRemove={() => {}}
       materializedValue={args.materializedValue}
+      expanded
+      onToggleExpanded={() => {}}
     />
   ),
 };

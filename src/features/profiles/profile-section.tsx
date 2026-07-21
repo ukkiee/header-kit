@@ -14,6 +14,7 @@ import type { TabPickerOptions } from '@/platform/tabs';
 import { Button } from '@/ui/button';
 import { Card } from '@/ui/card';
 import { Input } from '@/ui/input';
+import { ModTableHeader } from '@/ui/mod-table';
 import { Select } from '@/ui/select';
 import { Tab, TabList, TabPanel, Tabs } from '@/ui/tabs';
 import { ToggleSwitch } from '@/ui/toggle-switch';
@@ -51,6 +52,9 @@ export interface ProfileSectionProps {
   /** 활성 탭 — 앱 레이어 뷰 상태(스펙 결정). 미지정 시 비제어(수정 탭 시작). */
   activeTab?: ProfileTab;
   onActiveTabChange?: (tab: ProfileTab) => void;
+  /** 확장된 수정 행 id — 앱 레이어의 단일 확장 상태(ADR 0004). */
+  expandedRowId?: string | null;
+  onToggleRow?: (modificationId: string) => void;
 }
 
 export function ProfileSection({
@@ -63,6 +67,8 @@ export function ProfileSection({
   userHeaders,
   activeTab,
   onActiveTabChange,
+  expandedRowId,
+  onToggleRow,
 }: ProfileSectionProps) {
   const t = useT();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -121,37 +127,44 @@ export function ProfileSection({
           </Tab>
         </TabList>
 
-        <TabPanel value="modifications" className="flex flex-col gap-1.5 pt-2">
-          {profile.modifications.map((modification) => {
-            const onChange = (next: Modification) =>
-              onCommand({ type: 'update-modification', profileId: profile.id, modification: next });
-            const onRemove = () =>
-              onCommand({
-                type: 'remove-modification',
-                profileId: profile.id,
-                modificationId: modification.id,
-              });
-            if (modification.kind === 'csp') {
+        <TabPanel value="modifications" className="flex flex-col pt-2">
+          {profile.modifications.length > 0 && (
+            <ModTableHeader nameLabel={t('headerName')} valueLabel={t('value')} />
+          )}
+          <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+            {profile.modifications.map((modification) => {
+              const onChange = (next: Modification) =>
+                onCommand({ type: 'update-modification', profileId: profile.id, modification: next });
+              const onRemove = () =>
+                onCommand({
+                  type: 'remove-modification',
+                  profileId: profile.id,
+                  modificationId: modification.id,
+                });
+              if (modification.kind === 'csp') {
+                return (
+                  <CspRow key={modification.id} modification={modification} onChange={onChange} onRemove={onRemove} />
+                );
+              }
+              if (modification.kind === 'redirect') {
+                return (
+                  <RedirectRow key={modification.id} modification={modification} onChange={onChange} onRemove={onRemove} />
+                );
+              }
               return (
-                <CspRow key={modification.id} modification={modification} onChange={onChange} onRemove={onRemove} />
+                <HeaderRow
+                  key={modification.id}
+                  modification={modification}
+                  materializedValue={materialized?.[modification.id]}
+                  userHeaders={userHeaders}
+                  onChange={onChange}
+                  onRemove={onRemove}
+                  expanded={expandedRowId === modification.id}
+                  onToggleExpanded={onToggleRow ? () => onToggleRow(modification.id) : undefined}
+                />
               );
-            }
-            if (modification.kind === 'redirect') {
-              return (
-                <RedirectRow key={modification.id} modification={modification} onChange={onChange} onRemove={onRemove} />
-              );
-            }
-            return (
-              <HeaderRow
-                key={modification.id}
-                modification={modification}
-                materializedValue={materialized?.[modification.id]}
-                userHeaders={userHeaders}
-                onChange={onChange}
-                onRemove={onRemove}
-              />
-            );
-          })}
+            })}
+          </div>
         <div className="flex flex-wrap items-center gap-1">
           <Button
             variant="ghost"

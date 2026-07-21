@@ -684,6 +684,8 @@ try {
     baseProfile('p-le', 'LE', [{ kind: 'request-header', id: 'm1', name: 'X-Long', value: 'short', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }], []),
   ]);
   await tabApp.reload();
+  // 대형 편집기는 행 확장 영역 안에 있다 — 먼저 행을 펼친다 (슬라이스 04)
+  await tabApp.getByRole('button', { name: 'Toggle modification options' }).first().click();
   await tabApp.getByRole('button', { name: /open large editor/i }).first().click();
   const longValue = 'x'.repeat(300);
   await tabApp.getByRole('textbox', { name: /Value —/ }).fill(longValue);
@@ -1011,7 +1013,8 @@ try {
     baseProfile('n-tab', 'Tabbed',
       [
         { kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
-        { kind: 'request-header', id: 'm2', name: 'X-B', value: '2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+        // append 허용목록 헤더 — N7이 확장 영역에서 Append 모드 전환을 검증한다
+        { kind: 'request-header', id: 'm2', name: 'Accept', value: 'application/json', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
       ],
       [{ kind: 'url', id: 'f1', enabled: true, pattern: 'example\\.com' }]),
   ]);
@@ -1060,6 +1063,42 @@ try {
   record('N6: 탭 경유 필터 추가·편집·삭제 반영',
     added.length === 2 && added[1]?.pattern === 'api\\.staging\\.example\\.com' && removed.length === 1,
     `added=${added.length}, pattern=${added[1]?.pattern}, after-remove=${removed.length}`);
+
+  // N7: 테이블 행 단일 확장 + 확장 영역의 모드·주석 편집이 상태에 반영 (슬라이스 04)
+  await popup.getByRole('tab', { name: /Modifications/ }).click();
+  const rowToggles = popup.getByRole('button', { name: 'Toggle modification options' });
+  await rowToggles.first().waitFor({ timeout: 5000 });
+  // 행 1 확장 → 옵션(Override 칩) 노출
+  await rowToggles.nth(0).click();
+  const firstExpanded = await popup.getByRole('button', { name: 'Override' }).isVisible();
+  // 행 2 확장 → 행 1 자동 접힘 (단일 확장: Override 칩은 1개만 존재)
+  await rowToggles.nth(1).click();
+  const overrideCount = await popup.getByRole('button', { name: 'Override' }).count();
+  const expandedStates = await rowToggles.evaluateAll((els) => els.map((el) => el.getAttribute('aria-expanded')));
+  // 확장 영역에서 모드 변경(Append) + 주석 편집 → 상태 반영.
+  // 각 편집은 수정 객체 전체를 보내므로, 순차 편집으로 라운드트립을 기다린다.
+  const pollMod = async (test, timeoutMs = 5000) => {
+    const start = Date.now();
+    let mod = null;
+    while (Date.now() - start < timeoutMs) {
+      mod = await sw.evaluate(async () => {
+        const { state } = await chrome.storage.local.get('state');
+        return state.profiles[0]?.modifications[1] ?? null;
+      });
+      if (test(mod)) return mod;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return mod;
+  };
+  await popup.getByRole('button', { name: 'Append' }).click();
+  // 스토리지가 아닌 UI 반영(aria-pressed)을 기다린다 — 이후 편집이 이전 프롭을 덮어쓰지 않게.
+  await popup.getByRole('button', { name: 'Append', pressed: true }).waitFor({ timeout: 5000 });
+  await popup.getByLabel('Comment').fill('smoke comment');
+  const editedMod = await pollMod((m) => m?.mode === 'append' && m?.comment === 'smoke comment');
+  record('N7: 단일 확장 + 확장 영역 모드·주석 반영',
+    firstExpanded && overrideCount === 1 && expandedStates.join(',') === 'false,true'
+      && editedMod?.mode === 'append' && editedMod?.comment === 'smoke comment',
+    `first=${firstExpanded}, chips=${overrideCount}, aria=${expandedStates.join(',')}, mode=${editedMod?.mode}, comment="${editedMod?.comment}"`);
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

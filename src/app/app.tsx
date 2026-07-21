@@ -32,6 +32,8 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // 활성 탭(수정/필터)은 앱 레이어 뷰 상태 — 프로필을 전환해도 유지된다.
   const [activeTab, setActiveTab] = useState<ProfileTab>('modifications');
+  // 단일 확장 행 — 한 번에 한 행만 옵션을 펼친다 (ADR 0004).
+  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [commandError, setCommandError] = useState<string | null>(null);
   const [pickerOptions, setPickerOptions] = useState<TabPickerOptions | undefined>(undefined);
   const [summary, setSummary] = useState<StatusSummaryData | null>(null);
@@ -158,6 +160,8 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
           userHeaders={state.customHeaderNames}
           activeTab={activeTab}
           onActiveTabChange={setActiveTab}
+          expandedRowId={expandedRowId}
+          onToggleRow={(id) => setExpandedRowId((prev) => (prev === id ? null : id))}
         />
       ) : (
         <p className="text-xs text-zinc-500 dark:text-zinc-400">{t(locale, 'noProfilesYet')}</p>

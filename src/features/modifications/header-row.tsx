@@ -2,11 +2,11 @@ import { hasPlaceholders } from '@/core/placeholder';
 import { isRequestAppendAllowed } from '@/core/rules';
 import type { Modification } from '@/core/schema';
 import { Button } from '@/ui/button';
-import { Card } from '@/ui/card';
 import { Checkbox } from '@/ui/checkbox';
 import { Chip } from '@/ui/chip';
 import { Input } from '@/ui/input';
 import { KindLabel } from '@/ui/kind-label';
+import { modGrid } from '@/ui/mod-table';
 import { NoteText } from '@/ui/note-text';
 import { Select } from '@/ui/select';
 import { HeaderNameInput } from './header-name-input';
@@ -24,14 +24,23 @@ export interface HeaderRowProps {
   materializedValue?: string;
   /** 헤더 이름 autocomplete에 더할 사용자 등록 항목. */
   userHeaders?: readonly string[];
+  /** 확장 여부 — 앱 레이어의 단일 확장 상태(ADR 0004). */
+  expanded?: boolean;
+  onToggleExpanded?: () => void;
 }
 
+/**
+ * 테이블형 수정 행 — 기본 1줄(체크박스·종류·이름·값), 선택 시에만 모드·주석 등
+ * 옵션이 확장된다. 세부 옵션의 밀도는 필요할 때만 지불한다 (ADR 0004).
+ */
 export function HeaderRow({
   modification,
   onChange,
   onRemove,
   materializedValue,
   userHeaders = [],
+  expanded = false,
+  onToggleExpanded,
 }: HeaderRowProps) {
   const t = useT();
   const withPlaceholders = hasPlaceholders(modification.value);
@@ -59,8 +68,18 @@ export function HeaderRow({
   const label = isCookie ? 'Cookie' : kind === 'set-cookie' ? 'Set-Cookie' : null;
 
   return (
-    <Card variant="row">
-      <div className="flex items-center gap-2">
+    <div className="py-0.5">
+      {/* 그리드 여백 클릭도 확장 토글 — "행 선택" 의미론. 입력/버튼 클릭은 제외. */}
+      <div
+        className={modGrid}
+        onClick={
+          onToggleExpanded
+            ? (e) => {
+                if (e.target === e.currentTarget) onToggleExpanded();
+              }
+            : undefined
+        }
+      >
         <Checkbox
           checked={modification.enabled}
           onChange={(e) => onChange({ ...modification, enabled: e.target.checked })}
@@ -68,8 +87,8 @@ export function HeaderRow({
         />
         {isTogglableTarget ? (
           <Select
-            variant="bordered"
-            size="md"
+            variant="ghost"
+            size="sm"
             value={modification.kind}
             onChange={(e) => onChange({ ...modification, kind: e.target.value } as Modification)}
             aria-label="Header target"
@@ -78,86 +97,112 @@ export function HeaderRow({
             <option value="response-header">{t('responseHeaderShort')}</option>
           </Select>
         ) : (
-          <KindLabel>{label}</KindLabel>
+          <KindLabel width="auto">{label}</KindLabel>
         )}
-        {hasName && (
+        {hasName ? (
           <HeaderNameInput
+            variant="ghost"
+            size="sm"
             value={nameValue}
             onChange={setName}
             userHeaders={userHeaders}
-            className="w-32"
+            className="min-w-0"
           />
+        ) : (
+          <span />
         )}
         <Input
+          variant="ghost"
+          size="sm"
           value={modification.value}
           onChange={(e) => onChange({ ...modification, value: e.target.value })}
           placeholder={isCookie ? 'value' : t('value')}
           aria-label="Header value"
-          className="min-w-0 flex-1"
+          className="min-w-0 truncate"
         />
-        <LargeEditor
-          title={`${t('value')} — ${label ?? (nameValue || 'header')}`}
-          value={modification.value}
-          onCommit={(value) => onChange({ ...modification, value })}
-          triggerLabel="⤢"
-        />
-        <Button variant="danger" size="sm" onClick={onRemove} aria-label="Remove modification">
-          ✕
-        </Button>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-1 pl-6">
-        <Chip
-          active={modification.mode === 'override'}
-          onClick={() => onChange({ ...modification, mode: 'override' })}
-        >
-          {t('override')}
-        </Chip>
-        {appendAllowed && (
-          <Chip
-            active={modification.mode === 'append'}
-            onClick={() => onChange({ ...modification, mode: 'append' })}
+        {onToggleExpanded ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label="Toggle modification options"
+            aria-expanded={expanded}
+            onClick={onToggleExpanded}
           >
-            {t('append')}
-          </Chip>
+            {expanded ? '▾' : '▸'}
+          </Button>
+        ) : (
+          <span />
         )}
-        {isEmpty && (
-          <>
-            <NoteText as="span" indent="inline">{t('emptyArrow')}</NoteText>
-            <Chip
-              active={modification.emptyMeans === 'remove'}
-              onClick={() => onChange({ ...modification, emptyMeans: 'remove' })}
-            >
-              {t('remove')}
-            </Chip>
-            <Chip
-              active={modification.emptyMeans === 'send-empty'}
-              onClick={() => onChange({ ...modification, emptyMeans: 'send-empty' })}
-            >
-              {t('sendEmpty')}
-            </Chip>
-          </>
-        )}
-        <Input
-          variant="ghost"
-          size="xs"
-          value={modification.comment}
-          onChange={(e) => onChange({ ...modification, comment: e.target.value })}
-          placeholder={t('comment')}
-          aria-label="Comment"
-          className="ml-auto w-40 text-zinc-500"
-        />
       </div>
 
-      {isResponseHeader && <NoteText indent="row">{t('responsePanelNote')}</NoteText>}
-      {withPlaceholders && (
-        <NoteText indent="row">
-          {t('placeholderNote')}
-          {materializedValue !== undefined && (
-            <span className="ml-1 font-mono text-zinc-500">→ {materializedValue}</span>
+      {expanded && (
+        <div className="flex flex-col gap-1.5 pt-1 pb-1.5 pl-7">
+          <div className="flex flex-wrap items-center gap-1">
+            <Chip
+              active={modification.mode === 'override'}
+              onClick={() => onChange({ ...modification, mode: 'override' })}
+            >
+              {t('override')}
+            </Chip>
+            {appendAllowed && (
+              <Chip
+                active={modification.mode === 'append'}
+                onClick={() => onChange({ ...modification, mode: 'append' })}
+              >
+                {t('append')}
+              </Chip>
+            )}
+            {isEmpty && (
+              <>
+                <NoteText as="span" indent="inline">{t('emptyArrow')}</NoteText>
+                <Chip
+                  active={modification.emptyMeans === 'remove'}
+                  onClick={() => onChange({ ...modification, emptyMeans: 'remove' })}
+                >
+                  {t('remove')}
+                </Chip>
+                <Chip
+                  active={modification.emptyMeans === 'send-empty'}
+                  onClick={() => onChange({ ...modification, emptyMeans: 'send-empty' })}
+                >
+                  {t('sendEmpty')}
+                </Chip>
+              </>
+            )}
+            <div className="ml-auto flex shrink-0 items-center gap-1">
+              <LargeEditor
+                title={`${t('value')} — ${label ?? (nameValue || 'header')}`}
+                value={modification.value}
+                onCommit={(value) => onChange({ ...modification, value })}
+                triggerLabel="⤢"
+              />
+              <Button variant="danger" size="sm" onClick={onRemove} aria-label="Remove modification">
+                ✕
+              </Button>
+            </div>
+          </div>
+
+          <Input
+            variant="ghost"
+            size="xs"
+            value={modification.comment}
+            onChange={(e) => onChange({ ...modification, comment: e.target.value })}
+            placeholder={t('comment')}
+            aria-label="Comment"
+            className="w-full text-zinc-500"
+          />
+
+          {isResponseHeader && <NoteText>{t('responsePanelNote')}</NoteText>}
+          {withPlaceholders && (
+            <NoteText>
+              {t('placeholderNote')}
+              {materializedValue !== undefined && (
+                <span className="ml-1 font-mono text-zinc-500">→ {materializedValue}</span>
+              )}
+            </NoteText>
           )}
-        </NoteText>
+        </div>
       )}
-    </Card>
+    </div>
   );
 }

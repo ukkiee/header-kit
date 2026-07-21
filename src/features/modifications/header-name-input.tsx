@@ -1,9 +1,9 @@
 import { useId, useState } from 'react';
 import { suggestHeaderNames } from '@/core/autocomplete';
-import { Input } from '@/ui/input';
+import { Input, type InputProps } from '@/ui/input';
 import { useT } from '@/ui/i18n-context';
 
-export interface HeaderNameInputProps {
+export interface HeaderNameInputProps extends Pick<InputProps, 'variant' | 'size'> {
   value: string;
   onChange: (next: string) => void;
   userHeaders: readonly string[];
@@ -11,7 +11,14 @@ export interface HeaderNameInputProps {
 }
 
 /** 헤더 이름 입력 — 표준 사전 + 사용자 항목으로 autocomplete 제안한다. */
-export function HeaderNameInput({ value, onChange, userHeaders, className }: HeaderNameInputProps) {
+export function HeaderNameInput({
+  value,
+  onChange,
+  userHeaders,
+  className,
+  variant,
+  size,
+}: HeaderNameInputProps) {
   const t = useT();
   const listId = useId();
   const [focused, setFocused] = useState(false);
@@ -20,6 +27,8 @@ export function HeaderNameInput({ value, onChange, userHeaders, className }: Hea
   return (
     <>
       <Input
+        variant={variant}
+        size={size}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onFocus={() => setFocused(true)}

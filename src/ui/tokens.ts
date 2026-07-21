@@ -22,3 +22,6 @@ export const accentBg = 'bg-blue-600';
 
 /** 앱 캔버스(본문 배경+글자색) — App main / Storybook 프리뷰 래퍼가 공유한다. */
 export const canvas = 'bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100';
+
+/** 마이크로 캡션(종류 라벨·테이블 컬럼 헤더) — KindLabel / ModTableHeader가 공유한다. */
+export const microCaption = 'text-[10px] font-medium uppercase tracking-wide text-zinc-400';
