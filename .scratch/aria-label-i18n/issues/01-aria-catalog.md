@@ -4,9 +4,11 @@
 
 **Blocked by:** None — can start immediately. (ui-simplify release r1 R-1 defer에서 발행 — 부분 지역화의 비일관을 피하려 신규+기존을 한 단위로 묶음)
 
-**Status:** ready-for-agent
+**Status:** done — commit 42fa097
 
-- [ ] 모든 aria-label이 en/ko 카탈로그를 경유한다 (tsc parity 강제)
-- [ ] ko 로케일에서 접근성 이름이 한국어임을 smoke로 단언 (최소 1 표면)
-- [ ] 기존 smoke 전 항목 green (셀렉터 갱신 후)
-- [ ] 스크린리더 혼합 언어 잔여 없음 (grep 감사)
+- [x] 모든 aria-label이 en/ko 카탈로그를 경유한다 (aria* 키 45개, tsc parity 강제, 양측 검증)
+- [x] ko 로케일에서 접근성 이름이 한국어임을 smoke로 단언 (N14 — 스위치/메뉴/칩/행 토글 4종)
+- [x] 기존 smoke 전 항목 green — 66/66. 셀렉터 갱신 대신 **en 값 자구 보존** 전략으로 갱신 자체를 회피(유일 예외: Search profiles에 말줄임 추가 — 부분 문자열 매칭으로 무해)
+- [x] 스크린리더 혼합 언어 잔여 없음 (grep 감사 0 — 도메인 용어 'Initiator 도메인'은 가시 라벨과 일관된 의도적 유지)
+
+참고: code-review 2축 반영 — ko 어순(JSON 가져오기), 켬/끔 쌍 통일, 배지 표준 표기, profileSelectLabel 헬퍼 추출. 잔여(범위 밖, 기존): header-row의 'header' 폴백 혼합 표기, LargeEditor 기본 triggerLabel 'Expand'(스토리북 전용 노출).
