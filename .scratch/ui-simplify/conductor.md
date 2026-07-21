@@ -8,3 +8,4 @@
 - plan gate r1: done — needs-attention 3건(선택 재조정/인수 매트릭스/칩 overflow) 전부 accept·스펙 반영
 - plan gate r2: done — R2-1 accept(매트릭스 story 18-22·25·28 보강), 재리뷰 WAIVED by user → 게이트 통과
 - tickets: done — 9 슬라이스 발행 (01 골격 → 02 테마 → 03·04·05 체인 ∥ 06·07, 08←04, 09 마감), 전부 ready-for-agent
+- implement 01: done — 8d2b2f5, smoke 53/53 (N1-N4 신규), vitest 168, code-review 2축 반영
