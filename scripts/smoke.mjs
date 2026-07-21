@@ -60,18 +60,30 @@ async function fetchEchoHeaders(page, path = '/headers', method = 'GET') {
   );
 }
 
-async function pollSessionRuleCount(sw, expected, timeoutMs = 15000) {
+/** 범용 폴러 — probe를 test가 참일 때까지 재시도하고 마지막 값을 돌려준다. */
+async function pollUntil(probe, test, timeoutMs = 8000, intervalMs = 200) {
   const start = Date.now();
-  let count = -1;
+  let value;
   while (Date.now() - start < timeoutMs) {
-    count = await sw.evaluate(async () => {
+    value = await probe();
+    if (test(value)) return value;
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  return value;
+}
+
+async function pollSessionRuleCount(sw, expected, timeoutMs = 15000) {
+  const count = await pollUntil(
+    () => sw.evaluate(async () => {
       const rules = await chrome.declarativeNetRequest.getSessionRules();
       return rules.length;
-    });
-    if (count === expected) return count;
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  throw new Error(`session rule count ${count} !== expected ${expected}`);
+    }),
+    (c) => c === expected,
+    timeoutMs,
+    100,
+  );
+  if (count !== expected) throw new Error(`session rule count ${count} !== expected ${expected}`);
+  return count;
 }
 
 const { server, port } = await startEchoServer();
@@ -268,16 +280,8 @@ try {
   record('D1: 두 활성 Profile이 같은 헤더 수정 시 목록 위쪽이 승리', headers['x-conf'] === 'top-wins',
     `x-conf=${headers['x-conf']}`);
 
-  const pollBadge = async (expected, timeoutMs = 3000) => {
-    const start = Date.now();
-    let text = '';
-    while (Date.now() - start < timeoutMs) {
-      text = await sw.evaluate(() => chrome.action.getBadgeText({}));
-      if (text === expected) return text;
-      await new Promise((r) => setTimeout(r, 100));
-    }
-    return text;
-  };
+  const pollBadge = (expected, timeoutMs = 3000) =>
+    pollUntil(() => sw.evaluate(() => chrome.action.getBadgeText({})), (t) => t === expected, timeoutMs, 100);
 
   const multiBadge = await pollBadge('2');
   record('D2: 다중 활성 시 배지에 활성 개수 표시', multiBadge === '2', `badge="${multiBadge}"`);
@@ -465,19 +469,15 @@ try {
   await pollSessionRuleCount(sw, 1);
   const beforeExpiry = await fetchEchoHeaders(pageB, '/headers');
 
-  const pollProfileOff = async (timeoutMs = 20_000) => {
-    const start = Date.now();
-    while (Date.now() - start < timeoutMs) {
-      const active = await sw.evaluate(async () => {
-        const { state } = await chrome.storage.local.get('state');
-        return state.profiles[0].active;
-      });
-      if (active === false) return true;
-      await new Promise((r) => setTimeout(r, 250));
-    }
-    return false;
-  };
-  const turnedOff = await pollProfileOff();
+  const turnedOff = (await pollUntil(
+    () => sw.evaluate(async () => {
+      const { state } = await chrome.storage.local.get('state');
+      return state.profiles[0].active;
+    }),
+    (active) => active === false,
+    20_000,
+    250,
+  )) === false;
   const afterExpiry = await fetchEchoHeaders(pageB, '/headers');
   const expiredBadge = await sw.evaluate(() => chrome.action.getBadgeText({}));
   record('F3: Time Filter 만료 → 알람이 Profile off + 규칙 해제 + 배지 비움',
@@ -608,20 +608,15 @@ try {
   await pollSessionRuleCount(sw, 1);
 
   // 자동 백업은 최소 간격(30s) 스로틀이 있으므로 그보다 넉넉히 기다린다.
-  const pollBackupCount = async (min, timeoutMs = 35_000) => {
-    const start = Date.now();
-    let count = 0;
-    while (Date.now() - start < timeoutMs) {
-      count = await sw.evaluate(async () => {
-        const kv = await chrome.storage.sync.get('bk:manifest');
-        return kv['bk:manifest']?.snapshots?.length ?? 0;
-      });
-      if (count >= min) return count;
-      await new Promise((r) => setTimeout(r, 500));
-    }
-    return count;
-  };
-  const backupCount = await pollBackupCount(1);
+  const backupCount = await pollUntil(
+    () => sw.evaluate(async () => {
+      const kv = await chrome.storage.sync.get('bk:manifest');
+      return kv['bk:manifest']?.snapshots?.length ?? 0;
+    }),
+    (count) => count >= 1,
+    35_000,
+    500,
+  );
   record('I1: Profile 변경 후 자동 Backup 생성 (manifest-last 커밋)', backupCount >= 1,
     `snapshots=${backupCount}`);
 
@@ -634,18 +629,16 @@ try {
   await restoreRow.getByRole('button', { name: 'Restore backup' }).click();
   await restoreRow.getByRole('button', { name: 'Confirm restore' }).click();
 
-  const restoredOk = await (async () => {
-    const start = Date.now();
-    while (Date.now() - start < 8_000) {
-      const state = await sw.evaluate(async () => {
-        const { state } = await chrome.storage.local.get('state');
-        return state;
-      });
-      if (state.profiles.length === 1 && state.profiles[0].name === 'Backupable') return true;
-      await new Promise((r) => setTimeout(r, 300));
-    }
-    return false;
-  })();
+  const restoredState = await pollUntil(
+    () => sw.evaluate(async () => {
+      const { state } = await chrome.storage.local.get('state');
+      return state;
+    }),
+    (s) => s.profiles.length === 1 && s.profiles[0].name === 'Backupable',
+    8_000,
+    300,
+  );
+  const restoredOk = restoredState.profiles.length === 1 && restoredState.profiles[0].name === 'Backupable';
   await pollSessionRuleCount(sw, 1);
   const restoredHeader = (await fetchEchoHeaders(pageB, '/headers'))['x-restored-id'];
   record('I2: 스냅샷 복원 → 전체 교체 + 활성화 경계 재실체화',
@@ -670,8 +663,10 @@ try {
   await tabApp.goto(`chrome-extension://${extId}/app.html?locale=en`);
   await tabApp.getByRole('heading', { name: 'HeaderKit' }).waitFor();
   const shownRuleCount = await tabApp.getByText(/active rule/).textContent();
-  record('J1: 탭 앱이 활성 규칙 수를 표시한다 (요약이 Compile과 일치)',
-    /2\s*active rule/.test(shownRuleCount ?? ''), `summary="${(shownRuleCount ?? '').trim()}"`);
+  const shownProfileCount = await tabApp.getByText(/active profile/).textContent();
+  record('J1: 탭 앱이 활성 규칙·프로필 수를 표시한다 (요약이 Compile과 일치)',
+    /2\s*active rule/.test(shownRuleCount ?? '') && /1\s*active profile/.test(shownProfileCount ?? ''),
+    `rules="${(shownRuleCount ?? '').trim()}", profiles="${(shownProfileCount ?? '').trim()}"`);
 
   // J2: 겹침 경고가 요약에 노출된다 (두 활성 Profile이 같은 헤더 수정)
   await seedProfiles([
@@ -923,18 +918,6 @@ try {
   });
   record('M3: CSP 디렉티브 합성 → 응답 헤더', cspHeader === "default-src 'none'", `csp=${cspHeader}`);
 
-  // 범용 폴러 — 새 UI 경로 검증들이 공유한다 (probe를 test가 참일 때까지 재시도).
-  const pollUntil = async (probe, test, timeoutMs = 8000, intervalMs = 200) => {
-    const start = Date.now();
-    let value;
-    while (Date.now() - start < timeoutMs) {
-      value = await probe();
-      if (test(value)) return value;
-      await new Promise((r) => setTimeout(r, intervalMs));
-    }
-    return value;
-  };
-
   // M3b: 새 UI 경로(확장 편집)로 CSP 디렉티브 값 변경 → 실제 응답 헤더 반영 (슬라이스 05)
   await popup.reload();
   await popup.getByRole('button', { name: 'Toggle modification options' }).first().click();
@@ -1013,16 +996,8 @@ try {
   ]);
   await popup.reload();
   // 커맨드 왕복(add/remove-profile) 후 렌더를 기다리며 이름 입력 값을 폴링한다.
-  const pollProfileName = async (test, timeoutMs = 5000) => {
-    const start = Date.now();
-    let value = '';
-    while (Date.now() - start < timeoutMs) {
-      value = await popup.getByLabel('Profile name').inputValue().catch(() => '');
-      if (test(value)) return value;
-      await new Promise((r) => setTimeout(r, 100));
-    }
-    return value;
-  };
+  const pollProfileName = (test, timeoutMs = 5000) =>
+    pollUntil(() => popup.getByLabel('Profile name').inputValue().catch(() => ''), test, timeoutMs, 100);
 
   // 첫 활성(Alpha)이 자동 선택 → Beta 칩 클릭으로 전환
   await popup.getByRole('button', { name: 'Select profile Beta' }).click();
@@ -1102,19 +1077,16 @@ try {
   await popup.getByLabel('URL pattern').nth(1).waitFor({ timeout: 5000 });
   await popup.getByLabel('URL pattern').nth(1).fill('api\\.staging\\.example\\.com');
   await popup.getByLabel('URL pattern').nth(1).blur();
-  const pollFilters = async (test, timeoutMs = 5000) => {
-    const start = Date.now();
-    let filters = [];
-    while (Date.now() - start < timeoutMs) {
-      filters = await sw.evaluate(async () => {
+  const pollFilters = (test, timeoutMs = 5000) =>
+    pollUntil(
+      () => sw.evaluate(async () => {
         const { state } = await chrome.storage.local.get('state');
         return state.profiles[0]?.filters ?? [];
-      });
-      if (test(filters)) return filters;
-      await new Promise((r) => setTimeout(r, 100));
-    }
-    return filters;
-  };
+      }),
+      test,
+      timeoutMs,
+      100,
+    );
   const added = await pollFilters((f) => f.length === 2 && f[1]?.pattern === 'api\\.staging\\.example\\.com');
   await popup.getByRole('button', { name: 'Remove filter' }).nth(1).click();
   const removed = await pollFilters((f) => f.length === 1);
@@ -1135,19 +1107,16 @@ try {
   const expandedStates = await rowToggles.evaluateAll((els) => els.map((el) => el.getAttribute('aria-expanded')));
   // 확장 영역에서 모드 변경(Append) + 주석 편집 → 상태 반영.
   // 각 편집은 수정 객체 전체를 보내므로, 순차 편집으로 라운드트립을 기다린다.
-  const pollMod = async (test, timeoutMs = 5000) => {
-    const start = Date.now();
-    let mod = null;
-    while (Date.now() - start < timeoutMs) {
-      mod = await sw.evaluate(async () => {
+  const pollMod = (test, timeoutMs = 5000) =>
+    pollUntil(
+      () => sw.evaluate(async () => {
         const { state } = await chrome.storage.local.get('state');
         return state.profiles[0]?.modifications[1] ?? null;
-      });
-      if (test(mod)) return mod;
-      await new Promise((r) => setTimeout(r, 100));
-    }
-    return mod;
-  };
+      }),
+      test,
+      timeoutMs,
+      100,
+    );
   await popup.getByRole('button', { name: 'Append' }).click();
   // 스토리지가 아닌 UI 반영(aria-pressed)을 기다린다 — 이후 편집이 이전 프롭을 덮어쓰지 않게.
   await popup.getByRole('button', { name: 'Append', pressed: true }).waitFor({ timeout: 5000 });
@@ -1157,6 +1126,15 @@ try {
     firstExpanded && overrideCount === 1 && expandedStates.join(',') === 'false,true'
       && editedMod?.mode === 'append' && editedMod?.comment === 'smoke comment',
     `first=${firstExpanded}, chips=${overrideCount}, aria=${expandedStates.join(',')}, mode=${editedMod?.mode}, comment="${editedMod?.comment}"`);
+
+  // N7b: 빈 값 처리(emptyMeans) UI 경로 — 값을 비우면 칩이 나타나고 Send empty가 상태에 반영
+  await popup.getByLabel('Header value').nth(1).fill('');
+  await popup.getByRole('button', { name: 'Send empty' }).waitFor({ timeout: 5000 });
+  await popup.getByRole('button', { name: 'Send empty' }).click();
+  const emptyMeansMod = await pollMod((m) => m?.emptyMeans === 'send-empty');
+  record('N7b: 빈 값 → Send empty 칩 → 상태 반영',
+    emptyMeansMod?.emptyMeans === 'send-empty' && emptyMeansMod?.value === '',
+    `emptyMeans=${emptyMeansMod?.emptyMeans}, value="${emptyMeansMod?.value}"`);
 
   // N8: ⋯ 메뉴 이동 → 칩 순서 + 겹침 승자 실반영, 키보드로 복제 (슬라이스 06)
   await seedProfiles([
@@ -1254,6 +1232,52 @@ try {
     (v) => v === 'yes',
   );
   record('N10: 표면 동일성 — 탭 앱 편집이 실요청 반영', tabHeader === 'yes', `x-from-tab=${tabHeader}`);
+
+  // N11: 키보드 경로 마감 — 칩 스위처·행 확장 토글 (탭=N5, 메뉴=N8과 함께 4종 완성, 슬라이스 09)
+  await seedProfiles([
+    baseProfile('k-a', 'KeyA',
+      [{ kind: 'request-header', id: 'm1', name: 'X-K', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
+      []),
+    { ...baseProfile('k-b', 'KeyB', [], []), active: false },
+  ]);
+  await popup.reload();
+  // 칩: 포커스 + Enter → 프로필 전환
+  await popup.getByRole('button', { name: 'Select profile KeyB' }).focus();
+  await popup.keyboard.press('Enter');
+  const kbSwitched = await pollProfileName((v) => v === 'KeyB');
+  // 행 확장 토글: 포커스 + Enter → aria-expanded=true
+  await popup.getByRole('button', { name: 'Select profile KeyA' }).click();
+  await pollProfileName((v) => v === 'KeyA');
+  const rowToggle = popup.getByRole('button', { name: 'Toggle modification options' }).first();
+  await rowToggle.focus();
+  await popup.keyboard.press('Enter');
+  const kbExpanded = await pollUntil(() => rowToggle.getAttribute('aria-expanded'), (v) => v === 'true', 5000);
+  record('N11: 키보드 — 칩 전환·행 확장 토글',
+    kbSwitched === 'KeyB' && kbExpanded === 'true',
+    `chip=${kbSwitched}, row-expanded=${kbExpanded}`);
+
+  // N12: 프로필 헤더 편집(이름·뱃지 라벨·뱃지 색) → 상태 반영 (매트릭스 행 14 마감)
+  // 각 편집은 UI 반영을 기다린 뒤 다음 편집 — 전체 객체 전송 모델의 순차 편집 규약.
+  await popup.getByLabel('Profile name').fill('Renamed');
+  // 스토리지가 아닌 UI(프롭) 반영을 기다린다 — 다음 편집이 스테일 프롭으로 이름을 되돌리지 않게.
+  await pollProfileName((v) => v === 'Renamed');
+  await popup.getByLabel('Badge label').fill('RN');
+  await pollUntil(() => popup.getByLabel('Badge label').inputValue(), (v) => v === 'RN', 5000, 100);
+  await popup.getByLabel('Badge color').fill('#dc2626');
+  // 최종 상태를 한 번에 단언 — 뒤 편집이 앞 편집을 덮었으면 여기서 잡힌다.
+  const finalMeta = await pollUntil(
+    () => sw.evaluate(async () => {
+      const { state } = await chrome.storage.local.get('state');
+      const p = state.profiles.find((x) => x.id === 'k-a');
+      return { name: p?.name, shortLabel: p?.shortLabel, color: p?.color };
+    }),
+    (m) => m.name === 'Renamed' && m.shortLabel === 'RN' && m.color === '#dc2626',
+    5000,
+    100,
+  );
+  record('N12: 헤더 이름·뱃지 편집 → 상태 반영',
+    finalMeta.name === 'Renamed' && finalMeta.shortLabel === 'RN' && finalMeta.color === '#dc2626',
+    `name=${finalMeta.name}, badge=${finalMeta.shortLabel}, color=${finalMeta.color}`);
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

@@ -90,6 +90,51 @@ try {
   await tab.waitForTimeout(200);
   await tab.screenshot({ path: `${OUT}/diag-5-tabapp-dark.png`, fullPage: true });
   console.log('shot 5: tab app (dark)');
+
+  // 경계: 다수 프로필 + 최대 길이 en/ko 이름 — 칩 wrap이 대량 발동해도 420px 가로
+  // 오버플로가 없어야 한다. 오버플로는 진단 실패(exit 1)로 처리한다.
+  const boundaryProfiles = Array.from({ length: 12 }, (_, i) => ({
+    id: `bnd${i}`,
+    name: i % 2
+      ? `아주 길고 긴 한국어 프로필 이름 경계 검증 ${i} — 칩과 사이드바에서 반드시 잘려야 한다`
+      : `An extremely long English profile name for boundary verification ${i} that must truncate`,
+    active: i % 3 === 0,
+    shortLabel: `B${i % 10}`,
+    color: '#2563eb',
+    modifications: [],
+    filters: [],
+  }));
+  await sw.evaluate(async (profiles) => {
+    const { state } = await chrome.storage.local.get('state');
+    state.profiles = [...state.profiles, ...profiles];
+    await chrome.storage.local.set({ state });
+  }, boundaryProfiles);
+  await popup.emulateMedia({ colorScheme: 'light' });
+  await popup.reload();
+  await popup.waitForTimeout(500);
+  await popup.screenshot({ path: `${OUT}/diag-6-popup-boundary.png`, fullPage: true });
+  // 문서 수준 오버플로 + 요소 수준 가로 스크롤러 스캔 — 스펙은 내부 가로 스크롤
+  // 표면 자체를 금지하므로(칩 결정), 내부에서 스크롤로 흡수된 오버플로도 실패다.
+  const { overflowPx, innerScrollers } = await popup.evaluate(() => {
+    const bad = [];
+    for (const el of document.querySelectorAll('*')) {
+      const st = getComputedStyle(el);
+      if ((st.overflowX === 'auto' || st.overflowX === 'scroll') && el.scrollWidth > el.clientWidth) {
+        bad.push(`${el.tagName.toLowerCase()}.${String(el.className).split(' ')[0]}`);
+      }
+    }
+    return {
+      overflowPx: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      innerScrollers: bad,
+    };
+  });
+  console.log(
+    `shot 6: popup boundary (18 profiles, max-length names) — overflow=${overflowPx}px, inner-scrollers=${innerScrollers.length}`,
+  );
+  if (overflowPx > 0 || innerScrollers.length > 0) {
+    console.error(`FAIL: horizontal overflow (${overflowPx}px) or inner scrollers [${innerScrollers.join(', ')}]`);
+    process.exitCode = 1;
+  }
 } finally {
   await context.close();
 }

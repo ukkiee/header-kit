@@ -96,6 +96,19 @@ describe('state transition commands', () => {
     expect(next.profiles[0]?.shortLabel).toBe('LO');
   });
 
+  it('updateProfileMeta는 이름·색을 갱신하고 다른 프로필은 보존한다', () => {
+    const next = updateProfileMeta(state(), 'p1', {
+      name: 'Renamed',
+      shortLabel: '1',
+      color: '#dc2626',
+    });
+
+    expect(next.profiles[0]?.name).toBe('Renamed');
+    expect(next.profiles[0]?.color).toBe('#dc2626');
+    expect(next.profiles[0]?.shortLabel).toBe('1'); // 2자 이내는 그대로 통과
+    expect(next.profiles[1]?.name).toBe('Two');
+  });
+
   it('removeProfile은 해당 Profile만 제거한다', () => {
     const next = removeProfile(state(), 'p1');
 
