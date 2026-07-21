@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "release",
+  "verdict": "approve",
+  "summary": "Ship: R-1 and R-2 are resolved, with no new critical issue introduced by commit 0eb4ea7. TypeScript checking passed; targeted Vitest execution was blocked only because the read-only sandbox prevented Vite from creating its temporary config file.",
+  "planFile": "docs/prds/popup-ui-fixes.md",
+  "planInDiff": null,
+  "reviewedFileCount": 29,
+  "target": "branch diff against 6051250",
+  "reviewedSha": "c386cc0115453912a02513c72ca8c7f7f0efa5f9",
+  "reviewedTree": "7376c537f88da3b15d3d8b39fc8fc89d8b851e60",
+  "headMovedDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 0,
+  "planFindingCount": 0,
+  "triage": "Clean verdict: note it in your report and COMMIT this artifact with the next bookkeeping commit.",
+  "findings": [],
+  "next_steps": []
+}
