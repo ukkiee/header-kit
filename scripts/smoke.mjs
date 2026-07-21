@@ -1038,17 +1038,19 @@ try {
   const createdName = await pollProfileName((v) => /^Profile \d+$/.test(v));
   record('N2: 새 프로필 생성 → 즉시 선택', /^Profile \d+$/.test(createdName), `name=${createdName}`);
 
+  // 삭제는 ⋯ 메뉴의 2단 확인(Delete → Delete?)으로 수행한다 (슬라이스 06)
+  const deleteSelected = async () => {
+    await popup.getByRole('button', { name: 'Profile menu' }).click();
+    await popup.getByRole('menuitem', { name: 'Delete' }).click();
+    await popup.getByRole('menuitem', { name: 'Delete?' }).click();
+  };
+
   // N3: 선택 프로필 삭제 → 재조정 불변식(첫 활성 → 첫 프로필)으로 폴백
-  await popup.getByRole('button', { name: 'Delete profile' }).click();
-  await popup.getByRole('button', { name: 'Confirm delete' }).click();
+  await deleteSelected();
   const afterDeleteName = await pollProfileName((v) => v === 'Alpha');
   record('N3: 선택 프로필 삭제 → 첫 활성 프로필로 폴백', afterDeleteName === 'Alpha', `name=${afterDeleteName}`);
 
   // N4: 마지막 프로필까지 삭제 → 빈 상태 안내가 보인다
-  const deleteSelected = async () => {
-    await popup.getByRole('button', { name: 'Delete profile' }).click();
-    await popup.getByRole('button', { name: 'Confirm delete' }).click();
-  };
   await deleteSelected(); // Alpha 삭제 → Beta 선택(첫 프로필)
   await pollProfileName((v) => v === 'Beta');
   await deleteSelected(); // Beta 삭제 → 빈 목록
@@ -1149,6 +1151,54 @@ try {
     firstExpanded && overrideCount === 1 && expandedStates.join(',') === 'false,true'
       && editedMod?.mode === 'append' && editedMod?.comment === 'smoke comment',
     `first=${firstExpanded}, chips=${overrideCount}, aria=${expandedStates.join(',')}, mode=${editedMod?.mode}, comment="${editedMod?.comment}"`);
+
+  // N8: ⋯ 메뉴 이동 → 칩 순서 + 겹침 승자 실반영, 키보드로 복제 (슬라이스 06)
+  await seedProfiles([
+    baseProfile('n-top', 'Top',
+      [{ kind: 'request-header', id: 't1', name: 'X-Conf', value: 'top-wins', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
+      []),
+    baseProfile('n-bottom', 'Bottom',
+      [{ kind: 'request-header', id: 'b1', name: 'X-Conf', value: 'bottom-wins', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
+      []),
+  ]);
+  await popup.reload();
+  await pollSessionRuleCount(sw, 2);
+  const winnerBefore = (await fetchEchoHeaders(pageB, '/headers'))['x-conf'];
+  // Bottom 선택 → 메뉴 '위로 이동'
+  await popup.getByRole('button', { name: 'Select profile Bottom' }).click();
+  await popup.getByRole('button', { name: 'Profile menu' }).click();
+  await popup.getByRole('menuitem', { name: 'Move up' }).click();
+  const chipOrder = await pollUntil(
+    () => popup.locator('[aria-label^="Select profile"]').allTextContents(),
+    (names) => names[0]?.startsWith('Bottom'),
+  );
+  const winnerAfter = await pollUntil(
+    () => fetchEchoHeaders(pageB, '/headers').then((h) => h['x-conf']),
+    (v) => v === 'bottom-wins',
+  );
+  // 키보드로 메뉴 열고 복제 활성화: Enter 열기 → ArrowDown으로 'Duplicate' 하이라이트까지 → Enter
+  await popup.getByRole('button', { name: 'Profile menu' }).focus();
+  await popup.keyboard.press('Enter');
+  await popup.getByRole('menuitem', { name: 'Duplicate' }).waitFor({ timeout: 5000 });
+  for (let i = 0; i < 6; i++) {
+    const highlighted = await popup.evaluate(
+      () => document.querySelector('[role="menuitem"][data-highlighted]')?.textContent ?? '',
+    );
+    if (highlighted === 'Duplicate') break;
+    await popup.keyboard.press('ArrowDown');
+  }
+  await popup.keyboard.press('Enter');
+  const profilesAfterDup = await pollUntil(
+    () => sw.evaluate(async () => {
+      const { state } = await chrome.storage.local.get('state');
+      return state.profiles.map((p) => p.name);
+    }),
+    (names) => names.length === 3,
+  );
+  record('N8: 메뉴 이동→칩 순서+승자 반영, 키보드 복제',
+    winnerBefore === 'top-wins' && chipOrder[0]?.startsWith('Bottom') && winnerAfter === 'bottom-wins'
+      && profilesAfterDup.length === 3,
+    `before=${winnerBefore}, chips=[${chipOrder.join('|')}], after=${winnerAfter}, profiles=${profilesAfterDup.length}`);
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

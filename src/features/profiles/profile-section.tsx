@@ -14,6 +14,7 @@ import type { TabPickerOptions } from '@/platform/tabs';
 import { Button } from '@/ui/button';
 import { Card } from '@/ui/card';
 import { Input } from '@/ui/input';
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from '@/ui/menu';
 import { ModTableHeader } from '@/ui/mod-table';
 import { Select } from '@/ui/select';
 import { Tab, TabList, TabPanel, Tabs } from '@/ui/tabs';
@@ -111,6 +112,56 @@ export function ProfileSection({
           }
           aria-label={`Toggle ${profile.name}`}
         />
+        <Menu
+          onOpenChange={(open) => {
+            // 메뉴가 닫히면 무장된 삭제 확인을 해제 — Esc 후 재열기에 즉시 삭제 방지.
+            if (!open) {
+              setConfirmingDelete(false);
+              clearTimeout(confirmTimer.current);
+            }
+          }}
+        >
+          <MenuTrigger render={<Button variant="ghost" size="sm" aria-label="Profile menu" />}>
+            ⋯
+          </MenuTrigger>
+          <MenuPopup>
+            <MenuItem
+              disabled={index === 0}
+              onClick={() =>
+                onCommand({ type: 'move-profile', profileId: profile.id, toIndex: index - 1 })
+              }
+            >
+              {t('menuMoveUp')}
+            </MenuItem>
+            <MenuItem
+              disabled={index === profileCount - 1}
+              onClick={() =>
+                onCommand({ type: 'move-profile', profileId: profile.id, toIndex: index + 1 })
+              }
+            >
+              {t('menuMoveDown')}
+            </MenuItem>
+            <MenuItem onClick={() => onCommand({ type: 'duplicate-profile', profileId: profile.id })}>
+              {t('menuDuplicate')}
+            </MenuItem>
+            {/* 2단 확인: 첫 클릭은 메뉴를 열어둔 채 라벨만 '삭제?'로 — 3초 내 재클릭이 실행. */}
+            <MenuItem
+              tone="danger"
+              closeOnClick={confirmingDelete}
+              onClick={() => {
+                if (confirmingDelete) {
+                  onCommand({ type: 'remove-profile', profileId: profile.id });
+                  setConfirmingDelete(false);
+                  return;
+                }
+                setConfirmingDelete(true);
+                confirmTimer.current = setTimeout(() => setConfirmingDelete(false), 3000);
+              }}
+            >
+              {confirmingDelete ? t('confirmDelete') : t('menuDelete')}
+            </MenuItem>
+          </MenuPopup>
+        </Menu>
       </div>
 
       <Tabs
@@ -257,53 +308,6 @@ export function ProfileSection({
         </TabPanel>
       </Tabs>
 
-      <div className="flex items-center justify-end gap-1">
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={index === 0}
-          aria-label="Move profile up (wins conflicts)"
-          onClick={() =>
-            onCommand({ type: 'move-profile', profileId: profile.id, toIndex: index - 1 })
-          }
-        >
-          ▲
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={index === profileCount - 1}
-          aria-label="Move profile down"
-          onClick={() =>
-            onCommand({ type: 'move-profile', profileId: profile.id, toIndex: index + 1 })
-          }
-        >
-          ▼
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          aria-label="Duplicate profile"
-          onClick={() => onCommand({ type: 'duplicate-profile', profileId: profile.id })}
-        >
-          ⧉
-        </Button>
-        <Button
-          variant="danger"
-          size="sm"
-          aria-label={confirmingDelete ? 'Confirm delete' : 'Delete profile'}
-          onClick={() => {
-            if (confirmingDelete) {
-              onCommand({ type: 'remove-profile', profileId: profile.id });
-              return;
-            }
-            setConfirmingDelete(true);
-            confirmTimer.current = setTimeout(() => setConfirmingDelete(false), 3000);
-          }}
-        >
-          {confirmingDelete ? 'Delete?' : '✕'}
-        </Button>
-      </div>
     </Card>
   );
 }
