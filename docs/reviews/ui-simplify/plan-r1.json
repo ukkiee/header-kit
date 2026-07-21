@@ -1,0 +1,58 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "plan",
+  "verdict": "needs-attention",
+  "summary": "Do not slice this plan yet: it leaves selection-state recovery, constrained-width profile navigation, and critical acceptance coverage unresolved.",
+  "planFile": "docs/reviews/ui-simplify/spec.md",
+  "planInDiff": true,
+  "reviewedFileCount": 1,
+  "target": "working tree diff",
+  "reviewedSha": "6b2bdb3a031a827d4ab543003610a717124f3431",
+  "reviewedTree": "b2c27ae9bef100bcbf30e1d7a96b849bd1356d04",
+  "headMovedDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 3,
+  "planFindingCount": 3,
+  "triage": "review-gate SKILL.md rules govern: render EVERY finding as a full table row, the human decides each row (accept/reject/defer/question — free text), echo back before applying, max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "Open question: selected IDs can become stale after profile mutations",
+      "body": "The plan defines only the initial selected-profile fallback. It does not define what happens when the selected profile is deleted, an import replaces profile IDs, or the profile list becomes empty. Because deletion and import remain available in the redesigned UI, an engineer must guess whether to select an adjacent profile, the first active profile, or an empty state. That can produce a blank editor, commands targeting a missing profile, or inconsistent behavior between popup and tab app.",
+      "file": "docs/reviews/ui-simplify/spec.md",
+      "line_start": 51,
+      "line_end": 51,
+      "confidence": 0.97,
+      "recommendation": "Specify a selection reconciliation invariant for every profile-list mutation, including delete, import/restore, empty list, activation changes, and external storage updates; add observable tests for each transition on both surfaces.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "high",
+      "title": "Testing decisions omit several release-critical user stories",
+      "body": "The only new Playwright cases named are profile switching, tab switching, and row expansion. No interaction coverage is required for profile creation, move/priority semantics, duplicate/delete, tab-app search/navigation, keyboard operation, or expanded editors for CSP/Redirect. Storybook and screenshots do not verify those behaviors. A competent implementation can therefore satisfy the stated test plan while shipping broken primary controls or an accessibility regression.",
+      "file": "docs/reviews/ui-simplify/spec.md",
+      "line_start": 62,
+      "line_end": 65,
+      "confidence": 0.98,
+      "recommendation": "Map every materially changed user story to an observable acceptance test. At minimum require Playwright coverage for menu operations and resulting order, create/delete selection recovery, tab-app search/navigation, CSP/Redirect editing, and keyboard focus/activation semantics for tabs, chips, rows, and menus.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "medium",
+      "title": "Open question: the 420px chip switcher has no overflow behavior",
+      "body": "The popup must show every profile in one chip row even though profile count and names are unbounded, while another story requires no horizontal overflow in any state. The plan never decides whether chips wrap, scroll internally, truncate, collapse into overflow, or expose another keyboard navigation model. This is the exact high-profile-count condition motivating the redesign, so slicing would force an architectural UX guess and may recreate overflow or a new vertical wall.",
+      "file": "docs/reviews/ui-simplify/spec.md",
+      "line_start": 13,
+      "line_end": 13,
+      "confidence": 0.96,
+      "recommendation": "Choose and document the chip overflow, truncation, focus, and discoverability behavior for many profiles and long en/ko names; add boundary tests at 420px with representative maximum-length names and enough profiles to overflow.",
+      "isPlanFinding": true
+    }
+  ],
+  "next_steps": [
+    "Resolve the selection reconciliation and chip overflow decisions in the plan.",
+    "Add a user-story-to-test acceptance matrix before slicing implementation tickets."
+  ]
+}
