@@ -4,3 +4,4 @@
 
 - preflight: done — branch feature/ui-simplify, tracker=.scratch(tracked), tree clean
 - align: done — 범위 C(팝업 구조 개편+탭 앱 셸), 시스템 다크+라이트, 행 선택 시 확장, 칩 스위처+단일 뷰, 탭 앱 셸 제안대로. ADR 0004 기록
+- spec: done — .scratch/ui-simplify/spec.md 발행 (ready-for-agent), seam 확인(기존 4, 신규 0)
