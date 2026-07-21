@@ -141,14 +141,18 @@ export function ProfileSection({
                   profileId: profile.id,
                   modificationId: modification.id,
                 });
+              const expansion = {
+                expanded: expandedRowId === modification.id,
+                onToggleExpanded: onToggleRow ? () => onToggleRow(modification.id) : undefined,
+              };
               if (modification.kind === 'csp') {
                 return (
-                  <CspRow key={modification.id} modification={modification} onChange={onChange} onRemove={onRemove} />
+                  <CspRow key={modification.id} modification={modification} onChange={onChange} onRemove={onRemove} {...expansion} />
                 );
               }
               if (modification.kind === 'redirect') {
                 return (
-                  <RedirectRow key={modification.id} modification={modification} onChange={onChange} onRemove={onRemove} />
+                  <RedirectRow key={modification.id} modification={modification} onChange={onChange} onRemove={onRemove} {...expansion} />
                 );
               }
               return (
@@ -159,8 +163,7 @@ export function ProfileSection({
                   userHeaders={userHeaders}
                   onChange={onChange}
                   onRemove={onRemove}
-                  expanded={expandedRowId === modification.id}
-                  onToggleExpanded={onToggleRow ? () => onToggleRow(modification.id) : undefined}
+                  {...expansion}
                 />
               );
             })}

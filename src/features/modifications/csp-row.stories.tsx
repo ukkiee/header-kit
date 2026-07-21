@@ -7,25 +7,43 @@ const meta = { title: 'Popup/CspRow', component: CspRow } satisfies Meta<typeof 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-function Interactive({ initial }: { initial: CspModification }) {
+function Interactive({
+  initial,
+  initiallyExpanded = false,
+}: {
+  initial: CspModification;
+  initiallyExpanded?: boolean;
+}) {
   const [mod, setMod] = useState<CspModification>(initial);
-  return <CspRow modification={mod} onChange={(m: Modification) => setMod(m as CspModification)} onRemove={() => {}} />;
+  const [expanded, setExpanded] = useState(initiallyExpanded);
+  return (
+    <CspRow
+      modification={mod}
+      onChange={(m: Modification) => setMod(m as CspModification)}
+      onRemove={() => {}}
+      expanded={expanded}
+      onToggleExpanded={() => setExpanded((v) => !v)}
+    />
+  );
 }
 
-export const Default: Story = {
-  args: {
-    modification: {
-      kind: 'csp',
-      id: 'm1',
-      directives: [
-        { name: 'default-src', value: "'self'" },
-        { name: 'img-src', value: 'https: data:' },
-      ],
-      comment: '',
-      enabled: true,
-    },
-    onChange: () => {},
-    onRemove: () => {},
-  },
+const sample: CspModification = {
+  kind: 'csp',
+  id: 'm1',
+  directives: [
+    { name: 'default-src', value: "'self'" },
+    { name: 'img-src', value: 'https: data:' },
+  ],
+  comment: '',
+  enabled: true,
+};
+
+export const Collapsed: Story = {
+  args: { modification: sample, onChange: () => {}, onRemove: () => {} },
   render: (args) => <Interactive initial={args.modification} />,
+};
+
+export const Expanded: Story = {
+  args: { modification: sample, onChange: () => {}, onRemove: () => {} },
+  render: (args) => <Interactive initial={args.modification} initiallyExpanded />,
 };

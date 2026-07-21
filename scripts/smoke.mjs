@@ -917,6 +917,32 @@ try {
   });
   record('M3: CSP 디렉티브 합성 → 응답 헤더', cspHeader === "default-src 'none'", `csp=${cspHeader}`);
 
+  // 범용 폴러 — 새 UI 경로 검증들이 공유한다 (probe를 test가 참일 때까지 재시도).
+  const pollUntil = async (probe, test, timeoutMs = 8000, intervalMs = 200) => {
+    const start = Date.now();
+    let value;
+    while (Date.now() - start < timeoutMs) {
+      value = await probe();
+      if (test(value)) return value;
+      await new Promise((r) => setTimeout(r, intervalMs));
+    }
+    return value;
+  };
+
+  // M3b: 새 UI 경로(확장 편집)로 CSP 디렉티브 값 변경 → 실제 응답 헤더 반영 (슬라이스 05)
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Toggle modification options' }).first().click();
+  await popup.getByLabel('CSP directive value').fill("'self'");
+  const cspEdited = await pollUntil(
+    () => pageB.evaluate(async () => {
+      const res = await fetch('/headers', { cache: 'no-store' });
+      return res.headers.get('content-security-policy');
+    }),
+    (v) => v === "default-src 'self'",
+  );
+  record('M3b: UI 확장 편집으로 CSP 값 변경 → 실응답 반영', cspEdited === "default-src 'self'",
+    `csp=${cspEdited}`);
+
   // M4: Redirect regex + 캡처 그룹 치환
   await seedProfiles([
     baseProfile('p-rd', 'Rd',
@@ -932,6 +958,30 @@ try {
     return res.text();
   });
   record('M4: Redirect regex 캡처 그룹 치환', /\/redir-dst\?q=1/.test(landed), `landed=${landed}`);
+
+  // M4b: 새 UI 경로(확장 편집)로 치환·패턴 편집 → 실제 리다이렉트 반영 (슬라이스 05)
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Toggle modification options' }).first().click();
+  await popup.getByLabel('Redirect substitution').fill(`http://127.0.0.1:${port}/redir-alt\\1`);
+  const fetchLanding = (path) => (
+    pageB.evaluate(async (p) => {
+      const res = await fetch(p, { cache: 'no-store', redirect: 'follow' });
+      return res.text();
+    }, path)
+  );
+  const landedEdited = await pollUntil(
+    () => fetchLanding('/redir-src?q=1'),
+    (v) => /\/redir-alt\?q=1/.test(v),
+  );
+  // 패턴도 UI로 편집 — 매칭 소스가 /redir-two 로 바뀌어 실제 매칭에 반영된다
+  await popup.getByLabel('Redirect pattern').fill(`^http://127\\.0\\.0\\.1:${port}/redir-two(.*)`);
+  const landedPattern = await pollUntil(
+    () => fetchLanding('/redir-two?q=2'),
+    (v) => /\/redir-alt\?q=2/.test(v),
+  );
+  record('M4b: UI 확장 편집으로 치환·패턴 변경 → 실리다이렉트 반영',
+    /\/redir-alt\?q=1/.test(landedEdited) && /\/redir-alt\?q=2/.test(landedPattern),
+    `sub=${/\/redir-alt\?q=1/.test(landedEdited)}, pattern-landed=${landedPattern?.slice(-30)}`);
 
   // M5: 유효하지 않은 redirect 패턴은 저장 시점에 거부된다
   const redirectReject = await popup.evaluate(async () => {
