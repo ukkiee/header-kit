@@ -15,3 +15,4 @@
 - implement 04: done — 4b4e815, 테이블형 행+단일 확장, smoke 56/56. 프런티어: 05·06·07·08
 - implement 05: done — 584873e, CSP·리다이렉트 테이블 행, ModRowShell 공유, smoke 58/58. 잔여: smoke 구형 폴러 5종 pollUntil 전환(09에서)
 - implement 06: done — e38be3c, ⋯ 메뉴+헤더 정돈, smoke 59/59. 프런티어: 07·08
+- implement 07: done — ebc4cb9, 상태 요약 슬림 라인+Card 축약, smoke 59/59. 주의: smoke 섹션 I(602행) 플레이크 빈발 — 09에서 폴러 정리 시 원인 조사 후보
