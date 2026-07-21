@@ -23,7 +23,7 @@ const richState = {
       shortLabel: 'ST',
       color: '#d97706',
       modifications: [
-        { kind: 'request-header', id: 'm1', name: 'Authorization', value: 'Bearer {{uuid}}', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '스테이징 토큰' },
+        { kind: 'request-header', id: 'm1', name: 'Authorization', value: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.veryLongTokenValueThatShouldNotBreakTheRowLayoutAtAll.{{uuid}}', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '스테이징 토큰' },
         { kind: 'response-header', id: 'm2', name: 'X-Frame-Options', value: 'DENY', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
         { kind: 'cookie', id: 'm3', name: 'session', value: 'abc', enabled: true, mode: 'append', emptyMeans: 'remove', comment: '' },
         { kind: 'csp', id: 'm4', directives: [{ name: 'default-src', value: "'self'" }], comment: '', enabled: true },

@@ -51,7 +51,7 @@ export function PreferencesPanel({
                 }}
                 placeholder="X-My-Header"
                 aria-label="New autocomplete header"
-                className="flex-1"
+                className="min-w-0 flex-1"
               />
               <Button size="sm" aria-label="Add autocomplete header" onClick={add} disabled={draft.trim() === ''}>
                 {t('add')}

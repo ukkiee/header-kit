@@ -93,7 +93,7 @@ export function HeaderRow({
           onChange={(e) => onChange({ ...modification, value: e.target.value })}
           placeholder={isCookie ? 'value' : t('value')}
           aria-label="Header value"
-          className="flex-1"
+          className="min-w-0 flex-1"
         />
         <LargeEditor
           title={`${t('value')} — ${label ?? (nameValue || 'header')}`}

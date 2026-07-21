@@ -31,7 +31,7 @@ export function RedirectRow({ modification, onChange, onRemove }: RedirectRowPro
           onChange={(e) => onChange({ ...modification, pattern: e.target.value })}
           placeholder="^https://prod\\.example\\.com/(.*)"
           aria-label="Redirect pattern"
-          className="flex-1"
+          className="min-w-0 flex-1"
         />
         <span className="text-xs text-zinc-400">→</span>
         <Input
@@ -40,7 +40,7 @@ export function RedirectRow({ modification, onChange, onRemove }: RedirectRowPro
           onChange={(e) => onChange({ ...modification, substitution: e.target.value })}
           placeholder="http://localhost:3000/\\1"
           aria-label="Redirect substitution"
-          className="flex-1"
+          className="min-w-0 flex-1"
         />
         <Button variant="danger" size="sm" onClick={onRemove} aria-label="Remove modification">
           ✕

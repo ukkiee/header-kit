@@ -63,7 +63,7 @@ export function CspRow({ modification, onChange, onRemove }: CspRowProps) {
               }
               placeholder="'self'"
               aria-label="CSP directive value"
-              className="flex-1"
+              className="min-w-0 flex-1"
             />
             <Button
               variant="danger"
