@@ -4,10 +4,12 @@
 
 **Blocked by:** 01 — 단일 프로필 뷰 골격.
 
-**Status:** ready-for-agent
+**Status:** done — commit 1165783
 
-- [ ] prefers-color-scheme 다크에서 팝업·탭 앱이 다크로 렌더된다
-- [ ] 토큰에 다크 값이 정의되고 액센트가 1색으로 통일된다 (기존 다중 강조색 정리)
-- [ ] 렌더 감사에 다크 스크린샷 시나리오가 추가된다
-- [ ] Storybook에서 양 테마 상태를 확인할 수 있다
-- [ ] tsc·vitest·build·smoke·storybook green
+- [x] prefers-color-scheme 다크에서 팝업·탭 앱이 다크로 렌더된다 (diag 4·5 감사, body/main 토큰 정합)
+- [x] 토큰에 다크 값이 정의되고 액센트가 1색으로 통일된다 — @theme 겸용 램프 + blue 단일(시맨틱 success/warn/danger만 잔존), canvas 토큰 추출
+- [x] 렌더 감사에 다크 스크린샷 시나리오가 추가된다 (diag-4 팝업 / diag-5 탭 앱)
+- [x] Storybook에서 양 테마 상태를 확인할 수 있다 (테마 툴바 + data-theme 오버라이드, 네이티브 위젯 포함)
+- [x] tsc·vitest170·build·smoke53/53·storybook green
+
+참고: code-review 2축 반영 — 원시 CSS의 data-theme 미준수(@variant dark로 통일), 캔버스 클래스 3중 중복 해소, design-system.md 경로 정정.
