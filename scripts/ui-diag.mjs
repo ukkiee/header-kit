@@ -37,6 +37,11 @@ const richState = {
       ],
     },
     { id: 'p2', name: '두 번째 프로필', active: false, shortLabel: '2', color: '#2563eb', modifications: [], filters: [] },
+    // 칩 스위처 wrap+truncate 경계 — 긴 en/ko 이름 + 다수 프로필로 420px 줄바꿈을 실제로 발동시킨다.
+    { id: 'p3', name: '아주 길고 긴 한국어 프로필 이름은 칩에서 잘려야 한다', active: true, shortLabel: '긴', color: '#16a34a', modifications: [], filters: [] },
+    { id: 'p4', name: 'A very long English profile name that must truncate', active: false, shortLabel: 'EN', color: '#dc2626', modifications: [], filters: [] },
+    { id: 'p5', name: 'QA', active: true, shortLabel: 'QA', color: '#7c3aed', modifications: [], filters: [] },
+    { id: 'p6', name: 'Perf', active: false, shortLabel: 'PF', color: '#0891b2', modifications: [], filters: [] },
   ],
 };
 

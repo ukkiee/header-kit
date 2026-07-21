@@ -945,6 +945,67 @@ try {
   record('M5: invalid redirect 패턴이 저장 시점에 거부', redirectReject?.ok === false && /regex/i.test(redirectReject?.error ?? ''),
     `ok=${redirectReject?.ok}, error="${redirectReject?.error}"`);
 
+  // ---------- N. ui-simplify 슬라이스 01: 단일 프로필 뷰 + 칩 스위처 ----------
+  // N1: 칩 클릭 → 본문이 해당 프로필로 전환된다
+  await seedProfiles([
+    baseProfile('n-a', 'Alpha',
+      [{ kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
+      []),
+    { ...baseProfile('n-b', 'Beta', [], []), active: false },
+  ]);
+  await popup.reload();
+  // 커맨드 왕복(add/remove-profile) 후 렌더를 기다리며 이름 입력 값을 폴링한다.
+  const pollProfileName = async (test, timeoutMs = 5000) => {
+    const start = Date.now();
+    let value = '';
+    while (Date.now() - start < timeoutMs) {
+      value = await popup.getByLabel('Profile name').inputValue().catch(() => '');
+      if (test(value)) return value;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return value;
+  };
+
+  // 첫 활성(Alpha)이 자동 선택 → Beta 칩 클릭으로 전환
+  await popup.getByRole('button', { name: 'Select profile Beta' }).click();
+  const shownName = await pollProfileName((v) => v === 'Beta');
+  record('N1: 칩 클릭 → 본문 프로필 전환', shownName === 'Beta', `name=${shownName}`);
+
+  // N1b: 칩이 on/off 상태를 반영한다 (aria-label = 도트와 같은 소스)
+  const betaOff = await popup.getByRole('button', { name: 'Select profile Beta (off)' }).isVisible();
+  await popup.getByRole('switch', { name: 'Toggle Beta' }).click();
+  const betaOn = await popup
+    .getByRole('button', { name: 'Select profile Beta (on)' })
+    .waitFor({ timeout: 5000 })
+    .then(() => true, () => false);
+  record('N1b: 칩 도트/라벨이 프로필 on/off 반영', betaOff && betaOn, `off=${betaOff}, on=${betaOn}`);
+  await popup.getByRole('switch', { name: 'Toggle Beta' }).click();
+
+  // N2: + 새 프로필 → 생성된 프로필이 선택된다
+  await popup.getByRole('button', { name: '+ New profile' }).click();
+  const createdName = await pollProfileName((v) => /^Profile \d+$/.test(v));
+  record('N2: 새 프로필 생성 → 즉시 선택', /^Profile \d+$/.test(createdName), `name=${createdName}`);
+
+  // N3: 선택 프로필 삭제 → 재조정 불변식(첫 활성 → 첫 프로필)으로 폴백
+  await popup.getByRole('button', { name: 'Delete profile' }).click();
+  await popup.getByRole('button', { name: 'Confirm delete' }).click();
+  const afterDeleteName = await pollProfileName((v) => v === 'Alpha');
+  record('N3: 선택 프로필 삭제 → 첫 활성 프로필로 폴백', afterDeleteName === 'Alpha', `name=${afterDeleteName}`);
+
+  // N4: 마지막 프로필까지 삭제 → 빈 상태 안내가 보인다
+  const deleteSelected = async () => {
+    await popup.getByRole('button', { name: 'Delete profile' }).click();
+    await popup.getByRole('button', { name: 'Confirm delete' }).click();
+  };
+  await deleteSelected(); // Alpha 삭제 → Beta 선택(첫 프로필)
+  await pollProfileName((v) => v === 'Beta');
+  await deleteSelected(); // Beta 삭제 → 빈 목록
+  const emptyShown = await popup
+    .getByText('No profiles yet')
+    .waitFor({ timeout: 5000 })
+    .then(() => true, () => false);
+  record('N4: 빈 목록 → 빈 상태 안내 표시', emptyShown, `visible=${emptyShown}`);
+
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
   process.exitCode = failed.length === 0 ? 0 : 1;

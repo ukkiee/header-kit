@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { BackupPanel } from '@/features/backup/backup-panel';
 import { PreferencesPanel } from '@/features/preferences/preferences-panel';
+import { ProfileChips } from '@/features/profiles/profile-chips';
 import { ProfileSection } from '@/features/profiles/profile-section';
+import { reconcileSelection } from '@/features/profiles/selection';
 import { StatusSummary } from '@/features/status/status-summary';
 import { TransferPanel } from '@/features/transfer/transfer-panel';
 import { Alert } from '@/ui/alert';
@@ -25,6 +27,8 @@ export type AppSurface = 'popup' | 'tab';
 
 export function App({ surface = 'popup' }: { surface?: AppSurface }) {
   const [state, setState] = useState<StoredState | null>(null);
+  // 단일 프로필 뷰(ADR 0004)의 선택 — 렌더마다 reconcileSelection으로 재조정된다.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [commandError, setCommandError] = useState<string | null>(null);
   const [pickerOptions, setPickerOptions] = useState<TabPickerOptions | undefined>(undefined);
   const [summary, setSummary] = useState<StatusSummaryData | null>(null);
@@ -45,6 +49,10 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
   }, []);
 
   if (!state) return null;
+
+  const effectiveSelectedId = reconcileSelection(selectedId, state.profiles);
+  const selectedIndex = state.profiles.findIndex((p) => p.id === effectiveSelectedId);
+  const selectedProfile = selectedIndex >= 0 ? state.profiles[selectedIndex] : undefined;
 
   const dispatch = (command: Command) => {
     void sendCommand(command).then((result) => {
@@ -111,34 +119,34 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
         </Alert>
       )}
 
-      {state.profiles.map((profile, index) => (
+      <ProfileChips
+        profiles={state.profiles}
+        selectedId={effectiveSelectedId}
+        onSelect={setSelectedId}
+        onCreate={() => {
+          const profile = createProfile(`Profile ${state.profiles.length + 1}`, {
+            color: PROFILE_COLORS[state.profiles.length % PROFILE_COLORS.length],
+          });
+          dispatch({ type: 'add-profile', profile });
+          // 낙관적 선택 — 커맨드가 실패하면 다음 렌더의 reconcileSelection이 되돌린다.
+          setSelectedId(profile.id);
+        }}
+      />
+
+      {selectedProfile ? (
         <ProfileSection
-          key={profile.id}
-          profile={profile}
-          index={index}
+          key={selectedProfile.id}
+          profile={selectedProfile}
+          index={selectedIndex}
           profileCount={state.profiles.length}
           onCommand={dispatch}
           pickerOptions={pickerOptions}
           materialized={state.materialized}
           userHeaders={state.customHeaderNames}
         />
-      ))}
-
-      <Button
-        variant="ghost"
-        size="sm"
-        className="self-start"
-        onClick={() =>
-          dispatch({
-            type: 'add-profile',
-            profile: createProfile(`Profile ${state.profiles.length + 1}`, {
-              color: PROFILE_COLORS[state.profiles.length % PROFILE_COLORS.length],
-            }),
-          })
-        }
-      >
-        + {t(locale, 'newProfile')}
-      </Button>
+      ) : (
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">{t(locale, 'noProfilesYet')}</p>
+      )}
 
       <TransferPanel state={state} onCommand={dispatchWithResult} />
       <BackupPanel onCommand={dispatchWithResult} />
