@@ -594,11 +594,17 @@ try {
   // ---------- I. 이슈 09: 자동 Backup · 복원 ----------
   // 이전 섹션들의 누적 백업을 지우고 자족적으로 시작한다.
   await sw.evaluate(async () => chrome.storage.sync.clear());
+  // placeholder 실체화는 커맨드 경로(활성화 경계)에서만 일어난다 — 직접 active로
+  // 시드하면 프로필이 정당하게 제외되어(규칙 0) 이 폴은 이전 섹션의 낡은 규칙을
+  // 우연히 샘플링할 때만 통과했다(역대 플레이크의 실체). 비활성 시드 후 실제
+  // 팝업 토글로 활성화 경계를 태운다.
   await seedProfiles([
-    baseProfile('p-bk', 'Backupable',
+    { ...baseProfile('p-bk', 'Backupable',
       [{ kind: 'request-header', id: 'm1', name: 'X-Restored-Id', value: 'rst-{{uuid}}', enabled: true }],
-      []),
+      []), active: false },
   ]);
+  await popup.reload();
+  await popup.getByRole('switch', { name: 'Toggle Backupable' }).click();
   await pollSessionRuleCount(sw, 1);
 
   // 자동 백업은 최소 간격(30s) 스로틀이 있으므로 그보다 넉넉히 기다린다.
@@ -1199,6 +1205,55 @@ try {
     winnerBefore === 'top-wins' && chipOrder[0]?.startsWith('Bottom') && winnerAfter === 'bottom-wins'
       && profilesAfterDup.length === 3,
     `before=${winnerBefore}, chips=[${chipOrder.join('|')}], after=${winnerAfter}, profiles=${profilesAfterDup.length}`);
+
+  // N9: 탭 앱 셸 — 사이드바 검색·선택, 레일 화면 전환 (슬라이스 08)
+  await seedProfiles([
+    baseProfile('s-a', 'Alpha', [], []),
+    { ...baseProfile('s-b', 'Beta', [], []), active: false },
+    { ...baseProfile('s-g', 'Gamma', [], []), active: false },
+  ]);
+  await tabApp.reload();
+  await tabApp.getByLabel('Search profiles').fill('Bet');
+  const searchResult = await pollUntil(
+    () => tabApp.locator('[aria-label^="Select profile"]').allTextContents(),
+    (names) => names.length === 1,
+  );
+  await tabApp.getByLabel('Search profiles').fill('');
+  await tabApp.getByRole('button', { name: 'Select profile Gamma' }).click();
+  const sidebarSelected = await pollUntil(
+    () => tabApp.getByLabel('Profile name').inputValue().catch(() => ''),
+    (v) => v === 'Gamma',
+  );
+  await tabApp.getByRole('button', { name: 'Show backups' }).click();
+  const backupsShown = await tabApp.getByRole('button', { name: 'Toggle backups' }).isVisible();
+  await tabApp.getByRole('button', { name: 'Show preferences' }).click();
+  const prefsShown = await tabApp.getByRole('button', { name: 'Toggle preferences' }).isVisible();
+  await tabApp.getByRole('button', { name: 'Show profiles' }).click();
+  record('N9: 탭 앱 셸 — 검색 필터·사이드바 선택·레일 전환',
+    searchResult.length === 1 && searchResult[0]?.startsWith('Beta') && sidebarSelected === 'Gamma'
+      && backupsShown && prefsShown,
+    `search=[${searchResult.join('|')}], selected=${sidebarSelected}, backups=${backupsShown}, prefs=${prefsShown}`);
+
+  // N10: 표면 동일성 — 탭 앱에서 헤더 추가·편집 → 실제 요청 반영 (팝업과 같은 컴포넌트 경로)
+  await tabApp.getByRole('button', { name: '+ Request' }).click();
+  await tabApp.getByLabel('Header name').waitFor({ timeout: 5000 });
+  await tabApp.getByLabel('Header name').fill('X-From-Tab');
+  // 이름 커밋을 기다린 뒤 값 편집 — 수정 전체 객체 전송 모델의 순차 편집 규약
+  await pollUntil(
+    () => sw.evaluate(async () => {
+      const { state } = await chrome.storage.local.get('state');
+      return state.profiles.find((p) => p.name === 'Gamma')?.modifications[0]?.name ?? '';
+    }),
+    (v) => v === 'X-From-Tab',
+  );
+  await tabApp.getByLabel('Header value').fill('yes');
+  await tabApp.getByRole('switch', { name: 'Toggle Gamma' }).click();
+  await pollSessionRuleCount(sw, 1);
+  const tabHeader = await pollUntil(
+    () => fetchEchoHeaders(pageB, '/headers').then((h) => h['x-from-tab']),
+    (v) => v === 'yes',
+  );
+  record('N10: 표면 동일성 — 탭 앱 편집이 실요청 반영', tabHeader === 'yes', `x-from-tab=${tabHeader}`);
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

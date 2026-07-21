@@ -3,6 +3,7 @@ import { BackupPanel } from '@/features/backup/backup-panel';
 import { PreferencesPanel } from '@/features/preferences/preferences-panel';
 import { ProfileChips } from '@/features/profiles/profile-chips';
 import { ProfileSection, type ProfileTab } from '@/features/profiles/profile-section';
+import { ProfileSidebar } from '@/features/profiles/profile-sidebar';
 import { reconcileSelection } from '@/features/profiles/selection';
 import { StatusSummary } from '@/features/status/status-summary';
 import { TransferPanel } from '@/features/transfer/transfer-panel';
@@ -23,8 +24,17 @@ import {
 } from '@/platform/stateStore';
 import { queryTabPickerOptions, type TabPickerOptions } from '@/platform/tabs';
 
-/** popup은 컴팩트, tab 앱은 넓은 레이아웃 — 같은 컴포넌트를 다른 마운트로 쓴다. */
+/** popup은 컴팩트, tab 앱은 레일+사이드바 셸 — 같은 편집 컴포넌트를 공유한다. */
 export type AppSurface = 'popup' | 'tab';
+
+/** 탭 앱 레일 화면 — 팝업 하단 접이 패널들이 넓은 표면에서 승격된다 (ADR 0004). */
+type RailView = 'profiles' | 'backups' | 'preferences';
+
+const RAIL_ITEMS: Array<{ view: RailView; icon: string; label: string }> = [
+  { view: 'profiles', icon: '▤', label: 'Show profiles' },
+  { view: 'backups', icon: '⟲', label: 'Show backups' },
+  { view: 'preferences', icon: '⚙', label: 'Show preferences' },
+];
 
 export function App({ surface = 'popup' }: { surface?: AppSurface }) {
   const [state, setState] = useState<StoredState | null>(null);
@@ -34,6 +44,7 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
   const [activeTab, setActiveTab] = useState<ProfileTab>('modifications');
   // 단일 확장 행 — 한 번에 한 행만 옵션을 펼친다 (ADR 0004).
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
+  const [railView, setRailView] = useState<RailView>('profiles');
   const [commandError, setCommandError] = useState<string | null>(null);
   const [pickerOptions, setPickerOptions] = useState<TabPickerOptions | undefined>(undefined);
   const [summary, setSummary] = useState<StatusSummaryData | null>(null);
@@ -89,83 +100,148 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
     void browser.tabs.create({ url: browser.runtime.getURL('/app.html') });
   };
 
-  return (
-    <LocaleProvider locale={locale}>
-    <main
-      className={`mx-auto flex flex-col gap-3 p-4 ${canvas} ${
-        surface === 'tab' ? 'min-h-screen w-full max-w-3xl' : ''
-      }`}
+  const createAndSelectProfile = () => {
+    const profile = createProfile(`Profile ${state.profiles.length + 1}`, {
+      color: PROFILE_COLORS[state.profiles.length % PROFILE_COLORS.length],
+    });
+    // 선택은 커맨드 성공 후 확정 — 낙관적 선택은 커밋-중-렌더 재조정이 되돌린다.
+    void sendCommand({ type: 'add-profile', profile }).then((result) => {
+      if (result.ok) {
+        setState(result.state);
+        setSelectedId(profile.id);
+        setCommandError(null);
+      } else {
+        setCommandError(result.error);
+      }
+    });
+  };
+
+  const pauseButton = (
+    <Button
+      variant={state.paused ? 'primary' : 'ghost'}
+      size="sm"
+      aria-label={state.paused ? t(locale, 'resume') : t(locale, 'pause')}
+      onClick={() => dispatch({ type: 'set-paused', paused: !state.paused })}
     >
-      <div className="flex items-center justify-between">
-        <h1 className="text-base font-semibold">{t(locale, 'appName')}</h1>
-        <div className="flex items-center gap-1">
-          {surface === 'popup' && (
-            <Button variant="ghost" size="sm" aria-label={t(locale, 'openInTab')} onClick={openTabApp}>
-              ⧉ {t(locale, 'openInTab')}
-            </Button>
-          )}
-          <Button
-            variant={state.paused ? 'primary' : 'ghost'}
-            size="sm"
-            aria-label={state.paused ? t(locale, 'resume') : t(locale, 'pause')}
-            onClick={() => dispatch({ type: 'set-paused', paused: !state.paused })}
-          >
-            {state.paused ? `▶ ${t(locale, 'resume')}` : `II ${t(locale, 'pause')}`}
-          </Button>
-        </div>
-      </div>
+      {state.paused ? `▶ ${t(locale, 'resume')}` : `II ${t(locale, 'pause')}`}
+    </Button>
+  );
 
-      {summary && <StatusSummary summary={summary} />}
-
+  const alerts = (
+    <>
       {incognitoAllowed === false && <Alert severity="info">{t(locale, 'incognitoBlocked')}</Alert>}
-
       {state.paused && <Alert severity="warn">{t(locale, 'pausedNote')}</Alert>}
-
       {commandError && (
         <Alert severity="danger" role="alert">
           {commandError}
         </Alert>
       )}
+    </>
+  );
+
+  const profileEditor = selectedProfile ? (
+    <ProfileSection
+      key={selectedProfile.id}
+      profile={selectedProfile}
+      index={selectedIndex}
+      profileCount={state.profiles.length}
+      onCommand={dispatch}
+      pickerOptions={pickerOptions}
+      materialized={state.materialized}
+      userHeaders={state.customHeaderNames}
+      activeTab={activeTab}
+      onActiveTabChange={setActiveTab}
+      expandedRowId={expandedRowId}
+      onToggleRow={(id) => setExpandedRowId((prev) => (prev === id ? null : id))}
+    />
+  ) : (
+    <p className="text-xs text-zinc-500 dark:text-zinc-400">{t(locale, 'noProfilesYet')}</p>
+  );
+
+  if (surface === 'tab') {
+    return (
+      <LocaleProvider locale={locale}>
+        <div className={`grid min-h-screen grid-cols-[3rem_14rem_minmax(0,1fr)] ${canvas}`}>
+          <nav className="flex flex-col items-center gap-1 border-r border-zinc-200 py-3 dark:border-zinc-800">
+            {RAIL_ITEMS.map(({ view, icon, label }) => (
+              <Button
+                key={view}
+                variant="ghost"
+                size="sm"
+                aria-label={label}
+                aria-pressed={railView === view}
+                className={railView === view ? 'bg-zinc-100 dark:bg-zinc-800' : ''}
+                onClick={() => setRailView(view)}
+              >
+                {icon}
+              </Button>
+            ))}
+          </nav>
+
+          <aside className="flex flex-col gap-2 border-r border-zinc-200 p-3 dark:border-zinc-800">
+            <ProfileSidebar
+              profiles={state.profiles}
+              selectedId={effectiveSelectedId}
+              onSelect={setSelectedId}
+              onCreate={createAndSelectProfile}
+            />
+          </aside>
+
+          <main className="flex min-w-0 flex-col gap-3 p-4">
+            <div className="flex items-center justify-between">
+              <h1 className="text-base font-semibold">{t(locale, 'appName')}</h1>
+              {pauseButton}
+            </div>
+
+            {/* 오류·일시정지 배너는 레일 화면과 무관하게 항상 보인다 — 조용한 실패 금지. */}
+            {alerts}
+
+            {railView === 'profiles' && (
+              <>
+                {summary && <StatusSummary summary={summary} />}
+                {profileEditor}
+                <TransferPanel state={state} onCommand={dispatchWithResult} />
+              </>
+            )}
+            {railView === 'backups' && <BackupPanel onCommand={dispatchWithResult} />}
+            {railView === 'preferences' && (
+              <PreferencesPanel
+                customHeaderNames={state.customHeaderNames}
+                onCommand={dispatch}
+                incognitoAllowed={incognitoAllowed}
+              />
+            )}
+          </main>
+        </div>
+      </LocaleProvider>
+    );
+  }
+
+  return (
+    <LocaleProvider locale={locale}>
+    <main className={`mx-auto flex flex-col gap-3 p-4 ${canvas}`}>
+      <div className="flex items-center justify-between">
+        <h1 className="text-base font-semibold">{t(locale, 'appName')}</h1>
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="sm" aria-label={t(locale, 'openInTab')} onClick={openTabApp}>
+            ⧉ {t(locale, 'openInTab')}
+          </Button>
+          {pauseButton}
+        </div>
+      </div>
+
+      {summary && <StatusSummary summary={summary} />}
+
+      {alerts}
 
       <ProfileChips
         profiles={state.profiles}
         selectedId={effectiveSelectedId}
         onSelect={setSelectedId}
-        onCreate={() => {
-          const profile = createProfile(`Profile ${state.profiles.length + 1}`, {
-            color: PROFILE_COLORS[state.profiles.length % PROFILE_COLORS.length],
-          });
-          // 선택은 커맨드 성공 후 확정 — 낙관적 선택은 커밋-중-렌더 재조정이 되돌린다.
-          void sendCommand({ type: 'add-profile', profile }).then((result) => {
-            if (result.ok) {
-              setState(result.state);
-              setSelectedId(profile.id);
-              setCommandError(null);
-            } else {
-              setCommandError(result.error);
-            }
-          });
-        }}
+        onCreate={createAndSelectProfile}
       />
 
-      {selectedProfile ? (
-        <ProfileSection
-          key={selectedProfile.id}
-          profile={selectedProfile}
-          index={selectedIndex}
-          profileCount={state.profiles.length}
-          onCommand={dispatch}
-          pickerOptions={pickerOptions}
-          materialized={state.materialized}
-          userHeaders={state.customHeaderNames}
-          activeTab={activeTab}
-          onActiveTabChange={setActiveTab}
-          expandedRowId={expandedRowId}
-          onToggleRow={(id) => setExpandedRowId((prev) => (prev === id ? null : id))}
-        />
-      ) : (
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">{t(locale, 'noProfilesYet')}</p>
-      )}
+      {profileEditor}
 
       <TransferPanel state={state} onCommand={dispatchWithResult} />
       <BackupPanel onCommand={dispatchWithResult} />

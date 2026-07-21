@@ -1,6 +1,7 @@
 import type { Profile } from '@/core/schema';
 import { useT } from '@/ui/i18n-context';
 import { SwitcherChip } from '@/ui/switcher-chip';
+import { ProfileDot } from './profile-dot';
 
 export interface ProfileChipsProps {
   profiles: readonly Profile[];
@@ -26,11 +27,7 @@ export function ProfileChips({ profiles, selectedId, onSelect, onCreate }: Profi
           aria-label={`Select profile ${profile.name} (${profile.active ? 'on' : 'off'})`}
           onClick={() => onSelect(profile.id)}
         >
-          <span
-            aria-hidden
-            className={`size-1.5 shrink-0 rounded-full ${profile.active ? '' : 'bg-zinc-300 dark:bg-zinc-600'}`}
-            style={profile.active ? { backgroundColor: profile.color } : undefined}
-          />
+          <ProfileDot profile={profile} />
           <span className="max-w-28 truncate">{profile.name}</span>
         </SwitcherChip>
       ))}

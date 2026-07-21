@@ -53,11 +53,7 @@
   --radius-lg: 0.75rem;
 }
 
-/* 팝업만 최소 폭을 강제한다 — 탭 앱은 전체 폭을 쓴다. */
-body:has(> #root > .max-w-3xl) {
-  min-width: 0;
-}
-
+/* 팝업 최소 폭 — 탭 앱은 항상 그보다 넓어 같은 규칙이 무해하다. */
 body {
   min-width: 420px;
   font-family: var(--font-sans);
