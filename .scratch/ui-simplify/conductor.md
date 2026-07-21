@@ -7,3 +7,4 @@
 - spec: done — .scratch/ui-simplify/spec.md 발행 (ready-for-agent), seam 확인(기존 4, 신규 0)
 - plan gate r1: done — needs-attention 3건(선택 재조정/인수 매트릭스/칩 overflow) 전부 accept·스펙 반영
 - plan gate r2: done — R2-1 accept(매트릭스 story 18-22·25·28 보강), 재리뷰 WAIVED by user → 게이트 통과
+- tickets: done — 9 슬라이스 발행 (01 골격 → 02 테마 → 03·04·05 체인 ∥ 06·07, 08←04, 09 마감), 전부 ready-for-agent
