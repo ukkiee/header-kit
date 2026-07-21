@@ -4,10 +4,22 @@
 
 **Blocked by:** 05, 06, 07, 08 — 전 슬라이스 완료 후 마감.
 
-**Status:** ready-for-agent
+**Status:** done — commit 60c3b0c
 
-- [ ] smoke: 탭·칩·행·메뉴를 키보드로 포커스·활성화하는 기본 경로 항목 추가·green
-- [ ] 렌더 감사: 다수 프로필 + 최대 길이 en/ko 이름에서 420px 가로 오버플로 없음
-- [ ] 렌더 감사: 라이트/다크 × 팝업/탭 앱 4종 스크린샷 확보
-- [ ] 스펙 인수 매트릭스 전 행이 충족됐음을 확인·기록
-- [ ] 전 게이트 green (tsc·vitest·build·smoke·storybook)
+- [x] smoke: 탭(N5)·칩(N11)·행(N11)·메뉴(N8) 키보드 포커스·활성화 4종 green
+- [x] 렌더 감사: 18프로필 + 최대 길이 en/ko 이름, 문서+요소 수준 가로 스크롤 스캔 overflow=0 (diag shot 6, 위반 시 exit 1)
+- [x] 렌더 감사: 라이트/다크 × 팝업/탭 앱 4종 + 패널 펼침 + 경계 = 6샷 확보
+- [x] 스펙 인수 매트릭스 전 행 충족 확인·기록 (아래)
+- [x] 전 게이트 green (tsc0·vitest171·build·smoke64/64·storybook)
+
+## 인수 매트릭스 검증 기록 (5-에이전트 전수 감사, 커밋 60c3b0c 기준)
+
+20행 중 18행 즉시 충족, gap 2행은 이 커밋으로 마감:
+- 행 14(헤더 편집): smoke N12 추가 — 이름·뱃지 라벨·색 UI 편집 → 상태 반영 (+ commands.test updateProfileMeta 전파 케이스)
+- 행 15(활성 프로필 수): smoke J1 확장 — active profile 수 단언
+
+기록된 편차 (의도적 결정):
+1. **신규 aria-label 하드코딩 영어** — 앱 전반 관례 유지 (smoke 셀렉터 공유). story 28의 "모든 라벨" 문언과의 편차. 가시 라벨은 전부 카탈로그 경유. 후속: aria-label 일괄 i18n 티켓 후보 (smoke 셀렉터 동반 수정 필요).
+2. **story 8(테이블형)·11(종류 뱃지)·16(액센트 1색)** — 명명된 매트릭스 행 없이 렌더 감사·storybook·액센트 grep 감사(티켓 02·04)로 커버.
+3. **Export 버튼 smoke 무커버** — transfer-panel은 이 브랜치 무변경(기존 구멍). 후속 백로그 후보.
+4. **pollUntil 통일** — 05에서 이 티켓으로 명시 이연된 부채 상환 (스코프 크리프 아님, conductor.md 기록).

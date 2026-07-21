@@ -17,3 +17,4 @@
 - implement 06: done — e38be3c, ⋯ 메뉴+헤더 정돈, smoke 59/59. 프런티어: 07·08
 - implement 07: done — ebc4cb9, 상태 요약 슬림 라인+Card 축약, smoke 59/59. 주의: smoke 섹션 I(602행) 플레이크 빈발 — 09에서 폴러 정리 시 원인 조사 후보
 - implement 08: done — 5833f7f, 탭 앱 셸(레일+사이드바+검색), 표면 동일성, smoke 61/61×3 + 섹션 I 플레이크 근본 수정. 프런티어: 09만 남음
+- implement 09: done — 60c3b0c, 키보드 4종·경계 스캔·매트릭스 20/20(5-에이전트 검증, gap 2건 마감), 폴러 통일. 전 티켓 완료 → Stage 5
