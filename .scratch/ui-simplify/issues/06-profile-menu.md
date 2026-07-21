@@ -4,10 +4,12 @@
 
 **Blocked by:** 02 — 시스템 테마. (03·04 체인과 병렬 가능)
 
-**Status:** ready-for-agent
+**Status:** done — commit e38be3c
 
-- [ ] 헤더에 토글·이름·뱃지 편집이 남고 아이콘 버튼 나열이 사라진다
-- [ ] `⋯` 메뉴에서 위/아래 이동 → 칩 순서 변화 + 겹침 헤더 승자 변경이 실제 요청에 반영된다 (smoke)
-- [ ] 복제가 동작하고, 삭제는 확인 후 실행되며 선택이 폴백 규칙대로 복구된다 (smoke)
-- [ ] 메뉴가 키보드로 열리고 항목을 활성화할 수 있다
-- [ ] 메뉴 라벨 en/ko 카탈로그 경유, 전 게이트 green
+- [x] 헤더에 토글·이름·뱃지 편집이 남고 아이콘 버튼 나열이 사라진다 (렌더 감사)
+- [x] `⋯` 메뉴에서 위/아래 이동 → 칩 순서 변화 + 겹침 헤더 승자 변경이 실제 요청에 반영된다 (smoke N8)
+- [x] 복제가 동작하고, 삭제는 확인 후 실행되며 선택이 폴백 규칙대로 복구된다 (smoke N8·N3·N4 — 메뉴 2단 확인 경로)
+- [x] 메뉴가 키보드로 열리고 항목을 활성화할 수 있다 (N8: Enter 열기 → data-highlighted 내비 → Enter 복제)
+- [x] 메뉴 라벨 en/ko 카탈로그 경유(menuMoveUp/Down/Duplicate/Delete + confirmDelete 재사용), 전 게이트 green (smoke 59/59)
+
+참고: code-review 2축 반영 — 무장된 삭제 확인이 메뉴 닫힘을 살아넘기는 문제 수정(onOpenChange 리셋). MenuItem press scale은 의도적 미적용(하이라이트 bg가 피드백 — 메뉴 항목은 버튼 press 관례 대상 아님으로 결정). aria-label 하드코딩은 앱 관례 따름(후속 일괄 i18n 후보).
