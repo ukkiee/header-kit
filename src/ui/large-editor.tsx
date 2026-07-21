@@ -2,6 +2,7 @@ import { Dialog } from '@base-ui-components/react/dialog';
 import { useState } from 'react';
 import { Button } from '@/ui/button';
 import { TextArea } from '@/ui/input';
+import { format } from '@/core/i18n';
 import { useT } from './i18n-context';
 
 export interface LargeEditorProps {
@@ -28,7 +29,7 @@ export function LargeEditor({ title, value, onCommit, triggerLabel = 'Expand' }:
     >
       <Dialog.Trigger
         render={
-          <Button variant="ghost" size="sm" aria-label={`${title} — open large editor`}>
+          <Button variant="ghost" size="sm" aria-label={format(t('ariaOpenLargeEditor'), { title })}>
             {triggerLabel}
           </Button>
         }
@@ -47,7 +48,7 @@ export function LargeEditor({ title, value, onCommit, triggerLabel = 'Expand' }:
           <div className="flex justify-end gap-2">
             <Dialog.Close render={<Button variant="ghost" size="sm">{t('cancel')}</Button>} />
             <Dialog.Close
-              render={<Button size="sm" aria-label="Save large editor">{t('save')}</Button>}
+              render={<Button size="sm" aria-label={t('ariaSaveLargeEditor')}>{t('save')}</Button>}
               onClick={() => onCommit(draft)}
             />
           </div>

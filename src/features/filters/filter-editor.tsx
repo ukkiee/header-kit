@@ -92,7 +92,7 @@ export function FilterEditor({ filter, onChange, pickerOptions }: FilterEditorPr
           value={filter.tabId}
           options={(pickerOptions?.tabs ?? []).map((tab) => ({ value: tab.tabId, label: tab.label }))}
           placeholder={t('filterSelectTab')}
-          ariaLabel="Tab"
+          ariaLabel={t('ariaFilterTab')}
           onSelect={(tabId) => onChange({ ...filter, tabId })}
         />
       );
@@ -102,7 +102,7 @@ export function FilterEditor({ filter, onChange, pickerOptions }: FilterEditorPr
           value={filter.groupId}
           options={(pickerOptions?.groups ?? []).map((g) => ({ value: g.groupId, label: g.label }))}
           placeholder={t('filterSelectTabGroup')}
-          ariaLabel="Tab group"
+          ariaLabel={t('ariaFilterTabGroup')}
           onSelect={(groupId) => onChange({ ...filter, groupId })}
         />
       );
@@ -112,7 +112,7 @@ export function FilterEditor({ filter, onChange, pickerOptions }: FilterEditorPr
           value={filter.windowId}
           options={(pickerOptions?.windows ?? []).map((w) => ({ value: w.windowId, label: w.label }))}
           placeholder={t('filterSelectWindow')}
-          ariaLabel="Window"
+          ariaLabel={t('ariaFilterWindow')}
           onSelect={(windowId) => onChange({ ...filter, windowId })}
         />
       );
@@ -123,7 +123,7 @@ export function FilterEditor({ filter, onChange, pickerOptions }: FilterEditorPr
             value={filter.domain}
             onCommit={(domain) => onChange({ ...filter, domain })}
             placeholder="example.com"
-            aria-label="Tab domain"
+            aria-label={t('ariaTabDomain')}
             size="sm"
           />
           <NoteText as="span">{t('filterTabDomainNote')}</NoteText>
@@ -137,7 +137,7 @@ export function FilterEditor({ filter, onChange, pickerOptions }: FilterEditorPr
             size="sm"
             value={epochToLocalInput(filter.expiresAt)}
             onChange={(e) => onChange({ ...filter, expiresAt: localInputToEpoch(e.target.value) })}
-            aria-label="Expires at"
+            aria-label={t('ariaExpiresAt')}
           />
           <NoteText as="span">{t('filterTimeNote')}</NoteText>
         </div>
@@ -149,7 +149,7 @@ export function FilterEditor({ filter, onChange, pickerOptions }: FilterEditorPr
           value={filter.pattern}
           onCommit={(pattern) => onChange({ ...filter, pattern })}
           placeholder={t('filterRegexPattern')}
-          aria-label={`${filter.kind === 'url' ? 'URL' : 'Exclude'} pattern`}
+          aria-label={t(filter.kind === 'url' ? 'ariaUrlPattern' : 'ariaExcludePattern')}
           size="sm"
           font="mono"
           className="min-w-0 flex-1"
@@ -192,7 +192,7 @@ export function FilterEditor({ filter, onChange, pickerOptions }: FilterEditorPr
             value={filter.domain}
             onCommit={(domain) => onChange({ ...filter, domain })}
             placeholder="example.com"
-            aria-label="Initiator domain"
+            aria-label={t('ariaInitiatorDomain')}
             size="sm"
           />
           <NoteText as="span">{t('filterInitiatorNote')}</NoteText>

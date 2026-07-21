@@ -9,7 +9,7 @@ import {
   type ModificationKind,
   type Profile,
 } from '@/core/schema';
-import type { MessageKey } from '@/core/i18n';
+import { format, type MessageKey } from '@/core/i18n';
 import type { TabPickerOptions } from '@/platform/tabs';
 import { Button } from '@/ui/button';
 import { Card } from '@/ui/card';
@@ -87,21 +87,21 @@ export function ProfileSection({
           type="color"
           value={profile.color}
           onChange={(e) => updateMeta({ color: e.target.value })}
-          aria-label="Badge color"
+          aria-label={t('ariaBadgeColor')}
           className="size-6 shrink-0 cursor-pointer rounded border-none bg-transparent p-0"
         />
         <input
           type="text"
           value={profile.name}
           onChange={(e) => updateMeta({ name: e.target.value })}
-          aria-label="Profile name"
+          aria-label={t('ariaProfileName')}
           className="h-8 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 text-sm font-medium outline-none focus:border-blue-500"
         />
         <Input
           align="center"
           value={profile.shortLabel}
           onChange={(e) => updateMeta({ shortLabel: e.target.value.slice(0, 2) })}
-          aria-label="Badge label"
+          aria-label={t('ariaBadgeLabel')}
           maxLength={2}
           className="w-10"
         />
@@ -110,7 +110,7 @@ export function ProfileSection({
           onCheckedChange={(active) =>
             onCommand({ type: 'toggle-profile', profileId: profile.id, active })
           }
-          aria-label={`Toggle ${profile.name}`}
+          aria-label={format(t('ariaToggleProfile'), { name: profile.name })}
         />
         <Menu
           onOpenChange={(open) => {
@@ -121,7 +121,7 @@ export function ProfileSection({
             }
           }}
         >
-          <MenuTrigger render={<Button variant="ghost" size="sm" aria-label="Profile menu" />}>
+          <MenuTrigger render={<Button variant="ghost" size="sm" aria-label={t('ariaProfileMenu')} />}>
             ⋯
           </MenuTrigger>
           <MenuPopup>
@@ -250,7 +250,7 @@ export function ProfileSection({
             variant="ghost"
             size="sm"
             value=""
-            aria-label="Add modification"
+            aria-label={t('ariaAddModification')}
             onChange={(e) => {
               const kind = e.target.value as ModificationKind | '';
               if (kind !== '') {
@@ -289,7 +289,7 @@ export function ProfileSection({
             variant="ghost"
             size="sm"
             value=""
-            aria-label="Add filter"
+            aria-label={t('ariaAddFilter')}
             className="self-start"
             onChange={(e) => {
               const kind = e.target.value as FilterKind | '';

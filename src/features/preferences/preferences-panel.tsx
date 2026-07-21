@@ -4,6 +4,7 @@ import { Button } from '@/ui/button';
 import { Input } from '@/ui/input';
 import { CollapsiblePanel } from '@/ui/collapsible-panel';
 import { Pill } from '@/ui/pill';
+import { format } from '@/core/i18n';
 import { useT } from '@/ui/i18n-context';
 
 export interface PreferencesPanelProps {
@@ -36,7 +37,7 @@ export function PreferencesPanel({
       onOpenChange={setOpen}
       showLabel={t('show')}
       hideLabel={t('hide')}
-      toggleAriaLabel="Toggle preferences"
+      toggleAriaLabel={t('ariaTogglePreferences')}
     >
       <div className="flex flex-col gap-2 text-xs">
           <div className="flex flex-col gap-1">
@@ -50,10 +51,10 @@ export function PreferencesPanel({
                   if (e.key === 'Enter') add();
                 }}
                 placeholder="X-My-Header"
-                aria-label="New autocomplete header"
+                aria-label={t('ariaNewAutocompleteHeader')}
                 className="min-w-0 flex-1"
               />
-              <Button size="sm" aria-label="Add autocomplete header" onClick={add} disabled={draft.trim() === ''}>
+              <Button size="sm" aria-label={t('ariaAddAutocompleteHeader')} onClick={add} disabled={draft.trim() === ''}>
                 {t('add')}
               </Button>
             </div>
@@ -64,7 +65,7 @@ export function PreferencesPanel({
                     {name}
                     <button
                       type="button"
-                      aria-label={`Remove ${name}`}
+                      aria-label={format(t('ariaRemoveName'), { name })}
                       className="text-zinc-400 hover:text-red-500"
                       onClick={() => onCommand({ type: 'remove-custom-header-name', name })}
                     >

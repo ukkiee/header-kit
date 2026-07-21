@@ -23,11 +23,11 @@ export function FilterRow({ filter, onChange, onRemove, pickerOptions }: FilterR
         offset="row"
         checked={filter.enabled}
         onChange={(e) => onChange({ ...filter, enabled: e.target.checked })}
-        aria-label="Enable filter"
+        aria-label={t('ariaEnableFilter')}
       />
       <KindLabel offset="filter">{t(KIND_LABEL_KEYS[filter.kind])}</KindLabel>
       <FilterEditor filter={filter} onChange={onChange} pickerOptions={pickerOptions} />
-      <Button variant="danger" size="sm" onClick={onRemove} aria-label="Remove filter">
+      <Button variant="danger" size="sm" onClick={onRemove} aria-label={t('ariaRemoveFilter')}>
         ✕
       </Button>
     </div>

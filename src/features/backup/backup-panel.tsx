@@ -65,7 +65,7 @@ export function BackupPanel({
       onOpenChange={setOpen}
       showLabel={t('show')}
       hideLabel={t('hide')}
-      toggleAriaLabel="Toggle backups"
+      toggleAriaLabel={t('ariaToggleBackups')}
       banner={
         error && (
           <Alert as="p" severity="danger" size="xs" role="alert">
@@ -92,7 +92,7 @@ export function BackupPanel({
                   <Button
                     variant={confirmingId === snapshot.id ? 'danger' : 'ghost'}
                     size="sm"
-                    aria-label={confirmingId === snapshot.id ? 'Confirm restore' : 'Restore backup'}
+                    aria-label={t(confirmingId === snapshot.id ? 'ariaConfirmRestore' : 'ariaRestoreBackup')}
                     onClick={() => void restore(snapshot)}
                   >
                     {confirmingId === snapshot.id ? t('confirmReplaceAll') : t('restore')}

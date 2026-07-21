@@ -36,7 +36,7 @@ export function RedirectRow({
           <Checkbox
             checked={modification.enabled}
             onChange={(e) => onChange({ ...modification, enabled: e.target.checked })}
-            aria-label="Enable modification"
+            aria-label={t('ariaEnableModification')}
           />
           <KindLabel width="auto">{t('modRedirect')}</KindLabel>
           {/* 읽기 전용 요약은 행 선택 표면 — 클릭하면 확장한다. */}
@@ -56,7 +56,7 @@ export function RedirectRow({
           value={modification.pattern}
           onChange={(e) => onChange({ ...modification, pattern: e.target.value })}
           placeholder="^https://prod\\.example\\.com/(.*)"
-          aria-label="Redirect pattern"
+          aria-label={t('ariaRedirectPattern')}
           className="min-w-0 flex-1"
         />
         <span className="text-xs text-zinc-400">→</span>
@@ -66,13 +66,13 @@ export function RedirectRow({
           value={modification.substitution}
           onChange={(e) => onChange({ ...modification, substitution: e.target.value })}
           placeholder="http://localhost:3000/\\1"
-          aria-label="Redirect substitution"
+          aria-label={t('ariaRedirectSubstitution')}
           className="min-w-0 flex-1"
         />
       </div>
       <div className="flex items-center justify-between gap-2">
         <NoteText>{t('redirectCaptureNote')}</NoteText>
-        <Button variant="danger" size="sm" onClick={onRemove} aria-label="Remove modification">
+        <Button variant="danger" size="sm" onClick={onRemove} aria-label={t('ariaRemoveModification')}>
           ✕
         </Button>
       </div>

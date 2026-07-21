@@ -3,7 +3,7 @@ import type { Profile } from '@/core/schema';
 import { Input } from '@/ui/input';
 import { SwitcherChip } from '@/ui/switcher-chip';
 import { useT } from '@/ui/i18n-context';
-import { ProfileDot } from './profile-dot';
+import { ProfileDot, profileSelectLabel } from './profile-dot';
 
 export interface ProfileSidebarProps {
   profiles: readonly Profile[];
@@ -31,7 +31,7 @@ export function ProfileSidebar({ profiles, selectedId, onSelect, onCreate }: Pro
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder={t('searchProfiles')}
-        aria-label="Search profiles"
+        aria-label={t('searchProfiles')}
       />
       <ul className="flex flex-col gap-0.5">
         {visible.map((profile) => (
@@ -39,7 +39,7 @@ export function ProfileSidebar({ profiles, selectedId, onSelect, onCreate }: Pro
             <SwitcherChip
               shape="row"
               selected={profile.id === selectedId}
-              aria-label={`Select profile ${profile.name} (${profile.active ? 'on' : 'off'})`}
+              aria-label={profileSelectLabel(profile, t)}
               onClick={() => onSelect(profile.id)}
             >
               <ProfileDot profile={profile} />

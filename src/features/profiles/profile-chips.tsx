@@ -1,7 +1,7 @@
 import type { Profile } from '@/core/schema';
 import { useT } from '@/ui/i18n-context';
 import { SwitcherChip } from '@/ui/switcher-chip';
-import { ProfileDot } from './profile-dot';
+import { ProfileDot, profileSelectLabel } from './profile-dot';
 
 export interface ProfileChipsProps {
   profiles: readonly Profile[];
@@ -24,7 +24,7 @@ export function ProfileChips({ profiles, selectedId, onSelect, onCreate }: Profi
         <SwitcherChip
           key={profile.id}
           selected={profile.id === selectedId}
-          aria-label={`Select profile ${profile.name} (${profile.active ? 'on' : 'off'})`}
+          aria-label={profileSelectLabel(profile, t)}
           onClick={() => onSelect(profile.id)}
         >
           <ProfileDot profile={profile} />

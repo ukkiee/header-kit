@@ -11,7 +11,7 @@ import { Alert } from '@/ui/alert';
 import { Button } from '@/ui/button';
 import { LocaleProvider } from '@/ui/i18n-context';
 import type { Command } from '@/core/commands';
-import { resolveLocale, t, type Locale } from '@/core/i18n';
+import { resolveLocale, t, type Locale, type MessageKey } from '@/core/i18n';
 import { createProfile, PROFILE_COLORS, type StoredState } from '@/core/schema';
 import type { StatusSummary as StatusSummaryData } from '@/core/summary';
 import { canvas } from '@/ui/tokens';
@@ -30,10 +30,10 @@ export type AppSurface = 'popup' | 'tab';
 /** 탭 앱 레일 화면 — 팝업 하단 접이 패널들이 넓은 표면에서 승격된다 (ADR 0004). */
 type RailView = 'profiles' | 'backups' | 'preferences';
 
-const RAIL_ITEMS: Array<{ view: RailView; icon: string; label: string }> = [
-  { view: 'profiles', icon: '▤', label: 'Show profiles' },
-  { view: 'backups', icon: '⟲', label: 'Show backups' },
-  { view: 'preferences', icon: '⚙', label: 'Show preferences' },
+const RAIL_ITEMS: Array<{ view: RailView; icon: string; labelKey: MessageKey }> = [
+  { view: 'profiles', icon: '▤', labelKey: 'ariaShowProfiles' },
+  { view: 'backups', icon: '⟲', labelKey: 'ariaShowBackups' },
+  { view: 'preferences', icon: '⚙', labelKey: 'ariaShowPreferences' },
 ];
 
 export function App({ surface = 'popup' }: { surface?: AppSurface }) {
@@ -163,12 +163,12 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
       <LocaleProvider locale={locale}>
         <div className={`grid min-h-screen grid-cols-[3rem_14rem_minmax(0,1fr)] ${canvas}`}>
           <nav className="flex flex-col items-center gap-1 border-r border-zinc-200 py-3 dark:border-zinc-800">
-            {RAIL_ITEMS.map(({ view, icon, label }) => (
+            {RAIL_ITEMS.map(({ view, icon, labelKey }) => (
               <Button
                 key={view}
                 variant="ghost"
                 size="sm"
-                aria-label={label}
+                aria-label={t(locale, labelKey)}
                 aria-pressed={railView === view}
                 className={railView === view ? 'bg-zinc-100 dark:bg-zinc-800' : ''}
                 onClick={() => setRailView(view)}

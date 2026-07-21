@@ -1295,6 +1295,26 @@ try {
       && exportPayload.profiles.some((p) => p.name === 'Renamed'),
     `file=${exportDownload.suggestedFilename()}, profiles=${exportPayload.profiles?.length}, names=[${exportPayload.profiles?.map((p) => p.name).join('|')}]`);
 
+  // N14: ko 로케일 접근성 이름 — aria-label이 en/ko 카탈로그를 경유한다 (aria-label-i18n)
+  // 상태: Renamed(k-a, 켬) + KeyB(k-b, 꺼짐)
+  const popupKo = await context.newPage();
+  await popupKo.goto(`chrome-extension://${extensionId}/popup.html?locale=ko`);
+  const koToggle = await popupKo
+    .getByRole('switch', { name: 'Renamed 켬/끔' })
+    .waitFor({ timeout: 5000 })
+    .then(() => true, () => false);
+  const koMenu = await popupKo.getByRole('button', { name: '프로필 메뉴' }).isVisible().catch(() => false);
+  const koChip = await popupKo.getByRole('button', { name: 'KeyB 프로필 선택 (끔)' }).isVisible().catch(() => false);
+  const koRowToggle = await popupKo
+    .getByRole('button', { name: '수정 옵션 펼치기/접기' })
+    .first()
+    .isVisible()
+    .catch(() => false);
+  await popupKo.close();
+  record('N14: ko 접근성 이름 — aria 카탈로그 경유',
+    koToggle && koMenu && koChip && koRowToggle,
+    `toggle=${koToggle}, menu=${koMenu}, chip=${koChip}, row=${koRowToggle}`);
+
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
   process.exitCode = failed.length === 0 ? 0 : 1;

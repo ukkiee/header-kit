@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Button } from './button';
+import { useT } from './i18n-context';
 import { microCaption } from './tokens';
 
 /**
@@ -51,6 +52,7 @@ export interface ModRowShellProps extends RowExpansionProps {
  * HeaderRow/CspRow/RedirectRow가 같은 상호작용 문법을 공유한다.
  */
 export function ModRowShell({ expanded = false, onToggleExpanded, cells, children }: ModRowShellProps) {
+  const t = useT();
   return (
     <div className="py-0.5">
       {/* 그리드 여백 클릭도 확장 토글 — "행 선택" 의미론. 입력/버튼 클릭은 제외. */}
@@ -69,7 +71,7 @@ export function ModRowShell({ expanded = false, onToggleExpanded, cells, childre
           <Button
             variant="ghost"
             size="sm"
-            aria-label="Toggle modification options"
+            aria-label={t('ariaToggleRowOptions')}
             aria-expanded={expanded}
             onClick={onToggleExpanded}
           >

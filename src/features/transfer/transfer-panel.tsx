@@ -123,7 +123,7 @@ export function TransferPanel({ state, onCommand, download = browserDownload }: 
             value={importText}
             onChange={(e) => setImportText(e.target.value)}
             placeholder={t('pasteExportHere')}
-            aria-label="Import JSON"
+            aria-label={t('ariaImportJson')}
             rows={5}
             font="mono"
             size="sm"
@@ -131,7 +131,7 @@ export function TransferPanel({ state, onCommand, download = browserDownload }: 
           <input
             type="file"
             accept="application/json,.json"
-            aria-label="Import file"
+            aria-label={t('ariaImportFile')}
             className="text-xs"
             onChange={(e) => {
               const file = e.target.files?.[0];
@@ -148,7 +148,7 @@ export function TransferPanel({ state, onCommand, download = browserDownload }: 
           <div className="flex gap-1">
             <Button
               size="sm"
-              aria-label="Run import"
+              aria-label={t('ariaRunImport')}
               onClick={() => void runImport()}
               disabled={importText.trim() === ''}
             >

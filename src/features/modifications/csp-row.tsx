@@ -36,7 +36,7 @@ export function CspRow({ modification, onChange, onRemove, expanded, onToggleExp
           <Checkbox
             checked={modification.enabled}
             onChange={(e) => onChange({ ...modification, enabled: e.target.checked })}
-            aria-label="Enable modification"
+            aria-label={t('ariaEnableModification')}
           />
           <KindLabel width="auto">CSP</KindLabel>
           {/* 읽기 전용 요약은 행 선택 표면 — 클릭하면 확장한다. */}
@@ -60,7 +60,7 @@ export function CspRow({ modification, onChange, onRemove, expanded, onToggleExp
               )
             }
             placeholder="default-src"
-            aria-label="CSP directive name"
+            aria-label={t('ariaCspDirectiveName')}
             className="w-32"
           />
           <Input
@@ -73,13 +73,13 @@ export function CspRow({ modification, onChange, onRemove, expanded, onToggleExp
               )
             }
             placeholder="'self'"
-            aria-label="CSP directive value"
+            aria-label={t('ariaCspDirectiveValue')}
             className="min-w-0 flex-1"
           />
           <Button
             variant="danger"
             size="sm"
-            aria-label="Remove directive"
+            aria-label={t('ariaRemoveDirective')}
             onClick={() => setDirectives(modification.directives.filter((_, j) => j !== i))}
           >
             ✕
@@ -94,7 +94,7 @@ export function CspRow({ modification, onChange, onRemove, expanded, onToggleExp
         >
           + {t('addDirective')}
         </Button>
-        <Button variant="danger" size="sm" onClick={onRemove} aria-label="Remove modification">
+        <Button variant="danger" size="sm" onClick={onRemove} aria-label={t('ariaRemoveModification')}>
           ✕
         </Button>
       </div>

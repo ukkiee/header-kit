@@ -34,7 +34,7 @@ export function HeaderNameInput({
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         placeholder={t('headerName')}
-        aria-label="Header name"
+        aria-label={t('headerName')}
         list={listId}
         autoComplete="off"
         className={className}

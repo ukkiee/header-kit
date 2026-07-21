@@ -73,7 +73,7 @@ export function HeaderRow({
           <Checkbox
             checked={modification.enabled}
             onChange={(e) => onChange({ ...modification, enabled: e.target.checked })}
-            aria-label="Enable modification"
+            aria-label={t('ariaEnableModification')}
           />
           {isTogglableTarget ? (
             <Select
@@ -81,7 +81,7 @@ export function HeaderRow({
               size="sm"
               value={modification.kind}
               onChange={(e) => onChange({ ...modification, kind: e.target.value } as Modification)}
-              aria-label="Header target"
+              aria-label={t('ariaHeaderTarget')}
             >
               <option value="request-header">{t('requestHeaderShort')}</option>
               <option value="response-header">{t('responseHeaderShort')}</option>
@@ -107,7 +107,7 @@ export function HeaderRow({
             value={modification.value}
             onChange={(e) => onChange({ ...modification, value: e.target.value })}
             placeholder={isCookie ? 'value' : t('value')}
-            aria-label="Header value"
+            aria-label={t('ariaHeaderValue')}
             className="min-w-0 truncate"
           />
         </>
@@ -152,7 +152,7 @@ export function HeaderRow({
             onCommit={(value) => onChange({ ...modification, value })}
             triggerLabel="⤢"
           />
-          <Button variant="danger" size="sm" onClick={onRemove} aria-label="Remove modification">
+          <Button variant="danger" size="sm" onClick={onRemove} aria-label={t('ariaRemoveModification')}>
             ✕
           </Button>
         </div>
@@ -164,7 +164,7 @@ export function HeaderRow({
         value={modification.comment}
         onChange={(e) => onChange({ ...modification, comment: e.target.value })}
         placeholder={t('comment')}
-        aria-label="Comment"
+        aria-label={t('comment')}
         className="w-full text-zinc-500"
       />
 
