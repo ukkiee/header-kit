@@ -162,7 +162,7 @@ export function ProfileSection({
             })
           }
         >
-          + {t('requestHeader')}
+          + {t('addRequestHeader')}
         </Button>
         <Button
           variant="ghost"
@@ -175,7 +175,7 @@ export function ProfileSection({
             })
           }
         >
-          + {t('responseHeader')}
+          + {t('addResponseHeader')}
         </Button>
         <Select
           variant="ghost"

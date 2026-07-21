@@ -1,0 +1,46 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "release",
+  "verdict": "needs-attention",
+  "summary": "No-ship: 핵심 액션 행 요구사항이 부분 구현됐고, 가장 위험한 i18n 매핑 분기에 대한 검증도 누락됐다.",
+  "planFile": "docs/prds/popup-ui-fixes.md",
+  "planInDiff": null,
+  "reviewedFileCount": 25,
+  "target": "branch diff against 6051250",
+  "reviewedSha": "5b4e54077d5242cdfed259697165151a7b1da63f",
+  "reviewedTree": "2e443ed72bbb5be453737cc43791026b5cf8af34",
+  "headMovedDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 2,
+  "planFindingCount": 0,
+  "findings": [
+    {
+      "severity": "high",
+      "title": "액션 버튼 라벨 축약 요구사항이 구현되지 않음",
+      "body": "PRD는 420px 폭을 확보하기 위해 `요청 헤더`/`응답 헤더`를 `요청`/`응답`으로 축약하도록 확정했지만, ProfileSection은 기존 `requestHeader`/`responseHeader` 키를 그대로 사용한다. 해당 카탈로그 값도 여전히 `요청 헤더`/`응답 헤더`와 `Request header`/`Response header`다. 따라서 핵심 S2 요구사항의 세 조치 중 하나가 빠졌으며, 검증 문서가 주장하는 축약된 첫 행보다 폭을 더 소비한다. 좁은 폭이나 긴 번역에서 불필요한 추가 줄바꿈·클리핑이 재발할 수 있다.",
+      "file": "src/features/profiles/profile-section.tsx",
+      "line_start": 154,
+      "line_end": 179,
+      "confidence": 0.99,
+      "recommendation": "액션 전용 짧은 en/ko MessageKey를 추가해 두 버튼에서 사용하고, 420px 한국어 렌더 결과로 `+ 요청`/`+ 응답` 및 전체 액션 접근성을 다시 검증하라.",
+      "isPlanFinding": false
+    },
+    {
+      "severity": "medium",
+      "title": "Missing verification: compile 경고 code→지역화 출력 매핑",
+      "body": "새 계약의 실제 동작은 이 파일의 6개 label 매핑과 `warnDetailKey` 분기, 특히 quota의 두 하위 분기에 달려 있다. 그러나 수정된 summary 테스트는 code와 params의 타입만 확인하고, Storybook 데이터도 header-overlap과 total-rules 두 경우뿐이다. PRD가 요구한 code→label 매핑 단위 테스트가 없으므로 잘못된 키, 잘못된 quota 분기, 누락된 보간 인자가 있어도 현재 기록된 tsc·i18n parity·summary 테스트는 통과할 수 있다. 단일 missing-materialization 수동 렌더 역시 나머지 위험 표면을 검증하지 않는다.",
+      "file": "src/features/status/status-summary.tsx",
+      "line_start": 11,
+      "line_end": 36,
+      "confidence": 0.97,
+      "recommendation": "StatusSummary를 en/ko로 렌더하는 단위 테스트를 추가해 6개 warning code 모두의 label/detail을 검증하고, quota-exceeded는 total-rules와 regex-rules를 각각 검사하며 header/limit 보간 결과도 단언하라.",
+      "isPlanFinding": false
+    }
+  ],
+  "next_steps": [
+    "액션 전용 축약 번역 키를 적용하고 420px 한국어 렌더 증거를 갱신한다.",
+    "모든 경고 코드와 quota 양쪽 분기를 포괄하는 UI 지역화 테스트를 추가한다."
+  ]
+}
