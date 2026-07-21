@@ -1,6 +1,6 @@
 # 03 — compile 경고 i18n
 
-Status: ready-for-agent
+Status: done — ebf9e2b (랜딩 완료, 상태 후기입)
 Blocked by: None - can start immediately
 
 ## Parent

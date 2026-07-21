@@ -1,6 +1,6 @@
 # 01 — nowrap 프리미티브 하드닝
 
-Status: ready-for-agent
+Status: done — 20dad48 (랜딩 완료, 상태 후기입)
 Blocked by: None - can start immediately
 
 ## Parent

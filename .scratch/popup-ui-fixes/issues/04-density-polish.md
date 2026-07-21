@@ -1,6 +1,6 @@
 # 04 — 밀도 폴리시
 
-Status: ready-for-agent
+Status: done — 94beaf5 (랜딩 완료, 상태 후기입)
 Blocked by: 02
 
 ## Parent

@@ -1,6 +1,6 @@
 # 02 — ProfileSection 액션 행 재설계
 
-Status: ready-for-agent
+Status: done — d636a0b (랜딩 완료, 상태 후기입)
 Blocked by: 01
 
 ## Parent
