@@ -6,6 +6,7 @@
  *
  * 실행: bun run build && bun run smoke
  */
+import { readFileSync } from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -1278,6 +1279,21 @@ try {
   record('N12: 헤더 이름·뱃지 편집 → 상태 반영',
     finalMeta.name === 'Renamed' && finalMeta.shortLabel === 'RN' && finalMeta.color === '#dc2626',
     `name=${finalMeta.name}, badge=${finalMeta.shortLabel}, color=${finalMeta.color}`);
+
+  // N13: Export 경로 — 실제 다운로드 캡처 → 페이로드 검증 (release r1 R-2)
+  // 현재 상태: Renamed(k-a) + KeyB(k-b). 전체 선택 기본 → 2개 내보내기.
+  await popup.getByRole('button', { name: 'Export…' }).click();
+  const [exportDownload] = await Promise.all([
+    popup.waitForEvent('download'),
+    popup.getByRole('button', { name: /Export… \(2\)/ }).click(),
+  ]);
+  const exportPayload = JSON.parse(readFileSync(await exportDownload.path(), 'utf8'));
+  record('N13: Export 다운로드 → 페이로드 검증',
+    exportDownload.suggestedFilename() === 'headerkit-profiles.json'
+      && exportPayload.headerkit === 1
+      && exportPayload.profiles?.length === 2
+      && exportPayload.profiles.some((p) => p.name === 'Renamed'),
+    `file=${exportDownload.suggestedFilename()}, profiles=${exportPayload.profiles?.length}, names=[${exportPayload.profiles?.map((p) => p.name).join('|')}]`);
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

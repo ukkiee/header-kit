@@ -1,0 +1,48 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "release",
+  "verdict": "needs-attention",
+  "summary": "Do not ship yet: the branch knowingly violates the localization requirement and overstates its release evidence.",
+  "planFile": "docs/reviews/ui-simplify/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 54,
+  "target": "branch diff against main",
+  "reviewedSha": "82be97ca4670027fcb6b32a2b27878273a898672",
+  "reviewedTree": "db5f565d22f58fa9b7b3ce99d42004d0d0fd3dc9",
+  "headMovedDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 2,
+  "planFindingCount": 0,
+  "triage": "review-gate SKILL.md rules govern: render EVERY finding as a full table row, the human decides each row (accept/reject/defer/question — free text), echo back before applying, max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "medium",
+      "title": "New screen-reader labels bypass the en/ko catalog",
+      "body": "Story 28 requires every new UI label to use the en/ko catalog, but the new tab-app rail exposes hard-coded English accessible names. The same issue affects profile selection and search controls. Korean screen-reader users therefore receive a mixed-language UI, while TypeScript key-parity cannot detect these labels because they never enter the catalog. The committed audit explicitly acknowledges this deviation, so this is an unmet requirement rather than a hypothetical concern.",
+      "file": "src/app/app.tsx",
+      "line_start": 33,
+      "line_end": 36,
+      "confidence": 0.99,
+      "recommendation": "Add catalog keys for the rail, profile selection/status, search, menu, and row controls; generate their accessible names through t(locale, ...) or useT(), then add a Korean accessibility-name smoke assertion.",
+      "isPlanFinding": false
+    },
+    {
+      "severity": "medium",
+      "title": "Verification claims full matrix coverage despite acknowledged gaps",
+      "body": "The release document says all 20 acceptance rows are satisfied while simultaneously referring to known deviations, including the uncatalogued labels and an uncovered Export path. The spec explicitly assigns popup export/import/backup access to the smoke seam, so passing 64/64 tests does not establish that complete requirement. This makes the committed evidence unsuitable as a release gate because it labels unverified or unmet behavior as complete.",
+      "file": "docs/reviews/ui-simplify/verification.md",
+      "line_start": 34,
+      "line_end": 36,
+      "confidence": 0.98,
+      "recommendation": "Mark the affected matrix rows incomplete until fixed. Add an external-behavior smoke scenario that opens Export, selects profiles, performs the download through an injectable/testable seam, and validates the exported payload; update the verification claim only after that and the localization gap pass.",
+      "isPlanFinding": false
+    }
+  ],
+  "next_steps": [
+    "Localize all newly introduced accessible labels and test the Korean names.",
+    "Add real Export-path smoke coverage.",
+    "Regenerate verification evidence without listing known requirement gaps as fully satisfied."
+  ]
+}
