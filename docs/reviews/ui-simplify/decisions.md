@@ -14,3 +14,7 @@
 ### structure r1
 
 - S-1 accept — Reconciled selection is never committed to application state (커밋-중-렌더 패턴 + 전이 시퀀스 테스트 2종으로 해소; 생성 선택은 커맨드 성공 후 확정으로 전환)
+
+### structure r2
+
+- verdict: approve (findings 0) — S-1 해소 재확인, 신규 critical 없음. 게이트 통과.
