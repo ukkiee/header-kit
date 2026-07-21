@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "release",
+  "verdict": "approve",
+  "summary": "Ship: R-1 is honestly recorded as deferred with an actionable follow-up, and story 28 is no longer counted as satisfied. R-2 is resolved by N13 exercising the real Export UI, capturing the download, and validating its filename and JSON payload. No new critical issue was introduced. A local smoke rerun was prevented by sandbox localhost restrictions; committed evidence records 65/65 at the reviewed tree.",
+  "planFile": "docs/reviews/ui-simplify/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 56,
+  "target": "branch diff against main",
+  "reviewedSha": "f2db42ef8b3db08a7ef626884fc247d925b70c81",
+  "reviewedTree": "e2ebbe503b2cc1b4b903989144c7ccb8642f7013",
+  "headMovedDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 0,
+  "planFindingCount": 0,
+  "triage": "Clean verdict: note it in your report and COMMIT this artifact with the next bookkeeping commit.",
+  "findings": [],
+  "next_steps": []
+}

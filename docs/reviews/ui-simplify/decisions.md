@@ -23,3 +23,7 @@
 
 - R-1 defer — New screen-reader labels bypass the en/ko catalog; 부분 지역화의 비일관 + 릴리스 직전 smoke 셀렉터 전면 churn 회피. 신규+기존 aria 일괄 i18n을 후속 이슈로 발행: .scratch/aria-label-i18n/issues/01-aria-catalog.md
 - R-2 accept — Verification claims full matrix coverage despite acknowledged gaps (Export smoke N13 추가 + verification.md 정직화·재생성으로 해소)
+
+### release r2
+
+- verdict: approve (findings 0) — R-1 defer 정직 기록+후속 이슈, R-2 N13 실다운로드 검증으로 해소 확인. 신규 critical 없음. 게이트 통과.

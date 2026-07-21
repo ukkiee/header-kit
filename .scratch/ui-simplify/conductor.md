@@ -19,3 +19,4 @@
 - implement 08: done — 5833f7f, 탭 앱 셸(레일+사이드바+검색), 표면 동일성, smoke 61/61×3 + 섹션 I 플레이크 근본 수정. 프런티어: 09만 남음
 - implement 09: done — 60c3b0c, 키보드 4종·경계 스캔·매트릭스 20/20(5-에이전트 검증, gap 2건 마감), 폴러 통일. 전 티켓 완료 → Stage 5
 - verification: done — HEAD c1902ee 고정 증거(tsc0/vitest171/build/smoke64/storybook/diag6샷) 커밋. release 게이트 진입
+- release gate: done — r1 2건(R-1 defer/R-2 accept) 처리, r2 approve. 파이프라인 종료: plan(waive)·structure(approve)·release(approve)
