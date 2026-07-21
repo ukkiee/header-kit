@@ -3,7 +3,7 @@ import type { ButtonHTMLAttributes } from 'react';
 import { accentBg, ghostInteractive } from './tokens';
 
 const button = cva(
-  'inline-flex cursor-pointer items-center justify-center font-medium transition active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 disabled:pointer-events-none disabled:opacity-50',
+  'inline-flex shrink-0 cursor-pointer items-center justify-center whitespace-nowrap font-medium transition active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 disabled:pointer-events-none disabled:opacity-50',
   {
     variants: {
       // pill(rounded-full)은 주 액션 신호 — DESIGN의 primary CTA 문법.

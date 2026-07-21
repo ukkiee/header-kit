@@ -7,7 +7,7 @@ import { fieldFocus, fieldSolid, ghostInteractive } from './tokens';
  * tokens.ts에서 공유해 재사용한다. outline-none은 bordered에만 두어(focus:border로 대체)
  * ghost는 기본 포커스 outline을 유지한다(키보드 a11y). children은 <option>들.
  */
-const select = cva('cursor-pointer rounded-md', {
+const select = cva('cursor-pointer whitespace-nowrap rounded-md', {
   variants: {
     variant: {
       bordered: `${fieldSolid} px-1 ${fieldFocus}`,
