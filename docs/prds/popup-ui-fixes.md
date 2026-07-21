@@ -3,7 +3,7 @@ feature: popup-ui-fixes
 invariant-class: feature
 entry-track: feature
 review-track: light
-pipeline-stage: executing
+pipeline-stage: landed
 prd-published: true
 ---
 
