@@ -98,6 +98,21 @@ const en = {
   filterTabDomainNote: 'Applies to every request from tabs on this domain — third-party included.',
   filterTimeNote: 'The profile turns off automatically at this time.',
   filterInitiatorNote: "Matches the request's origin — not the tab's domain.",
+  // Compile 경고 — 라벨 + 상세({param} 보간). background는 로케일 미인지, UI가 지역화.
+  warnEmptyHeaderName: 'Empty header name',
+  warnEmptyHeaderNameDetail: 'Header name is empty; the modification was skipped.',
+  warnHeaderOverlap: 'Overlapping header across profiles',
+  warnHeaderOverlapDetail: 'Multiple active profiles modify "{header}"; the highest profile in the list wins.',
+  warnRegexTooLong: 'URL pattern too long',
+  warnRegexTooLongDetail: 'URL pattern is longer than {limit} characters and was skipped.',
+  warnQuotaExceeded: 'Rule limit exceeded',
+  warnQuotaTotalDetail: 'Session rule limit ({limit}) exceeded; some modifications are not applied.',
+  warnQuotaRegexDetail: 'Regex rule limit ({limit}) exceeded; some modifications are not applied.',
+  warnMissingMaterialization: 'Placeholder not materialized',
+  warnMissingMaterializationDetail:
+    'An active profile has a placeholder without a materialized value; the whole profile was excluded from rules.',
+  warnAppendNotAllowed: 'Header cannot be appended',
+  warnAppendNotAllowedDetail: 'Request header "{header}" cannot be appended; it was set instead.',
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -193,6 +208,20 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     filterTabDomainNote: '이 도메인의 탭에서 나가는 모든 요청에 적용됩니다 — 서드파티 포함.',
     filterTimeNote: '이 시간에 프로필이 자동으로 꺼집니다.',
     filterInitiatorNote: '요청의 출처(origin)와 매칭됩니다 — 탭의 도메인이 아닙니다.',
+    warnEmptyHeaderName: '헤더 이름 비어 있음',
+    warnEmptyHeaderNameDetail: '헤더 이름이 비어 수정을 건너뛰었습니다.',
+    warnHeaderOverlap: '프로필 간 헤더 겹침',
+    warnHeaderOverlapDetail: '여러 활성 프로필이 "{header}"를 수정합니다 — 목록 상단 프로필이 우선합니다.',
+    warnRegexTooLong: 'URL 패턴이 너무 김',
+    warnRegexTooLongDetail: 'URL 패턴이 {limit}자를 넘어 건너뛰었습니다.',
+    warnQuotaExceeded: '규칙 수 한도 초과',
+    warnQuotaTotalDetail: 'session 규칙 한도({limit})를 초과해 일부 수정이 적용되지 않았습니다.',
+    warnQuotaRegexDetail: 'regex 규칙 한도({limit})를 초과해 일부 수정이 적용되지 않았습니다.',
+    warnMissingMaterialization: 'Placeholder 미실체화',
+    warnMissingMaterializationDetail:
+      '활성 프로필의 Placeholder에 실체화 값이 없어 해당 프로필 전체를 규칙에서 제외했습니다.',
+    warnAppendNotAllowed: '헤더 덧붙이기 불가',
+    warnAppendNotAllowedDetail: '요청 헤더 "{header}"는 덧붙일 수 없어 set으로 대체했습니다.',
   },
 };
 
@@ -204,6 +233,11 @@ export function makeTranslator(locale: Locale): Translator {
 
 export function t(locale: Locale, key: MessageKey): string {
   return MESSAGES[locale][key];
+}
+
+/** `{key}` 자리표시자를 params 값으로 치환한다 (경고 상세 등 보간용). */
+export function format(template: string, params: Record<string, string | number>): string {
+  return template.replace(/\{(\w+)\}/g, (_, key) => String(params[key] ?? `{${key}}`));
 }
 
 /** 브라우저 UI 언어를 지원 로케일로 해석한다 (미지원은 en). */

@@ -137,7 +137,7 @@ function joinPatterns(
         code: 'regex-too-long',
         profileId,
         filterId: id,
-        message: `URL pattern is longer than ${REGEX_JOIN_LIMIT} characters and was skipped.`,
+        limit: REGEX_JOIN_LIMIT,
       });
       continue;
     }
@@ -223,10 +223,7 @@ function emitRule(
         quota,
         profileId: origin.profileId,
         modificationId: origin.modificationId,
-        message:
-          quota === 'total-rules'
-            ? `Session rule limit (${TOTAL_RULE_LIMIT}) exceeded; some modifications are not applied.`
-            : `Regex rule limit (${REGEX_RULE_LIMIT}) exceeded; some modifications are not applied.`,
+        limit: quota === 'total-rules' ? TOTAL_RULE_LIMIT : REGEX_RULE_LIMIT,
       });
     }
     return;
@@ -340,7 +337,6 @@ function emitHeaderRule(
       code: 'empty-header-name',
       profileId,
       modificationId: modification.id,
-      message: 'Header name is empty; the modification was skipped.',
     });
     return;
   }
@@ -381,7 +377,7 @@ function resolveHeaderInfo(
         code: 'append-not-allowed',
         profileId,
         modificationId: modification.id,
-        message: `Request header "${plan.header}" cannot be appended; it was set instead.`,
+        header: plan.header,
       });
       return { header: plan.header, operation: 'set', value: plan.composedValue };
     }
@@ -506,8 +502,6 @@ export function compile(profiles: Profile[], env: CompileEnv): CompileResult {
         code: 'missing-materialization',
         profileId: profile.id,
         modificationId: missing.id,
-        message:
-          'An active profile has a placeholder without a materialized value; the whole profile was excluded from rules.',
       });
       continue;
     }
@@ -566,7 +560,6 @@ export function compile(profiles: Profile[], env: CompileEnv): CompileResult {
         code: 'header-overlap',
         header,
         profileIds,
-        message: `Multiple active profiles modify "${header}"; the highest profile in the list wins.`,
       });
     }
   }

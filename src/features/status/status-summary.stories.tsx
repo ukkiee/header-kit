@@ -27,16 +27,8 @@ export const WithWarnings: Story = {
       ...clean,
       hasProblems: true,
       warnings: [
-        {
-          code: 'header-overlap',
-          label: 'Overlapping header across profiles',
-          detail: 'Multiple active profiles modify "authorization"; the highest profile wins.',
-        },
-        {
-          code: 'quota-exceeded',
-          label: 'Rule limit exceeded',
-          detail: 'Session rule limit (5000) exceeded; some modifications are not applied.',
-        },
+        { code: 'header-overlap', params: { header: 'authorization' } },
+        { code: 'quota-exceeded', params: { quota: 'total-rules', limit: 5000 } },
       ],
     },
   },

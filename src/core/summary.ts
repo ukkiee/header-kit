@@ -9,8 +9,8 @@ import type { Profile } from './schema';
 
 export interface WarningView {
   code: CompileWarning['code'];
-  label: string;
-  detail: string;
+  /** 라벨·상세 보간 인자 (header/limit/quota) — 로케일을 아는 UI가 카탈로그로 렌더. */
+  params: Record<string, string | number>;
 }
 
 export interface StatusSummary {
@@ -23,21 +23,19 @@ export interface StatusSummary {
   hasProblems: boolean;
 }
 
-const WARNING_LABELS: Record<CompileWarning['code'], string> = {
-  'empty-header-name': 'Empty header name',
-  'header-overlap': 'Overlapping header across profiles',
-  'regex-too-long': 'URL pattern too long',
-  'quota-exceeded': 'Rule limit exceeded',
-  'missing-materialization': 'Placeholder not materialized',
-  'append-not-allowed': 'Header cannot be appended',
-};
-
 function toView(warning: CompileWarning): WarningView {
-  return {
-    code: warning.code,
-    label: WARNING_LABELS[warning.code],
-    detail: warning.message,
-  };
+  switch (warning.code) {
+    case 'header-overlap':
+      return { code: warning.code, params: { header: warning.header } };
+    case 'regex-too-long':
+      return { code: warning.code, params: { limit: warning.limit } };
+    case 'quota-exceeded':
+      return { code: warning.code, params: { quota: warning.quota, limit: warning.limit } };
+    case 'append-not-allowed':
+      return { code: warning.code, params: { header: warning.header } };
+    default:
+      return { code: warning.code, params: {} };
+  }
 }
 
 export interface SummaryContext {

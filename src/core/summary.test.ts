@@ -37,7 +37,7 @@ describe('summarizeCompile', () => {
     expect(summary.paused).toBe(false);
   });
 
-  it('경고를 종류별로 묶고 사람이 읽는 라벨을 붙인다', () => {
+  it('경고를 종류별로 묶고 code + 보간 params를 낸다 (라벨은 UI 카탈로그가 지역화)', () => {
     const profiles = [
       profile({ id: 'a', modifications: [mod('a1', 'X-Same'), mod('a2', '  ')] }),
       profile({ id: 'b', modifications: [mod('b1', 'X-Same')] }),
@@ -49,8 +49,8 @@ describe('summarizeCompile', () => {
     expect(codes).toContain('empty-header-name');
     expect(codes).toContain('header-overlap');
     for (const warning of summary.warnings) {
-      expect(warning.label.length).toBeGreaterThan(0);
-      expect(warning.detail.length).toBeGreaterThan(0);
+      expect(typeof warning.code).toBe('string');
+      expect(warning.params).toBeTypeOf('object');
     }
   });
 
