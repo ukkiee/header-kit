@@ -13,3 +13,4 @@
 - implement 02: done — 1165783, 다크+라이트 시스템 연동, 액센트 blue 단일 확인, storybook 테마 툴바
 - implement 03: done — 088560c, 언더라인 탭+뱃지, 활성 탭 앱 레이어, smoke 55/55
 - implement 04: done — 4b4e815, 테이블형 행+단일 확장, smoke 56/56. 프런티어: 05·06·07·08
+- implement 05: done — 584873e, CSP·리다이렉트 테이블 행, ModRowShell 공유, smoke 58/58. 잔여: smoke 구형 폴러 5종 pollUntil 전환(09에서)
