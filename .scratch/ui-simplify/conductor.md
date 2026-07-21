@@ -11,3 +11,4 @@
 - implement 01: done — 8d2b2f5, smoke 53/53 (N1-N4 신규), vitest 168, code-review 2축 반영
 - structure gate: done — r1 S-1(선택 커밋 경계) accept·반영, r2 approve. 티켓 02 프런티어 개방
 - implement 02: done — 1165783, 다크+라이트 시스템 연동, 액센트 blue 단일 확인, storybook 테마 툴바
+- implement 03: done — 088560c, 언더라인 탭+뱃지, 활성 탭 앱 레이어, smoke 55/55
