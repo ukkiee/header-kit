@@ -6,3 +6,4 @@
 - align: done — 범위 C(팝업 구조 개편+탭 앱 셸), 시스템 다크+라이트, 행 선택 시 확장, 칩 스위처+단일 뷰, 탭 앱 셸 제안대로. ADR 0004 기록
 - spec: done — .scratch/ui-simplify/spec.md 발행 (ready-for-agent), seam 확인(기존 4, 신규 0)
 - plan gate r1: done — needs-attention 3건(선택 재조정/인수 매트릭스/칩 overflow) 전부 accept·스펙 반영
+- plan gate r2: done — R2-1 accept(매트릭스 story 18-22·25·28 보강), 재리뷰 WAIVED by user → 게이트 통과

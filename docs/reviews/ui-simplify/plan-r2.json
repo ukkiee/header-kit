@@ -1,0 +1,35 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "plan",
+  "verdict": "needs-attention",
+  "summary": "Do not ship the plan yet: R-1 and R-3 are addressed, but R-2 remains only partially fixed because the acceptance matrix still omits release-critical stories.",
+  "planFile": "docs/reviews/ui-simplify/spec.md",
+  "planInDiff": true,
+  "reviewedFileCount": 1,
+  "target": "working tree diff",
+  "reviewedSha": "78f8441436e475084e5b1459c4471edddbbf3ee4",
+  "reviewedTree": "45df39a9d6fdfec2097aa233321ded8f50f57360",
+  "headMovedDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 1,
+  "planFindingCount": 1,
+  "triage": "review-gate SKILL.md rules govern: render EVERY finding as a full table row, the human decides each row (accept/reject/defer/question — free text), echo back before applying, max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "medium",
+      "title": "R-2 remains: acceptance matrix omits critical retained behaviors",
+      "body": "The matrix claims to map user stories to observable tests, but it provides no acceptance coverage for stories 18–22, 25, or 28: profile-header editing, status summary, localized compile warnings, one-click pause/resume, popup management actions, cross-surface editor parity, and en/ko catalog enforcement. The generic statement that existing smoke scenarios remain does not identify whether these relocated controls and contracts are covered. A competent implementer could complete the listed matrix while silently dropping or breaking these explicitly retained behaviors.",
+      "file": "docs/reviews/ui-simplify/spec.md",
+      "line_start": 70,
+      "line_end": 86,
+      "confidence": 0.98,
+      "recommendation": "Add matrix rows with concrete seams and observable assertions for stories 18–22, 25, and 28. Where existing smoke or type checks already cover them, name the exact scenarios/checks and specify the updated interaction path.",
+      "isPlanFinding": true
+    }
+  ],
+  "next_steps": [
+    "Complete the acceptance matrix for the omitted stories, then rerun the round-2 gate."
+  ]
+}
