@@ -51,6 +51,9 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
   if (!state) return null;
 
   const effectiveSelectedId = reconcileSelection(selectedId, state.profiles);
+  // 재조정 결과를 상태로 커밋(렌더 중 상태 조정 패턴) — 자동 선택·폴백이 고정되어,
+  // 활성 토글로 뷰가 점프하거나 옛 ID 재도입 시 선택이 되돌아가지 않는다.
+  if (effectiveSelectedId !== selectedId) setSelectedId(effectiveSelectedId);
   const selectedIndex = state.profiles.findIndex((p) => p.id === effectiveSelectedId);
   const selectedProfile = selectedIndex >= 0 ? state.profiles[selectedIndex] : undefined;
 
@@ -127,9 +130,16 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
           const profile = createProfile(`Profile ${state.profiles.length + 1}`, {
             color: PROFILE_COLORS[state.profiles.length % PROFILE_COLORS.length],
           });
-          dispatch({ type: 'add-profile', profile });
-          // 낙관적 선택 — 커맨드가 실패하면 다음 렌더의 reconcileSelection이 되돌린다.
-          setSelectedId(profile.id);
+          // 선택은 커맨드 성공 후 확정 — 낙관적 선택은 커밋-중-렌더 재조정이 되돌린다.
+          void sendCommand({ type: 'add-profile', profile }).then((result) => {
+            if (result.ok) {
+              setState(result.state);
+              setSelectedId(profile.id);
+              setCommandError(null);
+            } else {
+              setCommandError(result.error);
+            }
+          });
         }}
       />
 

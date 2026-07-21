@@ -1,0 +1,36 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "structure",
+  "verdict": "needs-attention",
+  "summary": "Do not ship: the foundational selection state machine violates the spec’s reconciliation invariant across state transitions.",
+  "planFile": "docs/reviews/ui-simplify/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 26,
+  "target": "branch diff against main",
+  "reviewedSha": "b20d3a2f445f01ebfeb15b7625ff99f88ff586e3",
+  "reviewedTree": "816cc565f7e21e1ddc7255a04849ac1f49c9dee0",
+  "headMovedDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 1,
+  "planFindingCount": 0,
+  "triage": "review-gate SKILL.md rules govern: render EVERY finding as a full table row, the human decides each row (accept/reject/defer/question — free text), echo back before applying, max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "Reconciled selection is never committed to application state",
+      "body": "`reconcileSelection` is used only to derive a render-time value while `selectedId` remains null or retains a removed ID. Consequently, an initially auto-selected Profile can unexpectedly switch when its active state changes, despite still existing. Likewise, after deletion/import falls back to another Profile, a later restore or external update that reintroduces the old ID can silently jump selection back. This is the selection boundary the future tab sidebar must share, so extending it now would propagate an invalid state model. The pure-function tests cannot expose these sequential App-state failures.",
+      "file": "src/app/app.tsx",
+      "line_start": 53,
+      "line_end": 53,
+      "confidence": 0.99,
+      "recommendation": "Introduce a selection hook/reducer that commits every reconciled ID at the App state boundary. Add public-seam transition tests for initial selection followed by deactivation, and `A selected → A removed → fallback B → A reintroduced`.",
+      "isPlanFinding": false
+    }
+  ],
+  "next_steps": [
+    "Fix the selection state boundary before building subsequent increments.",
+    "Run the focused Vitest and smoke suites afterward; verification here was blocked because the read-only environment prevented pnpm from creating its temporary file."
+  ]
+}
