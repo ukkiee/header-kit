@@ -3,9 +3,11 @@ import { decodeSnapshotText, type SnapshotStatus } from '@/core/backup';
 import type { Command } from '@/core/commands';
 import { parseImport } from '@/core/transfer';
 import { listBackupSnapshots, readSyncKV } from '@/platform/backupStore';
+import { RotateCcw } from 'lucide-react';
 import { Alert } from '@/ui/alert';
 import { Button } from '@/ui/button';
 import { CollapsiblePanel } from '@/ui/collapsible-panel';
+import { IconButton } from '@/ui/icon-button';
 import { Pill } from '@/ui/pill';
 import { useT } from '@/ui/i18n-context';
 
@@ -88,15 +90,23 @@ export function BackupPanel({
                   <Pill tone="danger" title={snapshot.reason}>
                     {t('corrupt')}
                   </Pill>
-                ) : (
+                ) : confirmingId === snapshot.id ? (
+                  // 파괴적 확인 단계는 문구가 명시적인 텍스트 버튼을 유지한다
                   <Button
-                    variant={confirmingId === snapshot.id ? 'danger' : 'ghost'}
+                    variant="danger"
                     size="sm"
-                    aria-label={t(confirmingId === snapshot.id ? 'ariaConfirmRestore' : 'ariaRestoreBackup')}
+                    aria-label={t('ariaConfirmRestore')}
                     onClick={() => void restore(snapshot)}
                   >
-                    {confirmingId === snapshot.id ? t('confirmReplaceAll') : t('restore')}
+                    {t('confirmReplaceAll')}
                   </Button>
+                ) : (
+                  <IconButton
+                    label={t('ariaRestoreBackup')}
+                    tooltip={t('restore')}
+                    icon={RotateCcw}
+                    onClick={() => void restore(snapshot)}
+                  />
                 )}
               </li>
             ))}

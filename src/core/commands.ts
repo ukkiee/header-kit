@@ -1,3 +1,4 @@
+import { STANDARD_HEADERS } from './autocomplete';
 import { isRuleExpired } from './expiry';
 import { normalizeImportedProfiles } from './transfer';
 import {
@@ -246,7 +247,14 @@ export function togglePause(state: StoredState): StoredState {
 
 export function addCustomHeaderName(state: StoredState, name: string): StoredState {
   const trimmed = name.trim();
-  if (trimmed === '' || state.customHeaderNames.some((n) => n.toLowerCase() === trimmed.toLowerCase())) {
+  const lower = trimmed.toLowerCase();
+  // 표준 사전과의 중복도 거른다 — 환경설정이 기본 사전을 노출하므로(ui-refine 03)
+  // 같은 이름이 제거 가능/불가 쌍둥이 pill로 나란히 서는 것을 막는다.
+  if (
+    trimmed === '' ||
+    state.customHeaderNames.some((n) => n.toLowerCase() === lower) ||
+    STANDARD_HEADERS.some((n) => n.toLowerCase() === lower)
+  ) {
     return state;
   }
   return { ...state, customHeaderNames: [...state.customHeaderNames, trimmed] };

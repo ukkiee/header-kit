@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { IconTooltipProvider } from '@/ui/icon-button';
 import { BackupPanel } from '@/features/backup/backup-panel';
 import { PreferencesPanel } from '@/features/preferences/preferences-panel';
 import { ProfileSection } from '@/features/profiles/profile-section';
@@ -151,6 +152,7 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
   // 차이는 크기(팝업 760×580 고정+본문 스크롤 / 탭 전폭·전고)와 "탭에서 열기"뿐.
   return (
     <LocaleProvider locale={locale}>
+      <IconTooltipProvider>
       <div
         className={`grid grid-cols-[3rem_14rem_minmax(0,1fr)] ${canvas} ${
           surface === 'tab' ? 'min-h-screen' : 'h-[580px] w-[760px]'
@@ -215,6 +217,7 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
           )}
         </main>
       </div>
+      </IconTooltipProvider>
     </LocaleProvider>
   );
 }

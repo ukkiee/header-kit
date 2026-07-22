@@ -1,13 +1,15 @@
+import { Pencil, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { Modification } from '@/core/schema';
-import { Button } from '@/ui/button';
 import { Checkbox } from '@/ui/checkbox';
+import { IconButton } from '@/ui/icon-button';
 import { useT } from '@/ui/i18n-context';
 import { ruleView } from './rule-summary';
 
 /**
- * 목록 항목의 읽기 요약 행 (ADR 0006/0009) — 규칙과 적용 조건이 같은 시각 언어를
- * 공유한다: 체크박스 + 제목/배지 + 효과 한 줄 + Edit/Delete. 편집은 폼에서.
+ * 목록 항목의 읽기 요약 행 (ADR 0006/0009) — 체크박스 + 제목/배지 + 효과 한 줄 +
+ * 편집/삭제 아이콘. 아이콘은 행 호버·포커스 시에만 보인다(읽기 모드 최소 소음).
+ * 편집은 폼에서.
  */
 export interface ItemRowProps {
   title: ReactNode;
@@ -33,7 +35,7 @@ export function ItemRow({
 }: ItemRowProps) {
   const t = useT();
   return (
-    <div className="flex items-center gap-2.5 py-2">
+    <div className="group flex items-center gap-2.5 py-2">
       <Checkbox
         checked={enabled}
         onCheckedChange={onToggleEnabled}
@@ -48,13 +50,9 @@ export function ItemRow({
         </div>
         <div className="truncate font-mono text-xs text-zinc-500 dark:text-zinc-400">{summary}</div>
       </div>
-      <div className="flex shrink-0 items-center gap-1">
-        <Button variant="ghost" size="sm" onClick={onEdit}>
-          {t('edit')}
-        </Button>
-        <Button variant="danger" size="sm" onClick={onRemove}>
-          {t('menuDelete')}
-        </Button>
+      <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+        <IconButton label={t('edit')} icon={Pencil} onClick={onEdit} />
+        <IconButton label={t('menuDelete')} icon={Trash2} tone="danger" onClick={onRemove} />
       </div>
     </div>
   );

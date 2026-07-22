@@ -1,6 +1,7 @@
 import { Collapsible as BaseCollapsible } from '@base-ui-components/react/collapsible';
+import { ChevronDown } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Button } from './button';
+import { IconButton } from './icon-button';
 import { PanelSection } from './panel-section';
 
 export interface CollapsiblePanelProps {
@@ -36,10 +37,15 @@ export function CollapsiblePanel({
         title={title}
         actions={
           <BaseCollapsible.Trigger
-            render={<Button variant="ghost" size="sm" aria-label={toggleAriaLabel} />}
-          >
-            {open ? hideLabel : showLabel}
-          </BaseCollapsible.Trigger>
+            render={
+              <IconButton
+                label={toggleAriaLabel}
+                tooltip={open ? hideLabel : showLabel}
+                icon={ChevronDown}
+                className={`transition-transform ${open ? 'rotate-180' : ''}`}
+              />
+            }
+          />
         }
       >
         {banner}

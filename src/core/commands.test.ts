@@ -145,6 +145,10 @@ describe('state transition commands', () => {
     const dup = applyCommand(added, { type: 'add-custom-header-name', name: 'x-my' });
     expect(dup.customHeaderNames).toEqual(['X-My']);
 
+    // 표준 사전 항목도 중복으로 거른다 — 환경설정의 쌍둥이 pill 방지 (ui-refine 03)
+    const std = applyCommand(added, { type: 'add-custom-header-name', name: 'accept' });
+    expect(std.customHeaderNames).toEqual(['X-My']);
+
     const removed = applyCommand(added, { type: 'remove-custom-header-name', name: 'X-My' });
     expect(removed.customHeaderNames).toEqual([]);
   });

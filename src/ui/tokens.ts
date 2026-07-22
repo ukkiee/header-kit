@@ -29,6 +29,10 @@ export const popupSurface =
 export const popupItem =
   'flex cursor-pointer items-center rounded-md px-2 py-1.5 text-xs outline-none select-none data-[highlighted]:bg-zinc-100 dark:data-[highlighted]:bg-zinc-800';
 
+/** 툴팁 표면 — 반전 명도(라이트에서 어두운 배경). IconButton 계열이 공유한다. */
+export const tooltipPopup =
+  'rounded-md bg-zinc-900 px-2 py-1 text-[11px] text-white dark:bg-zinc-100 dark:text-zinc-900';
+
 /** 앱 캔버스(본문 배경+글자색) — App main / Storybook 프리뷰 래퍼가 공유한다. */
 export const canvas = 'bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100';
 

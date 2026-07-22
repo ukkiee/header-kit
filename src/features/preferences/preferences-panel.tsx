@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
+import { STANDARD_HEADERS } from '@/core/autocomplete';
 import type { Command } from '@/core/commands';
 import { Button } from '@/ui/button';
 import { Input } from '@/ui/input';
@@ -15,7 +16,7 @@ export interface PreferencesPanelProps {
   incognitoAllowed: boolean | null;
 }
 
-/** 보조 설정 — autocomplete 사용자 항목, 단축키·시크릿 안내. */
+/** 보조 설정 — autocomplete 사전(기본+사용자 항목), 시크릿 안내. */
 export function PreferencesPanel({
   customHeaderNames,
   onCommand,
@@ -59,28 +60,28 @@ export function PreferencesPanel({
                 {t('add')}
               </Button>
             </div>
-            {customHeaderNames.length > 0 && (
-              <ul className="flex flex-wrap gap-1">
-                {customHeaderNames.map((name) => (
-                  <Pill as="li" key={name} tone="neutral">
-                    {name}
-                    <button
-                      type="button"
-                      aria-label={format(t('ariaRemoveName'), { name })}
-                      className="text-zinc-400 hover:text-red-500"
-                      onClick={() => onCommand({ type: 'remove-custom-header-name', name })}
-                    >
-                      <X size={12} strokeWidth={1.75} />
-                    </button>
-                  </Pill>
-                ))}
-              </ul>
-            )}
+            {/* 기본 사전은 항상 보이고 제거 불가 — 사용자 항목만 X (ui-refine #14). */}
+            <ul className="flex flex-wrap gap-1">
+              {STANDARD_HEADERS.map((name) => (
+                <Pill as="li" key={name} tone="neutral">
+                  {name}
+                </Pill>
+              ))}
+              {customHeaderNames.map((name) => (
+                <Pill as="li" key={name} tone="neutral">
+                  {name}
+                  <button
+                    type="button"
+                    aria-label={format(t('ariaRemoveName'), { name })}
+                    className="text-zinc-400 hover:text-red-500"
+                    onClick={() => onCommand({ type: 'remove-custom-header-name', name })}
+                  >
+                    <X size={12} strokeWidth={1.75} />
+                  </button>
+                </Pill>
+              ))}
+            </ul>
           </div>
-
-          <p className="text-zinc-500">
-            {t('shortcutsHint')} <code>chrome://extensions/shortcuts</code>.
-          </p>
 
           {incognitoAllowed && <p className="text-zinc-500">{t('incognitoAllowed')}</p>}
         </div>

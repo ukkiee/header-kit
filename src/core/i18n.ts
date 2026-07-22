@@ -82,7 +82,6 @@ const en = {
   noProfilesYet: 'No profiles yet — create one with + New profile.',
   corrupt: 'corrupt',
   autocompleteHeaders: 'Autocomplete header names',
-  shortcutsHint: 'Keyboard shortcuts (Alt+Shift+H / Alt+Shift+P) can be changed at',
   incognitoAllowed: 'Incognito access is enabled.',
   incognitoBlocked:
     'Not enabled in incognito windows. Turn on “Allow in Incognito” on the extension details page to modify incognito traffic.',
@@ -222,7 +221,6 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     noProfilesYet: '아직 프로필이 없습니다 — + 새 프로필로 시작하세요.',
     corrupt: '손상됨',
     autocompleteHeaders: '자동완성 헤더 이름',
-    shortcutsHint: '키보드 단축키(Alt+Shift+H / Alt+Shift+P)는 다음에서 변경할 수 있습니다',
     incognitoAllowed: '시크릿 창 접근이 허용되었습니다.',
     incognitoBlocked:
       '시크릿 창에서 활성화되지 않았습니다. 시크릿 트래픽을 수정하려면 확장 상세 페이지에서 “시크릿 모드에서 허용”을 켜세요.',

@@ -1295,10 +1295,12 @@ try {
     .first()
     .isVisible()
     .catch(() => false);
+  // 아이콘 버튼(ui-refine 03)의 ko aria — 삭제 아이콘이 카탈로그 경유 이름을 갖는다
+  const koDeleteIcon = (await popupKo.getByRole('button', { name: '삭제', exact: true }).count()) > 0;
   await popupKo.close();
   record('N14: ko 접근성 이름 — aria 카탈로그 경유',
-    koToggle && koMenu && koSidebarItem && koRowToggle,
-    `toggle=${koToggle}, menu=${koMenu}, sidebar=${koSidebarItem}, row=${koRowToggle}`);
+    koToggle && koMenu && koSidebarItem && koRowToggle && koDeleteIcon,
+    `toggle=${koToggle}, menu=${koMenu}, sidebar=${koSidebarItem}, row=${koRowToggle}, delete-icon=${koDeleteIcon}`);
 
   // N15: 규칙 단위 URL 필터 (ADR 0007/0008) — contains(비정규식)와 regex 두 방식 모두
   // 매칭 URL에만 적용되고, 무스코프 규칙은 전역이며, 프로필 필터는 건드리지 않는다.
@@ -1405,6 +1407,52 @@ try {
       && chipSaved?.resourceTypes?.includes('main_frame') && chipSaved?.resourceTypes?.includes('script')
       && chipDeselected?.resourceTypes?.join() === 'script',
     `idle=${bgIdle}, caption-hover=${bgCaptionHover}, chip-hover=${bgChipHover}, pressed=${pressedAfterClick}, saved=${JSON.stringify(chipSaved?.resourceTypes)}, deselected=${JSON.stringify(chipDeselected?.resourceTypes)}`);
+
+  // N17: 아이콘 버튼 — 툴팁(호버·포커스), 행 액션 호버 표시, 환경설정 정리 (ui-refine 03)
+  await waitFormClosed();
+  const editIcon = popup.getByRole('button', { name: 'Edit', exact: true }).first();
+  const iconOpacity = () => editIcon.evaluate((el) => getComputedStyle(el.parentElement).opacity);
+  const row = popup.locator('.group').filter({ has: editIcon }).first();
+  const opacityIdle = await iconOpacity();
+  await row.hover();
+  const opacityRowHover = await pollUntil(iconOpacity, (v) => v === '1', 3000, 100);
+  await editIcon.hover();
+  const tooltipOnHover = await popup
+    .getByRole('tooltip')
+    .filter({ hasText: 'Edit' })
+    .waitFor({ timeout: 5000 })
+    .then(() => true, () => false);
+  await popup.mouse.move(0, 0);
+  // 툴팁은 키보드 포커스(focus-visible)에 열린다 — 프로그램적 focus()가 아니라 실제 Tab
+  await popup.getByRole('checkbox').first().focus();
+  await popup.keyboard.press('Tab');
+  const tooltipOnFocus = await popup
+    .getByRole('tooltip')
+    .filter({ hasText: 'Edit' })
+    .waitFor({ timeout: 5000 })
+    .then(() => true, () => false);
+  record('N17a: 행 액션 — 호버 시 표시 + 아이콘 툴팁(호버·포커스)',
+    opacityIdle === '0' && opacityRowHover === '1' && tooltipOnHover && tooltipOnFocus,
+    `idle=${opacityIdle}, row-hover=${opacityRowHover}, tooltip-hover=${tooltipOnHover}, tooltip-focus=${tooltipOnFocus}`);
+
+  // 환경설정: 단축키 문구 없음, 기본 사전 비제거 pill, 사용자 항목만 X
+  await popup.getByRole('button', { name: 'Show preferences' }).click();
+  await popup.getByRole('button', { name: 'Toggle preferences' }).click();
+  const hintGone = !(await popup.getByText(/chrome:\/\/extensions\/shortcuts/).isVisible().catch(() => false));
+  const acceptPill = popup.locator('li').filter({ hasText: /^Accept$/ }).first();
+  const stdShown = await acceptPill.waitFor({ timeout: 5000 }).then(() => true, () => false);
+  const stdNoRemove = (await acceptPill.getByRole('button').count()) === 0;
+  // 사용자 항목은 시드로 초기화됐으므로 여기서 추가해 X 버튼을 확인한다
+  await popup.getByLabel('New autocomplete header').fill('X-Team-Custom');
+  await popup.getByRole('button', { name: 'Add autocomplete header' }).click();
+  const userRemovable = await popup
+    .getByRole('button', { name: 'Remove X-Team-Custom' })
+    .waitFor({ timeout: 5000 })
+    .then(() => true, () => false);
+  await popup.getByRole('button', { name: 'Show profiles' }).click();
+  record('N17b: 환경설정 — 단축키 문구 제거, 기본 사전 비제거, 사용자 항목만 제거 가능',
+    hintGone && stdShown && stdNoRemove && userRemovable,
+    `hint-gone=${hintGone}, std=${stdShown}, std-no-x=${stdNoRemove}, user-x=${userRemovable}`);
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
