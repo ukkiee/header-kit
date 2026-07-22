@@ -3,7 +3,7 @@ import { suggestHeaderNames } from '@/core/autocomplete';
 import { Input, type InputProps } from '@/ui/input';
 import { useT } from '@/ui/i18n-context';
 
-export interface HeaderNameInputProps extends Pick<InputProps, 'variant' | 'size'> {
+export interface HeaderNameInputProps extends Pick<InputProps, 'variant' | 'size' | 'autoFocus'> {
   value: string;
   onChange: (next: string) => void;
   userHeaders: readonly string[];
@@ -18,6 +18,7 @@ export function HeaderNameInput({
   className,
   variant,
   size,
+  autoFocus,
 }: HeaderNameInputProps) {
   const t = useT();
   const listId = useId();
@@ -29,6 +30,7 @@ export function HeaderNameInput({
       <Input
         variant={variant}
         size={size}
+        autoFocus={autoFocus}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onFocus={() => setFocused(true)}

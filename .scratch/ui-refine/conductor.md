@@ -9,3 +9,4 @@
 - stage4 structure gate: done — r1 needs-attention(S-1 accept: Select 제네릭화) → r2 approve
 - stage4 ticket 02: done — ChipGroup(ToggleGroup)·Collapsible 교체, 호버 버그 구조 해소, smoke 67/67
 - stage4 ticket 03: done — IconButton+Tooltip(4대상), 호버 액션, 환경설정 정리, smoke 69/69
+- stage4 ticket 04: done — 저장 검증(core 순수 함수)+폼 정리+키보드, 스테일 오류 버그 수정, smoke 73/73

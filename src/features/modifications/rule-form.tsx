@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
 import type { MessageKey } from '@/core/i18n';
+import { missingRequiredFields, type RequiredField } from '@/core/rule-validation';
 import { isRequestAppendAllowed } from '@/core/rules';
 import {
   createModification,
@@ -17,7 +18,7 @@ import { Button } from '@/ui/button';
 import { Input } from '@/ui/input';
 import { LargeEditor } from '@/ui/large-editor';
 import { NoteText } from '@/ui/note-text';
-import { Field, fieldCaption } from '@/ui/field';
+import { Field, FieldError, fieldCaption } from '@/ui/field';
 import { Select } from '@/ui/select';
 import { useT } from '@/ui/i18n-context';
 import { HeaderNameInput } from './header-name-input';
@@ -50,8 +51,12 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
   // 매치 방식 기본값: 기존 규칙에 필터가 있었으면 regex(하위 호환), 아니면 contains.
   const defaultMatchType: UrlMatchType =
     initial && 'urlFilter' in initial && initial.urlFilter ? 'regex' : 'contains';
-  const [error, setError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // 저장 차단 검증 (ui-refine 04) — Save 시점에 계산, 다음 Save까지 유지.
+  const [fieldErrors, setFieldErrors] = useState<readonly RequiredField[]>([]);
+  const requiredError = (field: RequiredField) =>
+    fieldErrors.includes(field) ? t('requiredField') : undefined;
 
   const KIND_LABELS: Record<ModificationKind, MessageKey> = {
     'request-header': 'kindRequestHeader',
@@ -72,9 +77,15 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
       comment: draft.comment,
       ...(draft.conditions ? { conditions: draft.conditions } : {}),
     } as Modification);
+    // 이전 종류의 검증 오류는 새 초안과 무관하다 — 아직 Save한 적 없는데 표시되면 안 된다.
+    setFieldErrors([]);
   };
 
   const save = async () => {
+    // 빈 필수 필드는 저장을 통과하지 못한다 — 인라인 오류로 그 자리에서 알린다.
+    const missing = missingRequiredFields(draft);
+    setFieldErrors(missing);
+    if (missing.length > 0) return;
     setSaving(true);
     // 스코프 정리: 필터가 비면 매치 방식도 벗기고, 있으면 셀렉트 기본값을 확정한다.
     let toSave = draft;
@@ -96,7 +107,7 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
     }
     const result = await onSave(toSave);
     setSaving(false);
-    if (!result.ok) setError(result.error ?? t('saveRejected'));
+    if (!result.ok) setSaveError(result.error ?? t('saveRejected'));
   };
 
   const isValueKind =
@@ -113,8 +124,30 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
   const setCspDirectives = (directives: CspModification['directives']) =>
     setDraft({ ...(draft as CspModification), directives });
 
+  const currentMatchType: UrlMatchType =
+    ('urlMatchType' in draft ? draft.urlMatchType : undefined) ?? defaultMatchType;
+  // 매치 방식별 예시 — 정규식일 때 평문 예시가 오해를 만들지 않게 분기한다 (ui-refine #9).
+  const scopePlaceholder: Record<UrlMatchType, string> = {
+    contains: 'api.example.com',
+    domain: 'example.com',
+    prefix: 'https://example.com/api',
+    regex: '^https://.*\\.example\\.com/',
+  };
+
+  // 폼 키보드 (ui-refine 04): Esc 닫기, Cmd/Ctrl+Enter 저장 — 포털(셀렉트 팝업·대형
+  // 편집기)의 Esc는 여기까지 버블되지 않는다.
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      onCancel();
+    } else if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault();
+      void save();
+    }
+  };
+
   return (
-    <div className="flex flex-col gap-3 rounded-lg bg-zinc-50 p-3 dark:bg-zinc-900">
+    <div className="flex flex-col gap-3 rounded-lg bg-zinc-50 p-3 dark:bg-zinc-900" onKeyDown={onKeyDown}>
       <Field label={t('ruleKind')}>
         <Select
           variant="bordered"
@@ -157,7 +190,7 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
                   urlFilter: e.target.value === '' ? undefined : e.target.value,
                 } as Modification)
               }
-              placeholder="api.example.com"
+              placeholder={scopePlaceholder[currentMatchType]}
               aria-label={t('urlFilterScope')}
               className="min-w-0 flex-1"
             />
@@ -169,12 +202,26 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
         <>
           <div className="grid grid-cols-2 gap-2">
             {'name' in draft ? (
-              <Field label={t('headerName')}>
-                <HeaderNameInput
-                  value={draft.name}
-                  onChange={(name) => setDraft({ ...draft, name } as Modification)}
-                  userHeaders={userHeaders}
-                />
+              <Field
+                label={draft.kind === 'cookie' ? t('cookieName') : t('headerName')}
+                error={requiredError('name')}
+              >
+                {draft.kind === 'cookie' ? (
+                  // 쿠키 이름은 헤더 사전 자동완성 대상이 아니다 — 평문 입력.
+                  <Input
+                    autoFocus
+                    value={draft.name}
+                    onChange={(e) => setDraft({ ...draft, name: e.target.value } as Modification)}
+                    placeholder="session_id"
+                  />
+                ) : (
+                  <HeaderNameInput
+                    autoFocus
+                    value={draft.name}
+                    onChange={(name) => setDraft({ ...draft, name } as Modification)}
+                    userHeaders={userHeaders}
+                  />
+                )}
               </Field>
             ) : (
               <span />
@@ -182,6 +229,7 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
             <Field label={t('value')}>
               <div className="flex items-center gap-1">
                 <Input
+                  autoFocus={draft.kind === 'set-cookie'}
                   value={draft.value}
                   onChange={(e) => setDraft({ ...draft, value: e.target.value } as Modification)}
                   className="min-w-0 flex-1"
@@ -195,19 +243,21 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <Field label={t('mode')}>
-              <Select
-                variant="bordered"
-                size="md"
-                value={draft.mode}
-                onValueChange={(value) => setDraft({ ...draft, mode: value } as Modification)}
-                disabled={!appendAllowed}
-                options={[
-                  { value: 'override', label: t('override') },
-                  ...(appendAllowed ? [{ value: 'append', label: t('append') }] : []),
-                ]}
-              />
-            </Field>
+            {/* append 불가면 모드는 선택지가 하나 — 컨트롤을 아예 숨긴다 (ui-refine #6). */}
+            {appendAllowed && (
+              <Field label={t('mode')}>
+                <Select
+                  variant="bordered"
+                  size="md"
+                  value={draft.mode}
+                  onValueChange={(value) => setDraft({ ...draft, mode: value } as Modification)}
+                  options={[
+                    { value: 'override', label: t('override') },
+                    { value: 'append', label: t('append') },
+                  ]}
+                />
+              </Field>
+            )}
             <Field label={t('emptyValueMeans')}>
               <Select
                 variant="bordered"
@@ -233,6 +283,7 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
           {draft.directives.map((directive, i) => (
             <div key={i} className="flex items-center gap-1">
               <Input
+                autoFocus={i === 0}
                 size="sm"
                 value={directive.name}
                 onChange={(e) =>
@@ -276,21 +327,23 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
             <Plus size={14} strokeWidth={1.75} className="mr-1" />
             {t('addDirective')}
           </Button>
+          {requiredError('directives') && <FieldError>{t('requiredField')}</FieldError>}
         </div>
       )}
 
       {draft.kind === 'redirect' && (
         <>
           <div className="grid grid-cols-2 gap-2">
-            <Field label={t('ariaRedirectPattern')}>
+            <Field label={t('ariaRedirectPattern')} error={requiredError('pattern')}>
               <Input
+                autoFocus
                 font="mono"
                 value={draft.pattern}
                 onChange={(e) => setDraft({ ...draft, pattern: e.target.value })}
                 placeholder="^https://prod\\.example\\.com/(.*)"
               />
             </Field>
-            <Field label={t('ariaRedirectSubstitution')}>
+            <Field label={t('ariaRedirectSubstitution')} error={requiredError('substitution')}>
               <Input
                 font="mono"
                 value={draft.substitution}
@@ -324,9 +377,9 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
         />
       </Field>
 
-      {error && (
+      {saveError && (
         <Alert severity="danger" role="alert">
-          {error}
+          {saveError}
         </Alert>
       )}
 

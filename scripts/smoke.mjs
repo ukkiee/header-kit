@@ -1222,8 +1222,9 @@ try {
   await pollProfileName((v) => v === 'KeyA');
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().focus();
   await popup.keyboard.press('Enter');
+  // 폼 열림 마커: 'When empty'는 값 종류에서 항상 노출 (Mode는 append 불가 시 숨김 — ui-refine 04)
   const kbFormOpened = await popup
-    .getByRole('combobox', { name: 'Mode' })
+    .getByRole('combobox', { name: 'When empty' })
     .waitFor({ timeout: 5000 })
     .then(() => true, () => false);
   await popup.getByRole('button', { name: 'Cancel' }).click();
@@ -1453,6 +1454,90 @@ try {
   record('N17b: 환경설정 — 단축키 문구 제거, 기본 사전 비제거, 사용자 항목만 제거 가능',
     hintGone && stdShown && stdNoRemove && userRemovable,
     `hint-gone=${hintGone}, std=${stdShown}, std-no-x=${stdNoRemove}, user-x=${userRemovable}`);
+
+  // N18: 저장 검증 + 폼 정리 + 폼 키보드 (ui-refine 04)
+  await seedProfiles([
+    baseProfile('p-form', 'Form',
+      [{ kind: 'request-header', id: 'm1', name: 'X-Base', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }]),
+  ]);
+  await popup.reload();
+
+  // a: 빈 헤더 이름 Save → 인라인 오류 + aria-invalid + 저장 안 됨(폼 유지)
+  await popup.getByRole('button', { name: 'Add rule' }).click();
+  const nameInput = popup.getByLabel('Header name', { exact: true }).first();
+  const autofocused = await nameInput.evaluate((el) => document.activeElement === el);
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  const inlineError = await popup.getByText('Required.', { exact: true }).first()
+    .waitFor({ timeout: 5000 }).then(() => true, () => false);
+  const ariaInvalid = await nameInput.getAttribute('aria-invalid');
+  const modsAfterBlockedSave = await sw.evaluate(async () => {
+    const { state } = await chrome.storage.local.get('state');
+    return state.profiles[0].modifications.length;
+  });
+  record('N18a: 빈 필수 필드 Save 차단 — 인라인 오류·aria-invalid·스토리지 불변·autofocus',
+    autofocused && inlineError && ariaInvalid === 'true' && modsAfterBlockedSave === 1,
+    `autofocus=${autofocused}, error=${inlineError}, aria-invalid=${ariaInvalid}, mods=${modsAfterBlockedSave}`);
+
+  // b: 종류 전환은 이전 종류의 검증 오류를 지운다 — 차단 Save 직후(N18a에서 name 오류
+  //    상태) Request cookie로 바꾸면 아직 Save한 적 없으므로 오류가 없어야 한다.
+  await pickOption(popup, 'Type', 'Request cookie');
+  const cookieLabelShown = await popup.getByText('Cookie name', { exact: true }).isVisible().catch(() => false);
+  const noStaleError = (await popup.getByText('Required.', { exact: true }).count()) === 0;
+  // Redirect로 바꿔 Save하면 패턴·치환 두 오류가 새로 뜬다
+  await pickOption(popup, 'Type', 'Redirect');
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  const redirectErrors = await popup.getByText('Required.', { exact: true }).count();
+  await pickOption(popup, 'Type', 'Response cookie');
+  const setCookieSelected = await popup.getByRole('combobox', { name: 'Type', exact: true }).textContent();
+  record('N18b: 종류 전환 시 스테일 오류 없음 + 응답 쿠키·쿠키 이름 라벨 + Redirect 2필드 오류',
+    cookieLabelShown && noStaleError && redirectErrors === 2 && /Response cookie/.test(setCookieSelected ?? ''),
+    `cookie-label=${cookieLabelShown}, no-stale=${noStaleError}, redirect-errors=${redirectErrors}, kind="${(setCookieSelected ?? '').trim()}"`);
+
+  // c: 모드 숨김 — 비허용 요청 헤더 이름이면 Mode 미노출, 허용(Accept)이면 노출
+  await pickOption(popup, 'Type', 'Request header');
+  await popup.getByLabel('Header name', { exact: true }).fill('X-Custom');
+  const modeHidden = (await popup.getByRole('combobox', { name: 'Mode' }).count()) === 0;
+  await popup.getByLabel('Header name', { exact: true }).fill('Accept');
+  const modeShown = (await popup.getByRole('combobox', { name: 'Mode' }).count()) === 1;
+  // d: regex 선택 시 placeholder 분기
+  await pickOption(popup, 'URL match type', 'Regex (advanced)');
+  const regexPlaceholder = await popup.getByLabel('URL filter').getAttribute('placeholder');
+  record('N18c: 모드 미노출/노출 + regex placeholder 분기',
+    modeHidden && modeShown && /\^https/.test(regexPlaceholder ?? ''),
+    `hidden=${modeHidden}, shown=${modeShown}, placeholder="${regexPlaceholder}"`);
+
+  // e: 키보드 — Cmd/Ctrl+Enter 저장, Esc 닫기
+  await popup.getByLabel('Header name', { exact: true }).fill('X-Kbd');
+  await popup.getByLabel('Value', { exact: true }).fill('kbd');
+  await popup.keyboard.press(process.platform === 'darwin' ? 'Meta+Enter' : 'Control+Enter');
+  const kbdSaved = await pollUntil(
+    () => sw.evaluate(async () => {
+      const { state } = await chrome.storage.local.get('state');
+      return state.profiles[0].modifications.some((m) => m.name === 'X-Kbd');
+    }),
+    (v) => v === true,
+  );
+  await waitFormClosed();
+  await popup.getByRole('button', { name: 'Add rule' }).click();
+  await popup.getByLabel('Header name', { exact: true }).waitFor({ timeout: 5000 });
+  // 열린 Select 팝업 안의 Esc는 팝업만 닫고 폼은 유지해야 한다(이중 닫힘 방지)
+  await popup.getByRole('combobox', { name: 'Type', exact: true }).click();
+  await popup.getByRole('option', { name: 'Request header', exact: true }).waitFor({ timeout: 5000 });
+  await popup.keyboard.press('Escape');
+  const popupClosedFormKept = await pollUntil(
+    () => popup.getByRole('option').count(),
+    (n) => n === 0,
+    3000,
+    100,
+  );
+  const formStillOpen = await popup.getByRole('button', { name: 'Save', exact: true }).isVisible().catch(() => false);
+  // 폼 본문의 Esc는 폼을 닫는다
+  await popup.keyboard.press('Escape');
+  const escClosed = await popup.getByRole('button', { name: 'Save', exact: true })
+    .waitFor({ state: 'detached', timeout: 5000 }).then(() => true, () => false);
+  record('N18d: Cmd/Ctrl+Enter 저장 + Select 팝업 Esc는 폼 유지 + 폼 Esc는 닫힘',
+    kbdSaved === true && popupClosedFormKept === 0 && formStillOpen && escClosed,
+    `saved=${kbdSaved}, popup-only-close=${popupClosedFormKept === 0 && formStillOpen}, form-esc-closed=${escClosed}`);
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
