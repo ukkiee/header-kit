@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { IconTooltipProvider } from '@/ui/icon-button';
+import { useToastManager } from '@/ui/toast';
 import { BackupPanel } from '@/features/backup/backup-panel';
 import { PreferencesPanel } from '@/features/preferences/preferences-panel';
 import { ProfileSection } from '@/features/profiles/profile-section';
@@ -58,6 +59,8 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
     void browser.extension.isAllowedIncognitoAccess().then(setIncognitoAllowed);
   }, []);
 
+  const toast = useToastManager();
+
   if (!state) return null;
 
   const effectiveSelectedId = reconcileSelection(selectedId, state.profiles);
@@ -92,6 +95,27 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
 
   const openTabApp = () => {
     void browser.tabs.create({ url: browser.runtime.getURL('/app.html') });
+  };
+
+  // 규칙 삭제 + 실행 취소 (ui-refine 07) — 삭제 시점에 {원본, 인덱스, materialized 값}을
+  // 스냅샷하고, Undo는 restore-modification 하나로 원자 복원한다(재실체화 없음).
+  const deleteRuleWithUndo = (profileId: string, modificationId: string) => {
+    const profile = state.profiles.find((p) => p.id === profileId);
+    const index = profile?.modifications.findIndex((m) => m.id === modificationId) ?? -1;
+    const modification = index >= 0 ? profile!.modifications[index] : undefined;
+    if (!modification) return;
+    const materializedValue = state.materialized[modificationId];
+    dispatch({ type: 'remove-modification', profileId, modificationId });
+    const toastId = toast.add({
+      title: t(locale, 'ruleDeleted'),
+      data: { actionLabel: t(locale, 'undo') },
+      actionProps: {
+        onClick: () => {
+          dispatch({ type: 'restore-modification', profileId, index, modification, materializedValue });
+          toast.close(toastId); // 되돌렸으면 토스트도 닫는다
+        },
+      },
+    });
   };
 
   const createAndSelectProfile = () => {
@@ -139,6 +163,7 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
       key={selectedProfile.id}
       profile={selectedProfile}
       onCommand={dispatch}
+      onDeleteRule={deleteRuleWithUndo}
       userHeaders={state.customHeaderNames}
       onCommandWithResult={dispatchWithResult}
     />

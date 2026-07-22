@@ -15,6 +15,8 @@ import { useT } from '@/ui/i18n-context';
 export interface ProfileSectionProps {
   profile: Profile;
   onCommand: (command: Command) => void;
+  /** 규칙 삭제 — 스냅샷을 잡아 Undo 토스트를 띄운다 (ui-refine 07). */
+  onDeleteRule: (profileId: string, modificationId: string) => void;
   /** 헤더 이름 autocomplete 사용자 항목. */
   userHeaders?: readonly string[];
   /** 규칙 저장 — 권위 실행 결과를 폼이 돌려받아 거부를 인라인으로 보여준다. */
@@ -24,6 +26,7 @@ export interface ProfileSectionProps {
 export function ProfileSection({
   profile,
   onCommand,
+  onDeleteRule,
   userHeaders,
   onCommandWithResult,
 }: ProfileSectionProps) {
@@ -151,13 +154,7 @@ export function ProfileSection({
                 })
               }
               onEdit={() => setEditingRule(modification.id)}
-              onRemove={() =>
-                onCommand({
-                  type: 'remove-modification',
-                  profileId: profile.id,
-                  modificationId: modification.id,
-                })
-              }
+              onRemove={() => onDeleteRule(profile.id, modification.id)}
             />
           ),
         )}

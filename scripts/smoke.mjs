@@ -1608,6 +1608,50 @@ try {
     emptyHintShown && formOpened,
     `hint=${emptyHintShown}, form-opened=${formOpened}`);
 
+  // N20: 규칙 삭제 Undo 토스트 (ui-refine 07) — Placeholder 값 보존 원자 복원
+  await seedProfiles([
+    {
+      ...baseProfile('p-undo', 'Undo', [
+        { kind: 'request-header', id: 'm1', name: 'X-Trace', value: 'req-{{uuid}}', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+      ]),
+      active: false,
+    },
+  ]);
+  await popup.reload();
+  // 활성화 경계로 실체화(팝업 토글) 후, 삭제 전 실요청 값을 기록한다
+  await popup.getByRole('switch', { name: 'Toggle Undo' }).click();
+  await pollSessionRuleCount(sw, 1);
+  const beforeDelete = (await fetchEchoHeaders(pageB, '/headers'))['x-trace'];
+  // 삭제 → 규칙 0 + 토스트 노출(텍스트로 즉시 감지 — 토스트 기본 수명 내 Undo)
+  await popup.getByRole('button', { name: 'Delete', exact: true }).first().click();
+  await pollSessionRuleCount(sw, 0);
+  const toastShown = await popup.getByText('Rule deleted', { exact: true }).first()
+    .waitFor({ timeout: 5000 }).then(() => true, () => false);
+  // Undo → 규칙 복원 + 실요청 값이 삭제 전과 동일(재실체화 없음)
+  await popup.getByRole('button', { name: 'Undo', exact: true }).first().click();
+  await pollSessionRuleCount(sw, 1);
+  const afterUndo = await pollUntil(
+    () => fetchEchoHeaders(pageB, '/headers').then((h) => h['x-trace']),
+    (v) => typeof v === 'string' && v.startsWith('req-'),
+  );
+  record('N20a: 삭제 Undo — 토스트 노출 + Placeholder 값 보존 원자 복원',
+    /^req-[0-9a-f-]{36}$/.test(beforeDelete ?? '') && toastShown && afterUndo === beforeDelete,
+    `before=${beforeDelete}, toast=${toastShown}, after=${afterUndo}, preserved=${afterUndo === beforeDelete}`);
+
+  // N20b: Undo를 누르지 않으면 삭제가 유지된다(자동 복원 없음)
+  await popup.getByRole('button', { name: 'Delete', exact: true }).first().click();
+  await pollSessionRuleCount(sw, 0);
+  await popup.getByText('Rule deleted', { exact: true }).first().waitFor({ timeout: 5000 });
+  // Undo 없이 잠시 기다린 뒤에도 규칙은 복원되지 않는다
+  await new Promise((r) => setTimeout(r, 1000));
+  const stillDeleted = await sw.evaluate(async () => {
+    const { state } = await chrome.storage.local.get('state');
+    return state.profiles[0].modifications.length;
+  });
+  record('N20b: Undo 미클릭 시 삭제 유지(자동 복원 없음)',
+    stillDeleted === 0,
+    `mods=${stillDeleted}`);
+
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
   process.exitCode = failed.length === 0 ? 0 : 1;

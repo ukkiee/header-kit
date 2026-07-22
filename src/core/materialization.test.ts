@@ -5,6 +5,7 @@ import {
   expireRules,
   removeModification,
   removeProfile,
+  restoreModification,
   toggleProfile,
   updateModification,
 } from './commands';
@@ -141,6 +142,42 @@ describe('실체화 수명주기 (활성화 경계)', () => {
     expect(expired.profiles[0]?.active).toBe(true);
     expect(expired.profiles[0]?.modifications[0]?.enabled).toBe(false);
     expect(expired.materialized).toEqual({ 'm-ph': 'trace-old' });
+  });
+
+  it('삭제-Undo(restoreModification): 원위치·원상태 복원, Placeholder는 재실체화 없이 값 보존 (ui-refine 07)', () => {
+    const deps = stubDeps();
+    // 활성 프로필: m-ph(placeholder)=uuid-1, m-plain=static. m-ph를 삭제했다 되돌린다.
+    const on = toggleProfile(state([profile()]), 'p1', true, deps);
+    expect(on.materialized).toEqual({ 'm-ph': 'trace-uuid-1' });
+    const original = on.profiles[0]!.modifications[0]!; // m-ph, 인덱스 0
+    const snapshotValue = on.materialized['m-ph'];
+
+    const removed = removeModification(on, 'p1', 'm-ph');
+    expect(removed.materialized).toEqual({}); // 삭제가 값도 제거
+
+    // 스냅샷으로 원자 복원 — 재실체화 금지(deps 없이도 값이 돌아온다)
+    const restored = restoreModification(removed, 'p1', 0, original, snapshotValue);
+    expect(restored.profiles[0]?.modifications.map((m) => m.id)).toEqual(['m-ph', 'm-plain']);
+    expect(restored.materialized).toEqual({ 'm-ph': 'trace-uuid-1' }); // 새 uuid 아님
+    expect(deps.uuidCalls).toBe(1); // toggle에서 1회, 복원에선 0회
+  });
+
+  it('삭제-Undo: 원래 인덱스(중간)에 다시 끼운다', () => {
+    const three = profile({
+      modifications: [mod('a', 'x'), mod('b', 'y'), mod('c', 'z')],
+    });
+    const removed = removeModification(state([three]), 'p1', 'b');
+    expect(removed.profiles[0]?.modifications.map((m) => m.id)).toEqual(['a', 'c']);
+
+    const restored = restoreModification(removed, 'p1', 1, mod('b', 'y'));
+    expect(restored.profiles[0]?.modifications.map((m) => m.id)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('삭제-Undo: 인덱스가 현재 목록을 벗어나면 끝에 클램프한다 (삭제 시점 인덱스 계약)', () => {
+    // 삭제 시점 인덱스 5지만 되돌릴 때 목록이 1개 → 범위 밖이라 끝에 붙는다.
+    const one = profile({ modifications: [mod('a', 'x')] });
+    const restored = restoreModification(state([one]), 'p1', 5, mod('b', 'y'));
+    expect(restored.profiles[0]?.modifications.map((m) => m.id)).toEqual(['a', 'b']);
   });
 });
 

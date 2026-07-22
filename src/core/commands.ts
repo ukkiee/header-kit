@@ -171,6 +171,35 @@ export function removeModification(
   return { ...base, materialized: withoutKey(base.materialized, modificationId) };
 }
 
+/**
+ * 삭제 실행 취소 (ui-refine 07) — 스냅샷 {원본 Modification, 삭제 시점 인덱스, 해당
+ * materialized 값}을 원자적으로 되돌린다. 일반 추가 경로를 타지 않으므로 Placeholder
+ * 규칙도 재실체화되지 않고 삭제 전과 동일한 실체화 값으로 돌아온다. materializedValue가
+ * 있으면 그 값을 그대로 복원한다(삭제 당시 활성이었다는 뜻).
+ *
+ * 인덱스는 삭제 시점 목록 기준이다. 되돌리기 전에 목록이 바뀌면(다른 규칙 추가, 또는
+ * 여러 삭제를 원래 순서와 다르게 되돌림) 정확한 원위치가 아닐 수 있어 범위로 클램프한다 —
+ * 토스트 수명이 짧아 실무상 단일 삭제→즉시 되돌리기가 압도적이며 그 경로는 정확하다.
+ */
+export function restoreModification(
+  state: StoredState,
+  profileId: string,
+  index: number,
+  modification: Modification,
+  materializedValue?: string,
+): StoredState {
+  const base = withProfile(state, profileId, (profile) => {
+    const modifications = [...profile.modifications];
+    modifications.splice(Math.max(0, Math.min(index, modifications.length)), 0, modification);
+    return { ...profile, modifications };
+  });
+  if (materializedValue === undefined) return base;
+  return {
+    ...base,
+    materialized: { ...base.materialized, [modification.id]: materializedValue },
+  };
+}
+
 export function addProfile(
   state: StoredState,
   profile: Profile,
@@ -312,6 +341,13 @@ export type Command =
   | { type: 'add-modification'; profileId: string; modification: Modification }
   | { type: 'update-modification'; profileId: string; modification: Modification }
   | { type: 'remove-modification'; profileId: string; modificationId: string }
+  | {
+      type: 'restore-modification';
+      profileId: string;
+      index: number;
+      modification: Modification;
+      materializedValue?: string;
+    }
   | { type: 'import-profiles'; profiles: Profile[] }
   | { type: 'restore-profiles'; profiles: Profile[] };
 
@@ -382,6 +418,14 @@ export function applyCommand(
       return updateModification(state, command.profileId, command.modification, deps);
     case 'remove-modification':
       return removeModification(state, command.profileId, command.modificationId);
+    case 'restore-modification':
+      return restoreModification(
+        state,
+        command.profileId,
+        command.index,
+        command.modification,
+        command.materializedValue,
+      );
     default:
       return command satisfies never;
   }

@@ -40,10 +40,13 @@ function InteractiveProfileSection({ initial }: { initial: Profile }) {
     setState((s) => applyCommand(s, command));
     return { ok: true };
   };
+  const onDeleteRule = (profileId: string, modificationId: string) =>
+    setState((s) => applyCommand(s, { type: 'remove-modification', profileId, modificationId }));
   return (
     <ProfileSection
       profile={profile}
       onCommand={onCommand}
+      onDeleteRule={onDeleteRule}
       onCommandWithResult={onCommandWithResult}
     />
   );
@@ -53,6 +56,7 @@ export const Active: Story = {
   args: {
     profile: sampleProfile,
     onCommand: () => {},
+    onDeleteRule: () => {},
     onCommandWithResult: async () => ({ ok: true }),
   },
   render: (args) => <InteractiveProfileSection initial={args.profile} />,
@@ -62,6 +66,7 @@ export const Inactive: Story = {
   args: {
     profile: { ...sampleProfile, active: false, modifications: [] },
     onCommand: () => {},
+    onDeleteRule: () => {},
     onCommandWithResult: async () => ({ ok: true }),
   },
   render: (args) => <InteractiveProfileSection initial={args.profile} />,

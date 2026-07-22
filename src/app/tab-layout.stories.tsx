@@ -42,7 +42,7 @@ export const Wide: Story = {
           hasProblems: false,
         }}
       />
-      <ProfileSection profile={profile} onCommand={() => {}} onCommandWithResult={async () => ({ ok: true })} />
+      <ProfileSection profile={profile} onCommand={() => {}} onDeleteRule={() => {}} onCommandWithResult={async () => ({ ok: true })} />
     </main>
   ),
 };
