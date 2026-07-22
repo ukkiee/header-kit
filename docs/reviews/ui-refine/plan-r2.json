@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "plan",
+  "verdict": "approve",
+  "summary": "Ship the plan to ticket slicing. R-1 now defines and tests an atomic Undo snapshot/restore contract, R-2 specifies the sortable keyboard strategy and smoke path, and R-3 provides a reproducible baseline, measurement method, and blocking threshold. The fixes introduce no new critical issue within the Round 2 scope.",
+  "planFile": "docs/reviews/ui-refine/spec.md",
+  "planInDiff": true,
+  "reviewedFileCount": 2,
+  "target": "working tree diff",
+  "reviewedSha": "a68a8d442cdcd47f3dca730f168062b18b302016",
+  "reviewedTree": "57c6a8267fada410469602eef250b35a701e4c9b",
+  "headMovedDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 0,
+  "planFindingCount": 0,
+  "triage": "Clean verdict: note it in your report and COMMIT this artifact with the next bookkeeping commit.",
+  "findings": [],
+  "next_steps": []
+}
