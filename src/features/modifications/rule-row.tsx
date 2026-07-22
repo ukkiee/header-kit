@@ -36,7 +36,7 @@ export function ItemRow({
     <div className="flex items-center gap-2.5 py-2">
       <Checkbox
         checked={enabled}
-        onChange={(e) => onToggleEnabled(e.target.checked)}
+        onCheckedChange={onToggleEnabled}
         aria-label={toggleAria}
       />
       <div className="min-w-0 flex-1">

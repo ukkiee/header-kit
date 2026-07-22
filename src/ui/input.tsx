@@ -1,9 +1,12 @@
+import { Input as BaseInput } from '@base-ui-components/react/input';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { forwardRef, type InputHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 import { fieldFocus, fieldSolid } from './tokens';
 
 /**
  * 텍스트 필드 recipe — 앱 전반의 solid 필드 문자열을 흡수한다.
+ * Base UI Input 기반 (ADR 0011): 네이티브 input을 렌더하면서 Field 컨텍스트에
+ * 자동 등록되어 라벨 연결·검증 시맨틱을 얻는다. datalist 등 네이티브 속성은 그대로 통과한다.
  * 호출자는 레이아웃 유틸(flex-1/w-32 등)만 className으로 append 한다(override 아님).
  */
 const field = cva('rounded-md', {
@@ -32,7 +35,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   ref,
 ) {
   return (
-    <input ref={ref} type={type} className={field({ variant, size, font, align, className })} {...props} />
+    <BaseInput ref={ref} type={type} className={field({ variant, size, font, align, className })} {...props} />
   );
 });
 

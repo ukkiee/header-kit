@@ -1,7 +1,7 @@
-import type { ReactNode } from 'react';
 import { ALL_RESOURCE_TYPES, REQUEST_METHODS } from '@/core/rules';
 import type { RuleConditions } from '@/core/schema';
 import { Chip } from '@/ui/chip';
+import { Field } from '@/ui/field';
 import { Input } from '@/ui/input';
 import { NoteText } from '@/ui/note-text';
 import { useT } from '@/ui/i18n-context';
@@ -26,16 +26,6 @@ const splitCsv = (value: string): string[] =>
     .split(',')
     .map((x) => x.trim())
     .filter((x) => x !== '');
-
-/** 라벨 위, 입력 아래 — 폼 필드 공통 셸 (RuleForm과 동일 문법). */
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-300">
-      {label}
-      {children}
-    </label>
-  );
-}
 
 export interface RuleConditionsFieldsProps {
   conditions: RuleConditions;

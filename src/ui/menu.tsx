@@ -1,6 +1,7 @@
 import { Menu as BaseMenu } from '@base-ui-components/react/menu';
 import { cva, type VariantProps } from 'class-variance-authority';
 import type { ComponentProps } from 'react';
+import { popupItem, popupSurface } from './tokens';
 
 /**
  * 드롭다운 메뉴 — 빈도 낮은 조작(이동/복제/삭제)을 헤더의 아이콘 나열 대신
@@ -23,10 +24,7 @@ export function MenuPopup({
   return (
     <BaseMenu.Portal>
       <BaseMenu.Positioner align="end" sideOffset={4}>
-        <BaseMenu.Popup
-          className={`min-w-36 rounded-lg border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-zinc-900 ${className ?? ''}`}
-          {...props}
-        >
+        <BaseMenu.Popup className={`min-w-36 ${popupSurface} ${className ?? ''}`} {...props}>
           {children}
         </BaseMenu.Popup>
       </BaseMenu.Positioner>
@@ -35,7 +33,7 @@ export function MenuPopup({
 }
 
 const menuItem = cva(
-  'flex w-full cursor-pointer items-center rounded-md px-2 py-1.5 text-xs outline-none select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-40 data-[highlighted]:bg-zinc-100 dark:data-[highlighted]:bg-zinc-800',
+  `w-full data-[disabled]:pointer-events-none data-[disabled]:opacity-40 ${popupItem}`,
   {
     variants: {
       tone: {

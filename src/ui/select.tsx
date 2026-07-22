@@ -1,33 +1,90 @@
+import { Select as BaseSelect } from '@base-ui-components/react/select';
 import { cva, type VariantProps } from 'class-variance-authority';
-import { forwardRef, type SelectHTMLAttributes } from 'react';
-import { fieldFocus, fieldSolid, ghostInteractive } from './tokens';
+import { Check, ChevronDown } from 'lucide-react';
+import { fieldFocus, fieldSolid, ghostInteractive, popupItem, popupSurface } from './tokens';
 
 /**
- * Select recipe — bordered는 Input.solid 표면+포커스를, ghost는 Button.ghost 표면을
- * tokens.ts에서 공유해 재사용한다. outline-none은 bordered에만 두어(focus:border로 대체)
- * ghost는 기본 포커스 outline을 유지한다(키보드 a11y). children은 <option>들.
+ * Select — Base UI Select 기반 (ADR 0011). 팝업이 OS 네이티브가 아니라 앱 표면
+ * (Menu와 같은 보더+명도 팝업)으로 렌더된다. options 배열이 아이템의 단일 출처이고,
+ * items로도 전달해 Trigger의 Value가 원시 값 대신 라벨을 표시하게 한다.
+ * 키보드(화살표·Enter·Esc·타이핑 검색)와 role=combobox/option 시맨틱은 Base UI가 제공한다.
  */
-const select = cva('cursor-pointer whitespace-nowrap rounded-md', {
-  variants: {
-    variant: {
-      bordered: `${fieldSolid} px-1 ${fieldFocus}`,
-      ghost: `bg-transparent px-1 ${ghostInteractive}`,
+const trigger = cva(
+  'flex cursor-pointer items-center justify-between gap-1 whitespace-nowrap rounded-md',
+  {
+    variants: {
+      variant: {
+        bordered: `${fieldSolid} px-1.5 ${fieldFocus}`,
+        ghost: `bg-transparent px-1.5 ${ghostInteractive}`,
+      },
+      size: {
+        sm: 'h-7 text-xs',
+        md: 'h-8 text-xs',
+      },
     },
-    size: {
-      sm: 'h-7 text-xs',
-      md: 'h-8 text-xs',
-    },
+    defaultVariants: { variant: 'bordered', size: 'sm' },
   },
-  defaultVariants: { variant: 'bordered', size: 'sm' },
-});
+);
 
-export interface SelectProps
-  extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'size'>,
-    VariantProps<typeof select> {}
+export interface SelectOption {
+  value: string;
+  label: string;
+}
 
-export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
-  { variant, size, className, ...props },
-  ref,
-) {
-  return <select ref={ref} className={select({ variant, size, className })} {...props} />;
-});
+export interface SelectProps extends VariantProps<typeof trigger> {
+  value: string;
+  onValueChange: (value: string) => void;
+  options: readonly SelectOption[];
+  'aria-label'?: string;
+  id?: string;
+  disabled?: boolean;
+  className?: string;
+}
+
+export function Select({
+  variant,
+  size,
+  className,
+  value,
+  onValueChange,
+  options,
+  disabled,
+  id,
+  'aria-label': ariaLabel,
+}: SelectProps) {
+  return (
+    <BaseSelect.Root
+      items={options}
+      value={value}
+      onValueChange={(next) => {
+        if (typeof next === 'string') onValueChange(next);
+      }}
+      disabled={disabled}
+    >
+      <BaseSelect.Trigger id={id} aria-label={ariaLabel} className={trigger({ variant, size, className })}>
+        <BaseSelect.Value className="truncate" />
+        <BaseSelect.Icon className="flex shrink-0 text-zinc-400">
+          <ChevronDown size={12} strokeWidth={1.75} />
+        </BaseSelect.Icon>
+      </BaseSelect.Trigger>
+      <BaseSelect.Portal>
+        <BaseSelect.Positioner sideOffset={4} className="z-50 outline-none">
+          <BaseSelect.Popup className={`min-w-[var(--anchor-width)] outline-none ${popupSurface}`}>
+            {options.map((option) => (
+              <BaseSelect.Item
+                key={option.value}
+                value={option.value}
+                className={`justify-between gap-2 text-zinc-700 dark:text-zinc-200 ${popupItem}`}
+              >
+                <BaseSelect.ItemText>{option.label}</BaseSelect.ItemText>
+                <BaseSelect.ItemIndicator className="flex text-blue-600 dark:text-blue-400">
+                  <Check size={12} strokeWidth={1.75} />
+                </BaseSelect.ItemIndicator>
+              </BaseSelect.Item>
+            ))}
+          </BaseSelect.Popup>
+        </BaseSelect.Positioner>
+      </BaseSelect.Portal>
+    </BaseSelect.Root>
+  );
+}

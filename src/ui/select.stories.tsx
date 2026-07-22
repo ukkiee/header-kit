@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Select } from './select';
+import { useState } from 'react';
+import { Select, type SelectProps } from './select';
 
 const meta = {
   title: 'UI/Select',
@@ -9,12 +10,21 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-const options = (
-  <>
-    <option>Request header</option>
-    <option>Response header</option>
-  </>
-);
+const options = [
+  { value: 'request-header', label: 'Request header' },
+  { value: 'response-header', label: 'Response header' },
+];
 
-export const Bordered: Story = { args: { variant: 'bordered', size: 'md', children: options } };
-export const Ghost: Story = { args: { variant: 'ghost', size: 'sm', children: options } };
+function Interactive(args: SelectProps) {
+  const [value, setValue] = useState(args.value);
+  return <Select {...args} value={value} onValueChange={setValue} />;
+}
+
+export const Bordered: Story = {
+  args: { variant: 'bordered', size: 'md', value: 'request-header', onValueChange: () => {}, options, 'aria-label': 'Kind' },
+  render: (args) => <Interactive {...args} />,
+};
+export const Ghost: Story = {
+  args: { variant: 'ghost', size: 'sm', value: 'response-header', onValueChange: () => {}, options, 'aria-label': 'Kind' },
+  render: (args) => <Interactive {...args} />,
+};

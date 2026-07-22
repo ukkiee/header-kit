@@ -112,7 +112,6 @@ const en = {
   warnAppendNotAllowedDetail: 'Request header "{header}" cannot be appended; it was set instead.',
   // 접근성 이름(aria-label) — en 값은 기존 하드코딩 문자열과 자구 동일(smoke 셀렉터 안정).
   ariaEnableModification: 'Enable modification',
-  ariaHeaderValue: 'Header value',
   ariaCspDirectiveName: 'CSP directive name',
   ariaCspDirectiveValue: 'CSP directive value',
   ariaRemoveDirective: 'Remove directive',
@@ -250,7 +249,6 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     warnAppendNotAllowed: '헤더 덧붙이기 불가',
     warnAppendNotAllowedDetail: '요청 헤더 "{header}"는 덧붙일 수 없어 set으로 대체했습니다.',
     ariaEnableModification: '수정 활성화',
-    ariaHeaderValue: '헤더 값',
     ariaCspDirectiveName: 'CSP 디렉티브 이름',
     ariaCspDirectiveValue: 'CSP 디렉티브 값',
     ariaRemoveDirective: '디렉티브 제거',

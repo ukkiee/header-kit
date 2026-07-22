@@ -101,7 +101,7 @@ export function TransferPanel({ state, onCommand, download = browserDownload }: 
             <label key={profile.id} className="flex items-center gap-2 text-sm">
               <Checkbox
                 checked={selected.has(profile.id)}
-                onChange={() => toggleSelected(profile)}
+                onCheckedChange={() => toggleSelected(profile)}
               />
               {profile.name}
             </label>

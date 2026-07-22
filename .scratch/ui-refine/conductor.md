@@ -5,3 +5,4 @@
 - stage2 spec: done — .scratch/ui-refine/spec.md 게시, 시임 확인(기존 4 + 검증 순수 함수 1)
 - stage2 plan gate: done — r1 needs-attention(3건 accept) → r2 approve
 - stage3 slice: done — 티켓 8개 발행 (01 스켈레톤 → 구조 게이트 예정)
+- stage4 ticket 01: done — Base UI Select/Input/Checkbox/Field 교체, 팝업·캡션 토큰화, smoke 66/66 ×3

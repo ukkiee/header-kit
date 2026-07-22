@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { Plus } from 'lucide-react';
 import type { MessageKey } from '@/core/i18n';
 import { isRequestAppendAllowed } from '@/core/rules';
@@ -17,6 +17,7 @@ import { Button } from '@/ui/button';
 import { Input } from '@/ui/input';
 import { LargeEditor } from '@/ui/large-editor';
 import { NoteText } from '@/ui/note-text';
+import { Field, fieldCaption } from '@/ui/field';
 import { Select } from '@/ui/select';
 import { useT } from '@/ui/i18n-context';
 import { HeaderNameInput } from './header-name-input';
@@ -38,16 +39,6 @@ const RULE_KINDS: ModificationKind[] = [
   'csp',
   'redirect',
 ];
-
-/** 라벨 위, 입력 아래 — 폼 필드 공통 셸. */
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-300">
-      {label}
-      {children}
-    </label>
-  );
-}
 
 /**
  * 규칙 폼 (ADR 0006) — 종류를 고르면 그 종류의 필드가 나타나고, Save가 규칙
@@ -130,34 +121,33 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
           size="md"
           value={draft.kind}
           aria-label={t('ruleKind')}
-          onChange={(e) => switchKind(e.target.value as ModificationKind)}
-        >
-          {RULE_KINDS.map((kind) => (
-            <option key={kind} value={kind}>
-              {t(KIND_LABELS[kind])}
-            </option>
-          ))}
-        </Select>
+          onValueChange={(value) => switchKind(value as ModificationKind)}
+          options={RULE_KINDS.map((kind) => ({ value: kind, label: t(KIND_LABELS[kind]) }))}
+        />
       </Field>
 
+      {/* 한 캡션 아래 두 컨트롤(매치 방식+패턴) — Field 라벨 자동 연결이 두 컨트롤에
+          같은 이름을 주므로, 캡션은 span으로 두고 각 컨트롤이 자기 aria-label을 가진다. */}
       {draft.kind !== 'redirect' && (
-        <Field label={t('urlFilterScope')}>
+        <div className="flex flex-col gap-1">
+          <span className={fieldCaption}>{t('urlFilterScope')}</span>
           <div className="flex items-center gap-1.5">
             <Select
               variant="bordered"
               size="md"
               aria-label={t('ariaUrlMatchType')}
               value={('urlMatchType' in draft ? draft.urlMatchType : undefined) ?? defaultMatchType}
-              onChange={(e) =>
-                setDraft({ ...draft, urlMatchType: e.target.value as UrlMatchType } as Modification)
+              onValueChange={(value) =>
+                setDraft({ ...draft, urlMatchType: value as UrlMatchType } as Modification)
               }
               className="shrink-0"
-            >
-              <option value="contains">{t('matchContains')}</option>
-              <option value="domain">{t('matchDomain')}</option>
-              <option value="prefix">{t('matchPrefix')}</option>
-              <option value="regex">{t('matchRegex')}</option>
-            </Select>
+              options={[
+                { value: 'contains', label: t('matchContains') },
+                { value: 'domain', label: t('matchDomain') },
+                { value: 'prefix', label: t('matchPrefix') },
+                { value: 'regex', label: t('matchRegex') },
+              ]}
+            />
             <Input
               font="mono"
               value={'urlFilter' in draft ? (draft.urlFilter ?? '') : ''}
@@ -172,7 +162,7 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
               className="min-w-0 flex-1"
             />
           </div>
-        </Field>
+        </div>
       )}
 
       {isValueKind && (
@@ -194,7 +184,6 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
                 <Input
                   value={draft.value}
                   onChange={(e) => setDraft({ ...draft, value: e.target.value } as Modification)}
-                  aria-label={t('ariaHeaderValue')}
                   className="min-w-0 flex-1"
                 />
                 <LargeEditor
@@ -211,30 +200,32 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
                 variant="bordered"
                 size="md"
                 value={draft.mode}
-                onChange={(e) =>
-                  setDraft({ ...draft, mode: e.target.value as 'override' | 'append' } as Modification)
+                onValueChange={(value) =>
+                  setDraft({ ...draft, mode: value as 'override' | 'append' } as Modification)
                 }
                 disabled={!appendAllowed}
-              >
-                <option value="override">{t('override')}</option>
-                {appendAllowed && <option value="append">{t('append')}</option>}
-              </Select>
+                options={[
+                  { value: 'override', label: t('override') },
+                  ...(appendAllowed ? [{ value: 'append', label: t('append') }] : []),
+                ]}
+              />
             </Field>
             <Field label={t('emptyValueMeans')}>
               <Select
                 variant="bordered"
                 size="md"
                 value={draft.emptyMeans}
-                onChange={(e) =>
+                onValueChange={(value) =>
                   setDraft({
                     ...draft,
-                    emptyMeans: e.target.value as 'remove' | 'send-empty',
+                    emptyMeans: value as 'remove' | 'send-empty',
                   } as Modification)
                 }
-              >
-                <option value="remove">{t('remove')}</option>
-                <option value="send-empty">{t('sendEmpty')}</option>
-              </Select>
+                options={[
+                  { value: 'remove', label: t('remove') },
+                  { value: 'send-empty', label: t('sendEmpty') },
+                ]}
+              />
             </Field>
           </div>
           {draft.kind === 'response-header' && <NoteText>{t('responsePanelNote')}</NoteText>}

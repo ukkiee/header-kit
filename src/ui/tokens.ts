@@ -14,11 +14,19 @@ export const ghostInteractive =
   'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800';
 
 /**
- * accent 배경 조각 — Button.primary / Chip.active 가 클래스 문자열로 재사용한다.
- * accent의 실제 단일 출처는 global css의 @theme(`--color-blue-600`)다 — Checkbox의
- * `accent-blue-600`, ToggleSwitch의 `data-[checked]:bg-blue-600`도 그 토큰을 통해 테마된다.
+ * accent 배경 조각 — Button.primary / Chip.active / Checkbox.Indicator 가 클래스
+ * 문자열로 재사용한다. accent의 실제 단일 출처는 global css의 @theme(`--color-blue-600`)다 —
+ * ToggleSwitch의 `data-[checked]:bg-blue-600`도 그 토큰을 통해 테마된다.
  */
 export const accentBg = 'bg-blue-600';
+
+/** 떠 있는 팝업 표면 — Menu.Popup / Select.Popup 이 공유한다 (보더+명도, 무그림자). */
+export const popupSurface =
+  'rounded-lg border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-zinc-900';
+
+/** 팝업 항목 — Menu.Item / Select.Item 이 공유한다 (하이라이트는 data-highlighted). */
+export const popupItem =
+  'flex cursor-pointer items-center rounded-md px-2 py-1.5 text-xs outline-none select-none data-[highlighted]:bg-zinc-100 dark:data-[highlighted]:bg-zinc-800';
 
 /** 앱 캔버스(본문 배경+글자색) — App main / Storybook 프리뷰 래퍼가 공유한다. */
 export const canvas = 'bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100';

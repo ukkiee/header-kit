@@ -1030,6 +1030,13 @@ try {
   const waitFormClosed = () =>
     popup.getByRole('button', { name: 'Save', exact: true }).waitFor({ state: 'detached', timeout: 5000 });
 
+  // Base UI Select 조작 (ADR 0011) — 트리거(combobox) 클릭 → 팝업의 option 클릭
+  // (getByLabel은 트리거와 숨은 input 둘 다 잡으므로 role로 조준한다)
+  const pickOption = async (page, triggerLabel, optionName) => {
+    await page.getByRole('combobox', { name: triggerLabel, exact: true }).click();
+    await page.getByRole('option', { name: optionName, exact: true }).click();
+  };
+
   // N5: 통합 목록(ADR 0009) — 규칙 행 + '적용 조건' 캡션 + FILTER 행이 한 화면에
   await seedProfiles([
     baseProfile('n-tab', 'Tabbed',
@@ -1091,8 +1098,8 @@ try {
     );
   await popup.getByRole('button', { name: 'Edit', exact: true }).nth(1).click();
   // 폼은 한 번에 하나만 열린다
-  const formCount = await popup.getByLabel('Mode').count();
-  await popup.getByLabel('Mode').selectOption({ label: 'Append' });
+  const formCount = await popup.getByRole('combobox', { name: 'Mode' }).count();
+  await pickOption(popup, 'Mode', 'Append');
   await popup.getByLabel('comment').fill('smoke comment');
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
   const editedMod = await pollMod((m) => m?.mode === 'append' && m?.comment === 'smoke comment');
@@ -1103,8 +1110,8 @@ try {
 
   // N7b: 빈 값 처리 — 폼에서 값 비우고 When empty=Send empty 저장
   await popup.getByRole('button', { name: 'Edit', exact: true }).nth(1).click();
-  await popup.getByLabel('Header value').fill('');
-  await popup.getByLabel('When empty').selectOption({ label: 'Send empty' });
+  await popup.getByLabel('Value', { exact: true }).fill('');
+  await pickOption(popup, 'When empty', 'Send empty');
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
   const emptyMeansMod = await pollMod((m) => m?.emptyMeans === 'send-empty');
   record('N7b: 빈 값 → Send empty 저장 반영',
@@ -1189,7 +1196,7 @@ try {
   await tabApp.getByRole('button', { name: 'Add rule' }).click();
   await tabApp.getByLabel('Header name', { exact: true }).waitFor({ timeout: 5000 });
   await tabApp.getByLabel('Header name', { exact: true }).fill('X-From-Tab');
-  await tabApp.getByLabel('Header value').fill('yes');
+  await tabApp.getByLabel('Value', { exact: true }).fill('yes');
   await tabApp.getByRole('button', { name: 'Save', exact: true }).click();
   await tabApp.getByRole('switch', { name: 'Toggle Gamma' }).click();
   await pollSessionRuleCount(sw, 1);
@@ -1216,7 +1223,7 @@ try {
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().focus();
   await popup.keyboard.press('Enter');
   const kbFormOpened = await popup
-    .getByLabel('Mode')
+    .getByRole('combobox', { name: 'Mode' })
     .waitFor({ timeout: 5000 })
     .then(() => true, () => false);
   await popup.getByRole('button', { name: 'Cancel' }).click();
@@ -1303,7 +1310,7 @@ try {
   // 2) 무스코프 규칙(X-U) 추가
   await popup.getByRole('button', { name: 'Add rule' }).click();
   await popup.getByLabel('Header name', { exact: true }).fill('X-U');
-  await popup.getByLabel('Header value').fill('u');
+  await popup.getByLabel('Value', { exact: true }).fill('u');
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
   await waitFormClosed();
   const kaState = await pollUntil(
@@ -1323,7 +1330,7 @@ try {
   // 3) regex(고급) 방식으로 전환 — 실요청 검증
   await waitFormClosed();
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
-  await popup.getByLabel('URL match type').selectOption('regex');
+  await pickOption(popup, 'URL match type', 'Regex (advanced)');
   await popup.getByLabel('URL filter').fill(`127\\.0\\.0\\.1:${port}/headers\\?scope=2`);
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
   const regexIn = await pollUntil(

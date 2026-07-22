@@ -4,9 +4,15 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] 폼의 모든 셀렉트(종류/모드/빈 값/매치 방식 등)가 Base UI Select로 동작하고 팝업이 앱 스타일로 렌더 — 선택 결과가 기존과 동일하게 저장 (smoke)
-- [ ] 입력·체크박스·필드 셸이 Base UI 프리미티브 기반 — 기존 추가/편집/저장 흐름 회귀 없음 (smoke 전체 green)
-- [ ] 접근성 이름이 en/ko 카탈로그 경유로 유지 (ko 접근성 스모크 green)
-- [ ] 전 게이트 green (tsc·vitest·build·smoke·storybook·diag)
+- [x] 폼의 모든 셀렉트(종류/모드/빈 값/매치 방식 등)가 Base UI Select로 동작하고 팝업이 앱 스타일로 렌더 — 선택 결과가 기존과 동일하게 저장 (smoke)
+- [x] 입력·체크박스·필드 셸이 Base UI 프리미티브 기반 — 기존 추가/편집/저장 흐름 회귀 없음 (smoke 전체 green)
+- [x] 접근성 이름이 en/ko 카탈로그 경유로 유지 (ko 접근성 스모크 green) — 값 입력의 이름은 'Header value'→'Value'로 변경(Field 라벨 승계, 카탈로그 경유 유지)
+- [x] 전 게이트 green — tsc 0 · vitest 192 · build · smoke 66/66 ×3 · storybook · diag(overflow 0)
+
+## 리뷰 반영 (2축)
+
+- 수정: 체크박스 표면 fieldSolid/fieldFocus 토큰 재사용, 팝업 표면·항목 popupSurface/popupItem 토큰 추출(Menu와 공유), 필드 캡션 fieldCaption 공유(스코프 행 span), tokens.ts 주석 정정, 불필요 boolean 코어션 제거.
+- 기각: transfer-panel의 label 래핑 — 단일 컨트롤이라 호버 전파 문제 없음. 스토리 더미 args — Storybook 타입 요구.
+- 이관: 칩 그룹의 Field 연결 부재 → 티켓 02(ToggleGroup 교체)가 해소.

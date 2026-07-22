@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Checkbox } from './checkbox';
+import { useState } from 'react';
+import { Checkbox, type CheckboxProps } from './checkbox';
 
 const meta = {
   title: 'UI/Checkbox',
@@ -9,5 +10,16 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Checked: Story = { args: { defaultChecked: true, 'aria-label': 'Enable' } };
-export const Unchecked: Story = { args: { defaultChecked: false, 'aria-label': 'Enable' } };
+function Interactive(args: CheckboxProps) {
+  const [checked, setChecked] = useState(args.checked);
+  return <Checkbox {...args} checked={checked} onCheckedChange={setChecked} />;
+}
+
+export const Checked: Story = {
+  args: { checked: true, onCheckedChange: () => {}, 'aria-label': 'Enable' },
+  render: (args) => <Interactive {...args} />,
+};
+export const Unchecked: Story = {
+  args: { checked: false, onCheckedChange: () => {}, 'aria-label': 'Enable' },
+  render: (args) => <Interactive {...args} />,
+};
