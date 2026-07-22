@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { compile, type TabInfo } from './compile';
-import type { Filter, Modification, Profile } from './schema';
+import type { Modification, Profile, RuleConditions } from './schema';
 
-function mod(id: string, name: string): Modification {
-  return { kind: 'request-header', id, name, value: 'v', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' };
+function mod(id: string, name: string, conditions?: RuleConditions): Modification {
+  return { kind: 'request-header', id, name, value: 'v', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '', ...(conditions !== undefined ? { conditions } : {}) };
 }
 
 function profile(overrides: Partial<Profile> = {}): Profile {
@@ -14,153 +14,112 @@ function profile(overrides: Partial<Profile> = {}): Profile {
     shortLabel: 'P',
     color: '#2563eb',
     modifications: [mod('m1', 'X-A')],
-    filters: [],
     ...overrides,
   };
 }
 
 const TABS: TabInfo[] = [
-  { tabId: 1, windowId: 10, groupId: -1, url: 'https://app.example.com/page' },
-  { tabId: 2, windowId: 10, groupId: 5, url: 'https://sub.example.com/x' },
-  { tabId: 3, windowId: 20, groupId: 5, url: 'https://other.com/' },
+  { tabId: 1, url: 'https://example.com/page' },
+  { tabId: 2, url: 'https://sub.example.com/x' },
+  { tabId: 3, url: 'https://other.com/' },
+  { tabId: 4, url: 'https://notexample.com/' },
+  { tabId: 5 }, // url 미상 탭 (권한 없음 등)
 ];
 
 function env(overrides: Partial<Parameters<typeof compile>[1]> = {}) {
   return { paused: false, tabs: TABS, now: 1_000, materialized: {}, ...overrides };
 }
 
-const f = {
-  tab: (tabId: number): Filter => ({ kind: 'tab', id: `t${tabId}`, enabled: true, tabId }),
-  group: (groupId: number): Filter => ({ kind: 'tab-group', id: `g${groupId}`, enabled: true, groupId }),
-  window: (windowId: number): Filter => ({ kind: 'window', id: `w${windowId}`, enabled: true, windowId }),
-  tabDomain: (domain: string): Filter => ({ kind: 'tab-domain', id: `d-${domain}`, enabled: true, domain }),
-  time: (expiresAt: number): Filter => ({ kind: 'time', id: `time`, enabled: true, expiresAt }),
-};
+function emittedHeaders(rules: ReturnType<typeof compile>['rules']): (string | undefined)[] {
+  return rules.map((r) => r.action.requestHeaders?.[0]?.header);
+}
 
-describe('compile — 탭 계열 Filter의 tabIds 전개', () => {
-  it('Tab Filter는 해당 탭 id로 전개된다', () => {
-    const { rules } = compile([profile({ filters: [f.tab(2)] })], env());
+describe('compile — 규칙 tabDomains 조건의 tabIds 전개 (ADR 0010)', () => {
+  it('tabDomains는 도메인(서브도메인 포함)이 일치하는 탭들로 전개된다', () => {
+    const { rules } = compile(
+      [profile({ modifications: [mod('m1', 'X-A', { tabDomains: ['example.com'] })] })],
+      env(),
+    );
 
     expect(rules).toHaveLength(1);
-    expect(rules[0]?.condition.tabIds).toEqual([2]);
-  });
-
-  it('Tab Group·Window Filter는 소속 탭들로 전개된다', () => {
-    const byGroup = compile([profile({ filters: [f.group(5)] })], env());
-    expect(byGroup.rules[0]?.condition.tabIds).toEqual([2, 3]);
-
-    const byWindow = compile([profile({ filters: [f.window(10)] })], env());
-    expect(byWindow.rules[0]?.condition.tabIds).toEqual([1, 2]);
-  });
-
-  it('Tab Domain Filter는 도메인(서브도메인 포함)이 일치하는 탭들로 전개된다', () => {
-    const { rules } = compile([profile({ filters: [f.tabDomain('example.com')] })], env());
-
+    // notexample.com(탭 4)은 접미사만 겹칠 뿐 서브도메인이 아니므로 매칭되지 않는다.
     expect(rules[0]?.condition.tabIds).toEqual([1, 2]);
   });
 
-  it('같은 kind끼리 OR(합집합), 다른 kind끼리 AND(교집합)', () => {
-    const union = compile([profile({ filters: [f.tab(1), f.tab(3)] })], env());
-    expect(union.rules[0]?.condition.tabIds).toEqual([1, 3]);
-
-    const intersect = compile(
-      [profile({ filters: [f.group(5), f.window(10)] })],
+  it('여러 도메인은 OR(합집합)로 전개된다', () => {
+    const { rules } = compile(
+      [profile({ modifications: [mod('m1', 'X-A', { tabDomains: ['example.com', 'other.com'] })] })],
       env(),
     );
-    expect(intersect.rules[0]?.condition.tabIds).toEqual([2]);
+
+    expect(rules[0]?.condition.tabIds).toEqual([1, 2, 3]);
   });
 
-  it('매칭 탭이 없으면 그 Profile의 Modification 규칙을 내지 않는다 (탭 닫힘 자동 해제)', () => {
-    const { rules } = compile([profile({ filters: [f.tab(99)] })], env());
+  it('url을 모르는 탭은 어떤 도메인에도 매칭되지 않는다', () => {
+    const urlless: TabInfo[] = [{ tabId: 5 }];
+    const { rules } = compile(
+      [profile({ modifications: [mod('m1', 'X-A', { tabDomains: ['example.com'] })] })],
+      env({ tabs: urlless }),
+    );
 
     expect(rules).toEqual([]);
   });
 
-  it('탭 계열 Filter가 없으면 tabIds 조건이 없다', () => {
-    const { rules } = compile([profile()], env());
+  it('매칭 탭이 없으면 그 규칙만 방출되지 않는다 — 같은 프로필의 다른 규칙은 나온다 (탭 닫힘 자동 해제)', () => {
+    const { rules } = compile(
+      [
+        profile({
+          modifications: [
+            mod('m1', 'X-A', { tabDomains: ['closed.dev'] }), // 매칭 없음
+            mod('m2', 'X-B'),
+          ],
+        }),
+      ],
+      env(),
+    );
 
+    expect(emittedHeaders(rules)).toEqual(['X-B']);
     expect(rules[0]?.condition.tabIds).toBeUndefined();
   });
 
-  it('탭 매칭이 없으면 Exclude allow 규칙도 내지 않는다 (RL-2: 전역 누출 방지)', () => {
-    const { rules } = compile(
-      [
-        profile({
-          filters: [
-            f.tab(99), // 매칭 없음
-            { kind: 'exclude-url', id: 'x', enabled: true, pattern: 'private' },
-          ],
-        }),
-      ],
-      env(),
-    );
+  it('tabDomains 조건이 없으면 tabIds 조건도 없다', () => {
+    const { rules } = compile([profile()], env());
 
-    // 매칭 탭이 없는 Profile은 allow도 내지 않는다 — 다른 Profile을 전역 무효화하지 않는다.
-    expect(rules).toEqual([]);
+    expect(rules).toHaveLength(1);
+    expect(rules[0]?.condition.tabIds).toBeUndefined();
   });
 
-  it('Exclude allow 규칙은 소유 Profile의 탭 스코프를 그대로 상속한다 (RL-2)', () => {
+  it('빈 배열·공백뿐인 tabDomains는 조건 없음으로 취급된다 — 빈 패턴과 같은 fail-open', () => {
     const { rules } = compile(
       [
         profile({
-          filters: [
-            f.tab(2), // 탭 2에만 적용
-            { kind: 'exclude-url', id: 'x', enabled: true, pattern: 'private' },
+          modifications: [
+            mod('m1', 'X-A', { tabDomains: [] }),
+            mod('m2', 'X-B', { tabDomains: ['  ', ''] }),
           ],
         }),
       ],
       env(),
     );
 
-    const allow = rules.find((r) => r.action.type === 'allow')!;
-    // allow는 URL만이 아니라 소유 Profile의 tabIds 스코프 안에서만 작동한다.
-    expect(allow.condition.tabIds).toEqual([2]);
-    expect(allow.condition.regexFilter).toBe('(?:private)');
+    expect(emittedHeaders(rules)).toEqual(['X-A', 'X-B']);
+    expect(rules.every((r) => r.condition.tabIds === undefined)).toBe(true);
   });
 });
 
 describe('compile — 탭 상태 변화 추적', () => {
-  it('탭이 그룹·창을 옮기면 다음 컴파일에서 tabIds가 따라간다', () => {
-    const groupFilter = [f.group(5)];
-    const before = compile([profile({ filters: groupFilter })], env());
-    expect(before.rules[0]?.condition.tabIds).toEqual([2, 3]);
+  it('탭이 다른 도메인으로 이동하면 다음 컴파일에서 tabIds가 따라간다', () => {
+    const modifications = [mod('m1', 'X-A', { tabDomains: ['example.com'] })];
+    const before = compile([profile({ modifications })], env());
+    expect(before.rules[0]?.condition.tabIds).toEqual([1, 2]);
 
-    // 탭 1이 그룹 5로 이동, 탭 3이 그룹에서 이탈한 새 스냅샷
+    // 탭 3이 example.com으로 이동, 탭 1은 다른 도메인으로 이탈한 새 스냅샷
     const moved: TabInfo[] = [
-      { tabId: 1, windowId: 10, groupId: 5, url: 'https://app.example.com/page' },
-      { tabId: 2, windowId: 10, groupId: 5, url: 'https://sub.example.com/x' },
-      { tabId: 3, windowId: 20, groupId: -1, url: 'https://other.com/' },
+      { tabId: 1, url: 'https://elsewhere.io/' },
+      { tabId: 2, url: 'https://sub.example.com/x' },
+      { tabId: 3, url: 'https://example.com/in' },
     ];
-    const after = compile([profile({ filters: groupFilter })], env({ tabs: moved }));
-    expect(after.rules[0]?.condition.tabIds).toEqual([1, 2]);
-  });
-
-  it('미설정(UNSET_ID) 탭 계열 Filter는 무시된다 — 빈 패턴과 같은 fail-open', () => {
-    const { rules } = compile(
-      [profile({ filters: [{ kind: 'tab', id: 't', enabled: true, tabId: -1 }] })],
-      env(),
-    );
-
-    expect(rules).toHaveLength(1);
-    expect(rules[0]?.condition.tabIds).toBeUndefined();
-  });
-});
-
-describe('compile — Time Filter', () => {
-  it('만료 전에는 규칙이 나오고, env.now가 만료를 지나면 나오지 않는다 (방어층)', () => {
-    const before = compile([profile({ filters: [f.time(2_000)] })], env({ now: 1_000 }));
-    expect(before.rules).toHaveLength(1);
-
-    const after = compile([profile({ filters: [f.time(2_000)] })], env({ now: 2_000 }));
-    expect(after.rules).toEqual([]);
-  });
-
-  it('disabled Time Filter는 만료를 일으키지 않는다', () => {
-    const { rules } = compile(
-      [profile({ filters: [{ kind: 'time', id: 't', enabled: false, expiresAt: 1 }] })],
-      env({ now: 1_000 }),
-    );
-
-    expect(rules).toHaveLength(1);
+    const after = compile([profile({ modifications })], env({ tabs: moved }));
+    expect(after.rules[0]?.condition.tabIds).toEqual([2, 3]);
   });
 });

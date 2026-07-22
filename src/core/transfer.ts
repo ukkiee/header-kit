@@ -3,8 +3,7 @@ import {
   isFilter,
   isModification,
   isRecord,
-  UNSET_ID,
-  type Filter,
+  migrateProfileFilters,
   type Profile,
   type StoredState,
 } from './schema';
@@ -62,50 +61,18 @@ function validateProfileEntry(value: unknown, index: number): string[] {
     });
   }
 
-  if (!Array.isArray(value.filters)) {
-    errors.push(`${label}.filters: expected array`);
-  } else {
-    value.filters.forEach((f, i) => {
-      if (!isFilter(f)) errors.push(`${label}.filters[${i}]: invalid filter`);
-    });
+  // 레거시 export의 프로필 필터 — 선택 필드, 있으면 형만 검증(마이그레이션 대상).
+  if (value.filters !== undefined) {
+    if (!Array.isArray(value.filters)) {
+      errors.push(`${label}.filters: expected array`);
+    } else {
+      value.filters.forEach((f, i) => {
+        if (!isFilter(f)) errors.push(`${label}.filters[${i}]: invalid filter`);
+      });
+    }
   }
 
   return errors;
-}
-
-/**
- * 탭·그룹·창 참조는 다른 브라우저 세션의 런타임 id라 Import 시 무의미하다 —
- * 미설정으로 정리하고 알림을 남긴다. (tab-domain은 도메인 문자열이라 보존.)
- */
-function sanitizeFilter(
-  filter: Filter,
-  profileName: string,
-  newId: () => string,
-  notices: string[],
-): Filter {
-  const withId = { ...filter, id: newId() };
-  switch (withId.kind) {
-    case 'tab':
-      if (withId.tabId !== UNSET_ID) {
-        notices.push(`"${profileName}": tab filter reference was cleared (tabs are session-local).`);
-        return { ...withId, tabId: UNSET_ID };
-      }
-      return withId;
-    case 'tab-group':
-      if (withId.groupId !== UNSET_ID) {
-        notices.push(`"${profileName}": tab group filter reference was cleared.`);
-        return { ...withId, groupId: UNSET_ID };
-      }
-      return withId;
-    case 'window':
-      if (withId.windowId !== UNSET_ID) {
-        notices.push(`"${profileName}": window filter reference was cleared.`);
-        return { ...withId, windowId: UNSET_ID };
-      }
-      return withId;
-    default:
-      return withId;
-  }
 }
 
 /**
@@ -120,13 +87,35 @@ export function normalizeImportedProfiles(
 ): { profiles: Profile[]; notices: string[] } {
   const notices: string[] = [];
   return {
-    profiles: profiles.map((p) => ({
-      ...p,
-      id: newId(),
-      shortLabel: p.shortLabel.slice(0, 2),
-      modifications: p.modifications.map((m) => ({ ...m, id: newId() })),
-      filters: p.filters.map((f) => sanitizeFilter(f, p.name, newId, notices)),
-    })),
+    profiles: profiles.map((p) => {
+      const raw = p as unknown as Record<string, unknown>;
+      // 레거시 export의 프로필 필터를 규칙 conditions로 이주한다 (ADR 0010).
+      // 공지는 enabled 기준으로 정확하게: 소실 종류·이주·꺼진 필터 폐기를 구분한다.
+      const legacyFilters = (Array.isArray(raw.filters) ? raw.filters : []).filter(isRecord);
+      const enabledFilters = legacyFilters.filter((f) => f.enabled === true);
+      const isLostKind = (f: Record<string, unknown>) =>
+        f.kind === 'exclude-url' || f.kind === 'tab' || f.kind === 'tab-group' || f.kind === 'window';
+      const lost = enabledFilters.filter(isLostKind);
+      const disabledCount = legacyFilters.length - enabledFilters.length;
+      if (lost.length > 0) {
+        notices.push(
+          `"${p.name}": ${lost.length} legacy filter(s) (exclude-url/tab/group/window) have no per-rule equivalent and were dropped.`,
+        );
+      }
+      if (enabledFilters.some((f) => !isLostKind(f))) {
+        notices.push(`"${p.name}": legacy profile filters were migrated to per-rule conditions.`);
+      }
+      if (disabledCount > 0) {
+        notices.push(`"${p.name}": ${disabledCount} disabled legacy filter(s) were dropped.`);
+      }
+      const migrated = migrateProfileFilters(raw) as unknown as Profile;
+      return {
+        ...migrated,
+        id: newId(),
+        shortLabel: migrated.shortLabel.slice(0, 2),
+        modifications: migrated.modifications.map((m) => ({ ...m, id: newId() })),
+      };
+    }),
     notices,
   };
 }

@@ -10,7 +10,6 @@ function profile(mods: Modification[]): Profile {
     shortLabel: 'P',
     color: '#2563eb',
     modifications: mods,
-    filters: [],
   };
 }
 
@@ -138,22 +137,20 @@ describe('compile — Redirect', () => {
     expect(rules[0]?.condition.regexFilter).toBe('^https://prod\\.example\\.com/(.*)');
   });
 
-  it('redirect는 소유 Profile의 나머지 필터(메서드 등)를 상속한다', () => {
+  it('redirect도 자신의 conditions(메서드 등)를 DNR 조건에 싣는다', () => {
     const { rules } = compile(
       [
-        {
-          ...profile([
-            {
-              kind: 'redirect',
-              id: 'm1',
-              pattern: 'example',
-              substitution: 'https://local/\\0',
-              comment: '',
-              enabled: true,
-            },
-          ]),
-          filters: [{ kind: 'request-method', id: 'f1', enabled: true, methods: ['get'] }],
-        },
+        profile([
+          {
+            kind: 'redirect',
+            id: 'm1',
+            pattern: 'example',
+            substitution: 'https://local/\\0',
+            comment: '',
+            enabled: true,
+            conditions: { requestMethods: ['get'] },
+          },
+        ]),
       ],
       env,
     );

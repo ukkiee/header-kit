@@ -8,8 +8,8 @@ function initialState(): StoredState {
     schemaVersion: SCHEMA_VERSION,
     paused: false,
     profiles: [
-      { id: 'p1', name: 'One', active: false, shortLabel: '1', color: '#2563eb', modifications: [], filters: [] },
-      { id: 'p2', name: 'Two', active: false, shortLabel: '2', color: '#16a34a', modifications: [], filters: [] },
+      { id: 'p1', name: 'One', active: false, shortLabel: '1', color: '#2563eb', modifications: [] },
+      { id: 'p2', name: 'Two', active: false, shortLabel: '2', color: '#16a34a', modifications: [] },
     ],
     materialized: {},
     customHeaderNames: [],
@@ -73,19 +73,26 @@ describe('createCommandExecutor', () => {
         stored = state;
       },
       validate: async (command) =>
-        command.type === 'add-filter' && command.filter.kind === 'url'
+        command.type === 'add-modification' && command.modification.kind === 'redirect'
           ? 'Invalid regex'
           : null,
     });
 
     await expect(
       executor.execute({
-        type: 'add-filter',
+        type: 'add-modification',
         profileId: 'p1',
-        filter: { kind: 'url', id: 'f1', enabled: true, pattern: '(' },
+        modification: {
+          kind: 'redirect',
+          id: 'm1',
+          pattern: '(',
+          substitution: '',
+          comment: '',
+          enabled: true,
+        },
       }),
     ).rejects.toThrow('Invalid regex');
-    expect(stored.profiles[0]?.filters).toEqual([]);
+    expect(stored.profiles[0]?.modifications).toEqual([]);
 
     await executor.execute({ type: 'toggle-profile', profileId: 'p1', active: true });
     expect(stored.profiles[0]?.active).toBe(true);

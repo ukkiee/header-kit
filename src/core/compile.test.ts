@@ -11,12 +11,85 @@ function profile(overrides: Partial<Profile> = {}): Profile {
     shortLabel: 'T',
     color: '#2563eb',
     modifications: [],
-    filters: [],
     ...overrides,
   };
 }
 
 describe('compile', () => {
+  it('규칙 conditions가 그 규칙의 DNR 조건으로 직접 내려간다 (ADR 0010)', () => {
+    const { rules, warnings } = compile(
+      [profile({ modifications: [
+        { kind: 'request-header', id: 'm1', name: 'X-C', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
+          conditions: { excludedDomains: ['skip.io'], resourceTypes: ['script'], requestMethods: ['post'], initiatorDomains: ['init.io'] } },
+        { kind: 'request-header', id: 'm2', name: 'X-Free', value: '2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+      ] })],
+      { paused: false, tabs: [], now: 0, materialized: {} },
+    );
+    expect(warnings).toEqual([]);
+    const c = rules.find((r) => r.action.requestHeaders?.[0]?.header === 'X-C')?.condition;
+    expect(c?.resourceTypes).toEqual(['script']);
+    expect(c?.requestMethods).toEqual(['post']);
+    expect(c?.initiatorDomains).toEqual(['init.io']);
+    expect(c?.excludedRequestDomains).toEqual(['skip.io']);
+    const free = rules.find((r) => r.action.requestHeaders?.[0]?.header === 'X-Free')?.condition;
+    expect(free?.requestMethods).toBeUndefined();
+  });
+
+  it('tabDomains는 매칭 탭으로 전개되고, 매칭 탭이 없으면 그 규칙만 방출되지 않는다', () => {
+    const tabs = [
+      { tabId: 7, url: 'https://app.example.com/x' },
+      { tabId: 9, url: 'https://other.io/' },
+    ];
+    const { rules } = compile(
+      [profile({ modifications: [
+        { kind: 'request-header', id: 'm1', name: 'X-Tab', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
+          conditions: { tabDomains: ['example.com'] } },
+        { kind: 'request-header', id: 'm2', name: 'X-NoTab', value: '2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
+          conditions: { tabDomains: ['closed.io'] } },
+      ] })],
+      { paused: false, tabs, now: 0, materialized: {} },
+    );
+    const tab = rules.find((r) => r.action.requestHeaders?.[0]?.header === 'X-Tab');
+    expect(tab?.condition.tabIds).toEqual([7]);
+    expect(rules.some((r) => r.action.requestHeaders?.[0]?.header === 'X-NoTab')).toBe(false);
+  });
+
+  it('만료된 규칙(conditions.expiresAt <= now)은 방출되지 않는다', () => {
+    const { rules } = compile(
+      [profile({ modifications: [
+        { kind: 'request-header', id: 'm1', name: 'X-Old', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
+          conditions: { expiresAt: 100 } },
+        { kind: 'request-header', id: 'm2', name: 'X-Live', value: '2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
+          conditions: { expiresAt: 900 } },
+      ] })],
+      { paused: false, tabs: [], now: 500, materialized: {} },
+    );
+    expect(rules.map((r) => r.action.requestHeaders?.[0]?.header)).toEqual(['X-Live']);
+  });
+
+  it('미설정(expiresAt 0)은 만료로 치지 않는다 — 방출 가드와 알람 술어가 같은 정의를 쓴다', () => {
+    const { rules } = compile(
+      [profile({ modifications: [
+        { kind: 'request-header', id: 'm1', name: 'X-Unset', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
+          conditions: { expiresAt: 0 } },
+      ] })],
+      { paused: false, tabs: [], now: 500, materialized: {} },
+    );
+    expect(rules.map((r) => r.action.requestHeaders?.[0]?.header)).toEqual(['X-Unset']);
+  });
+
+  it('redirect도 conditions를 상속하되 regexFilter는 자기 pattern이다', () => {
+    const { rules } = compile(
+      [profile({ modifications: [
+        { kind: 'redirect', id: 'r1', pattern: '^https://a/(.*)', substitution: 'https://b/\\1', enabled: true, comment: '',
+          conditions: { requestMethods: ['get'] } },
+      ] })],
+      { paused: false, tabs: [], now: 0, materialized: {} },
+    );
+    expect(rules[0]?.condition.regexFilter).toBe('^https://a/(.*)');
+    expect(rules[0]?.condition.requestMethods).toEqual(['get']);
+  });
+
   it('urlMatchType이 비정규식이면 DNR urlFilter로 매핑되고 regex 카운터를 안 쓴다 (ADR 0008)', () => {
     const mk = (id: string, urlFilter: string, urlMatchType: 'domain' | 'contains' | 'prefix') => ({
       kind: 'request-header' as const, id, name: `X-${id}`, value: '1', enabled: true,
@@ -56,14 +129,13 @@ describe('compile', () => {
     expect(warnings.some((w) => w.code === 'regex-too-long' && w.modificationId === 'm1')).toBe(true);
   });
 
-  it('규칙 자체 urlFilter가 있으면 그 규칙의 regexFilter가 되고 프로필 URL 조인을 대체한다 (ADR 0007)', () => {
+  it('규칙 자체 urlFilter가 그 규칙의 regexFilter가 된다 — 없는 규칙은 무스코프 (ADR 0007/0010)', () => {
     const { rules, warnings } = compile(
       [
         profile({
-          filters: [{ kind: 'url', id: 'f1', enabled: true, pattern: 'profile\\.scope' }],
           modifications: [
             { kind: 'request-header', id: 'm1', name: 'X-Own', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '', urlFilter: 'own\\.scope' },
-            { kind: 'request-header', id: 'm2', name: 'X-Inherit', value: '2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+            { kind: 'request-header', id: 'm2', name: 'X-Free', value: '2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
           ],
         }),
       ],
@@ -72,9 +144,9 @@ describe('compile', () => {
 
     expect(warnings).toEqual([]);
     const own = rules.find((r) => r.action.requestHeaders?.[0]?.header === 'X-Own');
-    const inherit = rules.find((r) => r.action.requestHeaders?.[0]?.header === 'X-Inherit');
+    const free = rules.find((r) => r.action.requestHeaders?.[0]?.header === 'X-Free');
     expect(own?.condition.regexFilter).toBe('own\\.scope');
-    expect(inherit?.condition.regexFilter).toBe('(?:profile\\.scope)');
+    expect(free?.condition.regexFilter).toBeUndefined();
   });
 
   it('CSP 규칙도 자체 urlFilter를 쓴다', () => {
@@ -238,8 +310,7 @@ describe('compile', () => {
     expect(a1!.priority).toBeGreaterThan(a2!.priority);
     // 대역: 위 Profile의 가장 낮은 규칙도 아래 Profile의 가장 높은 규칙보다 높다
     expect(a2!.priority).toBeGreaterThan(b1!.priority);
-    // 대역 사이에는 Exclude allow 슬롯이 예약되어 있다 (인접 priority가 아님)
-    expect(a2!.priority - b1!.priority).toBeGreaterThanOrEqual(2);
+    // 대역이 인접해도 위 Profile이 항상 높다 (allow 슬롯 예약은 ADR 0010에서 퇴역)
     expect(b1!.priority).toBeGreaterThanOrEqual(1);
   });
 

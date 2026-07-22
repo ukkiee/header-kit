@@ -9,7 +9,6 @@ const profile = (id: string, active = false): Profile => ({
   shortLabel: id.slice(0, 2),
   color: '#2563eb',
   modifications: [],
-  filters: [],
 });
 
 describe('reconcileSelection', () => {

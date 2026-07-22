@@ -2,14 +2,75 @@ import { describe, expect, it } from 'vitest';
 import { parseStoredState, SCHEMA_VERSION } from './schema';
 
 describe('parseStoredState', () => {
+  it('프로필 필터를 규칙 conditions로 마이그레이션한다 (ADR 0010, 의미론 보존)', () => {
+    const parsed = parseStoredState({
+      schemaVersion: 1,
+      paused: false,
+      profiles: [
+        {
+          id: 'p1', name: 'P', active: true, shortLabel: 'P', color: '#2563eb',
+          modifications: [
+            { kind: 'request-header', id: 'm1', name: 'X', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+            // 자체 urlFilter가 있는 규칙은 URL 스코프를 유지한다 (0007 의미론)
+            { kind: 'request-header', id: 'm2', name: 'Y', value: '2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '', urlFilter: 'own', urlMatchType: 'contains' },
+          ],
+          filters: [
+            { kind: 'url', id: 'f1', enabled: true, pattern: 'a\\.com' },
+            { kind: 'url', id: 'f2', enabled: true, pattern: 'b\\.com' },
+            { kind: 'resource-type', id: 'f3', enabled: true, resourceTypes: ['script'] },
+            { kind: 'request-method', id: 'f4', enabled: true, methods: ['post'] },
+            { kind: 'initiator-domain', id: 'f5', enabled: true, domain: 'init.io' },
+            { kind: 'tab-domain', id: 'f6', enabled: true, domain: 'tab.io' },
+            { kind: 'time', id: 'f7', enabled: true, expiresAt: 500 },
+            { kind: 'time', id: 'f8', enabled: true, expiresAt: 300 },
+            { kind: 'exclude-url', id: 'f9', enabled: true, pattern: 'gone' }, // 소실 (ADR 명시)
+            { kind: 'tab', id: 'f10', enabled: true, tabId: 3 }, // 소실
+          ],
+        },
+      ],
+    });
+
+    const p1 = parsed.profiles[0]!;
+    expect('filters' in p1).toBe(false);
+    const m1 = p1.modifications[0]!;
+    expect(m1.kind === 'request-header' && m1.urlFilter).toBe('(?:a\\.com)|(?:b\\.com)');
+    expect(m1.kind === 'request-header' && m1.urlMatchType).toBe('regex');
+    expect(m1.conditions).toEqual({
+      resourceTypes: ['script'],
+      requestMethods: ['post'],
+      initiatorDomains: ['init.io'],
+      tabDomains: ['tab.io'],
+      expiresAt: 300, // 최솟값
+    });
+    const m2 = p1.modifications[1]!;
+    expect(m2.kind === 'request-header' && m2.urlFilter).toBe('own'); // 자체 스코프 유지
+    expect(m2.conditions?.resourceTypes).toEqual(['script']);
+  });
+
+  it('disabled 프로필 필터는 마이그레이션하지 않고, 필터 없는 프로필은 그대로다', () => {
+    const parsed = parseStoredState({
+      schemaVersion: 1,
+      paused: false,
+      profiles: [
+        {
+          id: 'p1', name: 'P', active: true, shortLabel: 'P', color: '#2563eb',
+          modifications: [
+            { kind: 'request-header', id: 'm1', name: 'X', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+          ],
+          filters: [{ kind: 'resource-type', id: 'f1', enabled: false, resourceTypes: ['image'] }],
+        },
+      ],
+    });
+    expect(parsed.profiles[0]?.modifications[0]?.conditions).toBeUndefined();
+  });
+
   it('urlFilter(ADR 0007)는 선택 문자열 — 비문자열이나 redirect의 것은 거부한다', () => {
     const base = {
       schemaVersion: 1,
       paused: false,
       profiles: [
         {
-          id: 'p1', name: 'P', active: true, shortLabel: 'P', color: '#2563eb', filters: [],
-          modifications: [
+          id: 'p1', name: 'P', active: true, shortLabel: 'P', color: '#2563eb',          modifications: [
             { kind: 'request-header', id: 'm1', name: 'X', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '', urlFilter: 'api\\.example' },
           ],
         },
@@ -46,10 +107,6 @@ describe('parseStoredState', () => {
           shortLabel: 'P',
           color: '#2563eb',
           modifications: [{ kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
-          filters: [
-            { kind: 'url', id: 'f1', enabled: true, pattern: 'api\\.example\\.com' },
-            { kind: 'resource-type', id: 'f2', enabled: true, resourceTypes: ['xmlhttprequest'] },
-          ],
         },
       ],
       materialized: { m1: 'trace-abc' },

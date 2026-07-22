@@ -1,7 +1,7 @@
-import { isProfileExpired } from './expiry';
+import { isRuleExpired } from './expiry';
 import { hasPlaceholders } from './placeholder';
-import type { Filter, HeaderMode, Modification, Profile, UrlMatchType } from './schema';
-import { placeholderTemplate, UNSET_ID } from './schema';
+import type { HeaderMode, Modification, Profile, RuleConditions, UrlMatchType } from './schema';
+import { placeholderTemplate } from './schema';
 
 /** 값·mode를 가진 Modification 종류 (header/cookie/set-cookie). */
 type ValueModification = Extract<Modification, { mode: HeaderMode }>;
@@ -11,24 +11,19 @@ import {
   isRequestAppendAllowed,
   type HeaderInfo,
   type NetRule,
-  type RequestMethod,
-  type ResourceType,
 } from './rules';
 
 /** 탭 상태 스냅샷 — 어댑터가 tabs API에서 만들어 env로 주입한다. */
 export interface TabInfo {
   tabId: number;
-  windowId: number;
-  /** 그룹 미소속은 -1. */
-  groupId: number;
   url?: string;
 }
 
 export interface CompileEnv {
   paused: boolean;
-  /** 열린 탭 스냅샷 — 탭 계열 Filter의 전개에 쓰인다. */
+  /** 열린 탭 스냅샷 — 규칙 tabDomains 조건의 전개에 쓰인다. */
   tabs: TabInfo[];
-  /** 현재 시각(ms) — Time Filter 만료 방어층에 쓰인다. */
+  /** 현재 시각(ms) — 규칙 자동 해제(expiresAt)의 방출 가드에 쓰인다. */
   now: number;
   /** Placeholder 실체화 구역 — Compile은 소비만 하고 절대 생성하지 않는다. */
   materialized: Record<string, string>;
@@ -39,12 +34,9 @@ export interface CompileResult {
   warnings: CompileWarning[];
 }
 
-/** Profile 대역 상단에 Exclude Filter의 allow 규칙이 들어갈 자리. */
-const EXCLUDE_ALLOW_SLOTS = 1;
-
 /**
  * regexFilter는 컴파일 후 2KB 미만이어야 한다. 컴파일 크기는 순수하게 측정할
- * 수 없으므로 보수적인 소스 길이 휴리스틱으로 OR-join을 끊는다.
+ * 수 없으므로 보수적인 소스 길이 휴리스틱을 쓴다.
  */
 export const REGEX_JOIN_LIMIT = 1500;
 
@@ -52,21 +44,6 @@ export const REGEX_JOIN_LIMIT = 1500;
 const TOTAL_RULE_LIMIT = 5000;
 /** regex 조건 규칙의 타입별 한도. */
 const REGEX_RULE_LIMIT = 1000;
-
-interface CompiledFilters {
-  /** 각 원소가 규칙 하나의 regexFilter — URL Filter가 없으면 [undefined]. */
-  regexJoins: Array<string | undefined>;
-  resourceTypes: ResourceType[] | undefined;
-  requestMethods: RequestMethod[] | undefined;
-  initiatorDomains: string[] | undefined;
-  /**
-   * 탭 계열 Filter의 전개 결과. undefined = 탭 조건 없음,
-   * 빈 배열 = 매칭 탭 없음(Modification 규칙을 내지 않는다).
-   */
-  tabIds: number[] | undefined;
-  /** Exclude Filter의 allow 규칙용 join들. */
-  excludeJoins: string[];
-}
 
 function hostnameOf(url: string | undefined): string | null {
   if (!url) return null;
@@ -82,113 +59,20 @@ function domainMatches(hostname: string, domain: string): boolean {
 }
 
 /**
- * 탭 계열 Filter 4종을 tabIds로 전개한다 — 같은 kind끼리 합집합(OR),
- * kind 사이는 교집합(AND). 탭 조건이 하나도 없으면 undefined.
+ * 규칙의 tabDomains 조건을 열린 탭으로 전개한다 (ADR 0010).
+ * undefined = 조건 없음, 빈 배열 = 매칭 탭 없음(그 규칙은 방출되지 않는다).
  */
-function expandTabIds(filters: Filter[], tabs: TabInfo[]): number[] | undefined {
-  const sets: number[][] = [];
-  const byKind = <K extends Filter['kind']>(kind: K) =>
-    filters.filter((f): f is Extract<Filter, { kind: K }> => f.kind === kind && f.enabled);
-
-  // 미설정(UNSET_ID) 값은 빈 패턴·빈 도메인과 동일하게 무시한다 — 일관된 fail-open.
-  const idKinds = [
-    { wanted: byKind('tab').map((f) => f.tabId), key: (t: TabInfo) => t.tabId },
-    { wanted: byKind('tab-group').map((f) => f.groupId), key: (t: TabInfo) => t.groupId },
-    { wanted: byKind('window').map((f) => f.windowId), key: (t: TabInfo) => t.windowId },
-  ];
-  for (const { wanted, key } of idKinds) {
-    const ids = wanted.filter((id) => id !== UNSET_ID);
-    if (ids.length === 0) continue;
-    const set = new Set(ids);
-    sets.push(tabs.filter((t) => set.has(key(t))).map((t) => t.tabId));
-  }
-
-  const domains = byKind('tab-domain')
-    .map((f) => f.domain.trim())
-    .filter((d) => d !== '');
-  if (domains.length > 0) {
-    sets.push(
-      tabs
-        .filter((t) => {
-          const hostname = hostnameOf(t.url);
-          return hostname !== null && domains.some((d) => domainMatches(hostname, d));
-        })
-        .map((t) => t.tabId),
-    );
-  }
-
-  if (sets.length === 0) return undefined;
-  return sets.reduce((acc, set) => acc.filter((id) => set.includes(id)));
+function expandTabDomains(conditions: RuleConditions | undefined, tabs: TabInfo[]): number[] | undefined {
+  const domains = (conditions?.tabDomains ?? []).map((d) => d.trim()).filter((d) => d !== '');
+  if (domains.length === 0) return undefined;
+  return tabs
+    .filter((t) => {
+      const hostname = hostnameOf(t.url);
+      return hostname !== null && domains.some((d) => domainMatches(hostname, d));
+    })
+    .map((t) => t.tabId);
 }
 
-
-function joinPatterns(
-  filters: Array<{ id: string; pattern: string }>,
-  profileId: string,
-  warnings: CompileWarning[],
-): string[] {
-  const joins: string[] = [];
-  let current = '';
-
-  for (const { id, pattern } of filters) {
-    const wrapped = `(?:${pattern})`;
-    if (wrapped.length > REGEX_JOIN_LIMIT) {
-      warnings.push({
-        code: 'regex-too-long',
-        profileId,
-        filterId: id,
-        limit: REGEX_JOIN_LIMIT,
-      });
-      continue;
-    }
-    const candidate = current === '' ? wrapped : `${current}|${wrapped}`;
-    if (candidate.length > REGEX_JOIN_LIMIT) {
-      joins.push(current);
-      current = wrapped;
-    } else {
-      current = candidate;
-    }
-  }
-  if (current !== '') joins.push(current);
-  return joins;
-}
-
-function compileFilters(
-  profile: Profile,
-  tabs: TabInfo[],
-  warnings: CompileWarning[],
-): CompiledFilters {
-  const enabled = profile.filters.filter((f) => f.enabled);
-  const byKind = <K extends Filter['kind']>(kind: K) =>
-    enabled.filter((f): f is Extract<Filter, { kind: K }> => f.kind === kind);
-
-  const urlFilters = byKind('url')
-    .map((f) => ({ id: f.id, pattern: f.pattern.trim() }))
-    .filter((f) => f.pattern !== '');
-  const excludeFilters = byKind('exclude-url')
-    .map((f) => ({ id: f.id, pattern: f.pattern.trim() }))
-    .filter((f) => f.pattern !== '');
-
-  const resourceTypes = [...new Set(byKind('resource-type').flatMap((f) => f.resourceTypes))];
-  const requestMethods = [...new Set(byKind('request-method').flatMap((f) => f.methods))];
-  const initiatorDomains = [
-    ...new Set(
-      byKind('initiator-domain')
-        .map((f) => f.domain.trim())
-        .filter((d) => d !== ''),
-    ),
-  ];
-
-  const regexJoins = joinPatterns(urlFilters, profile.id, warnings);
-  return {
-    regexJoins: regexJoins.length > 0 ? regexJoins : [undefined],
-    resourceTypes: resourceTypes.length > 0 ? resourceTypes : undefined,
-    requestMethods: requestMethods.length > 0 ? requestMethods : undefined,
-    initiatorDomains: initiatorDomains.length > 0 ? initiatorDomains : undefined,
-    tabIds: expandTabIds(enabled, tabs),
-    excludeJoins: joinPatterns(excludeFilters, profile.id, warnings),
-  };
-}
 
 interface Emitter {
   rules: NetRule[];
@@ -213,8 +97,7 @@ function emitRule(
         : null;
 
   if (quota) {
-    // 항목 단위 경고 — 어느 Modification이 빠졌는지 각각 알린다 (같은 항목의
-    // 분할 규칙 변형만 하나로 접는다).
+    // 항목 단위 경고 — 어느 Modification이 빠졌는지 각각 알린다.
     const key = `${quota}:${origin.profileId}:${origin.modificationId ?? ''}`;
     if (!emitter.warned.has(key)) {
       emitter.warned.add(key);
@@ -233,18 +116,34 @@ function emitRule(
   emitter.rules.push({ id: emitter.nextId++, ...rule });
 }
 
+/**
+ * 규칙의 conditions + URL 스코프를 DNR 조건으로 조립한다 (ADR 0010).
+ * tabIds는 호출자가 전개해 넘긴다(빈 배열이면 애초에 방출하지 않으므로 여기 오지 않는다).
+ */
 function conditionFor(
-  compiled: CompiledFilters,
-  regexFilter: string | undefined,
-  plainUrlFilter?: string,
+  conditions: RuleConditions | undefined,
+  scope: { regexFilter?: string; urlFilter?: string },
+  tabIds: number[] | undefined,
 ): NetRule['condition'] {
+  const initiatorDomains = (conditions?.initiatorDomains ?? [])
+    .map((d) => d.trim())
+    .filter((d) => d !== '');
+  const excludedRequestDomains = (conditions?.excludedDomains ?? [])
+    .map((d) => d.trim())
+    .filter((d) => d !== '');
   return {
-    ...(regexFilter !== undefined ? { regexFilter } : {}),
-    ...(plainUrlFilter !== undefined ? { urlFilter: plainUrlFilter } : {}),
-    resourceTypes: compiled.resourceTypes ?? [...ALL_RESOURCE_TYPES],
-    ...(compiled.requestMethods ? { requestMethods: compiled.requestMethods } : {}),
-    ...(compiled.initiatorDomains ? { initiatorDomains: compiled.initiatorDomains } : {}),
-    ...(compiled.tabIds !== undefined ? { tabIds: compiled.tabIds } : {}),
+    ...(scope.regexFilter !== undefined ? { regexFilter: scope.regexFilter } : {}),
+    ...(scope.urlFilter !== undefined ? { urlFilter: scope.urlFilter } : {}),
+    resourceTypes:
+      conditions?.resourceTypes && conditions.resourceTypes.length > 0
+        ? conditions.resourceTypes
+        : [...ALL_RESOURCE_TYPES],
+    ...(conditions?.requestMethods && conditions.requestMethods.length > 0
+      ? { requestMethods: conditions.requestMethods }
+      : {}),
+    ...(initiatorDomains.length > 0 ? { initiatorDomains } : {}),
+    ...(excludedRequestDomains.length > 0 ? { excludedRequestDomains } : {}),
+    ...(tabIds !== undefined ? { tabIds } : {}),
   };
 }
 
@@ -254,89 +153,63 @@ function consumeValue(rawValue: string, id: string, emitter: Emitter): string {
 }
 
 interface HeaderPlan {
-  header: string;
   isRequest: boolean;
-  /** 빈 값 판정에 쓰는 사용자 값. */
-  userValue: string;
-  /** set/append에 실릴 실제 헤더 값. */
-  composedValue: string;
-  /** 비어 있으면 empty-header-name 경고 대상인 이름 (set-cookie는 항상 non-empty). */
+  header: string;
   nameForWarning: string;
+  userValue: string;
+  composedValue: string;
 }
 
-/** header/cookie/set-cookie를 공통 HeaderPlan으로 정규화한다. */
 function planHeaderish(modification: ValueModification, emitter: Emitter): HeaderPlan {
-  const v = consumeValue(modification.value, modification.id, emitter);
+  const value = consumeValue(modification.value, modification.id, emitter);
   switch (modification.kind) {
     case 'request-header':
-    case 'response-header':
       return {
-        header: modification.name.trim(),
-        isRequest: modification.kind === 'request-header',
-        userValue: v,
-        composedValue: v,
-        nameForWarning: modification.name.trim(),
-      };
-    case 'cookie': {
-      const cookieName = modification.name.trim();
-      return {
-        header: 'Cookie',
         isRequest: true,
-        userValue: v,
-        composedValue: cookieName === '' ? v : `${cookieName}=${v}`,
-        nameForWarning: cookieName,
+        header: modification.name.trim(),
+        nameForWarning: modification.name,
+        userValue: modification.value,
+        composedValue: value,
       };
-    }
+    case 'response-header':
+      return {
+        isRequest: false,
+        header: modification.name.trim(),
+        nameForWarning: modification.name,
+        userValue: modification.value,
+        composedValue: value,
+      };
+    case 'cookie':
+      return {
+        isRequest: true,
+        header: 'Cookie',
+        nameForWarning: modification.name,
+        userValue: modification.value,
+        composedValue: `${modification.name.trim()}=${value}`,
+      };
     case 'set-cookie':
       return {
-        header: 'Set-Cookie',
         isRequest: false,
-        userValue: v,
-        composedValue: v,
+        header: 'Set-Cookie',
+        // set-cookie는 고정 헤더라 이름이 빌 수 없다 — 빈 값 차단이 유효한 사용례.
         nameForWarning: 'Set-Cookie',
+        userValue: modification.value,
+        composedValue: value,
       };
-    default:
-      return modification satisfies never;
   }
 }
-
-function emitModification(
-  modification: Modification,
-  priority: number,
-  profileId: string,
-  compiled: CompiledFilters,
-  emitter: Emitter,
-): void {
-  switch (modification.kind) {
-    case 'request-header':
-    case 'response-header':
-    case 'cookie':
-    case 'set-cookie':
-      emitHeaderRule(modification, priority, profileId, compiled, emitter);
-      return;
-    case 'csp':
-      emitCspRule(modification, priority, profileId, compiled, emitter);
-      return;
-    case 'redirect':
-      emitRedirectRule(modification, priority, profileId, compiled, emitter);
-      return;
-    default:
-      modification satisfies never;
-  }
-}
-
 
 /** 규칙 자체 스코프의 컴파일 결과 — regex 또는 DNR 비정규식 urlFilter (ADR 0007/0008). */
 type OwnScope =
-  | undefined // 자체 필터 없음 — 프로필 조인 사용
+  | undefined // 자체 필터 없음
   | null // 한도 초과 — 방출 금지(경고로 알림)
   | { regexFilter: string }
   | { urlFilter: string };
 
 /**
- * 규칙 자체 URL 필터 (ADR 0007) — 있으면 그 규칙의 조인을 대체한다.
- * 매치 방식(ADR 0008): 부재/regex → regexFilter, 나머지는 DNR 비정규식 문법으로
- * 매핑되어 regex 규칙 한도를 소모하지 않는다. 한도 초과면 방출 금지.
+ * 규칙 자체 URL 필터 (ADR 0007) — 매치 방식(ADR 0008): 부재/regex → regexFilter,
+ * 나머지는 DNR 비정규식 문법으로 매핑되어 regex 규칙 한도를 소모하지 않는다.
+ * 한도 초과면 방출 금지 — 스코프를 조용히 넓히지 않는다.
  */
 function ownScope(
   modification: { id: string; urlFilter?: string; urlMatchType?: UrlMatchType },
@@ -366,11 +239,40 @@ function ownScope(
   }
 }
 
+function emitModification(
+  modification: Modification,
+  priority: number,
+  profileId: string,
+  tabs: TabInfo[],
+  emitter: Emitter,
+): void {
+  // 규칙 tabDomains 조건 — 매칭 탭이 없으면 이 규칙만 어디에도 적용되지 않는다.
+  const tabIds = expandTabDomains(modification.conditions, tabs);
+  if (tabIds !== undefined && tabIds.length === 0) return;
+
+  switch (modification.kind) {
+    case 'request-header':
+    case 'response-header':
+    case 'cookie':
+    case 'set-cookie':
+      emitHeaderRule(modification, priority, profileId, tabIds, emitter);
+      return;
+    case 'csp':
+      emitCspRule(modification, priority, profileId, tabIds, emitter);
+      return;
+    case 'redirect':
+      emitRedirectRule(modification, priority, profileId, tabIds, emitter);
+      return;
+    default:
+      modification satisfies never;
+  }
+}
+
 function emitHeaderRule(
   modification: ValueModification,
   priority: number,
   profileId: string,
-  compiled: CompiledFilters,
+  tabIds: number[] | undefined,
   emitter: Emitter,
 ): void {
   const plan = planHeaderish(modification, emitter);
@@ -386,35 +288,20 @@ function emitHeaderRule(
 
   // 자체 필터 초과로 방출이 없을 규칙에 append 경고를 내지 않도록 먼저 검사한다.
   const own = ownScope(modification, profileId, emitter);
-  if (own === null) return; // 자체 필터가 한도 초과 — 규칙 없음 (경고로 알림)
+  if (own === null) return;
   const info = resolveHeaderInfo(plan, modification, profileId, emitter);
-  const action = {
-    type: 'modifyHeaders' as const,
-    ...(plan.isRequest ? { requestHeaders: [info] } : { responseHeaders: [info] }),
-  };
-  if (own !== undefined) {
-    emitRule(
-      emitter,
-      {
-        priority,
-        action,
-        condition: conditionFor(
-          compiled,
-          'regexFilter' in own ? own.regexFilter : undefined,
-          'urlFilter' in own ? own.urlFilter : undefined,
-        ),
+  emitRule(
+    emitter,
+    {
+      priority,
+      action: {
+        type: 'modifyHeaders',
+        ...(plan.isRequest ? { requestHeaders: [info] } : { responseHeaders: [info] }),
       },
-      { profileId, modificationId: modification.id },
-    );
-    return;
-  }
-  for (const join of compiled.regexJoins) {
-    emitRule(
-      emitter,
-      { priority, action, condition: conditionFor(compiled, join) },
-      { profileId, modificationId: modification.id },
-    );
-  }
+      condition: conditionFor(modification.conditions, own ?? {}, tabIds),
+    },
+    { profileId, modificationId: modification.id },
+  );
 }
 
 /** mode/emptyMeans를 DNR HeaderInfo 연산으로 변환한다. */
@@ -450,7 +337,7 @@ function emitCspRule(
   modification: Extract<Modification, { kind: 'csp' }>,
   priority: number,
   profileId: string,
-  compiled: CompiledFilters,
+  tabIds: number[] | undefined,
   emitter: Emitter,
 ): void {
   const value = modification.directives
@@ -460,49 +347,32 @@ function emitCspRule(
   if (value === '') return; // 빈 CSP는 규칙을 만들지 않는다
 
   const own = ownScope(modification, profileId, emitter);
-  if (own === null) return; // 자체 필터가 한도 초과 — 규칙 없음 (경고로 알림)
-  const cspAction = {
-    type: 'modifyHeaders' as const,
-    responseHeaders: [{ header: 'Content-Security-Policy', operation: 'set' as const, value }],
-  };
-  if (own !== undefined) {
-    emitRule(
-      emitter,
-      {
-        priority,
-        action: cspAction,
-        condition: conditionFor(
-          compiled,
-          'regexFilter' in own ? own.regexFilter : undefined,
-          'urlFilter' in own ? own.urlFilter : undefined,
-        ),
+  if (own === null) return;
+  emitRule(
+    emitter,
+    {
+      priority,
+      action: {
+        type: 'modifyHeaders',
+        responseHeaders: [{ header: 'Content-Security-Policy', operation: 'set', value }],
       },
-      { profileId, modificationId: modification.id },
-    );
-    return;
-  }
-  for (const join of compiled.regexJoins) {
-    emitRule(
-      emitter,
-      { priority, action: cspAction, condition: conditionFor(compiled, join) },
-      { profileId, modificationId: modification.id },
-    );
-  }
+      condition: conditionFor(modification.conditions, own ?? {}, tabIds),
+    },
+    { profileId, modificationId: modification.id },
+  );
 }
 
 function emitRedirectRule(
   modification: Extract<Modification, { kind: 'redirect' }>,
   priority: number,
   profileId: string,
-  compiled: CompiledFilters,
+  tabIds: number[] | undefined,
   emitter: Emitter,
 ): void {
   const pattern = modification.pattern.trim();
   if (pattern === '') return; // 매칭 패턴이 없으면 규칙 없음
 
-  // redirect는 자기 pattern을 regexFilter로 쓰고, profile의 나머지 필터(메서드·
-  // initiator·resource type·탭)를 그대로 상속한다. profile의 URL 필터는 redirect
-  // 패턴이 URL 매칭 역할을 대신하므로 추가 결합하지 않는다.
+  // redirect는 자기 pattern이 regexFilter — 나머지 conditions는 그대로 조립한다.
   emitRule(
     emitter,
     {
@@ -511,7 +381,7 @@ function emitRedirectRule(
         type: 'redirect',
         redirect: { regexSubstitution: modification.substitution },
       },
-      condition: conditionFor(compiled, pattern),
+      condition: conditionFor(modification.conditions, { regexFilter: pattern }, tabIds),
     },
     { profileId, modificationId: modification.id },
   );
@@ -537,9 +407,8 @@ function findMissingMaterialization(
  *
  * 충돌 의미론 (PRD): 목록 위쪽 Profile이 이긴다. 활성 Profile마다 분리된
  * priority 대역을 아래에서 위로 할당하고, 대역 안에서는 앞선 Modification이
- * 더 높은 priority를 받는다. Filter는 같은 kind끼리 OR, 다른 kind끼리 AND로
- * 합성되며, Exclude URL은 대역 상단의 allow 규칙이 되어 자기보다 낮은
- * 우선순위 Profile까지 하향 전파된다.
+ * 더 높은 priority를 받는다. 조건은 규칙의 속성이다 (ADR 0010) — 각 규칙의
+ * conditions가 자기 DNR 조건으로 직접 내려간다.
  */
 export function compile(profiles: Profile[], env: CompileEnv): CompileResult {
   const emitter: Emitter = {
@@ -556,15 +425,23 @@ export function compile(profiles: Profile[], env: CompileEnv): CompileResult {
   }
 
   const { tabs, now } = env;
-  const active = profiles.filter((p) => p.active && !isProfileExpired(p, now));
+  const active = profiles.filter((p) => p.active);
+
+  // 방출 대상: enabled이고 만료되지 않은 규칙 — 대역 폭도 이 기준으로 센다.
+  const emittable = new Map<string, Modification[]>();
+  for (const profile of active) {
+    emittable.set(
+      profile.id,
+      profile.modifications.filter((m) => m.enabled && !isRuleExpired(m, now)),
+    );
+  }
 
   const bandBase = new Map<string, number>();
   let cursor = 1;
   for (let i = active.length - 1; i >= 0; i -= 1) {
     const profile = active[i]!;
     bandBase.set(profile.id, cursor);
-    cursor +=
-      profile.modifications.filter((m) => m.enabled).length + EXCLUDE_ALLOW_SLOTS;
+    cursor += emittable.get(profile.id)!.length;
   }
 
   const headerUse = new Map<string, string[]>();
@@ -580,40 +457,11 @@ export function compile(profiles: Profile[], env: CompileEnv): CompileResult {
       continue;
     }
 
-    const enabled = profile.modifications.filter((m) => m.enabled);
+    const enabled = emittable.get(profile.id)!;
     const base = bandBase.get(profile.id)!;
-    const compiled = compileFilters(profile, tabs, emitter.warnings);
-
-    // 탭 조건이 있는데 매칭 탭이 없으면(탭 닫힘 등) 이 Profile은 어디에도
-    // 적용되지 않는다 — Modification 규칙도, Exclude allow 규칙도 내지 않는다.
-    const noMatchingTabs = compiled.tabIds !== undefined && compiled.tabIds.length === 0;
-    if (noMatchingTabs) continue;
-
-    // Exclude allow 규칙은 소유 Profile의 전체 Filter 스코프(메서드·initiator·
-    // resource type·탭)를 그대로 쓴다 — Exclude가 자기 Profile의 조건을 벗어나
-    // 전역으로 다른 Profile까지 무효화하지 않도록 (RL-2). quota 압력에서
-    // 살아남도록 Modification보다 먼저 낸다.
-    const allowPriority = base + enabled.length + EXCLUDE_ALLOW_SLOTS - 1;
-    for (const join of compiled.excludeJoins) {
-      emitRule(
-        emitter,
-        {
-          priority: allowPriority,
-          action: { type: 'allow' },
-          condition: conditionFor(compiled, join),
-        },
-        { profileId: profile.id },
-      );
-    }
 
     enabled.forEach((modification, index) => {
-      emitModification(
-        modification,
-        base + enabled.length - 1 - index,
-        profile.id,
-        compiled,
-        emitter,
-      );
+      emitModification(modification, base + enabled.length - 1 - index, profile.id, tabs, emitter);
       // 겹침 경고는 헤더 이름 있는 종류(request/response-header)에만 의미가 있다.
       if (modification.kind === 'request-header' || modification.kind === 'response-header') {
         const name = modification.name.trim().toLowerCase();

@@ -97,6 +97,15 @@ describe('ruleView', () => {
     expect(ruleView(header({ urlFilter: '  ' }), t).summary).toBe('X-Test: aaa');
   });
 
+  it('조건이 있으면 개수를 요약 뒤에 표기한다 (ADR 0010)', () => {
+    expect(
+      ruleView(header({ conditions: { resourceTypes: ['script'], expiresAt: 100 } }), t).summary,
+    ).toBe('X-Test: aaa · Conditions: 2');
+    expect(
+      ruleView(header({ urlFilter: 'a.io', conditions: { excludedDomains: ['b.io'] } }), ko).summary,
+    ).toBe('a.io → X-Test: aaa · 조건: 1');
+  });
+
   it('이름이 비면 종류 라벨로 폴백한다', () => {
     expect(ruleView(header({ name: '', comment: '' }), t).title).toBe('REQ');
     expect(

@@ -22,7 +22,6 @@ function profile(mods: Modification[]): Profile {
     shortLabel: 'P',
     color: '#2563eb',
     modifications: mods,
-    filters: [],
   };
 }
 

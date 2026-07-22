@@ -23,7 +23,6 @@ const profile: Profile = {
   modifications: [
     { kind: 'request-header', id: 'm1', name: 'Authorization', value: 'Bearer test', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
   ],
-  filters: [{ kind: 'url', id: 'f1', enabled: true, pattern: 'api\\.staging\\.example\\.com' }],
 };
 
 export const Wide: Story = {

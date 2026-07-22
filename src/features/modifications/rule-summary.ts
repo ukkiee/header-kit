@@ -27,7 +27,11 @@ export function ruleView(m: Modification, t: Translator): RuleView {
   const view = bareView(m, t);
   // 규칙 자신의 URL 필터(ADR 0007)는 효과 앞에 붙는다 — `imtest.me/ → x-test: aaa`.
   const scope = 'urlFilter' in m ? m.urlFilter?.trim() : undefined;
-  return scope ? { ...view, summary: `${scope} → ${view.summary}` } : view;
+  let summary = scope ? `${scope} → ${view.summary}` : view.summary;
+  // 조건(ADR 0010)은 개수만 표기 — 상세는 폼의 disclosure에서 본다.
+  const condCount = m.conditions ? Object.keys(m.conditions).length : 0;
+  if (condCount > 0) summary = `${summary} · ${t('conditionsCaption')}: ${condCount}`;
+  return { ...view, summary };
 }
 
 function bareView(m: Modification, t: Translator): RuleView {

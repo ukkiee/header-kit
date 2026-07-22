@@ -303,83 +303,82 @@ try {
   record('D4: Resume → 이전 활성 상태 그대로 복원', headers['x-conf'] === 'top-wins',
     `x-conf=${headers['x-conf']}`);
 
-  // ---------- E. 이슈 05: 네이티브 Filter ----------
+  // ---------- E. 규칙 조건 (ADR 0010) — DNR 네이티브 매핑 ----------
   const seedProfiles = (profiles) =>
     sw.evaluate(async (p) => {
       await chrome.storage.local.set({ state: { schemaVersion: 1, paused: false, profiles: p } });
     }, profiles);
 
-  const baseProfile = (id, name, mods, filters) => ({
+  const baseProfile = (id, name, mods) => ({
     id,
     name,
     active: true,
     shortLabel: name.charAt(0),
     color: '#2563eb',
     modifications: mods,
-    filters,
   });
 
-  // E1: URL Filter가 적용 범위를 좁힌다
+  // E1: 레거시 프로필 필터 시드 → 로드 마이그레이션이 규칙 스코프로 반영 (ADR 0010)
   await seedProfiles([
-    baseProfile('p-url', 'UrlF',
-      [{ kind: 'request-header', id: 'm1', name: 'X-F5', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
-      [{ kind: 'url', id: 'f1', enabled: true, pattern: 'tagged' }]),
+    {
+      ...baseProfile('p-url', 'UrlF',
+        [{ kind: 'request-header', id: 'm1', name: 'X-F5', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }]),
+      filters: [{ kind: 'url', id: 'f1', enabled: true, pattern: 'tagged' }],
+    },
   ]);
   await pollSessionRuleCount(sw, 1);
   const tagged = await fetchEchoHeaders(page, '/headers?tagged=1');
   const untagged = await fetchEchoHeaders(page, '/headers');
-  record('E1: URL Filter — 매칭 요청에만 적용', tagged['x-f5'] === 'on' && untagged['x-f5'] === undefined,
+  record('E1: 레거시 URL 필터 → 로드 마이그레이션이 규칙 스코프로 적용', tagged['x-f5'] === 'on' && untagged['x-f5'] === undefined,
     `tagged=${tagged['x-f5']}, untagged=${untagged['x-f5']}`);
 
-  // E2: Exclude URL Filter + 하향 전파 — 아래 Profile의 수정까지 해당 URL에서 차단
+  // E2: 제외 도메인 조건 — 해당 도메인 요청에는 적용되지 않는다 (네이티브 excludedRequestDomains)
   await seedProfiles([
-    baseProfile('p-top', 'Top',
-      [{ kind: 'request-header', id: 't1', name: 'X-Top', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
-      [{ kind: 'exclude-url', id: 'f1', enabled: true, pattern: 'blocked' }]),
-    baseProfile('p-bottom', 'Bot',
-      [{ kind: 'request-header', id: 'b1', name: 'X-Bottom', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
-      []),
+    baseProfile('p-ex', 'Ex',
+      [{ kind: 'request-header', id: 'm1', name: 'X-Ex', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
+        conditions: { excludedDomains: ['localhost'] } }]),
   ]);
-  await pollSessionRuleCount(sw, 3); // allow 1 + modify 2
-  const normal = await fetchEchoHeaders(page, '/headers');
-  const excluded = await fetchEchoHeaders(page, '/headers?blocked=1');
-  record('E2: Exclude — 매칭 URL에서 자기+하위 Profile 수정 차단',
-    normal['x-top'] === '1' && normal['x-bottom'] === '1' &&
-    excluded['x-top'] === undefined && excluded['x-bottom'] === undefined,
-    `normal=[${normal['x-top']},${normal['x-bottom']}], excluded=[${excluded['x-top']},${excluded['x-bottom']}]`);
+  await pollSessionRuleCount(sw, 1);
+  const onIncluded = await fetchEchoHeaders(page, '/headers');
+  await page.goto(`http://localhost:${port}/`);
+  const onExcluded = await fetchEchoHeaders(page, '/headers');
+  await page.goto(origin);
+  record('E2: 제외 도메인 — 해당 도메인에서만 미적용',
+    onIncluded['x-ex'] === 'on' && onExcluded['x-ex'] === undefined,
+    `127.0.0.1=${onIncluded['x-ex']}, localhost=${onExcluded['x-ex']}`);
 
-  // E3: Request Method Filter
+  // E3: 메서드 조건
   await seedProfiles([
     baseProfile('p-method', 'Meth',
-      [{ kind: 'request-header', id: 'm1', name: 'X-Post-Only', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
-      [{ kind: 'request-method', id: 'f1', enabled: true, methods: ['post'] }]),
+      [{ kind: 'request-header', id: 'm1', name: 'X-Post-Only', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
+        conditions: { requestMethods: ['post'] } }]),
   ]);
   await pollSessionRuleCount(sw, 1);
   const viaGet = await fetchEchoHeaders(page, '/headers');
   const viaPost = await fetchEchoHeaders(page, '/headers', 'POST');
-  record('E3: Method Filter — POST에만 적용', viaGet['x-post-only'] === undefined && viaPost['x-post-only'] === 'on',
+  record('E3: 메서드 조건 — POST에만 적용', viaGet['x-post-only'] === undefined && viaPost['x-post-only'] === 'on',
     `GET=${viaGet['x-post-only']}, POST=${viaPost['x-post-only']}`);
 
-  // E5: Resource Type Filter — main_frame 내비게이션에만 적용, XHR 제외
+  // E5: 리소스 종류 조건 — main_frame 내비게이션에만 적용, XHR 제외
   await seedProfiles([
     baseProfile('p-rt', 'Rt',
-      [{ kind: 'request-header', id: 'm1', name: 'X-Doc-Only', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
-      [{ kind: 'resource-type', id: 'f1', enabled: true, resourceTypes: ['main_frame'] }]),
+      [{ kind: 'request-header', id: 'm1', name: 'X-Doc-Only', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
+        conditions: { resourceTypes: ['main_frame'] } }]),
   ]);
   await pollSessionRuleCount(sw, 1);
   const viaXhr = await fetchEchoHeaders(page, '/headers');
   await page.goto(`${origin}/headers?nav=1`);
   const viaNav = JSON.parse(await page.evaluate(() => document.body.innerText));
   await page.goto(origin);
-  record('E5: Resource Type Filter — 문서 요청에만 적용',
+  record('E5: 리소스 종류 조건 — 문서 요청에만 적용',
     viaXhr['x-doc-only'] === undefined && viaNav['x-doc-only'] === 'on',
     `xhr=${viaXhr['x-doc-only']}, nav=${viaNav['x-doc-only']}`);
 
-  // E6: Initiator Domain Filter — 요청 출처가 매칭될 때만 적용
+  // E6: Initiator 도메인 조건 — 요청 출처가 매칭될 때만 적용
   const idProfile = (domain) => [
     baseProfile('p-id', 'Id',
-      [{ kind: 'request-header', id: 'm1', name: 'X-From-Local', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
-      [{ kind: 'initiator-domain', id: 'f1', enabled: true, domain }]),
+      [{ kind: 'request-header', id: 'm1', name: 'X-From-Local', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
+        conditions: { initiatorDomains: [domain] } }]),
   ];
   await seedProfiles(idProfile('127.0.0.1'));
   await pollSessionRuleCount(sw, 1);
@@ -387,103 +386,83 @@ try {
   await seedProfiles(idProfile('nomatch.example'));
   await new Promise((r) => setTimeout(r, 300));
   const unmatched = await fetchEchoHeaders(page, '/headers');
-  record('E6: Initiator Domain Filter — 출처 도메인 매칭 시에만 적용',
+  record('E6: Initiator 도메인 조건 — 출처 도메인 매칭 시에만 적용',
     matched['x-from-local'] === 'on' && unmatched['x-from-local'] === undefined,
     `matched=${matched['x-from-local']}, unmatched=${unmatched['x-from-local']}`);
 
-  // E4: 유효하지 않은 regex는 저장 시점(권위 경로)에 거부된다
+  // E4: 유효하지 않은 규칙 regex 스코프는 저장 시점(권위 경로)에 거부된다
   const rejection = await popup.evaluate(async () => {
     return chrome.runtime.sendMessage({
       type: 'headerkit:command',
       command: {
-        type: 'add-filter',
-        profileId: 'p-method',
-        filter: { kind: 'url', id: 'bad', enabled: true, pattern: '(unclosed' },
+        type: 'add-modification',
+        profileId: 'p-id',
+        modification: { kind: 'request-header', id: 'bad', name: 'X-Bad', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
+          urlFilter: '(unclosed', urlMatchType: 'regex' },
       },
     });
   });
   const stateAfter = await sw.evaluate(async () => {
     const { state } = await chrome.storage.local.get('state');
-    return state.profiles[0].filters.length;
+    return state.profiles[0].modifications.length;
   });
-  record('E4: invalid regex 명령이 오류로 거부되고 저장되지 않음',
+  record('E4: invalid regex 스코프 명령이 오류로 거부되고 저장되지 않음',
     rejection?.ok === false && /regex/i.test(rejection?.error ?? '') && stateAfter === 1,
-    `ok=${rejection?.ok}, error="${rejection?.error}", filters=${stateAfter}`);
+    `ok=${rejection?.ok}, error="${rejection?.error}", mods=${stateAfter}`);
 
-  // ---------- F. 이슈 06: 탭 계열 Filter · Time Filter ----------
-  await page.close(); // 이전 섹션의 127.0.0.1 탭이 tab-domain 매칭을 오염시키지 않도록
-
-  // F1: Tab Filter — 지정 탭에만 적용, 탭 닫힘 시 자동 해제
-  const pageA = await context.newPage();
-  await pageA.goto(`${origin}/?who=A`);
+  // ---------- F. 탭 도메인 조건 · 규칙 자동 해제 (ADR 0010) ----------
+  await page.close(); // 이전 섹션의 127.0.0.1 탭이 탭 도메인 매칭을 오염시키지 않도록
   const pageB = await context.newPage();
   await pageB.goto(`${origin}/?who=B`);
-  const tabIdByUrl = (tabs, marker) =>
-    tabs.find((t) => t.url && t.url.includes(marker))?.id;
-  const openTabs = await sw.evaluate(async () => {
-    const tabs = await chrome.tabs.query({});
-    return tabs.map((t) => ({ id: t.id, url: t.url }));
-  });
-  const tabAId = tabIdByUrl(openTabs, 'who=A');
 
-  await seedProfiles([
-    baseProfile('p-tab', 'Tab',
-      [{ kind: 'request-header', id: 'm1', name: 'X-Tab-Only', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
-      [{ kind: 'tab', id: 'f1', enabled: true, tabId: tabAId }]),
-  ]);
-  await pollSessionRuleCount(sw, 1);
-  const inA = await fetchEchoHeaders(pageA, '/headers');
-  const inB = await fetchEchoHeaders(pageB, '/headers');
-  record('F1a: Tab Filter — 지정 탭에만 적용', inA['x-tab-only'] === 'on' && inB['x-tab-only'] === undefined,
-    `A=${inA['x-tab-only']}, B=${inB['x-tab-only']}`);
-
-  await pageA.close();
-  await pollSessionRuleCount(sw, 0);
-  const inBAfterClose = await fetchEchoHeaders(pageB, '/headers');
-  record('F1b: 대상 탭 닫힘 → 규칙 자동 해제', inBAfterClose['x-tab-only'] === undefined,
-    `rules=0, B=${inBAfterClose['x-tab-only']}`);
-
-  // F2: Tab Domain Filter — 탭의 도메인 기준, 이탈 시 자동 비활성
+  // F1: 탭 도메인 조건 — 해당 도메인 탭이 있을 때만 적용, 이탈 시 자동 해제
   await seedProfiles([
     baseProfile('p-td', 'Td',
-      [{ kind: 'request-header', id: 'm1', name: 'X-Tab-Domain', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
-      [{ kind: 'tab-domain', id: 'f1', enabled: true, domain: '127.0.0.1' }]),
+      [{ kind: 'request-header', id: 'm1', name: 'X-Tab-Domain', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
+        conditions: { tabDomains: ['127.0.0.1'] } }]),
   ]);
   await pollSessionRuleCount(sw, 1);
   const onDomain = await fetchEchoHeaders(pageB, '/headers');
   await pageB.goto(`http://localhost:${port}/`);
-  await pollSessionRuleCount(sw, 0); // 도메인 이탈 → 매칭 탭 없음 → 규칙 해제
+  await pollSessionRuleCount(sw, 0); // 도메인 이탈 → 매칭 탭 없음 → 그 규칙만 미방출
   const offDomain = await fetchEchoHeaders(pageB, '/headers');
-  record('F2: Tab Domain Filter — 도메인 안 적용, 이탈 시 자동 해제',
+  record('F1: 탭 도메인 조건 — 도메인 안 적용, 이탈 시 자동 해제',
     onDomain['x-tab-domain'] === 'on' && offDomain['x-tab-domain'] === undefined,
     `on=${onDomain['x-tab-domain']}, off=${offDomain['x-tab-domain']}`);
   await pageB.goto(origin);
 
-  // F3: Time Filter — 만료 알람이 Profile을 끄고 배지가 비워진다
+  // F3: 규칙 자동 해제 — 만료 알람이 그 규칙만 끄고 expiresAt을 소비, 프로필·배지는 유지
   await seedProfiles([
-    {
-      ...baseProfile('p-time', 'Ti',
-        [{ kind: 'request-header', id: 'm1', name: 'X-Timed', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
-        [{ kind: 'time', id: 'f1', enabled: true, expiresAt: Date.now() + 1500 }]),
-    },
+    baseProfile('p-time', 'Ti',
+      [
+        { kind: 'request-header', id: 'm1', name: 'X-Timed', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
+          conditions: { expiresAt: Date.now() + 1500 } },
+        { kind: 'request-header', id: 'm2', name: 'X-Stays', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+      ]),
   ]);
-  await pollSessionRuleCount(sw, 1);
+  await pollSessionRuleCount(sw, 2);
   const beforeExpiry = await fetchEchoHeaders(pageB, '/headers');
 
-  const turnedOff = (await pollUntil(
+  const expiredMod = await pollUntil(
     () => sw.evaluate(async () => {
       const { state } = await chrome.storage.local.get('state');
-      return state.profiles[0].active;
+      const p = state.profiles[0];
+      return { active: p.active, enabled: p.modifications[0].enabled, conditions: p.modifications[0].conditions ?? null };
     }),
-    (active) => active === false,
+    (s) => s.enabled === false,
     20_000,
     250,
-  )) === false;
-  const afterExpiry = await fetchEchoHeaders(pageB, '/headers');
+  );
+  const afterExpiry = await pollUntil(
+    () => fetchEchoHeaders(pageB, '/headers'),
+    (h) => h['x-timed'] === undefined,
+  );
   const expiredBadge = await sw.evaluate(() => chrome.action.getBadgeText({}));
-  record('F3: Time Filter 만료 → 알람이 Profile off + 규칙 해제 + 배지 비움',
-    beforeExpiry['x-timed'] === 'on' && turnedOff && afterExpiry['x-timed'] === undefined && expiredBadge === '',
-    `before=${beforeExpiry['x-timed']}, off=${turnedOff}, after=${afterExpiry['x-timed']}, badge="${expiredBadge}"`);
+  record('F3: 규칙 만료 → 그 규칙만 off + expiresAt 소비, 프로필·다른 규칙·배지 유지',
+    beforeExpiry['x-timed'] === 'on' && beforeExpiry['x-stays'] === 'on'
+      && expiredMod.enabled === false && expiredMod.active === true && expiredMod.conditions === null
+      && afterExpiry['x-timed'] === undefined && afterExpiry['x-stays'] === 'on' && expiredBadge === 'T',
+    `before=[${beforeExpiry['x-timed']},${beforeExpiry['x-stays']}], mod-off=${expiredMod.enabled === false}, active=${expiredMod.active}, cond=${JSON.stringify(expiredMod.conditions)}, after=[${afterExpiry['x-timed']},${afterExpiry['x-stays']}], badge="${expiredBadge}"`);
 
   // ---------- G. 이슈 07: Placeholder 실체화 수명주기 ----------
   const UUID_RE = /^req-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -492,8 +471,7 @@ try {
   await seedProfiles([
     {
       ...baseProfile('p-ph', 'Ph',
-        [{ kind: 'request-header', id: 'm1', name: 'X-Trace-Id', value: 'req-{{uuid}}', enabled: true }],
-        []),
+        [{ kind: 'request-header', id: 'm1', name: 'X-Trace-Id', value: 'req-{{uuid}}', enabled: true }]),
       active: false,
     },
   ]);
@@ -567,19 +545,19 @@ try {
   await popup.getByRole('button', { name: 'Import…' }).click();
   await popup.getByLabel('Import JSON').fill(exportJson);
   await popup.getByRole('button', { name: 'Run import' }).click();
-  await pollSessionRuleCount(sw, 1); // tab 참조가 정리(UNSET)됐으므로 규칙이 전 탭에 적용된다
+  await pollSessionRuleCount(sw, 1); // 레거시 tab 필터는 마이그레이션에서 소실 → 규칙이 전 탭에 적용된다
   const importedState = await sw.evaluate(async () => {
     const { state } = await chrome.storage.local.get('state');
     return state;
   });
   const importedProfile = importedState.profiles.find((p) => p.name === 'Imported');
   const importedHeader = (await fetchEchoHeaders(pageB, '/headers'))['x-imported-id'];
-  record('H1: 활성 Import → id 재생성 + 탭 참조 정리 + 활성화 경계 실체화',
+  record('H1: 활성 Import → id 재생성 + 레거시 필터 소실(ADR 0010) + 활성화 경계 실체화',
     importedProfile !== undefined &&
     importedProfile.id !== 'src-p1' &&
-    importedProfile.filters[0]?.tabId === -1 &&
+    importedProfile.filters === undefined &&
     /^imp-[0-9a-f-]{36}$/.test(importedHeader ?? ''),
-    `id=${importedProfile?.id?.slice(0, 8)}, tabId=${importedProfile?.filters[0]?.tabId}, header=${importedHeader}`);
+    `id=${importedProfile?.id?.slice(0, 8)}, filters=${JSON.stringify(importedProfile?.filters)}, header=${importedHeader}`);
 
   await popup.getByRole('button', { name: 'Import…' }).click();
   await popup.getByLabel('Import JSON').fill('{broken json');
@@ -601,8 +579,7 @@ try {
   // 팝업 토글로 활성화 경계를 태운다.
   await seedProfiles([
     { ...baseProfile('p-bk', 'Backupable',
-      [{ kind: 'request-header', id: 'm1', name: 'X-Restored-Id', value: 'rst-{{uuid}}', enabled: true }],
-      []), active: false },
+      [{ kind: 'request-header', id: 'm1', name: 'X-Restored-Id', value: 'rst-{{uuid}}', enabled: true }]), active: false },
   ]);
   await popup.reload();
   await popup.getByRole('switch', { name: 'Toggle Backupable' }).click();
@@ -657,8 +634,7 @@ try {
       [
         { kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
         { kind: 'request-header', id: 'm2', name: 'X-B', value: '2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
-      ],
-      []),
+      ]),
   ]);
   await pollSessionRuleCount(sw, 2);
 
@@ -673,8 +649,8 @@ try {
 
   // J2: 겹침 경고가 요약에 노출된다 (두 활성 Profile이 같은 헤더 수정)
   await seedProfiles([
-    baseProfile('p-x', 'X', [{ kind: 'request-header', id: 'm1', name: 'X-Dup', value: 'a', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }], []),
-    baseProfile('p-y', 'Y', [{ kind: 'request-header', id: 'm2', name: 'X-Dup', value: 'b', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }], []),
+    baseProfile('p-x', 'X', [{ kind: 'request-header', id: 'm1', name: 'X-Dup', value: 'a', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }]),
+    baseProfile('p-y', 'Y', [{ kind: 'request-header', id: 'm2', name: 'X-Dup', value: 'b', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }]),
   ]);
   await tabApp.reload();
   const overlapShown = await tabApp
@@ -685,7 +661,7 @@ try {
 
   // J3: 대형 편집기로 긴 값을 저장하면 반영된다
   await seedProfiles([
-    baseProfile('p-le', 'LE', [{ kind: 'request-header', id: 'm1', name: 'X-Long', value: 'short', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }], []),
+    baseProfile('p-le', 'LE', [{ kind: 'request-header', id: 'm1', name: 'X-Long', value: 'short', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }]),
   ]);
   await tabApp.reload();
   // 대형 편집기는 규칙 폼 안에 있다 — Edit로 폼을 연다 (ADR 0006)
@@ -718,8 +694,7 @@ try {
   // K1: Response Header 수정이 실응답에 반영된다
   await seedProfiles([
     baseProfile('p-res', 'Res',
-      [hdr({ kind: 'response-header', id: 'm1', name: 'X-Injected-Resp', value: 'yes' })],
-      []),
+      [hdr({ kind: 'response-header', id: 'm1', name: 'X-Injected-Resp', value: 'yes' })]),
   ]);
   await pollSessionRuleCount(sw, 1);
   const respHeader = await pageB.evaluate(async () => {
@@ -730,12 +705,12 @@ try {
 
   // K2: send-empty는 빈 문자열을, remove는 헤더 자체를 없앤다 (직접 대조)
   await seedProfiles([
-    baseProfile('p-se', 'Se', [hdr({ id: 'm1', name: 'X-Empty-Test', value: '', emptyMeans: 'send-empty' })], []),
+    baseProfile('p-se', 'Se', [hdr({ id: 'm1', name: 'X-Empty-Test', value: '', emptyMeans: 'send-empty' })]),
   ]);
   await pollSessionRuleCount(sw, 1);
   const sentEmpty = await fetchEchoHeaders(pageB, '/headers');
   await seedProfiles([
-    baseProfile('p-rm3', 'Rm', [hdr({ id: 'm1', name: 'X-Empty-Test', value: '', emptyMeans: 'remove' })], []),
+    baseProfile('p-rm3', 'Rm', [hdr({ id: 'm1', name: 'X-Empty-Test', value: '', emptyMeans: 'remove' })]),
   ]);
   await new Promise((r) => setTimeout(r, 300));
   const afterRemove = await fetchEchoHeaders(pageB, '/headers');
@@ -746,8 +721,7 @@ try {
   // K3: 허용 목록 요청 헤더의 append가 누적된다
   await seedProfiles([
     baseProfile('p-ap', 'Ap',
-      [hdr({ id: 'm1', name: 'Accept-Language', value: 'ko', mode: 'append' })],
-      []),
+      [hdr({ id: 'm1', name: 'Accept-Language', value: 'ko', mode: 'append' })]),
   ]);
   await pollSessionRuleCount(sw, 1);
   const appended = (await fetchEchoHeaders(pageB, '/headers'))['accept-language'];
@@ -761,7 +735,7 @@ try {
     async () => (await chrome.commands.getAll()).some((c) => c.name === 'toggle-pause'),
   );
   await seedProfiles([
-    baseProfile('p-ux', 'Ux', [hdr({ id: 'm1', name: 'X-Ux', value: '1' })], []),
+    baseProfile('p-ux', 'Ux', [hdr({ id: 'm1', name: 'X-Ux', value: '1' })]),
   ]);
   await pollSessionRuleCount(sw, 1);
   await popup.reload();
@@ -772,7 +746,7 @@ try {
 
   // L2: autocomplete 사용자 항목 등록 → datalist 제안에 노출
   await seedProfiles([
-    baseProfile('p-ac', 'Ac', [hdr({ id: 'm1', name: '', value: 'v' })], []),
+    baseProfile('p-ac', 'Ac', [hdr({ id: 'm1', name: '', value: 'v' })]),
   ]);
   await popup.reload();
   // 단일 셸(ADR 0005): 환경설정은 레일 화면 경유, datalist 검사는 프로필 화면 복귀 후
@@ -817,8 +791,7 @@ try {
   // M1: Request Cookie append → Cookie 헤더에 name=value 누적
   await seedProfiles([
     baseProfile('p-ck', 'Ck',
-      [modBase('cookie', { name: 'smoke_sid', value: 'xyz', mode: 'append', emptyMeans: 'remove' })],
-      []),
+      [modBase('cookie', { name: 'smoke_sid', value: 'xyz', mode: 'append', emptyMeans: 'remove' })]),
   ]);
   await pollSessionRuleCount(sw, 1);
   const cookieEcho = await pageB.evaluate(async () => {
@@ -831,8 +804,7 @@ try {
   // M2: Set-Cookie 응답 헤더 주입
   await seedProfiles([
     baseProfile('p-sc', 'Sc',
-      [modBase('set-cookie', { value: 'injected=1; Path=/', mode: 'append', emptyMeans: 'remove' })],
-      []),
+      [modBase('set-cookie', { value: 'injected=1; Path=/', mode: 'append', emptyMeans: 'remove' })]),
   ]);
   await pollSessionRuleCount(sw, 1);
   // 브라우저는 fetch 응답의 Set-Cookie를 JS에 숨기므로, 실제 쿠키가 설정됐는지
@@ -861,8 +833,7 @@ try {
   });
   await seedProfiles([
     baseProfile('p-cko', 'Co',
-      [modBase('cookie', { name: 'session', value: 'new', mode: 'override', emptyMeans: 'remove' })],
-      []),
+      [modBase('cookie', { name: 'session', value: 'new', mode: 'override', emptyMeans: 'remove' })]),
   ]);
   await pollSessionRuleCount(sw, 1);
   const overridden = (await pageB.evaluate(async () => {
@@ -875,8 +846,7 @@ try {
   // M2c: Request Cookie remove는 기존 Cookie가 있어도 헤더를 제거한다
   await seedProfiles([
     baseProfile('p-ckr', 'Cr',
-      [modBase('cookie', { name: 'anything', value: '', mode: 'override', emptyMeans: 'remove' })],
-      []),
+      [modBase('cookie', { name: 'anything', value: '', mode: 'override', emptyMeans: 'remove' })]),
   ]);
   await pollSessionRuleCount(sw, 1);
   const removedCookie = (await pageB.evaluate(async () => {
@@ -890,8 +860,7 @@ try {
   await clearCookies();
   await seedProfiles([
     baseProfile('p-sco', 'So',
-      [modBase('set-cookie', { value: 'replaced=1; Path=/', mode: 'override', emptyMeans: 'remove' })],
-      []),
+      [modBase('set-cookie', { value: 'replaced=1; Path=/', mode: 'override', emptyMeans: 'remove' })]),
   ]);
   await pollSessionRuleCount(sw, 1);
   const afterScOverride = await pageB.evaluate(async () => {
@@ -907,8 +876,7 @@ try {
   await clearCookies();
   await seedProfiles([
     baseProfile('p-scb', 'Sb',
-      [modBase('set-cookie', { value: '', mode: 'override', emptyMeans: 'remove' })],
-      []),
+      [modBase('set-cookie', { value: '', mode: 'override', emptyMeans: 'remove' })]),
   ]);
   await pollSessionRuleCount(sw, 1);
   const afterScBlock = await pageB.evaluate(async () => {
@@ -923,8 +891,7 @@ try {
   // M3: CSP 응답 헤더 합성
   await seedProfiles([
     baseProfile('p-csp', 'Cs',
-      [modBase('csp', { directives: [{ name: 'default-src', value: "'none'" }] })],
-      []),
+      [modBase('csp', { directives: [{ name: 'default-src', value: "'none'" }] })]),
   ]);
   await pollSessionRuleCount(sw, 1);
   const cspHeader = await pageB.evaluate(async () => {
@@ -954,8 +921,7 @@ try {
       [modBase('redirect', {
         pattern: `^http://127\\.0\\.0\\.1:${port}/redir-src(.*)`,
         substitution: `http://127.0.0.1:${port}/redir-dst\\1`,
-      })],
-      []),
+      })]),
   ]);
   await pollSessionRuleCount(sw, 1);
   const landed = await pageB.evaluate(async () => {
@@ -1010,9 +976,8 @@ try {
   // N1: 칩 클릭 → 본문이 해당 프로필로 전환된다
   await seedProfiles([
     baseProfile('n-a', 'Alpha',
-      [{ kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
-      []),
-    { ...baseProfile('n-b', 'Beta', [], []), active: false },
+      [{ kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }]),
+    { ...baseProfile('n-b', 'Beta', []), active: false },
   ]);
   await popup.reload();
   // 커맨드 왕복(add/remove-profile) 후 렌더를 기다리며 이름 입력 값을 폴링한다.
@@ -1072,49 +1037,46 @@ try {
         { kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
         // append 허용목록 헤더 — N7이 폼에서 Append 모드 전환을 검증한다
         { kind: 'request-header', id: 'm2', name: 'Accept', value: 'application/json', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
-      ],
-      [{ kind: 'url', id: 'f1', enabled: true, pattern: 'example\\.com' }]),
+      ]),
   ]);
   await popup.reload();
-  const captionVisible = await popup
-    .getByText('Conditions (whole profile)')
-    .waitFor({ timeout: 5000 })
-    .then(() => true, () => false);
-  const filterRowVisible = await popup.getByText(/example\\.com/).first().isVisible().catch(() => false);
+  // 목록엔 규칙 행만 있다 — 프로필 수준 '적용 조건' 섹션은 퇴역했다 (ADR 0010)
+  await popup.getByRole('button', { name: 'Edit', exact: true }).first().waitFor({ timeout: 5000 });
   const editCount = await popup.getByRole('button', { name: 'Edit', exact: true }).count();
-  record('N5: 통합 목록 — 규칙+조건 캡션+FILTER 행, 탭 없음',
-    captionVisible && filterRowVisible && editCount === 3,
-    `caption=${captionVisible}, filter-row=${filterRowVisible}, edit-buttons=${editCount}`);
+  const profileCaptionGone = !(await popup.getByText('Conditions (whole profile)').isVisible().catch(() => false));
+  record('N5: 목록은 규칙 행만 — 프로필 조건 섹션 퇴역',
+    editCount === 2 && profileCaptionGone,
+    `edit-buttons=${editCount}, profile-caption-gone=${profileCaptionGone}`);
 
-  // N6: 통합 폼 경유 조건 추가·편집·삭제 (optgroup 조건 종류 선택)
-  const pollFilters = (test, timeoutMs = 5000) =>
+  // N6: 폼 조건 disclosure — 제외 도메인 추가 → 요약 표기 → 비우면 conditions 제거 (ADR 0010)
+  const pollFirstMod = (test, timeoutMs = 5000) =>
     pollUntil(
       () => sw.evaluate(async () => {
         const { state } = await chrome.storage.local.get('state');
-        return state.profiles[0]?.filters ?? [];
+        return state.profiles[0]?.modifications[0] ?? null;
       }),
       test,
       timeoutMs,
       100,
     );
-  await popup.getByRole('button', { name: 'Add rule' }).click();
-  await popup.getByLabel('Type', { exact: true }).selectOption({ label: 'URL filter' });
-  await popup.getByLabel('URL pattern').fill('api\\.staging\\.example\\.com');
+  await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
+  await popup.locator('summary', { hasText: 'Conditions' }).click(); // disclosure 열기
+  await popup.getByLabel('Excluded domains').fill('skip.example.com');
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
-  const added = await pollFilters((f) => f.length === 2 && f[1]?.pattern === 'api\\.staging\\.example\\.com');
-  // 조건 편집: 새 조건 행이 렌더된 뒤(Edit 4개) 마지막 Edit → 패턴 변경 → Save
-  await popup.getByRole('button', { name: 'Edit', exact: true }).nth(3).waitFor({ timeout: 5000 });
-  await popup.getByRole('button', { name: 'Edit', exact: true }).last().click();
-  await popup.getByLabel('URL pattern').fill('api\\.prod\\.example\\.com');
-  await popup.getByRole('button', { name: 'Save', exact: true }).click();
-  const edited = await pollFilters((f) => f[1]?.pattern === 'api\\.prod\\.example\\.com');
+  const condAdded = await pollFirstMod((m) => m?.conditions?.excludedDomains?.[0] === 'skip.example.com');
   await waitFormClosed();
-  // 조건 삭제: 마지막 Delete
-  await popup.getByRole('button', { name: 'Delete', exact: true }).last().click();
-  const removed = await pollFilters((f) => f.length === 1);
-  record('N6: 통합 폼 조건 추가·편집·삭제 반영',
-    added.length === 2 && edited[1]?.pattern === 'api\\.prod\\.example\\.com' && removed.length === 1,
-    `added=${added.length}, edited=${edited[1]?.pattern}, after-remove=${removed.length}`);
+  const condSummaryShown = await popup.getByText(/Conditions: 1/).first().isVisible().catch(() => false);
+  // 조건이 있는 규칙의 폼은 disclosure가 열린 채 시작 — 비우면 conditions 자체가 제거된다
+  await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
+  const disclosureOpen = await popup.getByLabel('Excluded domains').isVisible().catch(() => false);
+  await popup.getByLabel('Excluded domains').fill('');
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  const condCleared = await pollFirstMod((m) => m !== null && m.conditions === undefined);
+  await waitFormClosed();
+  record('N6: 폼 조건 편집 — 추가·요약 표기·비우면 제거',
+    condAdded?.conditions?.excludedDomains?.[0] === 'skip.example.com' && condSummaryShown
+      && disclosureOpen && condCleared?.conditions === undefined,
+    `added=${JSON.stringify(condAdded?.conditions)}, summary=${condSummaryShown}, open=${disclosureOpen}, cleared=${condCleared?.conditions === undefined}`);
 
   // N7: 규칙 폼 편집(ADR 0006) — Edit → 모드·메모 변경 → Save가 원자 반영
   const pollMod = (test, timeoutMs = 5000) =>
@@ -1152,11 +1114,9 @@ try {
   // N8: ⋯ 메뉴 이동 → 목록 순서 + 겹침 승자 실반영, 키보드로 복제
   await seedProfiles([
     baseProfile('n-top', 'Top',
-      [{ kind: 'request-header', id: 't1', name: 'X-Conf', value: 'top-wins', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
-      []),
+      [{ kind: 'request-header', id: 't1', name: 'X-Conf', value: 'top-wins', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }]),
     baseProfile('n-bottom', 'Bottom',
-      [{ kind: 'request-header', id: 'b1', name: 'X-Conf', value: 'bottom-wins', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
-      []),
+      [{ kind: 'request-header', id: 'b1', name: 'X-Conf', value: 'bottom-wins', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }]),
   ]);
   await popup.reload();
   await pollSessionRuleCount(sw, 2);
@@ -1199,9 +1159,9 @@ try {
 
   // N9: 탭 앱 셸 — 사이드바 검색·선택, 레일 화면 전환 (슬라이스 08)
   await seedProfiles([
-    baseProfile('s-a', 'Alpha', [], []),
-    { ...baseProfile('s-b', 'Beta', [], []), active: false },
-    { ...baseProfile('s-g', 'Gamma', [], []), active: false },
+    baseProfile('s-a', 'Alpha', []),
+    { ...baseProfile('s-b', 'Beta', []), active: false },
+    { ...baseProfile('s-g', 'Gamma', []), active: false },
   ]);
   await tabApp.reload();
   await tabApp.getByLabel('Search profiles').fill('Bet');
@@ -1242,9 +1202,8 @@ try {
   // N11: 키보드 경로 마감 — 사이드바·행 확장 토글 (탭=N5, 메뉴=N8과 함께 4종 완성)
   await seedProfiles([
     baseProfile('k-a', 'KeyA',
-      [{ kind: 'request-header', id: 'm1', name: 'X-K', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
-      []),
-    { ...baseProfile('k-b', 'KeyB', [], []), active: false },
+      [{ kind: 'request-header', id: 'm1', name: 'X-K', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }]),
+    { ...baseProfile('k-b', 'KeyB', []), active: false },
   ]);
   await popup.reload();
   // 사이드바 항목: 포커스 + Enter → 프로필 전환
@@ -1351,7 +1310,7 @@ try {
     () => sw.evaluate(async () => {
       const { state } = await chrome.storage.local.get('state');
       const prof = state.profiles.find((x) => x.id === 'k-a');
-      return { mods: prof?.modifications ?? [], filters: prof?.filters ?? [] };
+      return { mods: prof?.modifications ?? [] };
     }),
     (s) => s.mods.length === 2 && s.mods[0]?.urlFilter === 'scope=1' && s.mods[0]?.urlMatchType === 'contains',
   );
@@ -1390,11 +1349,11 @@ try {
     (h) => h['x-k'] === '1',
   );
   record('N15: 규칙 URL 필터 — contains·regex 스코핑, 무스코프 전역, 비우면 해제',
-    kaState.filters.length === 0 && inScope['x-k'] === '1' && inScope['x-u'] === 'u'
+    kaState.mods.length === 2 && inScope['x-k'] === '1' && inScope['x-u'] === 'u'
       && outScope['x-k'] === undefined && outScope['x-u'] === 'u'
       && scopedSummary && regexIn['x-k'] === '1' && regexOut['x-k'] === undefined
       && !cleared.hasFilter && !cleared.hasType && clearedHeaders['x-k'] === '1',
-    `filters=${kaState.filters.length}, contains=[${inScope['x-k']},${outScope['x-k']}], regex=[${regexIn['x-k']},${regexOut['x-k']}], summary=${scopedSummary}, storage-cleared=[${cleared.hasFilter},${cleared.hasType}], cleared=${clearedHeaders['x-k']}`);
+    `mods=${kaState.mods.length}, contains=[${inScope['x-k']},${outScope['x-k']}], regex=[${regexIn['x-k']},${regexOut['x-k']}], summary=${scopedSummary}, storage-cleared=[${cleared.hasFilter},${cleared.hasType}], cleared=${clearedHeaders['x-k']}`);
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

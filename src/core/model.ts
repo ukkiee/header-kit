@@ -11,6 +11,35 @@ export const SCHEMA_VERSION = 1 as const;
 /** 규칙 URL 필터의 매치 방식 (ADR 0008) — 부재 = regex(하위 호환). */
 export type UrlMatchType = 'domain' | 'contains' | 'prefix' | 'regex';
 
+/**
+ * 규칙의 적용 조건 (ADR 0010) — 프로필 필터를 대체하는 규칙 단위 조건.
+ * 전부 선택 필드이고, DNR 조건으로 직접 컴파일된다.
+ */
+export interface RuleConditions {
+  /** 이 도메인들(서브도메인 포함)의 요청에는 적용하지 않는다. */
+  excludedDomains?: string[];
+  resourceTypes?: ResourceType[];
+  requestMethods?: RequestMethod[];
+  /** 요청 출처(origin) 도메인 매칭. */
+  initiatorDomains?: string[];
+  /** 이 도메인 탭에서 나가는 요청에만 적용 (탭 전개 → tabIds). */
+  tabDomains?: string[];
+  /** 자동 해제 시각(epoch ms) — 만료 알람이 이 규칙만 끈다. */
+  expiresAt?: number;
+}
+
+/** 조건 객체 정리 — 빈 필드는 벗기고, 전부 비면 undefined. */
+export function normalizeConditions(conditions: RuleConditions): RuleConditions | undefined {
+  const next: RuleConditions = {};
+  if (conditions.excludedDomains?.length) next.excludedDomains = conditions.excludedDomains;
+  if (conditions.resourceTypes?.length) next.resourceTypes = conditions.resourceTypes;
+  if (conditions.requestMethods?.length) next.requestMethods = conditions.requestMethods;
+  if (conditions.initiatorDomains?.length) next.initiatorDomains = conditions.initiatorDomains;
+  if (conditions.tabDomains?.length) next.tabDomains = conditions.tabDomains;
+  if (conditions.expiresAt !== undefined) next.expiresAt = conditions.expiresAt;
+  return Object.keys(next).length > 0 ? next : undefined;
+}
+
 export type HeaderMode = 'override' | 'append';
 /** 값이 비었을 때의 의미 — 헤더 제거 vs 빈 값 전송. */
 export type EmptyValueMeaning = 'remove' | 'send-empty';
@@ -30,6 +59,8 @@ interface HeaderModificationBase {
   urlFilter?: string;
   /** urlFilter의 매치 방식 (ADR 0008) — 부재 = regex. */
   urlMatchType?: UrlMatchType;
+  /** 적용 조건 (ADR 0010) — 없으면 무조건 적용. */
+  conditions?: RuleConditions;
 }
 
 export interface RequestHeaderModification extends HeaderModificationBase {
@@ -59,6 +90,8 @@ export interface CookieModification {
   urlFilter?: string;
   /** urlFilter의 매치 방식 (ADR 0008) — 부재 = regex. */
   urlMatchType?: UrlMatchType;
+  /** 적용 조건 (ADR 0010) — 없으면 무조건 적용. */
+  conditions?: RuleConditions;
 }
 
 /**
@@ -77,6 +110,8 @@ export interface SetCookieModification {
   urlFilter?: string;
   /** urlFilter의 매치 방식 (ADR 0008) — 부재 = regex. */
   urlMatchType?: UrlMatchType;
+  /** 적용 조건 (ADR 0010) — 없으면 무조건 적용. */
+  conditions?: RuleConditions;
 }
 
 export interface CspDirective {
@@ -95,12 +130,16 @@ export interface CspModification {
   urlFilter?: string;
   /** urlFilter의 매치 방식 (ADR 0008) — 부재 = regex. */
   urlMatchType?: UrlMatchType;
+  /** 적용 조건 (ADR 0010) — 없으면 무조건 적용. */
+  conditions?: RuleConditions;
 }
 
 /** Redirect — regex 매칭 + 캡처 그룹 치환으로 URL을 재작성한다. */
 export interface RedirectModification {
   kind: 'redirect';
   id: string;
+  /** 적용 조건 (ADR 0010) — 없으면 무조건 적용. */
+  conditions?: RuleConditions;
   /** 매칭 regex (regexFilter). */
   pattern: string;
   /** 치환 문자열. `\1`~`\9` 캡처 그룹 (regexSubstitution). */
@@ -137,8 +176,8 @@ export function placeholderTemplate(modification: Modification): string | null {
 export type ModificationKind = Modification['kind'];
 
 /**
- * Filter도 kind 판별 union이다. 같은 kind끼리 OR, 다른 kind끼리 AND로
- * 합성된다 (PRD Filter 의미론). Tab 계열·Time Filter는 이슈 06에서 추가된다.
+ * 레거시 프로필 Filter (ADR 0010 이전). 저장·import 마이그레이션의 입력
+ * 검증에만 쓰인다 — 새 데이터는 규칙별 RuleConditions로 표현된다.
  */
 export type Filter =
   | { kind: 'url'; id: string; enabled: boolean; pattern: string }
@@ -152,35 +191,6 @@ export type Filter =
   | { kind: 'tab-domain'; id: string; enabled: boolean; domain: string }
   | { kind: 'time'; id: string; enabled: boolean; expiresAt: number };
 
-export type FilterKind = Filter['kind'];
-
-/** 탭·그룹·창 Filter의 "아직 선택되지 않음" 값 — 컴파일에서 무시된다. */
-export const UNSET_ID = -1;
-
-export function createFilter(kind: FilterKind, id: string = crypto.randomUUID()): Filter {
-  switch (kind) {
-    case 'url':
-    case 'exclude-url':
-      return { kind, id, enabled: true, pattern: '' };
-    case 'resource-type':
-      return { kind, id, enabled: true, resourceTypes: [] };
-    case 'request-method':
-      return { kind, id, enabled: true, methods: [] };
-    case 'initiator-domain':
-    case 'tab-domain':
-      return { kind, id, enabled: true, domain: '' };
-    case 'tab':
-      return { kind, id, enabled: true, tabId: UNSET_ID };
-    case 'tab-group':
-      return { kind, id, enabled: true, groupId: UNSET_ID };
-    case 'window':
-      return { kind, id, enabled: true, windowId: UNSET_ID };
-    case 'time':
-      return { kind, id, enabled: true, expiresAt: 0 };
-    default:
-      return kind satisfies never;
-  }
-}
 
 export interface Profile {
   id: string;
@@ -192,8 +202,6 @@ export interface Profile {
   color: string;
   /** 종류를 가로지르는 단일 순서 — 충돌 의미론의 우선순위 세분에 쓰인다. */
   modifications: Modification[];
-  /** 이 Profile의 Modification이 적용될 요청 범위를 좁히는 조건들. */
-  filters: Filter[];
 }
 
 export interface StoredState {
@@ -229,7 +237,6 @@ export function createProfile(
     shortLabel: options.shortLabel ?? name.charAt(0).toUpperCase(),
     color: options.color ?? PROFILE_COLORS[0],
     modifications: [],
-    filters: [],
   };
 }
 

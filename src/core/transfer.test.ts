@@ -1,16 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { applyCommand } from './commands';
 import type { MaterializeDeps } from './placeholder';
-import type { Filter, Modification, Profile, StoredState } from './schema';
-import { SCHEMA_VERSION, UNSET_ID } from './schema';
-import { exportProfiles, parseImport, serializeExport } from './transfer';
+import type { Filter, Profile, RequestHeaderModification, StoredState } from './schema';
+import { SCHEMA_VERSION } from './schema';
+import {
+  exportProfiles,
+  normalizeImportedProfiles,
+  parseImport,
+  serializeExport,
+} from './transfer';
 
 function stubDeps(): MaterializeDeps {
   let n = 0;
   return { uuid: () => `uuid-${++n}`, now: () => 42 };
 }
 
-function mod(id: string, value = 'v'): Modification {
+function mod(id: string, value = 'v'): RequestHeaderModification {
   return {
     kind: 'request-header',
     id,
@@ -31,13 +36,17 @@ function profile(overrides: Partial<Profile> = {}): Profile {
     shortLabel: 'A',
     color: '#2563eb',
     modifications: [mod('m1', 'trace-{{uuid}}')],
-    filters: [
-      { kind: 'url', id: 'f1', enabled: true, pattern: 'api\\.example\\.com' },
-      { kind: 'tab', id: 'f2', enabled: true, tabId: 123 },
-      { kind: 'tab-domain', id: 'f3', enabled: true, domain: 'example.com' },
-    ],
     ...overrides,
   };
+}
+
+/** 레거시 export 항목 — Profile 타입에서 제거된 filters 배열을 실은 형태 (ADR 0010 이전). */
+function legacyEntry(filters: Filter[], overrides: Partial<Profile> = {}): Record<string, unknown> {
+  return { ...profile(overrides), filters };
+}
+
+function importText(profiles: unknown[]): string {
+  return JSON.stringify({ headerkit: 1, profiles });
 }
 
 function state(profiles: Profile[], materialized: Record<string, string> = {}): StoredState {
@@ -64,6 +73,8 @@ describe('exportProfiles', () => {
     expect(text).toContain('trace-{{uuid}}');
     expect(text).not.toContain('SECRET-VALUE');
     expect(text).not.toContain('materialized');
+    // Profile 필터는 제거됐다 (ADR 0010) — export에 filters 구역이 없다
+    expect(text).not.toContain('"filters"');
   });
 });
 
@@ -82,9 +93,9 @@ describe('parseImport', () => {
     expect(imported.id).not.toBe(original.id);
     expect(imported.modifications[0]).toMatchObject({ name: 'X-m1', value: 'trace-{{uuid}}' });
     expect(imported.modifications[0]?.id).not.toBe('m1');
-    expect(imported.filters.find((f) => f.kind === 'url')).toMatchObject({
-      pattern: 'api\\.example\\.com',
-    });
+    // 현행 export에는 레거시 필터가 없다 — 알림도, filters 잔재도 없다
+    expect('filters' in imported).toBe(false);
+    expect(result.notices).toEqual([]);
   });
 
   it('두 번 Import해도 id가 전부 새로 나와 충돌하지 않는다', () => {
@@ -99,18 +110,93 @@ describe('parseImport', () => {
     );
   });
 
-  it('탭·그룹·창 참조는 정리(UNSET_ID)되고 알림이 남는다 — 다른 세션의 id는 무의미', () => {
-    const text = serializeExport(exportProfiles(state([profile()]), ['p1']));
+  it('레거시 filters는 규칙 단위 조건으로 이주된다 — URL은 OR 조인, 나머지는 conditions 복사', () => {
+    const text = importText([
+      legacyEntry(
+        [
+          { kind: 'url', id: 'f1', enabled: true, pattern: 'api\\.example\\.com' },
+          { kind: 'url', id: 'f2', enabled: true, pattern: 'cdn\\.example\\.com' },
+          { kind: 'url', id: 'f3', enabled: false, pattern: 'disabled\\.example' },
+          { kind: 'request-method', id: 'f4', enabled: true, methods: ['get', 'post'] },
+          { kind: 'tab-domain', id: 'f5', enabled: true, domain: 'example.com' },
+          { kind: 'time', id: 'f6', enabled: true, expiresAt: 500 },
+          { kind: 'time', id: 'f7', enabled: true, expiresAt: 200 },
+        ],
+        {
+          modifications: [
+            mod('m1'),
+            { ...mod('m2'), urlFilter: 'own\\.example', urlMatchType: 'contains' },
+          ],
+        },
+      ),
+    ]);
+
+    const result = parseImport(text);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const imported = result.profiles[0]!;
+    // 이주 후 결과에 filters는 남지 않는다
+    expect('filters' in imported).toBe(false);
+    // 자체 스코프 없는 규칙: 활성 URL 필터만 OR-조인 regex로 이식된다 (비활성 제외)
+    expect(imported.modifications[0]).toMatchObject({
+      urlFilter: '(?:api\\.example\\.com)|(?:cdn\\.example\\.com)',
+      urlMatchType: 'regex',
+    });
+    // 자체 스코프가 있는 규칙은 건드리지 않는다 (ADR 0007: 자체가 우선)
+    expect(imported.modifications[1]).toMatchObject({
+      urlFilter: 'own\\.example',
+      urlMatchType: 'contains',
+    });
+    // 리소스/메서드/도메인 계열은 각 규칙의 conditions로 복사되고, 시간은 최솟값이다
+    for (const m of imported.modifications) {
+      expect(m.conditions).toEqual({
+        requestMethods: ['get', 'post'],
+        tabDomains: ['example.com'],
+        expiresAt: 200,
+      });
+    }
+    expect(result.notices).toContainEqual(
+      expect.stringContaining('migrated to per-rule conditions'),
+    );
+  });
+
+  it('규칙 단위 대응물이 없는 레거시 필터(exclude-url·탭·그룹·창)는 소실되고 알림이 남는다', () => {
+    const text = importText([
+      legacyEntry([
+        { kind: 'exclude-url', id: 'x1', enabled: true, pattern: 'skip\\.example' },
+        { kind: 'tab', id: 'x2', enabled: true, tabId: 123 },
+        { kind: 'window', id: 'x3', enabled: true, windowId: 7 },
+      ]),
+    ]);
+
     const result = parseImport(text);
     if (!result.ok) throw new Error('unexpected');
 
-    const tabFilter = result.profiles[0]!.filters.find((f) => f.kind === 'tab');
-    expect(tabFilter).toMatchObject({ tabId: UNSET_ID });
-    expect(result.notices).toContainEqual(expect.stringContaining('Alpha'));
+    const imported = result.profiles[0]!;
+    expect('filters' in imported).toBe(false);
+    // 대응물이 없으므로 규칙에는 아무것도 이식되지 않는다
+    expect(imported.modifications[0]).not.toHaveProperty('urlFilter');
+    expect(imported.modifications[0]?.conditions).toBeUndefined();
+    expect(result.notices).toEqual([expect.stringContaining('3 legacy filter(s)')]);
+    expect(result.notices[0]).toContain('dropped');
+    expect(result.notices[0]).toContain('Alpha');
+  });
 
-    // tab-domain은 도메인 문자열이라 보존된다
-    const domainFilter = result.profiles[0]!.filters.find((f) => f.kind === 'tab-domain');
-    expect(domainFilter).toMatchObject({ domain: 'example.com' });
+  it('레거시 filters가 있으면 형을 검증한다 — 무효 항목은 전량 거부', () => {
+    const bad = {
+      headerkit: 1,
+      profiles: [
+        legacyEntry([{ kind: 'url', id: 'f1', enabled: true } as unknown as Filter]),
+        { ...profile(), filters: 'nope' },
+      ],
+    };
+
+    const result = parseImport(JSON.stringify(bad));
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.join('\n')).toMatch(/profiles\[0\].*filters\[0\]: invalid filter/);
+    expect(result.errors.join('\n')).toMatch(/profiles\[1\].*filters: expected array/);
   });
 
   it('깨진 JSON은 거부된다', () => {
@@ -145,18 +231,16 @@ describe('parseImport', () => {
 });
 
 describe('normalizeImportedProfiles', () => {
-  it('이미 미설정(UNSET_ID)인 탭 참조에는 알림을 만들지 않는다', async () => {
-    const { normalizeImportedProfiles } = await import('./transfer');
-    const clean = profile({
-      filters: [{ kind: 'tab', id: 'f', enabled: true, tabId: UNSET_ID }],
-    });
+  it('빈 레거시 filters 배열은 알림 없이 제거된다', () => {
+    const { profiles, notices } = normalizeImportedProfiles([
+      legacyEntry([]) as unknown as Profile,
+    ]);
 
-    const { notices } = normalizeImportedProfiles([clean]);
     expect(notices).toEqual([]);
+    expect('filters' in profiles[0]!).toBe(false);
   });
 
-  it('배지 라벨 불변식(2자)을 강제한다', async () => {
-    const { normalizeImportedProfiles } = await import('./transfer');
+  it('배지 라벨 불변식(2자)을 강제한다', () => {
     const { profiles } = normalizeImportedProfiles([profile({ shortLabel: 'IMPORT' })]);
 
     expect(profiles[0]?.shortLabel).toBe('IM');

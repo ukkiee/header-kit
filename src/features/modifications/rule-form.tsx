@@ -3,18 +3,14 @@ import { Plus } from 'lucide-react';
 import type { MessageKey } from '@/core/i18n';
 import { isRequestAppendAllowed } from '@/core/rules';
 import {
-  createFilter,
   createModification,
+  normalizeConditions,
   type CspModification,
-  type Filter,
-  type FilterKind,
   type Modification,
   type ModificationKind,
   type UrlMatchType,
 } from '@/core/schema';
-import type { TabPickerOptions } from '@/platform/tabs';
-import { FilterEditor } from '@/features/filters/filter-editor';
-import { FILTER_KIND_LABELS } from '@/features/filters/filter-summary';
+import { RuleConditionsFields } from './rule-conditions-fields';
 import { hasPlaceholders } from '@/core/placeholder';
 import { Alert } from '@/ui/alert';
 import { Button } from '@/ui/button';
@@ -25,18 +21,13 @@ import { Select } from '@/ui/select';
 import { useT } from '@/ui/i18n-context';
 import { HeaderNameInput } from './header-name-input';
 
-/** 폼이 다루는 항목 — 규칙(Modification) 또는 적용 조건(Filter) (ADR 0009). */
-export type FormItem = Modification | Filter;
-
 export interface RuleFormProps {
-  /** 편집이면 기존 항목, 생성이면 undefined. */
-  initial?: FormItem;
+  /** 편집이면 기존 규칙, 생성이면 undefined. */
+  initial?: Modification;
   /** 저장 — 권위 실행 결과를 돌려받아 거부(예: invalid regex)를 폼 안에서 보여준다. */
-  onSave: (item: FormItem) => Promise<{ ok: boolean; error?: string }>;
+  onSave: (modification: Modification) => Promise<{ ok: boolean; error?: string }>;
   onCancel: () => void;
   userHeaders?: readonly string[];
-  /** 탭 계열 조건 선택기의 표시 옵션. */
-  pickerOptions?: TabPickerOptions;
 }
 
 const RULE_KINDS: ModificationKind[] = [
@@ -47,26 +38,6 @@ const RULE_KINDS: ModificationKind[] = [
   'csp',
   'redirect',
 ];
-
-const FILTER_KINDS: FilterKind[] = [
-  'url',
-  'exclude-url',
-  'resource-type',
-  'request-method',
-  'initiator-domain',
-  'tab',
-  'tab-group',
-  'window',
-  'tab-domain',
-  'time',
-];
-
-const RULE_KIND_SET = new Set<string>(RULE_KINDS);
-
-/** Modification과 Filter는 kind 값 공간이 겹치지 않는다 — kind만으로 판별한다. */
-export function isRuleItem(item: FormItem): item is Modification {
-  return RULE_KIND_SET.has(item.kind);
-}
 
 /** 라벨 위, 입력 아래 — 폼 필드 공통 셸. */
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -82,13 +53,12 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
  * 규칙 폼 (ADR 0006) — 종류를 고르면 그 종류의 필드가 나타나고, Save가 규칙
  * 전체를 원자적으로 저장한다. 초안은 로컬 — 취소가 아무것도 흘리지 않는다.
  */
-export function RuleForm({ initial, onSave, onCancel, userHeaders = [], pickerOptions }: RuleFormProps) {
+export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFormProps) {
   const t = useT();
-  const [draft, setDraft] = useState<FormItem>(() => initial ?? createModification('request-header'));
+  const [draft, setDraft] = useState<Modification>(() => initial ?? createModification('request-header'));
   // 매치 방식 기본값: 기존 규칙에 필터가 있었으면 regex(하위 호환), 아니면 contains.
   const defaultMatchType: UrlMatchType =
-    initial && isRuleItem(initial) && 'urlFilter' in initial && initial.urlFilter ? 'regex' : 'contains';
-  const isRule = isRuleItem(draft);
+    initial && 'urlFilter' in initial && initial.urlFilter ? 'regex' : 'contains';
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -101,30 +71,37 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [], pickerOp
     redirect: 'modRedirect',
   };
 
-  const switchKind = (kind: ModificationKind | FilterKind) => {
+  const switchKind = (kind: ModificationKind) => {
     if (kind === draft.kind) return;
-    // 종류 전환은 새 초안 — 공유 가능한 건 id/enabled(+규칙 간 메모)뿐이다.
-    if (RULE_KIND_SET.has(kind)) {
-      const next = createModification(kind as ModificationKind, draft.id);
-      const comment = isRuleItem(draft) ? draft.comment : '';
-      setDraft({ ...next, enabled: draft.enabled, comment } as Modification);
-    } else {
-      const next = createFilter(kind as FilterKind, draft.id);
-      setDraft({ ...next, enabled: draft.enabled } as Filter);
-    }
+    // 종류 전환은 새 초안 — 공유 가능한 건 id/enabled/메모/조건뿐이다.
+    const next = createModification(kind, draft.id);
+    setDraft({
+      ...next,
+      enabled: draft.enabled,
+      comment: draft.comment,
+      ...(draft.conditions ? { conditions: draft.conditions } : {}),
+    } as Modification);
   };
 
   const save = async () => {
     setSaving(true);
     // 스코프 정리: 필터가 비면 매치 방식도 벗기고, 있으면 셀렉트 기본값을 확정한다.
     let toSave = draft;
-    if (isRuleItem(draft) && draft.kind !== 'redirect' && 'urlFilter' in draft) {
+    if (draft.kind !== 'redirect' && 'urlFilter' in draft) {
       if (!draft.urlFilter) {
         const { urlFilter: _f, urlMatchType: _m, ...rest } = draft;
         toSave = rest as Modification;
       } else if (!('urlMatchType' in draft) || draft.urlMatchType === undefined) {
         toSave = { ...draft, urlMatchType: defaultMatchType } as Modification;
       }
+    }
+    // 조건 정리: 빈 필드 제거, 전부 비면 conditions 자체를 벗긴다.
+    const normalized = normalizeConditions(toSave.conditions ?? {});
+    if (normalized) {
+      toSave = { ...toSave, conditions: normalized } as Modification;
+    } else if (toSave.conditions !== undefined) {
+      const { conditions: _c, ...rest } = toSave;
+      toSave = rest as Modification;
     }
     const result = await onSave(toSave);
     setSaving(false);
@@ -153,26 +130,17 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [], pickerOp
           size="md"
           value={draft.kind}
           aria-label={t('ruleKind')}
-          onChange={(e) => switchKind(e.target.value as ModificationKind | FilterKind)}
+          onChange={(e) => switchKind(e.target.value as ModificationKind)}
         >
-          <optgroup label={t('groupRules')}>
-            {RULE_KINDS.map((kind) => (
-              <option key={kind} value={kind}>
-                {t(KIND_LABELS[kind])}
-              </option>
-            ))}
-          </optgroup>
-          <optgroup label={t('conditionsCaption')}>
-            {FILTER_KINDS.map((kind) => (
-              <option key={kind} value={kind}>
-                {t(FILTER_KIND_LABELS[kind])}
-              </option>
-            ))}
-          </optgroup>
+          {RULE_KINDS.map((kind) => (
+            <option key={kind} value={kind}>
+              {t(KIND_LABELS[kind])}
+            </option>
+          ))}
         </Select>
       </Field>
 
-      {isRule && draft.kind !== 'redirect' && (
+      {draft.kind !== 'redirect' && (
         <Field label={t('urlFilterScope')}>
           <div className="flex items-center gap-1.5">
             <Select
@@ -349,22 +317,26 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [], pickerOp
         </>
       )}
 
-      {!isRule && (
-        <FilterEditor
-          filter={draft}
-          onChange={(next) => setDraft(next)}
-          pickerOptions={pickerOptions}
-        />
-      )}
-
-      {isRule && (
-        <Field label={t('comment')}>
-          <Input
-            value={draft.comment}
-            onChange={(e) => setDraft({ ...draft, comment: e.target.value } as Modification)}
+      {/* 조건 (ADR 0010) — 접이식, 기존 조건이 있으면 펼쳐서 시작 */}
+      <details open={draft.conditions !== undefined} className="group">
+        <summary className="cursor-pointer list-none text-xs font-medium text-zinc-500 select-none hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200">
+          <span className="mr-1 inline-block transition-transform group-open:rotate-90">›</span>
+          {t('conditionsCaption')}
+        </summary>
+        <div className="pt-3">
+          <RuleConditionsFields
+            conditions={draft.conditions ?? {}}
+            onChange={(conditions) => setDraft({ ...draft, conditions } as Modification)}
           />
-        </Field>
-      )}
+        </div>
+      </details>
+
+      <Field label={t('comment')}>
+        <Input
+          value={draft.comment}
+          onChange={(e) => setDraft({ ...draft, comment: e.target.value } as Modification)}
+        />
+      </Field>
 
       {error && (
         <Alert severity="danger" role="alert">

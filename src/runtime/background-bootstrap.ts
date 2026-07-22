@@ -1,7 +1,7 @@
 import { backupPayload } from '@/core/backup';
 import type { Command } from '@/core/commands';
 import { compile, type TabInfo } from '@/core/compile';
-import { hasExpiredProfiles } from '@/core/expiry';
+import { hasExpiredRules } from '@/core/expiry';
 import type { NetRule } from '@/core/rules';
 import type { StoredState } from '@/core/schema';
 import { summarizeCompile, type StatusSummary } from '@/core/summary';
@@ -90,9 +90,9 @@ export function bootstrap(deps: BackgroundDeps): void {
         }),
       );
       // 이미 지난 만료는 알람을 기다리지 않고 즉시 만료 전이를 태운다.
-      if (hasExpiredProfiles(snapshot.state, snapshot.now)) {
+      if (hasExpiredRules(snapshot.state, snapshot.now)) {
         void executor
-          .execute({ type: 'expire-profiles', now: snapshot.now })
+          .execute({ type: 'expire-rules', now: snapshot.now })
           .catch((error) => deps.logError('expiry failed', error));
       }
     },
@@ -140,7 +140,7 @@ export function bootstrap(deps: BackgroundDeps): void {
   deps.onExpiryAlarm(() => {
     // 만료 전이도 단일 writer 경로를 지난다 — 저장 변경이 재컴파일·배지를 촉발한다.
     void executor
-      .execute({ type: 'expire-profiles', now: deps.now() })
+      .execute({ type: 'expire-rules', now: deps.now() })
       .catch((error) => deps.logError('expiry failed', error));
   });
 

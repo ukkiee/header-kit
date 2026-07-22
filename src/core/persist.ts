@@ -21,6 +21,26 @@ function isHeaderish(value: Record<string, unknown>): boolean {
   );
 }
 
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((x) => typeof x === 'string');
+}
+
+/** 규칙 조건(ADR 0010) 형 검증 — 선택 객체, 각 필드도 선택. */
+function isRuleConditions(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!isRecord(value)) return false;
+  return (
+    (value.excludedDomains === undefined || isStringArray(value.excludedDomains)) &&
+    (value.resourceTypes === undefined ||
+      (Array.isArray(value.resourceTypes) && value.resourceTypes.every(isResourceType))) &&
+    (value.requestMethods === undefined ||
+      (Array.isArray(value.requestMethods) && value.requestMethods.every(isRequestMethod))) &&
+    (value.initiatorDomains === undefined || isStringArray(value.initiatorDomains)) &&
+    (value.tabDomains === undefined || isStringArray(value.tabDomains)) &&
+    (value.expiresAt === undefined || typeof value.expiresAt === 'number')
+  );
+}
+
 export function isModification(value: unknown): value is Modification {
   if (
     !isRecord(value) ||
@@ -31,7 +51,8 @@ export function isModification(value: unknown): value is Modification {
     (value.urlFilter !== undefined && (typeof value.urlFilter !== 'string' || value.kind === 'redirect')) ||
     // 매치 방식(ADR 0008)은 enum — backfill이 무효값을 치유한 뒤라 여기선 형만 지킨다.
     (value.urlMatchType !== undefined &&
-      !['domain', 'contains', 'prefix', 'regex'].includes(value.urlMatchType as string))
+      !['domain', 'contains', 'prefix', 'regex'].includes(value.urlMatchType as string)) ||
+    !isRuleConditions(value.conditions)
   ) {
     return false;
   }
@@ -102,9 +123,7 @@ function isProfile(value: unknown): value is Profile {
     typeof value.shortLabel === 'string' &&
     typeof value.color === 'string' &&
     Array.isArray(value.modifications) &&
-    value.modifications.every(isModification) &&
-    Array.isArray(value.filters) &&
-    value.filters.every(isFilter)
+    value.modifications.every(isModification)
   );
 }
 
@@ -138,14 +157,82 @@ export function backfillModification(value: unknown): unknown {
  */
 function backfillProfile(value: unknown): unknown {
   if (!isRecord(value)) return value;
-  return {
+  const base = {
     shortLabel: typeof value.name === 'string' ? value.name.charAt(0).toUpperCase() : '',
     color: PROFILE_COLORS[0],
-    filters: [],
     ...value,
     modifications: Array.isArray(value.modifications)
       ? value.modifications.map(backfillModification)
       : value.modifications,
+  };
+  return migrateProfileFilters(base);
+}
+
+/**
+ * 프로필 수준 필터 → 규칙 conditions 마이그레이션 (ADR 0010, 의미론 보존).
+ * URL 조인(OR)은 자체 스코프 없는 규칙의 regex 스코프로, 리소스/메서드/initiator/
+ * 탭 도메인은 conditions 배열로, 시간은 최솟값으로 복사한다. 제외 URL과
+ * 탭/그룹/창 피커는 규칙 단위 대응물이 없어 소실된다(ADR 명시).
+ */
+export function migrateProfileFilters(value: Record<string, unknown>): Record<string, unknown> {
+  const filters = value.filters;
+  if (!Array.isArray(filters)) return value;
+  const { filters: _dropped, ...profile } = value;
+  if (!Array.isArray(profile.modifications)) return profile;
+
+  const enabled = filters.filter(
+    (f): f is Record<string, unknown> => isRecord(f) && f.enabled === true,
+  );
+  const byKind = (kind: string) => enabled.filter((f) => f.kind === kind);
+
+  const urlJoin = byKind('url')
+    .map((f) => (typeof f.pattern === 'string' ? f.pattern.trim() : ''))
+    .filter((x) => x !== '')
+    .map((x) => `(?:${x})`)
+    .join('|');
+  const strings = (kind: string, field: string) =>
+    byKind(kind)
+      .map((f) => (typeof f[field] === 'string' ? (f[field] as string).trim() : ''))
+      .filter((x) => x !== '');
+  const resourceTypes = [...new Set(byKind('resource-type').flatMap((f) =>
+    Array.isArray(f.resourceTypes) ? f.resourceTypes : []))];
+  const requestMethods = [...new Set(byKind('request-method').flatMap((f) =>
+    Array.isArray(f.methods) ? f.methods : []))];
+  const initiatorDomains = [...new Set(strings('initiator-domain', 'domain'))];
+  const tabDomains = [...new Set(strings('tab-domain', 'domain'))];
+  const expiries = byKind('time')
+    .map((f) => f.expiresAt)
+    .filter((x): x is number => typeof x === 'number');
+  const expiresAt = expiries.length > 0 ? Math.min(...expiries) : undefined;
+
+  const conditions: Record<string, unknown> = {};
+  if (resourceTypes.length > 0) conditions.resourceTypes = resourceTypes;
+  if (requestMethods.length > 0) conditions.requestMethods = requestMethods;
+  if (initiatorDomains.length > 0) conditions.initiatorDomains = initiatorDomains;
+  if (tabDomains.length > 0) conditions.tabDomains = tabDomains;
+  if (expiresAt !== undefined) conditions.expiresAt = expiresAt;
+  const hasConditions = Object.keys(conditions).length > 0;
+  if (urlJoin === '' && !hasConditions) return profile;
+
+  return {
+    ...profile,
+    modifications: profile.modifications.map((m) => {
+      if (!isRecord(m)) return m;
+      const next: Record<string, unknown> = { ...m };
+      // URL 조인은 자체 스코프가 없는 비-redirect 규칙에만 (0007: 자체가 우선)
+      if (
+        urlJoin !== '' &&
+        m.kind !== 'redirect' &&
+        (typeof m.urlFilter !== 'string' || m.urlFilter.trim() === '')
+      ) {
+        next.urlFilter = urlJoin;
+        next.urlMatchType = 'regex';
+      }
+      if (hasConditions) {
+        next.conditions = { ...conditions, ...(isRecord(m.conditions) ? m.conditions : {}) };
+      }
+      return next;
+    }),
   };
 }
 

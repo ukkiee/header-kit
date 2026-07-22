@@ -35,14 +35,8 @@ async function validateRegexPattern(pattern: string): Promise<string | null> {
   return isSupported ? null : `Invalid regex pattern (${reason ?? 'unsupported'})`;
 }
 
-/** 저장 시점 검증: regex Filter·Redirect 패턴은 플랫폼이 실제 지원하는지 확인 후에만 저장된다. */
+/** 저장 시점 검증: regex 스코프·Redirect 패턴은 플랫폼이 실제 지원하는지 확인 후에만 저장된다. */
 async function validateCommand(command: Command): Promise<string | null> {
-  if (command.type === 'add-filter' || command.type === 'update-filter') {
-    const filter = command.filter;
-    if (filter.kind !== 'url' && filter.kind !== 'exclude-url') return null;
-    return validateRegexPattern(filter.pattern);
-  }
-
   if (command.type === 'add-modification' || command.type === 'update-modification') {
     if (command.modification.kind === 'redirect') {
       return validateRegexPattern(command.modification.pattern);
@@ -60,13 +54,6 @@ async function validateCommand(command: Command): Promise<string | null> {
   if (command.type === 'import-profiles') {
     const errors: string[] = [];
     for (const profile of command.profiles) {
-      for (const [index, filter] of profile.filters.entries()) {
-        if (filter.kind !== 'url' && filter.kind !== 'exclude-url') continue;
-        const error = await validateRegexPattern(filter.pattern);
-        if (error !== null) {
-          errors.push(`"${profile.name}" ${filter.kind} filter #${index + 1}: ${error}`);
-        }
-      }
       for (const [index, mod] of profile.modifications.entries()) {
         const pattern =
           mod.kind === 'redirect'

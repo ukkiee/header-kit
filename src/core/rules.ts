@@ -94,6 +94,7 @@ export interface NetRule {
     resourceTypes: ResourceType[];
     requestMethods?: RequestMethod[];
     initiatorDomains?: string[];
+    excludedRequestDomains?: string[];
     /** session rule 전용 조건 — 탭 계열 Filter의 전개 결과. */
     tabIds?: number[];
   };

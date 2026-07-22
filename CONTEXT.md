@@ -5,16 +5,16 @@
 ## Language
 
 **Profile**:
-Modification과 Filter의 이름 있는 묶음. 여러 Profile이 동시에 활성일 수 있다.
+Modification의 이름 있는 묶음. 여러 Profile이 동시에 활성일 수 있다.
 _Avoid_: preset, workspace, 설정 세트
 
 **Modification**:
-Profile에 속한 개별 수정 항목. 종류는 Request Header, Response Header, Request Cookie, Set-Cookie, CSP, Redirect 여섯 가지.
+Profile에 속한 개별 수정 항목. 종류는 Request Header, Response Header, Request Cookie, Set-Cookie, CSP, Redirect 여섯 가지. 자신의 URL 스코프(매치 방식 포함)와 Condition을 직접 들고 다닌다 (ADR 0010).
 _Avoid_: rule (브라우저의 net rule과 혼동), row, entry
 
-**Filter**:
-Profile의 Modification이 적용될 요청 범위를 좁히는 조건. 종류는 URL, Exclude URL, Initiator Domain, Resource Type, Request Method, Tab, Tab Group, Window, Tab Domain, Time.
-_Avoid_: condition, matcher
+**Condition**:
+Modification 하나가 적용될 요청 범위를 좁히는 규칙 단위 조건 — 제외 도메인, Resource Type, Request Method, Initiator Domain, Tab Domain, 자동 해제 시각(expiresAt). 프로필 수준 Filter는 ADR 0010에서 퇴역했고, 그 이름은 레거시 데이터 마이그레이션에서만 쓰인다.
+_Avoid_: filter (레거시 개념과 혼동), matcher
 
 **Override / Append**:
 Modification의 두 가지 적용 방식 — 기존 헤더 값을 통째로 대체(Override, 기본)하거나 기존 값 뒤에 덧붙임(Append).

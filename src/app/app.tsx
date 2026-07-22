@@ -22,7 +22,6 @@ import {
   onSummaryChanged,
   sendCommand,
 } from '@/platform/stateStore';
-import { queryTabPickerOptions, type TabPickerOptions } from '@/platform/tabs';
 
 /** 두 표면은 단일 셸(ADR 0005) — 차이는 크기와 '탭에서 열기' 버튼뿐. */
 export type AppSurface = 'popup' | 'tab';
@@ -42,7 +41,6 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [railView, setRailView] = useState<RailView>('profiles');
   const [commandError, setCommandError] = useState<string | null>(null);
-  const [pickerOptions, setPickerOptions] = useState<TabPickerOptions | undefined>(undefined);
   const [summary, setSummary] = useState<StatusSummaryData | null>(null);
   const [locale, setLocale] = useState<Locale>('en');
   const [incognitoAllowed, setIncognitoAllowed] = useState<boolean | null>(null);
@@ -53,7 +51,6 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
     void getSummary().then(setSummary);
     onStateChanged(() => void loadState().then(setState));
     onSummaryChanged(() => void getSummary().then(setSummary));
-    void queryTabPickerOptions().then(setPickerOptions);
     // URL의 ?locale= 오버라이드를 우선하고(언어 강제), 없으면 브라우저 UI 언어.
     const override = new URLSearchParams(window.location.search).get('locale');
     setLocale(resolveLocale(override ?? browser.i18n.getUILanguage()));
@@ -143,7 +140,6 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
       index={selectedIndex}
       profileCount={state.profiles.length}
       onCommand={dispatch}
-      pickerOptions={pickerOptions}
       userHeaders={state.customHeaderNames}
       onCommandWithResult={dispatchWithResult}
     />

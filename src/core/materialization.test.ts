@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   addModification,
   addProfile,
-  expireProfiles,
+  expireRules,
   removeModification,
   removeProfile,
   toggleProfile,
@@ -42,7 +42,6 @@ function profile(overrides: Partial<Profile> = {}): Profile {
     shortLabel: 'P',
     color: '#2563eb',
     modifications: [mod('m-ph', 'trace-{{uuid}}'), mod('m-plain', 'static')],
-    filters: [],
     ...overrides,
   };
 }
@@ -131,17 +130,17 @@ describe('실체화 수명주기 (활성화 경계)', () => {
     expect(next.materialized).toEqual({ 'm-ph': 'trace-uuid-1' });
   });
 
-  it('만료 경로도 toggleProfile을 경유하므로 실체화가 정리된다', () => {
-    const deps = stubDeps();
+  it('만료 경로(expireRules)는 규칙만 끄고 실체화 값은 보존한다 — 활성화 경계가 아니다', () => {
     const timed = profile({
       active: true,
-      filters: [{ kind: 'time', id: 't', enabled: true, expiresAt: 100 }],
+      modifications: [{ ...mod('m-ph', 'trace-{{uuid}}'), conditions: { expiresAt: 100 } }],
     });
     const withValues = state([timed], { 'm-ph': 'trace-old' });
 
-    const expired = expireProfiles(withValues, 200, deps);
-    expect(expired.profiles[0]?.active).toBe(false);
-    expect(expired.materialized).toEqual({});
+    const expired = expireRules(withValues, 200);
+    expect(expired.profiles[0]?.active).toBe(true);
+    expect(expired.profiles[0]?.modifications[0]?.enabled).toBe(false);
+    expect(expired.materialized).toEqual({ 'm-ph': 'trace-old' });
   });
 });
 

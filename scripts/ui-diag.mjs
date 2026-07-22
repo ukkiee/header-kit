@@ -23,25 +23,23 @@ const richState = {
       shortLabel: 'ST',
       color: '#d97706',
       modifications: [
-        { kind: 'request-header', id: 'm1', name: 'Authorization', value: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.veryLongTokenValueThatShouldNotBreakTheRowLayoutAtAll.{{uuid}}', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '스테이징 토큰' },
-        { kind: 'response-header', id: 'm2', name: 'X-Frame-Options', value: 'DENY', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+        // 조건이 붙은 규칙 (ADR 0010) — 요약의 'Conditions: n' 표기와 폼 disclosure를 감사한다.
+        { kind: 'request-header', id: 'm1', name: 'Authorization', value: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.veryLongTokenValueThatShouldNotBreakTheRowLayoutAtAll.{{uuid}}', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '스테이징 토큰',
+          urlFilter: 'api\\.staging\\.example\\.com',
+          conditions: { resourceTypes: ['xmlhttprequest', 'script'], tabDomains: ['example.com'], expiresAt: Date.now() + 3_600_000 } },
+        { kind: 'response-header', id: 'm2', name: 'X-Frame-Options', value: 'DENY', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
+          conditions: { excludedDomains: ['cdn.example.com'] } },
         { kind: 'cookie', id: 'm3', name: 'session', value: 'abc', enabled: true, mode: 'append', emptyMeans: 'remove', comment: '' },
         { kind: 'csp', id: 'm4', directives: [{ name: 'default-src', value: "'self'" }], comment: '', enabled: true },
         { kind: 'redirect', id: 'm5', pattern: '^https://prod\\.example\\.com/(.*)', substitution: 'http://localhost:3000/\\1', comment: '', enabled: true },
       ],
-      filters: [
-        { kind: 'url', id: 'f1', enabled: true, pattern: 'api\\.staging\\.example\\.com' },
-        { kind: 'resource-type', id: 'f2', enabled: true, resourceTypes: ['xmlhttprequest', 'script'] },
-        { kind: 'tab-domain', id: 'f3', enabled: true, domain: 'example.com' },
-        { kind: 'time', id: 'f4', enabled: true, expiresAt: Date.now() + 3_600_000 },
-      ],
     },
-    { id: 'p2', name: '두 번째 프로필', active: false, shortLabel: '2', color: '#2563eb', modifications: [], filters: [] },
+    { id: 'p2', name: '두 번째 프로필', active: false, shortLabel: '2', color: '#2563eb', modifications: [] },
     // 사이드바 truncate 경계 — 긴 en/ko 이름 + 다수 프로필 (ADR 0005 단일 셸).
-    { id: 'p3', name: '아주 길고 긴 한국어 프로필 이름은 목록에서 잘려야 한다', active: true, shortLabel: '긴', color: '#16a34a', modifications: [], filters: [] },
-    { id: 'p4', name: 'A very long English profile name that must truncate', active: false, shortLabel: 'EN', color: '#dc2626', modifications: [], filters: [] },
-    { id: 'p5', name: 'QA', active: true, shortLabel: 'QA', color: '#7c3aed', modifications: [], filters: [] },
-    { id: 'p6', name: 'Perf', active: false, shortLabel: 'PF', color: '#0891b2', modifications: [], filters: [] },
+    { id: 'p3', name: '아주 길고 긴 한국어 프로필 이름은 목록에서 잘려야 한다', active: true, shortLabel: '긴', color: '#16a34a', modifications: [] },
+    { id: 'p4', name: 'A very long English profile name that must truncate', active: false, shortLabel: 'EN', color: '#dc2626', modifications: [] },
+    { id: 'p5', name: 'QA', active: true, shortLabel: 'QA', color: '#7c3aed', modifications: [] },
+    { id: 'p6', name: 'Perf', active: false, shortLabel: 'PF', color: '#0891b2', modifications: [] },
   ],
 };
 
@@ -102,7 +100,6 @@ try {
     shortLabel: `B${i % 10}`,
     color: '#2563eb',
     modifications: [],
-    filters: [],
   }));
   await sw.evaluate(async (profiles) => {
     const { state } = await chrome.storage.local.get('state');

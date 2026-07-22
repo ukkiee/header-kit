@@ -1,4 +1,4 @@
-import { isProfileExpired } from './expiry';
+import { isRuleExpired } from './expiry';
 import { normalizeImportedProfiles } from './transfer';
 import {
   defaultMaterializeDeps,
@@ -6,7 +6,7 @@ import {
   materializeValue,
   type MaterializeDeps,
 } from './placeholder';
-import { placeholderTemplate, type Filter, type Modification, type Profile, type StoredState } from './schema';
+import { normalizeConditions, placeholderTemplate, type Modification, type Profile, type StoredState } from './schema';
 
 /** Modification이 Placeholder를 담은 값을 가지면 그 템플릿, 아니면 null. */
 function templateWithPlaceholders(modification: Modification): string | null {
@@ -260,43 +260,29 @@ export function removeCustomHeaderName(state: StoredState, name: string): Stored
 }
 
 /**
- * 만료된 Time Filter를 가진 활성 Profile을 비활성으로 전환한다.
- * 반드시 toggleProfile을 경유한다 — 활성→비활성 전이의 부수 규칙
- * (이슈 07의 실체화 정리 등)이 만료 경로에서도 동일하게 적용되도록.
+ * 만료된 규칙을 끄고 expiresAt을 소비한다 (ADR 0010) — 알람은 일회성이다.
+ * 규칙만 꺼지고 프로필은 그대로다.
  */
-export function expireProfiles(
-  state: StoredState,
-  now: number,
-  deps: MaterializeDeps = defaultMaterializeDeps,
-): StoredState {
-  return state.profiles
-    .filter((profile) => isProfileExpired(profile, now))
-    .reduce((acc, profile) => toggleProfile(acc, profile.id, false, deps), state);
-}
-
-export function addFilter(state: StoredState, profileId: string, filter: Filter): StoredState {
-  return withProfile(state, profileId, (profile) => ({
-    ...profile,
-    filters: [...profile.filters, filter],
-  }));
-}
-
-export function updateFilter(state: StoredState, profileId: string, next: Filter): StoredState {
-  return withProfile(state, profileId, (profile) => ({
-    ...profile,
-    filters: profile.filters.map((f) => (f.id === next.id ? next : f)),
-  }));
-}
-
-export function removeFilter(
-  state: StoredState,
-  profileId: string,
-  filterId: string,
-): StoredState {
-  return withProfile(state, profileId, (profile) => ({
-    ...profile,
-    filters: profile.filters.filter((f) => f.id !== filterId),
-  }));
+export function expireRules(state: StoredState, now: number): StoredState {
+  return {
+    ...state,
+    profiles: state.profiles.map((profile) => {
+      if (!profile.active || !profile.modifications.some((m) => isRuleExpired(m, now))) {
+        return profile;
+      }
+      return {
+        ...profile,
+        modifications: profile.modifications.map((m) => {
+          if (!isRuleExpired(m, now)) return m;
+          const conditions = normalizeConditions({ ...m.conditions, expiresAt: undefined });
+          const next = { ...m, enabled: false } as typeof m;
+          if (conditions) return { ...next, conditions };
+          const { conditions: _empty, ...bare } = next;
+          return bare as typeof m;
+        }),
+      };
+    }),
+  };
 }
 
 /**
@@ -312,17 +298,14 @@ export type Command =
   | { type: 'update-profile-meta'; profileId: string; meta: ProfileMeta }
   | { type: 'set-paused'; paused: boolean }
   | { type: 'toggle-pause' }
-  | { type: 'expire-profiles'; now: number }
+  | { type: 'expire-rules'; now: number }
   | { type: 'add-custom-header-name'; name: string }
   | { type: 'remove-custom-header-name'; name: string }
   | { type: 'add-modification'; profileId: string; modification: Modification }
   | { type: 'update-modification'; profileId: string; modification: Modification }
   | { type: 'remove-modification'; profileId: string; modificationId: string }
   | { type: 'import-profiles'; profiles: Profile[] }
-  | { type: 'restore-profiles'; profiles: Profile[] }
-  | { type: 'add-filter'; profileId: string; filter: Filter }
-  | { type: 'update-filter'; profileId: string; filter: Filter }
-  | { type: 'remove-filter'; profileId: string; filterId: string };
+  | { type: 'restore-profiles'; profiles: Profile[] };
 
 /**
  * Import된 Profile들을 끝에 덧붙인다 — 활성 Profile은 활성화 경계로 실체화된다.
@@ -375,8 +358,8 @@ export function applyCommand(
       return setPaused(state, command.paused);
     case 'toggle-pause':
       return togglePause(state);
-    case 'expire-profiles':
-      return expireProfiles(state, command.now, deps);
+    case 'expire-rules':
+      return expireRules(state, command.now);
     case 'add-custom-header-name':
       return addCustomHeaderName(state, command.name);
     case 'remove-custom-header-name':
@@ -391,12 +374,6 @@ export function applyCommand(
       return updateModification(state, command.profileId, command.modification, deps);
     case 'remove-modification':
       return removeModification(state, command.profileId, command.modificationId);
-    case 'add-filter':
-      return addFilter(state, command.profileId, command.filter);
-    case 'update-filter':
-      return updateFilter(state, command.profileId, command.filter);
-    case 'remove-filter':
-      return removeFilter(state, command.profileId, command.filterId);
     default:
       return command satisfies never;
   }

@@ -26,7 +26,6 @@ const sampleState: StoredState = {
       modifications: [
         { kind: 'request-header', id: 'm1', name: 'Authorization', value: 'Bearer x', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
       ],
-      filters: [],
     },
     {
       id: 'p2',
@@ -35,7 +34,6 @@ const sampleState: StoredState = {
       shortLabel: 'QA',
       color: '#16a34a',
       modifications: [],
-      filters: [],
     },
   ],
   materialized: {},
