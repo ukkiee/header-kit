@@ -4,9 +4,9 @@
 
 **Blocked by:** None.
 
-**Status:** ready-for-agent
+**Status:** done — commit 3114b1e
 
-- [ ] 폼에서 URL 필터 입력 → Save가 규칙+필터를 함께 저장 (smoke — 스토리지 반영 + 매칭/비매칭 URL 실요청)
-- [ ] 규칙 행 요약이 `스코프 → 효과` 형태로 표시 (ruleView 단위 테스트)
-- [ ] 스코프 비우고 Save → 프로필 URL 필터 제거
-- [ ] 전 게이트 green
+- [x] 폼에서 URL 필터 입력 → Save가 규칙+필터를 함께 저장 (smoke N15 — 스토리지 + 매칭 URL에만 헤더 적용)
+- [x] 규칙 행 요약이 `스코프 → 효과` 형태로 표시 (ruleView scope 케이스, 렌더 감사 확인)
+- [x] 스코프 비우고 Save → 프로필 URL 필터 제거 (N15)
+- [x] 전 게이트 green (tsc0·vitest179·build·smoke68/68·storybook·diag exit 0)
