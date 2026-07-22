@@ -288,8 +288,8 @@ try {
   record('D2: 다중 활성 시 배지에 활성 개수 표시', multiBadge === '2', `badge="${multiBadge}"`);
 
   await popup.reload();
-  // Pause/Resume 라벨은 i18n이라 로케일 독립 기호(II / ▶)로 선택한다.
-  await popup.locator('button', { hasText: 'II' }).first().click();
+  // Pause/Resume은 aria-label(en 카탈로그)로 선택한다 — 팝업은 ?locale=en.
+  await popup.getByRole('button', { name: 'Pause' }).click();
   await pollSessionRuleCount(sw, 0);
   headers = await fetchEchoHeaders(page);
   const pausedBadge = await pollBadge('II');
@@ -297,7 +297,7 @@ try {
     headers['x-conf'] === undefined && pausedBadge === 'II',
     `x-conf=${headers['x-conf']}, badge="${pausedBadge}"`);
 
-  await popup.locator('button', { hasText: '▶' }).first().click();
+  await popup.getByRole('button', { name: 'Resume' }).click();
   await pollSessionRuleCount(sw, 2);
   headers = await fetchEchoHeaders(page);
   record('D4: Resume → 이전 활성 상태 그대로 복원', headers['x-conf'] === 'top-wins',
@@ -688,16 +688,21 @@ try {
     baseProfile('p-le', 'LE', [{ kind: 'request-header', id: 'm1', name: 'X-Long', value: 'short', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }], []),
   ]);
   await tabApp.reload();
-  // 대형 편집기는 행 확장 영역 안에 있다 — 먼저 행을 펼친다 (슬라이스 04)
-  await tabApp.getByRole('button', { name: 'Toggle modification options' }).first().click();
+  // 대형 편집기는 규칙 폼 안에 있다 — Edit로 폼을 연다 (ADR 0006)
+  await tabApp.getByRole('button', { name: 'Edit', exact: true }).first().click();
   await tabApp.getByRole('button', { name: /open large editor/i }).first().click();
   const longValue = 'x'.repeat(300);
   await tabApp.getByRole('textbox', { name: /Value —/ }).fill(longValue);
   await tabApp.getByRole('button', { name: 'Save large editor' }).click();
-  const savedValue = await sw.evaluate(async () => {
-    const { state } = await chrome.storage.local.get('state');
-    return state.profiles[0].modifications[0].value;
-  });
+  // 에디터는 초안에만 반영 — 폼 Save가 원자 저장한다 (ADR 0006)
+  await tabApp.getByRole('button', { name: 'Save', exact: true }).click();
+  const savedValue = await pollUntil(
+    () => sw.evaluate(async () => {
+      const { state } = await chrome.storage.local.get('state');
+      return state.profiles[0].modifications[0].value;
+    }),
+    (v) => v === longValue,
+  );
   record('J3: 대형 편집기 저장이 값에 반영된다', savedValue === longValue, `len=${savedValue?.length}`);
 
   // ---------- K. 이슈 02: 헤더 Modification 완성 ----------
@@ -760,7 +765,7 @@ try {
   ]);
   await pollSessionRuleCount(sw, 1);
   await popup.reload();
-  await popup.locator('button', { hasText: 'II' }).first().click();
+  await popup.getByRole('button', { name: 'Pause' }).click();
   await pollSessionRuleCount(sw, 0);
   record('L1: Pause 단축키 등록 + set-paused가 전체 중단', shortcutRegistered,
     `toggle-pause 등록=${shortcutRegistered}, 규칙=0`);
@@ -779,7 +784,9 @@ try {
     (await chrome.storage.local.get('state')).state.customHeaderNames,
   );
   await popup.getByRole('button', { name: 'Show profiles' }).click();
-  await popup.getByLabel('Header name').first().waitFor({ timeout: 5000 });
+  // 이름 입력은 규칙 폼 안에만 있다 — Edit로 폼을 연다 (ADR 0006)
+  await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
+  await popup.getByLabel('Header name', { exact: true }).first().waitFor({ timeout: 5000 });
   const datalistHasCustom = await popup.evaluate(async () => {
     const nameInput = document.querySelector('input[aria-label="Header name"]');
     if (!nameInput) return false;
@@ -791,6 +798,7 @@ try {
     const options = list ? [...document.getElementById(list).options].map((o) => o.value) : [];
     return options.includes('X-Team-Custom');
   });
+  await popup.getByRole('button', { name: 'Cancel' }).click();
   record('L2: autocomplete 사용자 항목이 등록되고 제안에 노출',
     Array.isArray(savedCustom) && savedCustom.includes('X-Team-Custom') && datalistHasCustom,
     `custom=${JSON.stringify(savedCustom)}, inDatalist=${datalistHasCustom}`);
@@ -927,8 +935,9 @@ try {
 
   // M3b: 새 UI 경로(확장 편집)로 CSP 디렉티브 값 변경 → 실제 응답 헤더 반영 (슬라이스 05)
   await popup.reload();
-  await popup.getByRole('button', { name: 'Toggle modification options' }).first().click();
+  await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
   await popup.getByLabel('CSP directive value').fill("'self'");
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
   const cspEdited = await pollUntil(
     () => pageB.evaluate(async () => {
       const res = await fetch('/headers', { cache: 'no-store' });
@@ -957,8 +966,9 @@ try {
 
   // M4b: 새 UI 경로(확장 편집)로 치환·패턴 편집 → 실제 리다이렉트 반영 (슬라이스 05)
   await popup.reload();
-  await popup.getByRole('button', { name: 'Toggle modification options' }).first().click();
+  await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
   await popup.getByLabel('Redirect substitution').fill(`http://127.0.0.1:${port}/redir-alt\\1`);
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
   const fetchLanding = (path) => (
     pageB.evaluate(async (p) => {
       const res = await fetch(p, { cache: 'no-store', redirect: 'follow' });
@@ -970,7 +980,9 @@ try {
     (v) => /\/redir-alt\?q=1/.test(v),
   );
   // 패턴도 UI로 편집 — 매칭 소스가 /redir-two 로 바뀌어 실제 매칭에 반영된다
+  await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
   await popup.getByLabel('Redirect pattern').fill(`^http://127\\.0\\.0\\.1:${port}/redir-two(.*)`);
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
   const landedPattern = await pollUntil(
     () => fetchLanding('/redir-two?q=2'),
     (v) => /\/redir-alt\?q=2/.test(v),
@@ -1071,7 +1083,7 @@ try {
   await popup.keyboard.press('ArrowLeft');
   await popup.keyboard.press('Enter');
   const kbActivated = await popup
-    .getByRole('button', { name: '+ Request' })
+    .getByRole('button', { name: 'Add rule' })
     .waitFor({ timeout: 5000 })
     .then(() => true, () => false);
   record('N5: 탭 뱃지 개수 + 필터 탭 전환 + 키보드 활성화',
@@ -1101,19 +1113,8 @@ try {
     added.length === 2 && added[1]?.pattern === 'api\\.staging\\.example\\.com' && removed.length === 1,
     `added=${added.length}, pattern=${added[1]?.pattern}, after-remove=${removed.length}`);
 
-  // N7: 테이블 행 단일 확장 + 확장 영역의 모드·주석 편집이 상태에 반영 (슬라이스 04)
+  // N7: 규칙 폼 편집(ADR 0006) — Edit → 모드·메모 변경 → Save가 원자 반영
   await popup.getByRole('tab', { name: /Modifications/ }).click();
-  const rowToggles = popup.getByRole('button', { name: 'Toggle modification options' });
-  await rowToggles.first().waitFor({ timeout: 5000 });
-  // 행 1 확장 → 옵션(Override 칩) 노출
-  await rowToggles.nth(0).click();
-  const firstExpanded = await popup.getByRole('button', { name: 'Override' }).isVisible();
-  // 행 2 확장 → 행 1 자동 접힘 (단일 확장: Override 칩은 1개만 존재)
-  await rowToggles.nth(1).click();
-  const overrideCount = await popup.getByRole('button', { name: 'Override' }).count();
-  const expandedStates = await rowToggles.evaluateAll((els) => els.map((el) => el.getAttribute('aria-expanded')));
-  // 확장 영역에서 모드 변경(Append) + 주석 편집 → 상태 반영.
-  // 각 편집은 수정 객체 전체를 보내므로, 순차 편집으로 라운드트립을 기다린다.
   const pollMod = (test, timeoutMs = 5000) =>
     pollUntil(
       () => sw.evaluate(async () => {
@@ -1124,22 +1125,24 @@ try {
       timeoutMs,
       100,
     );
-  await popup.getByRole('button', { name: 'Append' }).click();
-  // 스토리지가 아닌 UI 반영(aria-pressed)을 기다린다 — 이후 편집이 이전 프롭을 덮어쓰지 않게.
-  await popup.getByRole('button', { name: 'Append', pressed: true }).waitFor({ timeout: 5000 });
-  await popup.getByLabel('Comment').fill('smoke comment');
+  await popup.getByRole('button', { name: 'Edit', exact: true }).nth(1).click();
+  // 폼은 한 번에 하나만 열린다
+  const formCount = await popup.getByLabel('Mode').count();
+  await popup.getByLabel('Mode').selectOption({ label: 'Append' });
+  await popup.getByLabel('comment').fill('smoke comment');
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
   const editedMod = await pollMod((m) => m?.mode === 'append' && m?.comment === 'smoke comment');
-  record('N7: 단일 확장 + 확장 영역 모드·주석 반영',
-    firstExpanded && overrideCount === 1 && expandedStates.join(',') === 'false,true'
-      && editedMod?.mode === 'append' && editedMod?.comment === 'smoke comment',
-    `first=${firstExpanded}, chips=${overrideCount}, aria=${expandedStates.join(',')}, mode=${editedMod?.mode}, comment="${editedMod?.comment}"`);
+  record('N7: 규칙 폼 편집 — 모드·메모 원자 저장',
+    formCount === 1 && editedMod?.mode === 'append' && editedMod?.comment === 'smoke comment',
+    `forms=${formCount}, mode=${editedMod?.mode}, comment="${editedMod?.comment}"`);
 
-  // N7b: 빈 값 처리(emptyMeans) UI 경로 — 값을 비우면 칩이 나타나고 Send empty가 상태에 반영
-  await popup.getByLabel('Header value').nth(1).fill('');
-  await popup.getByRole('button', { name: 'Send empty' }).waitFor({ timeout: 5000 });
-  await popup.getByRole('button', { name: 'Send empty' }).click();
+  // N7b: 빈 값 처리 — 폼에서 값 비우고 When empty=Send empty 저장
+  await popup.getByRole('button', { name: 'Edit', exact: true }).nth(1).click();
+  await popup.getByLabel('Header value').fill('');
+  await popup.getByLabel('When empty').selectOption({ label: 'Send empty' });
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
   const emptyMeansMod = await pollMod((m) => m?.emptyMeans === 'send-empty');
-  record('N7b: 빈 값 → Send empty 칩 → 상태 반영',
+  record('N7b: 빈 값 → Send empty 저장 반영',
     emptyMeansMod?.emptyMeans === 'send-empty' && emptyMeansMod?.value === '',
     `emptyMeans=${emptyMeansMod?.emptyMeans}, value="${emptyMeansMod?.value}"`);
 
@@ -1219,19 +1222,12 @@ try {
       && backupsShown && prefsShown,
     `search=[${searchResult.join('|')}], selected=${sidebarSelected}, backups=${backupsShown}, prefs=${prefsShown}`);
 
-  // N10: 표면 동일성 — 탭 앱에서 헤더 추가·편집 → 실제 요청 반영 (팝업과 같은 컴포넌트 경로)
-  await tabApp.getByRole('button', { name: '+ Request' }).click();
-  await tabApp.getByLabel('Header name').waitFor({ timeout: 5000 });
-  await tabApp.getByLabel('Header name').fill('X-From-Tab');
-  // 이름 커밋을 기다린 뒤 값 편집 — 수정 전체 객체 전송 모델의 순차 편집 규약
-  await pollUntil(
-    () => sw.evaluate(async () => {
-      const { state } = await chrome.storage.local.get('state');
-      return state.profiles.find((p) => p.name === 'Gamma')?.modifications[0]?.name ?? '';
-    }),
-    (v) => v === 'X-From-Tab',
-  );
+  // N10: 표면 동일성 — 탭 앱에서 규칙 폼으로 추가 → 실제 요청 반영 (ADR 0006 원자 저장)
+  await tabApp.getByRole('button', { name: 'Add rule' }).click();
+  await tabApp.getByLabel('Header name', { exact: true }).waitFor({ timeout: 5000 });
+  await tabApp.getByLabel('Header name', { exact: true }).fill('X-From-Tab');
   await tabApp.getByLabel('Header value').fill('yes');
+  await tabApp.getByRole('button', { name: 'Save', exact: true }).click();
   await tabApp.getByRole('switch', { name: 'Toggle Gamma' }).click();
   await pollSessionRuleCount(sw, 1);
   const tabHeader = await pollUntil(
@@ -1252,16 +1248,19 @@ try {
   await popup.getByRole('button', { name: 'Select profile KeyB' }).focus();
   await popup.keyboard.press('Enter');
   const kbSwitched = await pollProfileName((v) => v === 'KeyB');
-  // 행 확장 토글: 포커스 + Enter → aria-expanded=true
+  // Edit 버튼: 포커스 + Enter → 규칙 폼 열림
   await popup.getByRole('button', { name: 'Select profile KeyA' }).click();
   await pollProfileName((v) => v === 'KeyA');
-  const rowToggle = popup.getByRole('button', { name: 'Toggle modification options' }).first();
-  await rowToggle.focus();
+  await popup.getByRole('button', { name: 'Edit', exact: true }).first().focus();
   await popup.keyboard.press('Enter');
-  const kbExpanded = await pollUntil(() => rowToggle.getAttribute('aria-expanded'), (v) => v === 'true', 5000);
-  record('N11: 키보드 — 사이드바 전환·행 확장 토글',
-    kbSwitched === 'KeyB' && kbExpanded === 'true',
-    `sidebar=${kbSwitched}, row-expanded=${kbExpanded}`);
+  const kbFormOpened = await popup
+    .getByLabel('Mode')
+    .waitFor({ timeout: 5000 })
+    .then(() => true, () => false);
+  await popup.getByRole('button', { name: 'Cancel' }).click();
+  record('N11: 키보드 — 사이드바 전환·규칙 폼 열기',
+    kbSwitched === 'KeyB' && kbFormOpened,
+    `sidebar=${kbSwitched}, form=${kbFormOpened}`);
 
   // N12: 프로필 헤더 편집(이름·뱃지 라벨·뱃지 색) → 상태 반영 (매트릭스 행 14 마감)
   // 각 편집은 UI 반영을 기다린 뒤 다음 편집 — 전체 객체 전송 모델의 순차 편집 규약.
@@ -1323,7 +1322,7 @@ try {
   const koMenu = await popupKo.getByRole('button', { name: '프로필 메뉴' }).isVisible().catch(() => false);
   const koSidebarItem = await popupKo.getByRole('button', { name: 'KeyB 프로필 선택 (끔)' }).isVisible().catch(() => false);
   const koRowToggle = await popupKo
-    .getByRole('button', { name: '수정 옵션 펼치기/접기' })
+    .getByRole('button', { name: '편집' })
     .first()
     .isVisible()
     .catch(() => false);

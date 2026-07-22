@@ -4,7 +4,7 @@ import type { ComponentProps } from 'react';
 
 /**
  * 드롭다운 메뉴 — 빈도 낮은 조작(이동/복제/삭제)을 헤더의 아이콘 나열 대신
- * `⋯` 하나로 모은다 (ADR 0004). 키보드(화살표·Enter·Esc)와 role=menu 시맨틱은
+ * 케밥 메뉴 하나로 모은다 (ADR 0004). 키보드(화살표·Enter·Esc)와 role=menu 시맨틱은
  * Base UI가 제공한다. 표면은 무그림자 — 보더+명도로 구분한다.
  */
 export function Menu(props: ComponentProps<typeof BaseMenu.Root>) {

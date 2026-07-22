@@ -14,6 +14,7 @@ import { resolveLocale, t, type Locale, type MessageKey } from '@/core/i18n';
 import { createProfile, PROFILE_COLORS, type StoredState } from '@/core/schema';
 import type { StatusSummary as StatusSummaryData } from '@/core/summary';
 import { canvas } from '@/ui/tokens';
+import { ExternalLink, History, Layers, Pause, Play, Settings } from 'lucide-react';
 import {
   getSummary,
   loadState,
@@ -29,10 +30,10 @@ export type AppSurface = 'popup' | 'tab';
 /** 레일 화면 — 관리 기능(백업/환경설정)이 본문 편집과 분리된다 (ADR 0005). */
 type RailView = 'profiles' | 'backups' | 'preferences';
 
-const RAIL_ITEMS: Array<{ view: RailView; icon: string; labelKey: MessageKey }> = [
-  { view: 'profiles', icon: '▤', labelKey: 'ariaShowProfiles' },
-  { view: 'backups', icon: '⟲', labelKey: 'ariaShowBackups' },
-  { view: 'preferences', icon: '⚙', labelKey: 'ariaShowPreferences' },
+const RAIL_ITEMS: Array<{ view: RailView; Icon: typeof Layers; labelKey: MessageKey }> = [
+  { view: 'profiles', Icon: Layers, labelKey: 'ariaShowProfiles' },
+  { view: 'backups', Icon: History, labelKey: 'ariaShowBackups' },
+  { view: 'preferences', Icon: Settings, labelKey: 'ariaShowPreferences' },
 ];
 
 export function App({ surface = 'popup' }: { surface?: AppSurface }) {
@@ -41,8 +42,6 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // 활성 탭(수정/필터)은 앱 레이어 뷰 상태 — 프로필을 전환해도 유지된다.
   const [activeTab, setActiveTab] = useState<ProfileTab>('modifications');
-  // 단일 확장 행 — 한 번에 한 행만 옵션을 펼친다 (ADR 0004).
-  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [railView, setRailView] = useState<RailView>('profiles');
   const [commandError, setCommandError] = useState<string | null>(null);
   const [pickerOptions, setPickerOptions] = useState<TabPickerOptions | undefined>(undefined);
@@ -122,7 +121,8 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
       aria-label={state.paused ? t(locale, 'resume') : t(locale, 'pause')}
       onClick={() => dispatch({ type: 'set-paused', paused: !state.paused })}
     >
-      {state.paused ? `▶ ${t(locale, 'resume')}` : `II ${t(locale, 'pause')}`}
+      {state.paused ? <Play size={14} strokeWidth={1.75} /> : <Pause size={14} strokeWidth={1.75} />}
+      <span className="ml-1.5">{state.paused ? t(locale, 'resume') : t(locale, 'pause')}</span>
     </Button>
   );
 
@@ -146,12 +146,10 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
       profileCount={state.profiles.length}
       onCommand={dispatch}
       pickerOptions={pickerOptions}
-      materialized={state.materialized}
       userHeaders={state.customHeaderNames}
       activeTab={activeTab}
       onActiveTabChange={setActiveTab}
-      expandedRowId={expandedRowId}
-      onToggleRow={(id) => setExpandedRowId((prev) => (prev === id ? null : id))}
+      onCommandWithResult={dispatchWithResult}
     />
   ) : (
     <p className="text-xs text-zinc-500 dark:text-zinc-400">{t(locale, 'noProfilesYet')}</p>
@@ -167,7 +165,7 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
         }`}
       >
         <nav className="flex flex-col items-center gap-1 border-r border-zinc-200 py-3 dark:border-zinc-800">
-          {RAIL_ITEMS.map(({ view, icon, labelKey }) => (
+          {RAIL_ITEMS.map(({ view, Icon, labelKey }) => (
             <Button
               key={view}
               variant="ghost"
@@ -177,7 +175,7 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
               className={railView === view ? 'bg-zinc-100 dark:bg-zinc-800' : ''}
               onClick={() => setRailView(view)}
             >
-              {icon}
+              <Icon size={16} strokeWidth={1.75} />
             </Button>
           ))}
         </nav>
@@ -197,7 +195,8 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
             <div className="flex items-center gap-1">
               {surface === 'popup' && (
                 <Button variant="ghost" size="sm" aria-label={t(locale, 'openInTab')} onClick={openTabApp}>
-                  ⧉ {t(locale, 'openInTab')}
+                  <ExternalLink size={14} strokeWidth={1.75} />
+                  <span className="ml-1.5">{t(locale, 'openInTab')}</span>
                 </Button>
               )}
               {pauseButton}

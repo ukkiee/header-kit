@@ -1,3 +1,4 @@
+import { X } from 'lucide-react';
 import type { Filter } from '@/core/schema';
 import type { TabPickerOptions } from '@/platform/tabs';
 import { Button } from '@/ui/button';
@@ -28,7 +29,7 @@ export function FilterRow({ filter, onChange, onRemove, pickerOptions }: FilterR
       <KindLabel offset="filter">{t(KIND_LABEL_KEYS[filter.kind])}</KindLabel>
       <FilterEditor filter={filter} onChange={onChange} pickerOptions={pickerOptions} />
       <Button variant="danger" size="sm" onClick={onRemove} aria-label={t('ariaRemoveFilter')}>
-        ✕
+        <X size={14} strokeWidth={1.75} />
       </Button>
     </div>
   );

@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
+import { Ellipsis, Plus } from 'lucide-react';
 import type { Command } from '@/core/commands';
 import {
   createFilter,
-  createHeaderModification,
-  createModification,
   type FilterKind,
   type Modification,
-  type ModificationKind,
   type Profile,
 } from '@/core/schema';
 import { format, type MessageKey } from '@/core/i18n';
@@ -15,14 +13,12 @@ import { Button } from '@/ui/button';
 import { Card } from '@/ui/card';
 import { Input } from '@/ui/input';
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from '@/ui/menu';
-import { ModTableHeader } from '@/ui/mod-table';
 import { Select } from '@/ui/select';
 import { Tab, TabList, TabPanel, Tabs } from '@/ui/tabs';
 import { ToggleSwitch } from '@/ui/toggle-switch';
-import { CspRow } from '@/features/modifications/csp-row';
 import { FilterRow } from '@/features/filters/filter-row';
-import { HeaderRow } from '@/features/modifications/header-row';
-import { RedirectRow } from '@/features/modifications/redirect-row';
+import { RuleForm } from '@/features/modifications/rule-form';
+import { RuleRow } from '@/features/modifications/rule-row';
 import { useT } from '@/ui/i18n-context';
 
 const FILTER_KINDS: Array<{ kind: FilterKind; labelKey: MessageKey }> = [
@@ -46,16 +42,13 @@ export interface ProfileSectionProps {
   profileCount: number;
   onCommand: (command: Command) => void;
   pickerOptions?: TabPickerOptions;
-  /** Placeholder 실체화 구역 — Modification id 키. */
-  materialized?: Record<string, string>;
   /** 헤더 이름 autocomplete 사용자 항목. */
   userHeaders?: readonly string[];
   /** 활성 탭 — 앱 레이어 뷰 상태(스펙 결정). 미지정 시 비제어(수정 탭 시작). */
   activeTab?: ProfileTab;
   onActiveTabChange?: (tab: ProfileTab) => void;
-  /** 확장된 수정 행 id — 앱 레이어의 단일 확장 상태(ADR 0004). */
-  expandedRowId?: string | null;
-  onToggleRow?: (modificationId: string) => void;
+  /** 규칙 저장 — 권위 실행 결과를 폼이 돌려받아 거부를 인라인으로 보여준다. */
+  onCommandWithResult: (command: Command) => Promise<{ ok: boolean; error?: string }>;
 }
 
 export function ProfileSection({
@@ -64,14 +57,14 @@ export function ProfileSection({
   profileCount,
   onCommand,
   pickerOptions,
-  materialized,
   userHeaders,
   activeTab,
   onActiveTabChange,
-  expandedRowId,
-  onToggleRow,
+  onCommandWithResult,
 }: ProfileSectionProps) {
   const t = useT();
+  // 규칙 폼 상태 — 'new' = 생성, id = 편집, null = 목록만 (ADR 0006, 의도적 로컬)
+  const [editingRule, setEditingRule] = useState<'new' | string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const confirmTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(confirmTimer.current), []);
@@ -122,7 +115,7 @@ export function ProfileSection({
           }}
         >
           <MenuTrigger render={<Button variant="ghost" size="sm" aria-label={t('ariaProfileMenu')} />}>
-            ⋯
+            <Ellipsis size={16} strokeWidth={1.75} />
           </MenuTrigger>
           <MenuPopup>
             <MenuItem
@@ -178,97 +171,78 @@ export function ProfileSection({
           </Tab>
         </TabList>
 
-        <TabPanel value="modifications" className="flex flex-col pt-2">
-          {profile.modifications.length > 0 && (
-            <ModTableHeader nameLabel={t('headerName')} valueLabel={t('value')} />
+        <TabPanel value="modifications" className="flex flex-col gap-2 pt-2">
+          {profile.modifications.length === 0 && editingRule === null && (
+            <p className="py-1 text-xs text-zinc-500 dark:text-zinc-400">{t('noRulesYet')}</p>
           )}
           <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
-            {profile.modifications.map((modification) => {
-              const onChange = (next: Modification) =>
-                onCommand({ type: 'update-modification', profileId: profile.id, modification: next });
-              const onRemove = () =>
-                onCommand({
-                  type: 'remove-modification',
-                  profileId: profile.id,
-                  modificationId: modification.id,
-                });
-              const expansion = {
-                expanded: expandedRowId === modification.id,
-                onToggleExpanded: onToggleRow ? () => onToggleRow(modification.id) : undefined,
-              };
-              if (modification.kind === 'csp') {
-                return (
-                  <CspRow key={modification.id} modification={modification} onChange={onChange} onRemove={onRemove} {...expansion} />
-                );
-              }
-              if (modification.kind === 'redirect') {
-                return (
-                  <RedirectRow key={modification.id} modification={modification} onChange={onChange} onRemove={onRemove} {...expansion} />
-                );
-              }
-              return (
-                <HeaderRow
+            {profile.modifications.map((modification) =>
+              editingRule === modification.id ? (
+                <div key={modification.id} className="py-2">
+                  <RuleForm
+                    initial={modification}
+                    userHeaders={userHeaders}
+                    onCancel={() => setEditingRule(null)}
+                    onSave={async (next) => {
+                      const result = await onCommandWithResult({
+                        type: 'update-modification',
+                        profileId: profile.id,
+                        modification: next,
+                      });
+                      if (result.ok) setEditingRule(null);
+                      return result;
+                    }}
+                  />
+                </div>
+              ) : (
+                <RuleRow
                   key={modification.id}
                   modification={modification}
-                  materializedValue={materialized?.[modification.id]}
-                  userHeaders={userHeaders}
-                  onChange={onChange}
-                  onRemove={onRemove}
-                  {...expansion}
+                  onToggleEnabled={(enabled) =>
+                    onCommand({
+                      type: 'update-modification',
+                      profileId: profile.id,
+                      modification: { ...modification, enabled } as Modification,
+                    })
+                  }
+                  onEdit={() => setEditingRule(modification.id)}
+                  onRemove={() =>
+                    onCommand({
+                      type: 'remove-modification',
+                      profileId: profile.id,
+                      modificationId: modification.id,
+                    })
+                  }
                 />
-              );
-            })}
+              ),
+            )}
           </div>
-        <div className="flex flex-wrap items-center gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() =>
-              onCommand({
-                type: 'add-modification',
-                profileId: profile.id,
-                modification: createHeaderModification('request-header'),
-              })
-            }
-          >
-            + {t('addRequestHeader')}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() =>
-              onCommand({
-                type: 'add-modification',
-                profileId: profile.id,
-                modification: createHeaderModification('response-header'),
-              })
-            }
-          >
-            + {t('addResponseHeader')}
-          </Button>
-          <Select
-            variant="ghost"
-            size="sm"
-            value=""
-            aria-label={t('ariaAddModification')}
-            onChange={(e) => {
-              const kind = e.target.value as ModificationKind | '';
-              if (kind !== '') {
-                onCommand({
+
+          {editingRule === 'new' ? (
+            <RuleForm
+              userHeaders={userHeaders}
+              onCancel={() => setEditingRule(null)}
+              onSave={async (next) => {
+                const result = await onCommandWithResult({
                   type: 'add-modification',
                   profileId: profile.id,
-                  modification: createModification(kind),
+                  modification: next,
                 });
-              }
-            }}
-          >
-            <option value="">+ {t('moreModification')}</option>
-            <option value="cookie">{t('modCookie')}</option>
-            <option value="set-cookie">{t('modSetCookie')}</option>
-            <option value="csp">{t('modCsp')}</option>
-            <option value="redirect">{t('modRedirect')}</option>
-          </Select>
-        </div>
+                if (result.ok) setEditingRule(null);
+                return result;
+              }}
+            />
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="self-start"
+              onClick={() => setEditingRule('new')}
+            >
+              <Plus size={14} strokeWidth={1.75} className="mr-1" />
+              {t('addRule')}
+            </Button>
+          )}
         </TabPanel>
 
         <TabPanel value="filters" className="flex flex-col gap-1.5 pt-2">

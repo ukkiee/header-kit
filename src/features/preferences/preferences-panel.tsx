@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { X } from 'lucide-react';
 import type { Command } from '@/core/commands';
 import { Button } from '@/ui/button';
 import { Input } from '@/ui/input';
@@ -69,7 +70,7 @@ export function PreferencesPanel({
                       className="text-zinc-400 hover:text-red-500"
                       onClick={() => onCommand({ type: 'remove-custom-header-name', name })}
                     >
-                      ✕
+                      <X size={12} strokeWidth={1.75} />
                     </button>
                   </Pill>
                 ))}

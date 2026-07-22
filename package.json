@@ -18,10 +18,11 @@
     "postinstall": "wxt prepare"
   },
   "dependencies": {
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
     "@base-ui-components/react": "1.0.0-rc.0",
-    "class-variance-authority": "^0.7.1"
+    "class-variance-authority": "^0.7.1",
+    "lucide-react": "^1.25.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
   },
   "devDependencies": {
     "@storybook/react-vite": "^10.5.0",

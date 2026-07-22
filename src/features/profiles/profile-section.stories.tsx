@@ -40,13 +40,29 @@ function InteractiveProfileSection({ initial }: { initial: Profile }) {
   const profile = state.profiles[0];
   if (!profile) return <p className="text-sm">Profile deleted.</p>;
   const onCommand = (command: Command) => setState((s) => applyCommand(s, command));
+  const onCommandWithResult = async (command: Command) => {
+    setState((s) => applyCommand(s, command));
+    return { ok: true };
+  };
   return (
-    <ProfileSection profile={profile} index={0} profileCount={1} onCommand={onCommand} />
+    <ProfileSection
+      profile={profile}
+      index={0}
+      profileCount={1}
+      onCommand={onCommand}
+      onCommandWithResult={onCommandWithResult}
+    />
   );
 }
 
 export const Active: Story = {
-  args: { profile: sampleProfile, index: 0, profileCount: 1, onCommand: () => {} },
+  args: {
+    profile: sampleProfile,
+    index: 0,
+    profileCount: 1,
+    onCommand: () => {},
+    onCommandWithResult: async () => ({ ok: true }),
+  },
   render: (args) => <InteractiveProfileSection initial={args.profile} />,
 };
 
@@ -56,6 +72,7 @@ export const Inactive: Story = {
     index: 0,
     profileCount: 1,
     onCommand: () => {},
+    onCommandWithResult: async () => ({ ok: true }),
   },
   render: (args) => <InteractiveProfileSection initial={args.profile} />,
 };

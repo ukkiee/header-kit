@@ -1,5 +1,6 @@
 import { Dialog } from '@base-ui-components/react/dialog';
-import { useState } from 'react';
+import { Maximize2 } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
 import { Button } from '@/ui/button';
 import { TextArea } from '@/ui/input';
 import { format } from '@/core/i18n';
@@ -10,11 +11,11 @@ export interface LargeEditorProps {
   value: string;
   onCommit: (next: string) => void;
   /** 트리거 버튼에 표시할 라벨. */
-  triggerLabel?: string;
+  triggerLabel?: ReactNode;
 }
 
 /** 긴 regex·CSP·헤더 값을 넓은 다이얼로그에서 편집한다 (탭 앱·팝업 공용). */
-export function LargeEditor({ title, value, onCommit, triggerLabel = 'Expand' }: LargeEditorProps) {
+export function LargeEditor({ title, value, onCommit, triggerLabel = <Maximize2 size={14} strokeWidth={1.75} /> }: LargeEditorProps) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(value);
