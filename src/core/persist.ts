@@ -26,7 +26,9 @@ export function isModification(value: unknown): value is Modification {
     !isRecord(value) ||
     typeof value.id !== 'string' ||
     typeof value.comment !== 'string' ||
-    typeof value.enabled !== 'boolean'
+    typeof value.enabled !== 'boolean' ||
+    // 규칙 자체 URL 필터(ADR 0007)는 선택 문자열 — redirect에는 없다.
+    (value.urlFilter !== undefined && (typeof value.urlFilter !== 'string' || value.kind === 'redirect'))
   ) {
     return false;
   }

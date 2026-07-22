@@ -47,6 +47,10 @@ async function validateCommand(command: Command): Promise<string | null> {
     if (command.modification.kind === 'redirect') {
       return validateRegexPattern(command.modification.pattern);
     }
+    // 규칙 자체 URL 필터(ADR 0007)도 같은 저장 시점 검증을 받는다.
+    if (command.modification.urlFilter !== undefined) {
+      return validateRegexPattern(command.modification.urlFilter);
+    }
     return null;
   }
 
@@ -63,10 +67,11 @@ async function validateCommand(command: Command): Promise<string | null> {
         }
       }
       for (const [index, mod] of profile.modifications.entries()) {
-        if (mod.kind !== 'redirect') continue;
-        const error = await validateRegexPattern(mod.pattern);
+        const pattern = mod.kind === 'redirect' ? mod.pattern : mod.urlFilter;
+        if (pattern === undefined) continue;
+        const error = await validateRegexPattern(pattern);
         if (error !== null) {
-          errors.push(`"${profile.name}" redirect #${index + 1}: ${error}`);
+          errors.push(`"${profile.name}" ${mod.kind} #${index + 1}: ${error}`);
         }
       }
     }

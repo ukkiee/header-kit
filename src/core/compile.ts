@@ -323,6 +323,30 @@ function emitModification(
   }
 }
 
+
+/**
+ * 규칙 자체 URL 필터 (ADR 0007) — 있으면 그 규칙의 조인을 대체한다.
+ * 한도 초과면 null(방출 금지 신호) — 스코프를 조용히 넓히지 않는다.
+ */
+function ownScopeJoins(
+  modification: { id: string; urlFilter?: string },
+  profileId: string,
+  emitter: Emitter,
+): Array<string | undefined> | null | undefined {
+  const pattern = modification.urlFilter?.trim() ?? '';
+  if (pattern === '') return undefined; // 자체 필터 없음 — 프로필 조인 사용
+  if (pattern.length > REGEX_JOIN_LIMIT) {
+    emitter.warnings.push({
+      code: 'regex-too-long',
+      profileId,
+      modificationId: modification.id,
+      limit: REGEX_JOIN_LIMIT,
+    });
+    return null; // 방출 금지
+  }
+  return [pattern];
+}
+
 function emitHeaderRule(
   modification: ValueModification,
   priority: number,
@@ -342,7 +366,9 @@ function emitHeaderRule(
   }
 
   const info = resolveHeaderInfo(plan, modification, profileId, emitter);
-  for (const join of compiled.regexJoins) {
+  const own = ownScopeJoins(modification, profileId, emitter);
+  if (own === null) return; // 자체 필터가 한도 초과 — 규칙 없음 (경고로 알림)
+  for (const join of own ?? compiled.regexJoins) {
     emitRule(
       emitter,
       {
@@ -400,7 +426,9 @@ function emitCspRule(
     .join('; ');
   if (value === '') return; // 빈 CSP는 규칙을 만들지 않는다
 
-  for (const join of compiled.regexJoins) {
+  const own = ownScopeJoins(modification, profileId, emitter);
+  if (own === null) return; // 자체 필터가 한도 초과 — 규칙 없음 (경고로 알림)
+  for (const join of own ?? compiled.regexJoins) {
     emitRule(
       emitter,
       {

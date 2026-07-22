@@ -17,6 +17,72 @@ function profile(overrides: Partial<Profile> = {}): Profile {
 }
 
 describe('compile', () => {
+  it('규칙 자체 urlFilter가 있으면 그 규칙의 regexFilter가 되고 프로필 URL 조인을 대체한다 (ADR 0007)', () => {
+    const { rules, warnings } = compile(
+      [
+        profile({
+          filters: [{ kind: 'url', id: 'f1', enabled: true, pattern: 'profile\\.scope' }],
+          modifications: [
+            { kind: 'request-header', id: 'm1', name: 'X-Own', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '', urlFilter: 'own\\.scope' },
+            { kind: 'request-header', id: 'm2', name: 'X-Inherit', value: '2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+          ],
+        }),
+      ],
+      { paused: false, tabs: [], now: 0, materialized: {} },
+    );
+
+    expect(warnings).toEqual([]);
+    const own = rules.find((r) => r.action.requestHeaders?.[0]?.header === 'X-Own');
+    const inherit = rules.find((r) => r.action.requestHeaders?.[0]?.header === 'X-Inherit');
+    expect(own?.condition.regexFilter).toBe('own\\.scope');
+    expect(inherit?.condition.regexFilter).toBe('(?:profile\\.scope)');
+  });
+
+  it('CSP 규칙도 자체 urlFilter를 쓴다', () => {
+    const { rules } = compile(
+      [
+        profile({
+          modifications: [
+            { kind: 'csp', id: 'c1', directives: [{ name: 'default-src', value: "'self'" }], enabled: true, comment: '', urlFilter: 'csp\\.only' },
+          ],
+        }),
+      ],
+      { paused: false, tabs: [], now: 0, materialized: {} },
+    );
+    expect(rules).toHaveLength(1);
+    expect(rules[0]?.condition.regexFilter).toBe('csp\\.only');
+  });
+
+  it('자체 urlFilter가 한도를 넘으면 규칙을 방출하지 않고 경고한다 (스코프 확대 금지)', () => {
+    const { rules, warnings } = compile(
+      [
+        profile({
+          modifications: [
+            { kind: 'request-header', id: 'm1', name: 'X-Long', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '', urlFilter: 'a'.repeat(3000) },
+          ],
+        }),
+      ],
+      { paused: false, tabs: [], now: 0, materialized: {} },
+    );
+    expect(rules).toHaveLength(0);
+    expect(warnings.some((w) => w.code === 'regex-too-long' && w.modificationId === 'm1')).toBe(true);
+  });
+
+  it('공백뿐인 urlFilter는 프로필 조인을 그대로 쓴다', () => {
+    const { rules } = compile(
+      [
+        profile({
+          modifications: [
+            { kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '', urlFilter: '   ' },
+          ],
+        }),
+      ],
+      { paused: false, tabs: [], now: 0, materialized: {} },
+    );
+    expect(rules).toHaveLength(1);
+    expect(rules[0]?.condition.regexFilter).toBeUndefined();
+  });
+
   it('활성 Profile의 enabled Request Header를 set 규칙으로 컴파일한다', () => {
     const { rules, warnings } = compile(
       [

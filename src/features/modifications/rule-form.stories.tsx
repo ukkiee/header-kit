@@ -24,7 +24,21 @@ const redirect: Modification = {
 
 export const EditRedirect: Story = { args: { initial: redirect } };
 
-export const WithScope: Story = { args: { initialScope: 'api\\.staging\\.example\\.com' } };
+export const WithScope: Story = {
+  args: {
+    initial: {
+      kind: 'request-header',
+      id: 's1',
+      name: 'X-Env',
+      value: 'staging',
+      enabled: true,
+      mode: 'override',
+      emptyMeans: 'remove',
+      comment: '',
+      urlFilter: 'api\\.staging\\.example\\.com',
+    },
+  },
+};
 
 export const RejectedSave: Story = {
   args: {

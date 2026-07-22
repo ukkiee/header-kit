@@ -21,10 +21,8 @@ import { HeaderNameInput } from './header-name-input';
 export interface RuleFormProps {
   /** 편집이면 기존 규칙, 생성이면 undefined. */
   initial?: Modification;
-  /** 프로필의 현재 URL 필터 패턴 — 폼에서 함께 편집한다(프로필 전체 적용). */
-  initialScope?: string;
   /** 저장 — 권위 실행 결과를 돌려받아 거부(예: invalid regex)를 폼 안에서 보여준다. */
-  onSave: (modification: Modification, scope: string) => Promise<{ ok: boolean; error?: string }>;
+  onSave: (modification: Modification) => Promise<{ ok: boolean; error?: string }>;
   onCancel: () => void;
   userHeaders?: readonly string[];
 }
@@ -52,10 +50,9 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
  * 규칙 폼 (ADR 0006) — 종류를 고르면 그 종류의 필드가 나타나고, Save가 규칙
  * 전체를 원자적으로 저장한다. 초안은 로컬 — 취소가 아무것도 흘리지 않는다.
  */
-export function RuleForm({ initial, initialScope = '', onSave, onCancel, userHeaders = [] }: RuleFormProps) {
+export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFormProps) {
   const t = useT();
   const [draft, setDraft] = useState<Modification>(() => initial ?? createModification('request-header'));
-  const [scope, setScope] = useState(initialScope);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -77,7 +74,7 @@ export function RuleForm({ initial, initialScope = '', onSave, onCancel, userHea
 
   const save = async () => {
     setSaving(true);
-    const result = await onSave(draft, scope.trim());
+    const result = await onSave(draft);
     setSaving(false);
     if (!result.ok) setError(result.error ?? t('saveRejected'));
   };
@@ -113,14 +110,21 @@ export function RuleForm({ initial, initialScope = '', onSave, onCancel, userHea
         </Select>
       </Field>
 
-      <Field label={t('urlFilterScope')}>
-        <Input
-          font="mono"
-          value={scope}
-          onChange={(e) => setScope(e.target.value)}
-          placeholder="api\\.example\\.com"
-        />
-      </Field>
+      {draft.kind !== 'redirect' && (
+        <Field label={t('urlFilterScope')}>
+          <Input
+            font="mono"
+            value={'urlFilter' in draft ? (draft.urlFilter ?? '') : ''}
+            onChange={(e) =>
+              setDraft({
+                ...draft,
+                urlFilter: e.target.value === '' ? undefined : e.target.value,
+              } as Modification)
+            }
+            placeholder="api\\.example\\.com"
+          />
+        </Field>
+      )}
 
       {isValueKind && (
         <>

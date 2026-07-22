@@ -89,14 +89,12 @@ describe('ruleView', () => {
     });
   });
 
-  it('스코프(프로필 URL 필터)가 있으면 요약 앞에 붙는다', () => {
-    expect(ruleView(header({ comment: 'test', name: 'x-test', value: 'aaa' }), t, 'imtest.me/').summary).toBe(
-      'imtest.me/ → x-test: aaa',
-    );
-    // 스코프 없으면 그대로
+  it('규칙 자신의 urlFilter가 요약 앞에 붙는다 (ADR 0007)', () => {
+    expect(
+      ruleView(header({ comment: 'test', name: 'x-test', value: 'aaa', urlFilter: 'imtest.me/' }), t).summary,
+    ).toBe('imtest.me/ → x-test: aaa');
     expect(ruleView(header(), t).summary).toBe('X-Test: aaa');
-    // 빈 스코프 문자열도 그대로
-    expect(ruleView(header(), t, '').summary).toBe('X-Test: aaa');
+    expect(ruleView(header({ urlFilter: '  ' }), t).summary).toBe('X-Test: aaa');
   });
 
   it('이름이 비면 종류 라벨로 폴백한다', () => {

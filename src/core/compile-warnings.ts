@@ -19,7 +19,10 @@ export type CompileWarning =
       /** 단일 regex 패턴이 분할 불가능한 길이 한도를 초과해 건너뜀. */
       code: 'regex-too-long';
       profileId: string;
-      filterId: string;
+      /** 프로필 URL 필터가 원인일 때. */
+      filterId?: string;
+      /** 규칙 자체 urlFilter가 원인일 때 (ADR 0007). */
+      modificationId?: string;
       limit: number;
     }
   | {

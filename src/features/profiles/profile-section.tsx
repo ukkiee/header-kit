@@ -69,32 +69,6 @@ export function ProfileSection({
   const confirmTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(confirmTimer.current), []);
 
-  // 폼이 편집하는 스코프 = 프로필의 첫 URL 필터 (없으면 빈 문자열). 프로필 수준이다.
-  const urlFilter = profile.filters.find((f) => f.kind === 'url');
-  const scope = urlFilter?.pattern ?? '';
-
-  /** 규칙 + 스코프(URL 필터)를 순차 저장 — 첫 실패에서 중단해 폼이 오류를 보여준다. */
-  const saveRuleWithScope = async (
-    command: Command,
-    nextScope: string,
-  ): Promise<{ ok: boolean; error?: string }> => {
-    if (nextScope !== scope) {
-      const filterCommand: Command =
-        nextScope === ''
-          ? { type: 'remove-filter', profileId: profile.id, filterId: urlFilter!.id }
-          : urlFilter
-            ? { type: 'update-filter', profileId: profile.id, filter: { ...urlFilter, pattern: nextScope } }
-            : {
-                type: 'add-filter',
-                profileId: profile.id,
-                filter: { kind: 'url', id: crypto.randomUUID(), enabled: true, pattern: nextScope },
-              };
-      const filterResult = await onCommandWithResult(filterCommand);
-      if (!filterResult.ok) return filterResult;
-    }
-    return onCommandWithResult(command);
-  };
-
   const meta = { name: profile.name, shortLabel: profile.shortLabel, color: profile.color };
   const updateMeta = (patch: Partial<typeof meta>) =>
     onCommand({ type: 'update-profile-meta', profileId: profile.id, meta: { ...meta, ...patch } });
@@ -207,14 +181,14 @@ export function ProfileSection({
                 <div key={modification.id} className="py-2">
                   <RuleForm
                     initial={modification}
-                    initialScope={scope}
                     userHeaders={userHeaders}
                     onCancel={() => setEditingRule(null)}
-                    onSave={async (next, nextScope) => {
-                      const result = await saveRuleWithScope(
-                        { type: 'update-modification', profileId: profile.id, modification: next },
-                        nextScope,
-                      );
+                    onSave={async (next) => {
+                      const result = await onCommandWithResult({
+                        type: 'update-modification',
+                        profileId: profile.id,
+                        modification: next,
+                      });
                       if (result.ok) setEditingRule(null);
                       return result;
                     }}
@@ -224,7 +198,6 @@ export function ProfileSection({
                 <RuleRow
                   key={modification.id}
                   modification={modification}
-                  scope={scope}
                   onToggleEnabled={(enabled) =>
                     onCommand({
                       type: 'update-modification',
@@ -247,14 +220,14 @@ export function ProfileSection({
 
           {editingRule === 'new' ? (
             <RuleForm
-              initialScope={scope}
               userHeaders={userHeaders}
               onCancel={() => setEditingRule(null)}
-              onSave={async (next, nextScope) => {
-                const result = await saveRuleWithScope(
-                  { type: 'add-modification', profileId: profile.id, modification: next },
-                  nextScope,
-                );
+              onSave={async (next) => {
+                const result = await onCommandWithResult({
+                  type: 'add-modification',
+                  profileId: profile.id,
+                  modification: next,
+                });
                 if (result.ok) setEditingRule(null);
                 return result;
               }}

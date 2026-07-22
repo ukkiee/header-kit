@@ -25,7 +25,7 @@ const header: Modification = {
 export const RequestHeader: Story = { args: { modification: header } };
 
 export const WithScope: Story = {
-  args: { modification: { ...header, name: 'x-test', value: 'aaa' }, scope: 'imtest.me/' },
+  args: { modification: { ...header, name: 'x-test', value: 'aaa', urlFilter: 'imtest.me/' } },
 };
 
 export const AppendMode: Story = {

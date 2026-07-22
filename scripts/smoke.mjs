@@ -1331,40 +1331,54 @@ try {
     koToggle && koMenu && koSidebarItem && koRowToggle,
     `toggle=${koToggle}, menu=${koMenu}, sidebar=${koSidebarItem}, row=${koRowToggle}`);
 
-  // N15: 폼 내 URL 필터(스코프) — 규칙과 함께 저장, 실요청 스코핑, 비우면 제거
+  // N15: 규칙 단위 URL 필터 (ADR 0007) — 같은 프로필에서 스코프 규칙은 매칭 URL에만,
+  // 무스코프 규칙은 어디서나. 프로필 필터는 건드리지 않는다.
   // 상태: Renamed(k-a, 켬, X-K:1) + KeyB. 팝업은 Renamed 선택.
+  // 1) 기존 규칙(X-K)에 자체 스코프 부여
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
   await popup.getByLabel('URL filter').fill(`127\\.0\\.0\\.1:${port}/headers\\?scope=1`);
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
-  const scopedFilter = await pollUntil(
+  // 2) 무스코프 규칙(X-U) 추가
+  await popup.getByRole('button', { name: 'Add rule' }).click();
+  await popup.getByLabel('Header name', { exact: true }).fill('X-U');
+  await popup.getByLabel('Header value').fill('u');
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  const kaState = await pollUntil(
     () => sw.evaluate(async () => {
       const { state } = await chrome.storage.local.get('state');
-      return state.profiles.find((x) => x.id === 'k-a')?.filters ?? [];
+      const prof = state.profiles.find((x) => x.id === 'k-a');
+      return { mods: prof?.modifications ?? [], filters: prof?.filters ?? [] };
     }),
-    (f) => f.length === 1 && f[0]?.kind === 'url',
+    (s) => s.mods.length === 2 && s.mods[0]?.urlFilter?.includes('scope=1') === true,
   );
   const inScope = await pollUntil(
-    () => fetchEchoHeaders(pageB, '/headers?scope=1').then((h) => h['x-k']),
-    (v) => v === '1',
+    () => fetchEchoHeaders(pageB, '/headers?scope=1'),
+    (h) => h['x-k'] === '1' && h['x-u'] === 'u',
   );
-  const outOfScope = (await fetchEchoHeaders(pageB, '/headers'))['x-k'];
-  // 행 요약에 스코프 → 효과 프리픽스가 보인다
+  const outScope = await fetchEchoHeaders(pageB, '/headers');
+  // 행 요약에 스코프 → 효과 프리픽스
   const scopedSummary = await popup.getByText(/scope=1.*→.*X-K/i).first().isVisible().catch(() => false);
-  // 스코프 비우고 저장 → 필터 제거
+  // 3) 스코프 비우면 규칙 필드 제거 → 어디서나 적용
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
   await popup.getByLabel('URL filter').fill('');
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
-  const clearedFilters = await pollUntil(
+  const cleared = await pollUntil(
     () => sw.evaluate(async () => {
       const { state } = await chrome.storage.local.get('state');
-      return state.profiles.find((x) => x.id === 'k-a')?.filters ?? [];
+      const prof = state.profiles.find((x) => x.id === 'k-a');
+      return { url: prof?.modifications[0]?.urlFilter ?? null, filters: prof?.filters?.length ?? -1 };
     }),
-    (f) => f.length === 0,
+    (s) => s.url === null,
   );
-  record('N15: 폼 URL 필터 — 함께 저장·실요청 스코핑·비우면 제거',
-    scopedFilter.length === 1 && inScope === '1' && outOfScope === undefined
-      && scopedSummary && clearedFilters.length === 0,
-    `filter=${scopedFilter.length}, in=${inScope}, out=${outOfScope}, summary=${scopedSummary}, cleared=${clearedFilters.length}`);
+  const clearedHeaders = await pollUntil(
+    () => fetchEchoHeaders(pageB, '/headers'),
+    (h) => h['x-k'] === '1',
+  );
+  record('N15: 규칙 단위 URL 필터 — 스코프 규칙만 제한, 무스코프는 전역, 비우면 해제',
+    kaState.filters.length === 0 && inScope['x-k'] === '1' && inScope['x-u'] === 'u'
+      && outScope['x-k'] === undefined && outScope['x-u'] === 'u'
+      && scopedSummary && cleared.filters === 0 && clearedHeaders['x-k'] === '1',
+    `filters=${kaState.filters.length}, in=[${inScope['x-k']},${inScope['x-u']}], out=[${outScope['x-k']},${outScope['x-u']}], summary=${scopedSummary}, cleared=${clearedHeaders['x-k']}`);
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

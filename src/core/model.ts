@@ -23,6 +23,8 @@ interface HeaderModificationBase {
   emptyMeans: EmptyValueMeaning;
   comment: string;
   enabled: boolean;
+  /** 이 규칙만의 URL 필터(regex) — 있으면 프로필 URL 필터를 대체한다 (ADR 0007). */
+  urlFilter?: string;
 }
 
 export interface RequestHeaderModification extends HeaderModificationBase {
@@ -48,6 +50,8 @@ export interface CookieModification {
   emptyMeans: EmptyValueMeaning;
   comment: string;
   enabled: boolean;
+  /** 이 규칙만의 URL 필터(regex) — 있으면 프로필 URL 필터를 대체한다 (ADR 0007). */
+  urlFilter?: string;
 }
 
 /**
@@ -62,6 +66,8 @@ export interface SetCookieModification {
   emptyMeans: EmptyValueMeaning;
   comment: string;
   enabled: boolean;
+  /** 이 규칙만의 URL 필터(regex) — 있으면 프로필 URL 필터를 대체한다 (ADR 0007). */
+  urlFilter?: string;
 }
 
 export interface CspDirective {
@@ -76,6 +82,8 @@ export interface CspModification {
   directives: CspDirective[];
   comment: string;
   enabled: boolean;
+  /** 이 규칙만의 URL 필터(regex) — 있으면 프로필 URL 필터를 대체한다 (ADR 0007). */
+  urlFilter?: string;
 }
 
 /** Redirect — regex 매칭 + 캡처 그룹 치환으로 URL을 재작성한다. */

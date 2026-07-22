@@ -23,9 +23,10 @@ const BADGES = {
   redirect: 'REDIRECT',
 } as const;
 
-export function ruleView(m: Modification, t: Translator, scope?: string): RuleView {
+export function ruleView(m: Modification, t: Translator): RuleView {
   const view = bareView(m, t);
-  // 스코프(프로필 URL 필터)는 효과 앞에 붙는다 — `imtest.me/ → x-test: aaa`.
+  // 규칙 자신의 URL 필터(ADR 0007)는 효과 앞에 붙는다 — `imtest.me/ → x-test: aaa`.
+  const scope = 'urlFilter' in m ? m.urlFilter?.trim() : undefined;
   return scope ? { ...view, summary: `${scope} → ${view.summary}` } : view;
 }
 

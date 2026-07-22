@@ -2,6 +2,36 @@ import { describe, expect, it } from 'vitest';
 import { parseStoredState, SCHEMA_VERSION } from './schema';
 
 describe('parseStoredState', () => {
+  it('urlFilter(ADR 0007)는 선택 문자열 — 비문자열이나 redirect의 것은 거부한다', () => {
+    const base = {
+      schemaVersion: 1,
+      paused: false,
+      profiles: [
+        {
+          id: 'p1', name: 'P', active: true, shortLabel: 'P', color: '#2563eb', filters: [],
+          modifications: [
+            { kind: 'request-header', id: 'm1', name: 'X', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '', urlFilter: 'api\\.example' },
+          ],
+        },
+      ],
+    };
+    const parsed = parseStoredState(base);
+    const mod = parsed.profiles[0]?.modifications[0];
+    expect(mod && 'urlFilter' in mod && mod.urlFilter).toBe('api\\.example');
+
+    // 비문자열 urlFilter → 프로필 전체 거부(기본 상태 대체)
+    const bad = structuredClone(base);
+    (bad.profiles[0].modifications[0] as Record<string, unknown>).urlFilter = 42;
+    expect(parseStoredState(bad).profiles.some((p) => p.id === 'p1')).toBe(false);
+
+    // redirect에 urlFilter → 거부 (pattern이 매처)
+    const redirectBad = structuredClone(base);
+    redirectBad.profiles[0].modifications = [
+      { kind: 'redirect', id: 'r1', pattern: '^a', substitution: 'b', enabled: true, comment: '', urlFilter: 'x' } as never,
+    ];
+    expect(parseStoredState(redirectBad).profiles.some((p) => p.id === 'p1')).toBe(false);
+  });
+
   it('유효한 상태는 그대로 통과한다', () => {
     const state = {
       schemaVersion: SCHEMA_VERSION,
