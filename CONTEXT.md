@@ -9,8 +9,12 @@ Modification의 이름 있는 묶음. 여러 Profile이 동시에 활성일 수 
 _Avoid_: preset, workspace, 설정 세트
 
 **Modification**:
-Profile에 속한 개별 수정 항목. 종류는 Request Header, Response Header, Request Cookie, Set-Cookie, CSP, Redirect 여섯 가지. 자신의 URL 스코프(매치 방식 포함)와 Condition을 직접 들고 다닌다 (ADR 0010).
+Profile에 속한 개별 수정 항목. 종류는 Request Header, Response Header, Request Cookie, Response Cookie, CSP, Redirect 여섯 가지. 자신의 URL 스코프(매치 방식 포함)와 Condition을 직접 들고 다닌다 (ADR 0010).
 _Avoid_: rule (브라우저의 net rule과 혼동), row, entry
+
+**Response Cookie**:
+Set-Cookie 응답 헤더를 수정하는 Modification 종류. 사용자 대면 라벨은 '응답 쿠키'로 Request Cookie와 대칭이고, 행 뱃지는 실제 헤더 이름인 SET-COOKIE(프로토콜 토큰)를 유지한다.
+_Avoid_: set-cookie (라벨 층위에서 — 뱃지·스키마 kind 값에서는 유효)
 
 **Condition**:
 Modification 하나가 적용될 요청 범위를 좁히는 규칙 단위 조건 — 제외 도메인, Resource Type, Request Method, Initiator Domain, Tab Domain, 자동 해제 시각(expiresAt). 프로필 수준 Filter는 ADR 0010에서 퇴역했고, 그 이름은 레거시 데이터 마이그레이션에서만 쓰인다.
