@@ -1067,7 +1067,7 @@ try {
       100,
     );
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
-  await popup.locator('summary', { hasText: 'Conditions' }).click(); // disclosure 열기
+  await popup.getByRole('button', { name: 'Conditions' }).click(); // disclosure 열기
   await popup.getByLabel('Excluded domains').fill('skip.example.com');
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
   const condAdded = await pollFirstMod((m) => m?.conditions?.excludedDomains?.[0] === 'skip.example.com');
@@ -1126,9 +1126,16 @@ try {
     baseProfile('n-bottom', 'Bottom',
       [{ kind: 'request-header', id: 'b1', name: 'X-Conf', value: 'bottom-wins', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }]),
   ]);
+  // dnd-kit은 지연 청크(ui-refine 08)라 그립이 드래그 가능해질 때까지 기다린다 —
+  // useSortable이 그립에 aria-roledescription="sortable"을 붙이는 것이 로드 신호다.
+  const waitSortableReady = () =>
+    popup.locator('button[aria-label^="Reorder"][aria-roledescription="sortable"]')
+      .first().waitFor({ timeout: 5000 });
+
   await seedConf();
   await popup.reload();
   await pollSessionRuleCount(sw, 2);
+  await waitSortableReady();
   const winnerBefore = (await fetchEchoHeaders(pageB, '/headers'))['x-conf'];
   const orderNames = () => popup.locator('[aria-label^="Select profile"]').allTextContents();
 
@@ -1151,6 +1158,7 @@ try {
   await seedConf();
   await popup.reload();
   await pollSessionRuleCount(sw, 2);
+  await waitSortableReady();
   // dnd-kit KeyboardSensor는 키 사이에 좌표 재계산·재렌더가 필요하다 — 짧게 대기한다.
   await popup.getByRole('button', { name: 'Reorder Top' }).focus();
   await popup.keyboard.press('Space'); // 집기
@@ -1214,10 +1222,13 @@ try {
     () => tabApp.getByLabel('Profile name').inputValue().catch(() => ''),
     (v) => v === 'Gamma',
   );
+  // 레일 전환은 fade-in(ui-refine 08)이라 대상 화면 렌더를 기다린다(즉시 isVisible 아님).
   await tabApp.getByRole('button', { name: 'Show backups' }).click();
-  const backupsShown = await tabApp.getByRole('button', { name: 'Toggle backups' }).isVisible();
+  const backupsShown = await tabApp.getByRole('button', { name: 'Toggle backups' })
+    .waitFor({ timeout: 5000 }).then(() => true, () => false);
   await tabApp.getByRole('button', { name: 'Show preferences' }).click();
-  const prefsShown = await tabApp.getByRole('button', { name: 'Toggle preferences' }).isVisible();
+  const prefsShown = await tabApp.getByRole('button', { name: 'Toggle preferences' })
+    .waitFor({ timeout: 5000 }).then(() => true, () => false);
   await tabApp.getByRole('button', { name: 'Show profiles' }).click();
   record('N9: 탭 앱 셸 — 검색 필터·사이드바 선택·레일 전환',
     searchResult.length === 1 && searchResult[0]?.startsWith('Beta') && sidebarSelected === 'Gamma'
@@ -1404,7 +1415,7 @@ try {
   ]);
   await popup.reload();
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
-  await popup.locator('summary', { hasText: 'Conditions' }).click();
+  await popup.getByRole('button', { name: 'Conditions' }).click();
   const firstChip = popup.getByRole('button', { name: 'main_frame', exact: true });
   await firstChip.waitFor({ timeout: 5000 });
   const chipBg = () => firstChip.evaluate((el) => getComputedStyle(el).backgroundColor);
@@ -1651,6 +1662,36 @@ try {
   record('N20b: Undo 미클릭 시 삭제 유지(자동 복원 없음)',
     stillDeleted === 0,
     `mods=${stillDeleted}`);
+
+  // N21: motion 무결성 (ui-refine 08) — 애니메이션이 기능을 깨지 않고, reduced-motion을 존중
+  await seedProfiles([
+    baseProfile('p-motion', 'Motion', [
+      { kind: 'request-header', id: 'm1', name: 'X-M1', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+      { kind: 'request-header', id: 'm2', name: 'X-M2', value: '2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+    ]),
+  ]);
+  // reduced-motion 강제 — 이 조건에서도 추가/삭제·화면 전환이 정상 동작해야 한다
+  await popup.emulateMedia({ reducedMotion: 'reduce' });
+  await popup.reload();
+  await pollSessionRuleCount(sw, 2);
+  // 규칙 추가(행 enter): 폼으로 추가 → 목록에 반영
+  await popup.getByRole('button', { name: 'Add rule' }).click();
+  await popup.getByLabel('Header name', { exact: true }).fill('X-M3');
+  await popup.getByLabel('Value', { exact: true }).fill('3');
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  const afterAdd = await pollSessionRuleCount(sw, 3).then(() => true, () => false);
+  // 규칙 삭제(행 exit): 삭제 → 실요청 반영 + AnimatePresence exit가 상태를 막지 않음
+  await popup.getByRole('button', { name: 'Delete', exact: true }).first().click();
+  const afterDelete = await pollSessionRuleCount(sw, 2).then(() => true, () => false);
+  // 레일 화면 전환(cross-fade) 후 대상 화면이 뜬다
+  await popup.getByRole('button', { name: 'Show preferences' }).click();
+  const prefsAfterFade = await popup.getByRole('button', { name: 'Toggle preferences' })
+    .waitFor({ timeout: 5000 }).then(() => true, () => false);
+  await popup.getByRole('button', { name: 'Show profiles' }).click();
+  await popup.emulateMedia({ reducedMotion: null });
+  record('N21: motion 무결성 — reduced-motion에서도 행 추가/삭제·화면 전환 정상',
+    afterAdd && afterDelete && prefsAfterFade,
+    `add=${afterAdd}, delete=${afterDelete}, rail-fade=${prefsAfterFade}`);
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

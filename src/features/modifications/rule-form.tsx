@@ -19,6 +19,7 @@ import { Input } from '@/ui/input';
 import { LargeEditor } from '@/ui/large-editor';
 import { NoteText } from '@/ui/note-text';
 import { Field, FieldError, fieldCaption } from '@/ui/field';
+import { AnimatePresence, MotionRow } from '@/ui/motion-row';
 import { Select } from '@/ui/select';
 import { useT } from '@/ui/i18n-context';
 import { HeaderNameInput } from './header-name-input';
@@ -53,6 +54,8 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
     initial && 'urlFilter' in initial && initial.urlFilter ? 'regex' : 'contains';
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // 조건 disclosure 열림 — 기존 조건이 있으면 펼쳐서 시작.
+  const [condOpen, setCondOpen] = useState(draft.conditions !== undefined);
   // 저장 차단 검증 (ui-refine 04) — Save 시점에 계산, 다음 Save까지 유지.
   const [fieldErrors, setFieldErrors] = useState<readonly RequiredField[]>([]);
   const requiredError = (field: RequiredField) =>
@@ -356,19 +359,31 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
         </>
       )}
 
-      {/* 조건 (ADR 0010) — 접이식, 기존 조건이 있으면 펼쳐서 시작 */}
-      <details open={draft.conditions !== undefined} className="group">
-        <summary className="cursor-pointer list-none text-xs font-medium text-zinc-500 select-none hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200">
-          <span className="mr-1 inline-block transition-transform group-open:rotate-90">›</span>
+      {/* 조건 (ADR 0010) — 접이식(controlled), 기존 조건이 있으면 펼쳐서 시작.
+          열림에 height 전환을 주려고 native details 대신 상태+MotionRow로 제어한다 (ui-refine 08). */}
+      <div>
+        <button
+          type="button"
+          aria-expanded={condOpen}
+          onClick={() => setCondOpen((v) => !v)}
+          className="flex cursor-pointer items-center text-xs font-medium text-zinc-500 select-none hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+        >
+          <span className={`mr-1 inline-block transition-transform ${condOpen ? 'rotate-90' : ''}`}>›</span>
           {t('conditionsCaption')}
-        </summary>
-        <div className="pt-3">
-          <RuleConditionsFields
-            conditions={draft.conditions ?? {}}
-            onChange={(conditions) => setDraft({ ...draft, conditions } as Modification)}
-          />
-        </div>
-      </details>
+        </button>
+        <AnimatePresence initial={false}>
+          {condOpen && (
+            <MotionRow>
+              <div className="pt-3">
+                <RuleConditionsFields
+                  conditions={draft.conditions ?? {}}
+                  onChange={(conditions) => setDraft({ ...draft, conditions } as Modification)}
+                />
+              </div>
+            </MotionRow>
+          )}
+        </AnimatePresence>
+      </div>
 
       <Field label={t('comment')}>
         <Input

@@ -7,6 +7,7 @@ import { Button } from '@/ui/button';
 import { Card } from '@/ui/card';
 import { Input } from '@/ui/input';
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from '@/ui/menu';
+import { AnimatePresence, MotionRow } from '@/ui/motion-row';
 import { ToggleSwitch } from '@/ui/toggle-switch';
 import { RuleForm } from '@/features/modifications/rule-form';
 import { RuleRow } from '@/features/modifications/rule-row';
@@ -132,40 +133,51 @@ export function ProfileSection({
       )}
 
       <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
-        {profile.modifications.map((modification) =>
-          editingRule === modification.id ? (
-            <div key={modification.id} className="py-2">
-              <RuleForm
-                initial={modification}
-                userHeaders={userHeaders}
-                onCancel={() => setEditingRule(null)}
-                onSave={(next) => saveItem(next, 'update')}
-              />
-            </div>
-          ) : (
-            <RuleRow
-              key={modification.id}
-              modification={modification}
-              onToggleEnabled={(enabled) =>
-                onCommand({
-                  type: 'update-modification',
-                  profileId: profile.id,
-                  modification: { ...modification, enabled } as Modification,
-                })
-              }
-              onEdit={() => setEditingRule(modification.id)}
-              onRemove={() => onDeleteRule(profile.id, modification.id)}
-            />
-          ),
-        )}
+        <AnimatePresence initial={false}>
+          {profile.modifications.map((modification) =>
+            // 행↔폼 교체는 키를 달리해 AnimatePresence가 height enter/exit로 전환한다 —
+            // 폼 열림에 부드러운 height-in을 준다 (ui-refine 08).
+            editingRule === modification.id ? (
+              <MotionRow key={`${modification.id}-form`}>
+                <div className="py-2">
+                  <RuleForm
+                    initial={modification}
+                    userHeaders={userHeaders}
+                    onCancel={() => setEditingRule(null)}
+                    onSave={(next) => saveItem(next, 'update')}
+                  />
+                </div>
+              </MotionRow>
+            ) : (
+              // 규칙 행 추가/삭제 시 fade+height enter/exit (ui-refine 08) — reduced-motion 존중.
+              <MotionRow key={modification.id}>
+                <RuleRow
+                  modification={modification}
+                  onToggleEnabled={(enabled) =>
+                    onCommand({
+                      type: 'update-modification',
+                      profileId: profile.id,
+                      modification: { ...modification, enabled } as Modification,
+                    })
+                  }
+                  onEdit={() => setEditingRule(modification.id)}
+                  onRemove={() => onDeleteRule(profile.id, modification.id)}
+                />
+              </MotionRow>
+            ),
+          )}
+        </AnimatePresence>
       </div>
 
       {editingRule === 'new' ? (
-        <RuleForm
-          userHeaders={userHeaders}
-          onCancel={() => setEditingRule(null)}
-          onSave={(next) => saveItem(next, 'add')}
-        />
+        // 새 규칙 폼도 열릴 때 height-in (ui-refine 08).
+        <MotionRow>
+          <RuleForm
+            userHeaders={userHeaders}
+            onCancel={() => setEditingRule(null)}
+            onSave={(next) => saveItem(next, 'add')}
+          />
+        </MotionRow>
       ) : (
         // 빈 상태 CTA가 추가를 유도하므로 하단 버튼은 규칙이 있을 때만 노출한다.
         profile.modifications.length > 0 && (

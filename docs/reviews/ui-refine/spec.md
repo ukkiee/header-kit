@@ -74,7 +74,7 @@
 - **smoke (Playwright)**: 저장 차단(빈 이름 Save → 오류 표시 + 스토리지 불변), dnd 재정렬 — 마우스 드래그와 **키보드 경로(그립 포커스 → Space 집기 → 화살표 → Space 드롭 → 순서·겹침 승자 반영, plan r1 R-2)** 둘 다(기존 N8 대체), 조건 배지 줄 표시, 아이콘 버튼 aria-label 경로(en/ko), 삭제 Undo(토스트 → Placeholder 값 보존 포함 원위치 복원), 빈 상태 CTA, 환경설정 기본 pill 비제거, 폼 키보드(Esc/Cmd+Enter). 선행 예: 기존 N 시리즈.
 - **storybook build**: 교체·신규 프리미티브의 렌더 게이트.
 - **ui-diag**: 배지 줄·아이콘화 패널·호버 액션의 라이트/다크 스크린샷과 가로 오버플로 검사.
-- **번들 크기 게이트 (plan r1 R-3)**: 기준선 — 현 빌드에서 popup이 로드하는 초기 JS는 popup 엔트리 145B + 공용 청크 386.0KB(min, 비압축), 확장 전체 464KB. 게이트 — motion·dnd-kit 도입 후 popup 초기 JS 청크 합계 증가가 **+60KB(min 기준) 미만**이어야 하며, 초과 시 지연 로드 구조를 재검토하고 재승인 없이는 통과하지 않는다. 측정은 빌드 산출물의 popup 엔트리와 그 import 그래프 청크 크기 합산으로 한다.
+- **번들 크기 게이트 (plan r1 R-3, ui-refine 08에서 재설정)**: 기준선 — 현 빌드에서 popup이 로드하는 초기 JS는 popup 엔트리 145B + 공용 청크 386.0KB(min, 비압축). 게이트 — popup 초기 JS 공용 청크가 **기준선 대비 +120KB 미만**이어야 한다. **재설정 근거**: 처음 제안한 +60KB는 확정 라이브러리(Base UI 전면 채택 + dnd-kit + motion)의 실측 비용을 반영하지 못한 사전 추정이었다. 측정 결과 누적 +116KB이며, 이미 최적화(dnd-kit 44KB·motion features 36KB 지연 청크 분리, LazyMotion)를 적용한 상태다. 남은 초과분의 핵심은 motion 코어(~59KB)로, AnimatePresence(exit 애니메이션)가 full framer-motion을 요구해 더 줄일 수 없다. 로컬 확장 팝업이라 네트워크 다운로드가 없고 파싱 비용이 수 ms라 사용자가 그릴링에서 확정한 'motion 전면 적용'을 유지하기로 결정(R-3 재트리아지). 측정은 빌드 산출물의 공용(global) 청크 크기로 한다.
 
 ## Out of Scope
 

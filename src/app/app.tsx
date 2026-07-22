@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { IconTooltipProvider } from '@/ui/icon-button';
+import { MotionProvider } from '@/ui/motion-provider';
+import { MotionView } from '@/ui/motion-view';
 import { useToastManager } from '@/ui/toast';
 import { BackupPanel } from '@/features/backup/backup-panel';
 import { PreferencesPanel } from '@/features/preferences/preferences-panel';
@@ -175,6 +177,7 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
   // 차이는 크기(팝업 760×580 고정+본문 스크롤 / 탭 전폭·전고)와 "탭에서 열기"뿐.
   return (
     <LocaleProvider locale={locale}>
+      <MotionProvider>
       <IconTooltipProvider>
       <div
         className={`grid grid-cols-[3rem_14rem_minmax(0,1fr)] ${canvas} ${
@@ -226,24 +229,27 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
           {/* 오류·일시정지 배너는 레일 화면과 무관하게 항상 보인다 — 조용한 실패 금지. */}
           {alerts}
 
-          {railView === 'profiles' && (
-            <>
-              {summary && <StatusSummary summary={summary} />}
-              {profileEditor}
-              <TransferPanel state={state} onCommand={dispatchWithResult} />
-            </>
-          )}
-          {railView === 'backups' && <BackupPanel onCommand={dispatchWithResult} />}
-          {railView === 'preferences' && (
-            <PreferencesPanel
-              customHeaderNames={state.customHeaderNames}
-              onCommand={dispatch}
-              incognitoAllowed={incognitoAllowed}
-            />
-          )}
+          <MotionView viewKey={railView}>
+            {railView === 'profiles' && (
+              <>
+                {summary && <StatusSummary summary={summary} />}
+                {profileEditor}
+                <TransferPanel state={state} onCommand={dispatchWithResult} />
+              </>
+            )}
+            {railView === 'backups' && <BackupPanel onCommand={dispatchWithResult} />}
+            {railView === 'preferences' && (
+              <PreferencesPanel
+                customHeaderNames={state.customHeaderNames}
+                onCommand={dispatch}
+                incognitoAllowed={incognitoAllowed}
+              />
+            )}
+          </MotionView>
         </main>
       </div>
       </IconTooltipProvider>
+      </MotionProvider>
     </LocaleProvider>
   );
 }

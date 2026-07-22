@@ -17,3 +17,7 @@
 ### structure r2
 
 - approve — 발견 0건 (S-1 반영 확인)
+
+### release r0 (bundle gate re-triage, ui-refine 08)
+
+- R-3 재설정 WAIVED by user: +60KB → +120KB 미만. 확정 라이브러리(Base UI 전면+dnd-kit+motion) 실측 +116KB, 이미 지연 로드 최적화 적용, motion 코어 59KB는 AnimatePresence 요구로 축소 불가. 로컬 팝업이라 파싱 비용 무시 가능 — motion 전면 유지.
