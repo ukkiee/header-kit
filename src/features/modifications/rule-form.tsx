@@ -60,6 +60,9 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
   const [fieldErrors, setFieldErrors] = useState<readonly RequiredField[]>([]);
   const requiredError = (field: RequiredField) =>
     fieldErrors.includes(field) ? t('requiredField') : undefined;
+  // CSP 디렉티브 필수 검증 — 이름 있는 디렉티브가 없으면 활성 (release r1 R-2).
+  const cspError = fieldErrors.includes('directives');
+  const CSP_ERROR_ID = 'csp-directives-error';
 
   const KIND_LABELS: Record<ModificationKind, MessageKey> = {
     'request-header': 'kindRequestHeader',
@@ -296,6 +299,9 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
                 }
                 placeholder="default-src"
                 aria-label={t('ariaCspDirectiveName')}
+                // 디렉티브 필수(이름 있는 항목 ≥1) 검증 실패 시, 이름이 빈 입력을 invalid로 표시.
+                aria-invalid={cspError && directive.name.trim() === '' ? true : undefined}
+                aria-describedby={cspError ? CSP_ERROR_ID : undefined}
                 className="w-32"
               />
               <Input
@@ -330,7 +336,7 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
             <Plus size={14} strokeWidth={1.75} className="mr-1" />
             {t('addDirective')}
           </Button>
-          {requiredError('directives') && <FieldError>{t('requiredField')}</FieldError>}
+          {cspError && <FieldError id={CSP_ERROR_ID}>{t('requiredField')}</FieldError>}
         </div>
       )}
 

@@ -8,9 +8,9 @@ export const fieldCaption = 'text-xs font-medium text-zinc-600 dark:text-zinc-30
 export const fieldErrorClass = 'text-xs text-red-600 dark:text-red-400';
 
 /** Field 컨텍스트를 못 쓰는 자리(다중 컨트롤 그룹)의 인라인 오류 문구. */
-export function FieldError({ children }: { children: ReactNode }) {
+export function FieldError({ id, children }: { id?: string; children: ReactNode }) {
   return (
-    <p role="alert" className={fieldErrorClass}>
+    <p id={id} role="alert" className={fieldErrorClass}>
       {children}
     </p>
   );

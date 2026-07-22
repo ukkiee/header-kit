@@ -188,6 +188,9 @@ export function restoreModification(
   modification: Modification,
   materializedValue?: string,
 ): StoredState {
+  // 대상 프로필이 사라졌으면(삭제 후 그 프로필까지 삭제됐다면) 아무것도 하지 않는다 —
+  // 규칙을 못 넣으면서 materialized만 쓰면 도달 불가능한 값이 영구히 남는다(원자성 위반).
+  if (!state.profiles.some((p) => p.id === profileId)) return state;
   const base = withProfile(state, profileId, (profile) => {
     const modifications = [...profile.modifications];
     modifications.splice(Math.max(0, Math.min(index, modifications.length)), 0, modification);

@@ -1,0 +1,47 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "release",
+  "verdict": "needs-attention",
+  "summary": "Do not ship yet: Undo can corrupt persisted materialization state after profile deletion, and CSP validation does not meet the promised accessibility contract or test coverage.",
+  "planFile": "docs/reviews/ui-refine/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 74,
+  "target": "branch diff against main",
+  "reviewedSha": "7de8602a0084be86482441b99e61ecc96f467913",
+  "reviewedTree": "0225af0037c6423df5ed74b278c6716e17406713",
+  "headMovedDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 2,
+  "planFindingCount": 0,
+  "triage": "review-gate SKILL.md rules govern: render EVERY finding as a full table row, the human decides each row (accept/reject/defer/question — free text), echo back before applying, max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "medium",
+      "title": "Undo after profile deletion restores orphaned materialized data",
+      "body": "The Undo callback remains actionable after the containing profile can be deleted. `restoreModification` silently fails to insert the rule when `profileId` no longer exists, but still writes `materializedValue` into global state. This leaves an unreachable placeholder value persisted indefinitely and violates the atomic restoration contract. The committed N20 test covers only immediate Undo, so it misses this intervening-state failure.",
+      "file": "src/core/commands.ts",
+      "line_start": 185,
+      "line_end": 199,
+      "confidence": 0.97,
+      "recommendation": "Make restore a no-op or return an error unless the target profile still exists, and never restore materialized data without restoring the rule. Add a command-level test for remove rule → remove profile → Undo.",
+      "isPlanFinding": false
+    },
+    {
+      "severity": "medium",
+      "title": "CSP validation omits the required aria-invalid state",
+      "body": "When every CSP directive name is empty, Save is blocked and a group-level error is rendered, but none of the directive-name inputs receives `aria-invalid`. This only partially implements the spec's explicit contract that missing fields receive both inline errors and `aria-invalid`. The advertised smoke evidence checks `aria-invalid` only for an empty header name, so it passes without covering this required CSP seam.",
+      "file": "src/features/modifications/rule-form.tsx",
+      "line_start": 286,
+      "line_end": 333,
+      "confidence": 0.99,
+      "recommendation": "Set `aria-invalid` on the CSP directive-name inputs when the `directives` error is active, associate the error text via `aria-describedby`, and extend smoke coverage to verify the CSP path and unchanged storage.",
+      "isPlanFinding": false
+    }
+  ],
+  "next_steps": [
+    "Guard `restore-modification` against a missing target profile and test the intervening profile-deletion scenario.",
+    "Complete and smoke-test CSP validation accessibility before merge."
+  ]
+}

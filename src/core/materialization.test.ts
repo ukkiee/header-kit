@@ -179,6 +179,14 @@ describe('실체화 수명주기 (활성화 경계)', () => {
     const restored = restoreModification(state([one]), 'p1', 5, mod('b', 'y'));
     expect(restored.profiles[0]?.modifications.map((m) => m.id)).toEqual(['a', 'b']);
   });
+
+  it('삭제-Undo: 대상 프로필이 사라졌으면 no-op — 고아 materialized를 남기지 않는다 (release r1 R-1)', () => {
+    // 규칙 삭제 → 그 프로필까지 삭제 → Undo. 규칙을 넣을 곳이 없으므로 아무것도 안 한다.
+    const empty = state([]);
+    const restored = restoreModification(empty, 'gone', 0, mod('m-ph', 'trace-{{uuid}}'), 'trace-old');
+    expect(restored).toBe(empty); // 참조 동일 — 상태 무변경
+    expect(restored.materialized).toEqual({}); // materialized 오염 없음
+  });
 });
 
 describe('재시작 유지 (persist → parse → compile)', () => {

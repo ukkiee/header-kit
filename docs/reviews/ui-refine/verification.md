@@ -1,6 +1,6 @@
 # ui-refine — 검증 증거 (Stage 5)
 
-**Verified SHA:** `8da717cdeee6de25e829985c2affcdae8f638f72` (feature/ui-refine, 8개 티켓 전부 done)
+**Verified SHA:** feature/ui-refine, 8개 티켓 전부 done + 릴리스 게이트 r1 반영(R-1/R-2). vitest **203**, smoke **79/79**.
 
 ## 실행한 명령과 결과 (HEAD에서)
 

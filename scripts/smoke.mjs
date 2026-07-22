@@ -1536,6 +1536,24 @@ try {
     cookieLabelShown && noStaleError && redirectErrors === 2 && /Response cookie/.test(setCookieSelected ?? ''),
     `cookie-label=${cookieLabelShown}, no-stale=${noStaleError}, redirect-errors=${redirectErrors}, kind="${(setCookieSelected ?? '').trim()}"`);
 
+  // N18e: CSP 디렉티브 이름이 비면 Save 차단 — 인라인 오류 + 이름 입력에 aria-invalid + 저장 안 됨 (release r1 R-2)
+  await pickOption(popup, 'Type', 'CSP');
+  await popup.getByRole('button', { name: 'directive' }).click(); // 빈 디렉티브 1개 추가
+  const cspNameInput = popup.getByLabel('CSP directive name').first();
+  await cspNameInput.waitFor({ timeout: 5000 });
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  const cspInlineError = await popup.getByText('Required.', { exact: true }).first()
+    .waitFor({ timeout: 5000 }).then(() => true, () => false);
+  const cspAriaInvalid = await cspNameInput.getAttribute('aria-invalid');
+  const modsAfterCspBlock = await sw.evaluate(async () => {
+    const { state } = await chrome.storage.local.get('state');
+    return state.profiles[0].modifications.length;
+  });
+  record('N18e: CSP 빈 디렉티브 이름 Save 차단 — 인라인 오류·aria-invalid·스토리지 불변',
+    cspInlineError && cspAriaInvalid === 'true' && modsAfterCspBlock === 1,
+    `error=${cspInlineError}, aria-invalid=${cspAriaInvalid}, mods=${modsAfterCspBlock}`);
+  // 폼은 열어둔 채 다음 케이스(N18c)로 — 종류 전환이 스테일 오류를 지운다.
+
   // c: 모드 숨김 — 비허용 요청 헤더 이름이면 Mode 미노출, 허용(Accept)이면 노출
   await pickOption(popup, 'Type', 'Request header');
   await popup.getByLabel('Header name', { exact: true }).fill('X-Custom');
