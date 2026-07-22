@@ -13,8 +13,8 @@ export interface ProfileSidebarProps {
 }
 
 /**
- * 탭 앱 사이드바 (ADR 0004) — 프로필 목록 + 검색. 선택은 팝업 칩 스위처와 같은
- * 재조정 불변식(앱 레이어 selectedId)을 공유하고, aria 규약도 동일하게 맞춰
+ * 프로필 사이드바 (ADR 0005) — 양 표면 공용 목록 + 검색. 선택은 앱 레이어
+ * selectedId의 재조정 불변식을 따르고, aria 규약(profileSelectLabel)로
  * smoke·스크린리더가 표면과 무관하게 같은 셀렉터를 쓴다.
  */
 export function ProfileSidebar({ profiles, selectedId, onSelect, onCreate }: ProfileSidebarProps) {
@@ -37,7 +37,6 @@ export function ProfileSidebar({ profiles, selectedId, onSelect, onCreate }: Pro
         {visible.map((profile) => (
           <li key={profile.id}>
             <SwitcherChip
-              shape="row"
               selected={profile.id === selectedId}
               aria-label={profileSelectLabel(profile, t)}
               onClick={() => onSelect(profile.id)}
@@ -49,7 +48,6 @@ export function ProfileSidebar({ profiles, selectedId, onSelect, onCreate }: Pro
         ))}
       </ul>
       <SwitcherChip
-        shape="row"
         className="w-auto self-start text-zinc-500 dark:text-zinc-400"
         onClick={onCreate}
       >

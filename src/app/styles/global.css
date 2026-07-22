@@ -53,9 +53,8 @@
   --radius-lg: 0.75rem;
 }
 
-/* 팝업 최소 폭 — 탭 앱은 항상 그보다 넓어 같은 규칙이 무해하다. */
+/* 팝업 크기는 셸이 정한다(760×580, ADR 0005) — body는 서체만 소유한다. */
 body {
-  min-width: 420px;
   font-family: var(--font-sans);
 }
 

@@ -1,5 +1,5 @@
 /**
- * UI 진단 (popup-ui-fixes 스파이크) — 실 확장을 로드해 420px + 한국어 + 실데이터로
+ * UI 진단 — 실 확장을 로드해 팝업(760×580 단일 셸, ADR 0005) + 한국어 + 실데이터로
  * 팝업을 렌더하고 스크린샷을 떠서 레이아웃 문제를 전수 확인한다.
  * 실행: bun run build && node scripts/ui-diag.mjs
  */
@@ -37,8 +37,8 @@ const richState = {
       ],
     },
     { id: 'p2', name: '두 번째 프로필', active: false, shortLabel: '2', color: '#2563eb', modifications: [], filters: [] },
-    // 칩 스위처 wrap+truncate 경계 — 긴 en/ko 이름 + 다수 프로필로 420px 줄바꿈을 실제로 발동시킨다.
-    { id: 'p3', name: '아주 길고 긴 한국어 프로필 이름은 칩에서 잘려야 한다', active: true, shortLabel: '긴', color: '#16a34a', modifications: [], filters: [] },
+    // 사이드바 truncate 경계 — 긴 en/ko 이름 + 다수 프로필 (ADR 0005 단일 셸).
+    { id: 'p3', name: '아주 길고 긴 한국어 프로필 이름은 목록에서 잘려야 한다', active: true, shortLabel: '긴', color: '#16a34a', modifications: [], filters: [] },
     { id: 'p4', name: 'A very long English profile name that must truncate', active: false, shortLabel: 'EN', color: '#dc2626', modifications: [], filters: [] },
     { id: 'p5', name: 'QA', active: true, shortLabel: 'QA', color: '#7c3aed', modifications: [], filters: [] },
     { id: 'p6', name: 'Perf', active: false, shortLabel: 'PF', color: '#0891b2', modifications: [], filters: [] },
@@ -56,7 +56,7 @@ try {
   await sw.evaluate(async (state) => chrome.storage.local.set({ state }), richState);
 
   const popup = await context.newPage();
-  await popup.setViewportSize({ width: 420, height: 1000 });
+  await popup.setViewportSize({ width: 760, height: 600 });
   await popup.goto(`chrome-extension://${extensionId}/popup.html?locale=ko`);
   await popup.waitForTimeout(500);
 
@@ -91,7 +91,7 @@ try {
   await tab.screenshot({ path: `${OUT}/diag-5-tabapp-dark.png`, fullPage: true });
   console.log('shot 5: tab app (dark)');
 
-  // 경계: 다수 프로필 + 최대 길이 en/ko 이름 — 칩 wrap이 대량 발동해도 420px 가로
+  // 경계: 다수 프로필 + 최대 길이 en/ko 이름 — 사이드바 목록이 길어져도 팝업 가로
   // 오버플로가 없어야 한다. 오버플로는 진단 실패(exit 1)로 처리한다.
   const boundaryProfiles = Array.from({ length: 12 }, (_, i) => ({
     id: `bnd${i}`,

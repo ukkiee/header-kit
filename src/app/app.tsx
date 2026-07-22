@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { BackupPanel } from '@/features/backup/backup-panel';
 import { PreferencesPanel } from '@/features/preferences/preferences-panel';
-import { ProfileChips } from '@/features/profiles/profile-chips';
 import { ProfileSection, type ProfileTab } from '@/features/profiles/profile-section';
 import { ProfileSidebar } from '@/features/profiles/profile-sidebar';
 import { reconcileSelection } from '@/features/profiles/selection';
@@ -24,10 +23,10 @@ import {
 } from '@/platform/stateStore';
 import { queryTabPickerOptions, type TabPickerOptions } from '@/platform/tabs';
 
-/** popup은 컴팩트, tab 앱은 레일+사이드바 셸 — 같은 편집 컴포넌트를 공유한다. */
+/** 두 표면은 단일 셸(ADR 0005) — 차이는 크기와 '탭에서 열기' 버튼뿐. */
 export type AppSurface = 'popup' | 'tab';
 
-/** 탭 앱 레일 화면 — 팝업 하단 접이 패널들이 넓은 표면에서 승격된다 (ADR 0004). */
+/** 레일 화면 — 관리 기능(백업/환경설정)이 본문 편집과 분리된다 (ADR 0005). */
 type RailView = 'profiles' | 'backups' | 'preferences';
 
 const RAIL_ITEMS: Array<{ view: RailView; icon: string; labelKey: MessageKey }> = [
@@ -158,99 +157,73 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
     <p className="text-xs text-zinc-500 dark:text-zinc-400">{t(locale, 'noProfilesYet')}</p>
   );
 
-  if (surface === 'tab') {
-    return (
-      <LocaleProvider locale={locale}>
-        <div className={`grid min-h-screen grid-cols-[3rem_14rem_minmax(0,1fr)] ${canvas}`}>
-          <nav className="flex flex-col items-center gap-1 border-r border-zinc-200 py-3 dark:border-zinc-800">
-            {RAIL_ITEMS.map(({ view, icon, labelKey }) => (
-              <Button
-                key={view}
-                variant="ghost"
-                size="sm"
-                aria-label={t(locale, labelKey)}
-                aria-pressed={railView === view}
-                className={railView === view ? 'bg-zinc-100 dark:bg-zinc-800' : ''}
-                onClick={() => setRailView(view)}
-              >
-                {icon}
-              </Button>
-            ))}
-          </nav>
-
-          <aside className="flex flex-col gap-2 border-r border-zinc-200 p-3 dark:border-zinc-800">
-            <ProfileSidebar
-              profiles={state.profiles}
-              selectedId={effectiveSelectedId}
-              onSelect={setSelectedId}
-              onCreate={createAndSelectProfile}
-            />
-          </aside>
-
-          <main className="flex min-w-0 flex-col gap-3 p-4">
-            <div className="flex items-center justify-between">
-              <h1 className="text-base font-semibold">{t(locale, 'appName')}</h1>
-              {pauseButton}
-            </div>
-
-            {/* 오류·일시정지 배너는 레일 화면과 무관하게 항상 보인다 — 조용한 실패 금지. */}
-            {alerts}
-
-            {railView === 'profiles' && (
-              <>
-                {summary && <StatusSummary summary={summary} />}
-                {profileEditor}
-                <TransferPanel state={state} onCommand={dispatchWithResult} />
-              </>
-            )}
-            {railView === 'backups' && <BackupPanel onCommand={dispatchWithResult} />}
-            {railView === 'preferences' && (
-              <PreferencesPanel
-                customHeaderNames={state.customHeaderNames}
-                onCommand={dispatch}
-                incognitoAllowed={incognitoAllowed}
-              />
-            )}
-          </main>
-        </div>
-      </LocaleProvider>
-    );
-  }
-
+  // 단일 셸 (ADR 0005) — 두 표면이 같은 레일+사이드바+본문을 쓴다.
+  // 차이는 크기(팝업 760×580 고정+본문 스크롤 / 탭 전폭·전고)와 "탭에서 열기"뿐.
   return (
     <LocaleProvider locale={locale}>
-    <main className={`mx-auto flex flex-col gap-3 p-4 ${canvas}`}>
-      <div className="flex items-center justify-between">
-        <h1 className="text-base font-semibold">{t(locale, 'appName')}</h1>
-        <div className="flex items-center gap-1">
-          <Button variant="ghost" size="sm" aria-label={t(locale, 'openInTab')} onClick={openTabApp}>
-            ⧉ {t(locale, 'openInTab')}
-          </Button>
-          {pauseButton}
-        </div>
+      <div
+        className={`grid grid-cols-[3rem_14rem_minmax(0,1fr)] ${canvas} ${
+          surface === 'tab' ? 'min-h-screen' : 'h-[580px] w-[760px]'
+        }`}
+      >
+        <nav className="flex flex-col items-center gap-1 border-r border-zinc-200 py-3 dark:border-zinc-800">
+          {RAIL_ITEMS.map(({ view, icon, labelKey }) => (
+            <Button
+              key={view}
+              variant="ghost"
+              size="sm"
+              aria-label={t(locale, labelKey)}
+              aria-pressed={railView === view}
+              className={railView === view ? 'bg-zinc-100 dark:bg-zinc-800' : ''}
+              onClick={() => setRailView(view)}
+            >
+              {icon}
+            </Button>
+          ))}
+        </nav>
+
+        <aside className="flex min-h-0 flex-col gap-2 overflow-y-auto border-r border-zinc-200 p-3 dark:border-zinc-800">
+          <ProfileSidebar
+            profiles={state.profiles}
+            selectedId={effectiveSelectedId}
+            onSelect={setSelectedId}
+            onCreate={createAndSelectProfile}
+          />
+        </aside>
+
+        <main className="flex min-h-0 min-w-0 flex-col gap-3 overflow-y-auto p-4">
+          <div className="flex items-center justify-between">
+            <h1 className="text-base font-semibold">{t(locale, 'appName')}</h1>
+            <div className="flex items-center gap-1">
+              {surface === 'popup' && (
+                <Button variant="ghost" size="sm" aria-label={t(locale, 'openInTab')} onClick={openTabApp}>
+                  ⧉ {t(locale, 'openInTab')}
+                </Button>
+              )}
+              {pauseButton}
+            </div>
+          </div>
+
+          {/* 오류·일시정지 배너는 레일 화면과 무관하게 항상 보인다 — 조용한 실패 금지. */}
+          {alerts}
+
+          {railView === 'profiles' && (
+            <>
+              {summary && <StatusSummary summary={summary} />}
+              {profileEditor}
+              <TransferPanel state={state} onCommand={dispatchWithResult} />
+            </>
+          )}
+          {railView === 'backups' && <BackupPanel onCommand={dispatchWithResult} />}
+          {railView === 'preferences' && (
+            <PreferencesPanel
+              customHeaderNames={state.customHeaderNames}
+              onCommand={dispatch}
+              incognitoAllowed={incognitoAllowed}
+            />
+          )}
+        </main>
       </div>
-
-      {summary && <StatusSummary summary={summary} />}
-
-      {alerts}
-
-      <ProfileChips
-        profiles={state.profiles}
-        selectedId={effectiveSelectedId}
-        onSelect={setSelectedId}
-        onCreate={createAndSelectProfile}
-      />
-
-      {profileEditor}
-
-      <TransferPanel state={state} onCommand={dispatchWithResult} />
-      <BackupPanel onCommand={dispatchWithResult} />
-      <PreferencesPanel
-        customHeaderNames={state.customHeaderNames}
-        onCommand={dispatch}
-        incognitoAllowed={incognitoAllowed}
-      />
-    </main>
     </LocaleProvider>
   );
 }

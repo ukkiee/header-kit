@@ -625,6 +625,8 @@ try {
   await seedProfiles([]);
   await pollSessionRuleCount(sw, 0);
   await popup.reload();
+  // 단일 셸(ADR 0005): 백업은 팝업에서도 레일 화면 경유
+  await popup.getByRole('button', { name: 'Show backups' }).click();
   await popup.getByRole('button', { name: 'Toggle backups' }).click();
   const restoreRow = popup.locator('li').filter({ hasText: 'profile' }).first();
   await restoreRow.getByRole('button', { name: 'Restore backup' }).click();
@@ -768,12 +770,16 @@ try {
     baseProfile('p-ac', 'Ac', [hdr({ id: 'm1', name: '', value: 'v' })], []),
   ]);
   await popup.reload();
+  // 단일 셸(ADR 0005): 환경설정은 레일 화면 경유, datalist 검사는 프로필 화면 복귀 후
+  await popup.getByRole('button', { name: 'Show preferences' }).click();
   await popup.getByRole('button', { name: 'Toggle preferences' }).click();
   await popup.getByLabel('New autocomplete header').fill('X-Team-Custom');
   await popup.getByRole('button', { name: 'Add autocomplete header' }).click();
   const savedCustom = await sw.evaluate(async () =>
     (await chrome.storage.local.get('state')).state.customHeaderNames,
   );
+  await popup.getByRole('button', { name: 'Show profiles' }).click();
+  await popup.getByLabel('Header name').first().waitFor({ timeout: 5000 });
   const datalistHasCustom = await popup.evaluate(async () => {
     const nameInput = document.querySelector('input[aria-label="Header name"]');
     if (!nameInput) return false;
@@ -987,7 +993,7 @@ try {
   record('M5: invalid redirect 패턴이 저장 시점에 거부', redirectReject?.ok === false && /regex/i.test(redirectReject?.error ?? ''),
     `ok=${redirectReject?.ok}, error="${redirectReject?.error}"`);
 
-  // ---------- N. ui-simplify 슬라이스 01: 단일 프로필 뷰 + 칩 스위처 ----------
+  // ---------- N. 단일 프로필 뷰 + 사이드바 (ADR 0005 단일 셸) ----------
   // N1: 칩 클릭 → 본문이 해당 프로필로 전환된다
   await seedProfiles([
     baseProfile('n-a', 'Alpha',
@@ -1000,19 +1006,19 @@ try {
   const pollProfileName = (test, timeoutMs = 5000) =>
     pollUntil(() => popup.getByLabel('Profile name').inputValue().catch(() => ''), test, timeoutMs, 100);
 
-  // 첫 활성(Alpha)이 자동 선택 → Beta 칩 클릭으로 전환
+  // 첫 활성(Alpha)이 자동 선택 → 사이드바에서 Beta 선택으로 전환
   await popup.getByRole('button', { name: 'Select profile Beta' }).click();
   const shownName = await pollProfileName((v) => v === 'Beta');
-  record('N1: 칩 클릭 → 본문 프로필 전환', shownName === 'Beta', `name=${shownName}`);
+  record('N1: 사이드바 선택 → 본문 프로필 전환', shownName === 'Beta', `name=${shownName}`);
 
-  // N1b: 칩이 on/off 상태를 반영한다 (aria-label = 도트와 같은 소스)
+  // N1b: 사이드바 항목이 on/off 상태를 반영한다 (aria-label = 도트와 같은 소스)
   const betaOff = await popup.getByRole('button', { name: 'Select profile Beta (off)' }).isVisible();
   await popup.getByRole('switch', { name: 'Toggle Beta' }).click();
   const betaOn = await popup
     .getByRole('button', { name: 'Select profile Beta (on)' })
     .waitFor({ timeout: 5000 })
     .then(() => true, () => false);
-  record('N1b: 칩 도트/라벨이 프로필 on/off 반영', betaOff && betaOn, `off=${betaOff}, on=${betaOn}`);
+  record('N1b: 사이드바 도트/라벨이 프로필 on/off 반영', betaOff && betaOn, `off=${betaOff}, on=${betaOn}`);
   await popup.getByRole('switch', { name: 'Toggle Beta' }).click();
 
   // N2: + 새 프로필 → 생성된 프로필이 선택된다
@@ -1137,7 +1143,7 @@ try {
     emptyMeansMod?.emptyMeans === 'send-empty' && emptyMeansMod?.value === '',
     `emptyMeans=${emptyMeansMod?.emptyMeans}, value="${emptyMeansMod?.value}"`);
 
-  // N8: ⋯ 메뉴 이동 → 칩 순서 + 겹침 승자 실반영, 키보드로 복제 (슬라이스 06)
+  // N8: ⋯ 메뉴 이동 → 목록 순서 + 겹침 승자 실반영, 키보드로 복제
   await seedProfiles([
     baseProfile('n-top', 'Top',
       [{ kind: 'request-header', id: 't1', name: 'X-Conf', value: 'top-wins', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
@@ -1180,7 +1186,7 @@ try {
     }),
     (names) => names.length === 3,
   );
-  record('N8: 메뉴 이동→칩 순서+승자 반영, 키보드 복제',
+  record('N8: 메뉴 이동→목록 순서+승자 반영, 키보드 복제',
     winnerBefore === 'top-wins' && chipOrder[0]?.startsWith('Bottom') && winnerAfter === 'bottom-wins'
       && profilesAfterDup.length === 3,
     `before=${winnerBefore}, chips=[${chipOrder.join('|')}], after=${winnerAfter}, profiles=${profilesAfterDup.length}`);
@@ -1234,7 +1240,7 @@ try {
   );
   record('N10: 표면 동일성 — 탭 앱 편집이 실요청 반영', tabHeader === 'yes', `x-from-tab=${tabHeader}`);
 
-  // N11: 키보드 경로 마감 — 칩 스위처·행 확장 토글 (탭=N5, 메뉴=N8과 함께 4종 완성, 슬라이스 09)
+  // N11: 키보드 경로 마감 — 사이드바·행 확장 토글 (탭=N5, 메뉴=N8과 함께 4종 완성)
   await seedProfiles([
     baseProfile('k-a', 'KeyA',
       [{ kind: 'request-header', id: 'm1', name: 'X-K', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
@@ -1242,7 +1248,7 @@ try {
     { ...baseProfile('k-b', 'KeyB', [], []), active: false },
   ]);
   await popup.reload();
-  // 칩: 포커스 + Enter → 프로필 전환
+  // 사이드바 항목: 포커스 + Enter → 프로필 전환
   await popup.getByRole('button', { name: 'Select profile KeyB' }).focus();
   await popup.keyboard.press('Enter');
   const kbSwitched = await pollProfileName((v) => v === 'KeyB');
@@ -1253,9 +1259,9 @@ try {
   await rowToggle.focus();
   await popup.keyboard.press('Enter');
   const kbExpanded = await pollUntil(() => rowToggle.getAttribute('aria-expanded'), (v) => v === 'true', 5000);
-  record('N11: 키보드 — 칩 전환·행 확장 토글',
+  record('N11: 키보드 — 사이드바 전환·행 확장 토글',
     kbSwitched === 'KeyB' && kbExpanded === 'true',
-    `chip=${kbSwitched}, row-expanded=${kbExpanded}`);
+    `sidebar=${kbSwitched}, row-expanded=${kbExpanded}`);
 
   // N12: 프로필 헤더 편집(이름·뱃지 라벨·뱃지 색) → 상태 반영 (매트릭스 행 14 마감)
   // 각 편집은 UI 반영을 기다린 뒤 다음 편집 — 전체 객체 전송 모델의 순차 편집 규약.
@@ -1279,6 +1285,17 @@ try {
   record('N12: 헤더 이름·뱃지 편집 → 상태 반영',
     finalMeta.name === 'Renamed' && finalMeta.shortLabel === 'RN' && finalMeta.color === '#dc2626',
     `name=${finalMeta.name}, badge=${finalMeta.shortLabel}, color=${finalMeta.color}`);
+
+  // N12b: 팝업 사이드바 검색 필터 (ADR 0005 — 검색이 양 표면에서 동작)
+  await popup.getByLabel('Search profiles').fill('Renamed');
+  const popupSearch = await pollUntil(
+    () => popup.locator('[aria-label^="Select profile"]').allTextContents(),
+    (names) => names.length === 1,
+  );
+  await popup.getByLabel('Search profiles').fill('');
+  record('N12b: 팝업 사이드바 검색 필터',
+    popupSearch.length === 1 && popupSearch[0]?.startsWith('Renamed'),
+    `search=[${popupSearch.join('|')}]`);
 
   // N13: Export 경로 — 실제 다운로드 캡처 → 페이로드 검증 (release r1 R-2)
   // 현재 상태: Renamed(k-a) + KeyB(k-b). 전체 선택 기본 → 2개 내보내기.
@@ -1304,7 +1321,7 @@ try {
     .waitFor({ timeout: 5000 })
     .then(() => true, () => false);
   const koMenu = await popupKo.getByRole('button', { name: '프로필 메뉴' }).isVisible().catch(() => false);
-  const koChip = await popupKo.getByRole('button', { name: 'KeyB 프로필 선택 (끔)' }).isVisible().catch(() => false);
+  const koSidebarItem = await popupKo.getByRole('button', { name: 'KeyB 프로필 선택 (끔)' }).isVisible().catch(() => false);
   const koRowToggle = await popupKo
     .getByRole('button', { name: '수정 옵션 펼치기/접기' })
     .first()
@@ -1312,8 +1329,8 @@ try {
     .catch(() => false);
   await popupKo.close();
   record('N14: ko 접근성 이름 — aria 카탈로그 경유',
-    koToggle && koMenu && koChip && koRowToggle,
-    `toggle=${koToggle}, menu=${koMenu}, chip=${koChip}, row=${koRowToggle}`);
+    koToggle && koMenu && koSidebarItem && koRowToggle,
+    `toggle=${koToggle}, menu=${koMenu}, sidebar=${koSidebarItem}, row=${koRowToggle}`);
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
