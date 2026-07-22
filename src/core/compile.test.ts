@@ -17,6 +17,45 @@ function profile(overrides: Partial<Profile> = {}): Profile {
 }
 
 describe('compile', () => {
+  it('urlMatchType이 비정규식이면 DNR urlFilter로 매핑되고 regex 카운터를 안 쓴다 (ADR 0008)', () => {
+    const mk = (id: string, urlFilter: string, urlMatchType: 'domain' | 'contains' | 'prefix') => ({
+      kind: 'request-header' as const, id, name: `X-${id}`, value: '1', enabled: true,
+      mode: 'override' as const, emptyMeans: 'remove' as const, comment: '', urlFilter, urlMatchType,
+    });
+    const { rules, warnings } = compile(
+      [profile({ modifications: [mk('d', 'example.com', 'domain'), mk('c', '/api/', 'contains'), mk('p', 'https://a.io/', 'prefix')] })],
+      { paused: false, tabs: [], now: 0, materialized: {} },
+    );
+    expect(warnings).toEqual([]);
+    const by = (h: string) => rules.find((r) => r.action.requestHeaders?.[0]?.header === h)?.condition;
+    expect(by('X-d')?.urlFilter).toBe('||example.com');
+    expect(by('X-c')?.urlFilter).toBe('/api/');
+    expect(by('X-p')?.urlFilter).toBe('|https://a.io/');
+    for (const h of ['X-d', 'X-c', 'X-p']) expect(by(h)?.regexFilter).toBeUndefined();
+  });
+
+  it('urlMatchType 부재 + urlFilter 존재 = regex (하위 호환)', () => {
+    const { rules } = compile(
+      [profile({ modifications: [
+        { kind: 'request-header', id: 'm1', name: 'X', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '', urlFilter: 'legacy\\.regex' },
+      ] })],
+      { paused: false, tabs: [], now: 0, materialized: {} },
+    );
+    expect(rules[0]?.condition.regexFilter).toBe('legacy\\.regex');
+    expect(rules[0]?.condition.urlFilter).toBeUndefined();
+  });
+
+  it('비정규식 방식도 길이 한도 초과 시 방출하지 않고 경고한다', () => {
+    const { rules, warnings } = compile(
+      [profile({ modifications: [
+        { kind: 'request-header', id: 'm1', name: 'X', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '', urlFilter: 'a'.repeat(3000), urlMatchType: 'contains' },
+      ] })],
+      { paused: false, tabs: [], now: 0, materialized: {} },
+    );
+    expect(rules).toHaveLength(0);
+    expect(warnings.some((w) => w.code === 'regex-too-long' && w.modificationId === 'm1')).toBe(true);
+  });
+
   it('규칙 자체 urlFilter가 있으면 그 규칙의 regexFilter가 되고 프로필 URL 조인을 대체한다 (ADR 0007)', () => {
     const { rules, warnings } = compile(
       [

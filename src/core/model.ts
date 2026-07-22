@@ -8,6 +8,9 @@ export const SCHEMA_VERSION = 1 as const;
  * (ordered modifications 컬렉션)은 바뀌지 않는다.
  */
 /** 기존 값을 통째 대체(override)하거나 뒤에 덧붙인다(append). */
+/** 규칙 URL 필터의 매치 방식 (ADR 0008) — 부재 = regex(하위 호환). */
+export type UrlMatchType = 'domain' | 'contains' | 'prefix' | 'regex';
+
 export type HeaderMode = 'override' | 'append';
 /** 값이 비었을 때의 의미 — 헤더 제거 vs 빈 값 전송. */
 export type EmptyValueMeaning = 'remove' | 'send-empty';
@@ -23,8 +26,10 @@ interface HeaderModificationBase {
   emptyMeans: EmptyValueMeaning;
   comment: string;
   enabled: boolean;
-  /** 이 규칙만의 URL 필터(regex) — 있으면 프로필 URL 필터를 대체한다 (ADR 0007). */
+  /** 이 규칙만의 URL 필터 — 있으면 프로필 URL 필터를 대체한다 (ADR 0007). */
   urlFilter?: string;
+  /** urlFilter의 매치 방식 (ADR 0008) — 부재 = regex. */
+  urlMatchType?: UrlMatchType;
 }
 
 export interface RequestHeaderModification extends HeaderModificationBase {
@@ -50,8 +55,10 @@ export interface CookieModification {
   emptyMeans: EmptyValueMeaning;
   comment: string;
   enabled: boolean;
-  /** 이 규칙만의 URL 필터(regex) — 있으면 프로필 URL 필터를 대체한다 (ADR 0007). */
+  /** 이 규칙만의 URL 필터 — 있으면 프로필 URL 필터를 대체한다 (ADR 0007). */
   urlFilter?: string;
+  /** urlFilter의 매치 방식 (ADR 0008) — 부재 = regex. */
+  urlMatchType?: UrlMatchType;
 }
 
 /**
@@ -66,8 +73,10 @@ export interface SetCookieModification {
   emptyMeans: EmptyValueMeaning;
   comment: string;
   enabled: boolean;
-  /** 이 규칙만의 URL 필터(regex) — 있으면 프로필 URL 필터를 대체한다 (ADR 0007). */
+  /** 이 규칙만의 URL 필터 — 있으면 프로필 URL 필터를 대체한다 (ADR 0007). */
   urlFilter?: string;
+  /** urlFilter의 매치 방식 (ADR 0008) — 부재 = regex. */
+  urlMatchType?: UrlMatchType;
 }
 
 export interface CspDirective {
@@ -82,8 +91,10 @@ export interface CspModification {
   directives: CspDirective[];
   comment: string;
   enabled: boolean;
-  /** 이 규칙만의 URL 필터(regex) — 있으면 프로필 URL 필터를 대체한다 (ADR 0007). */
+  /** 이 규칙만의 URL 필터 — 있으면 프로필 URL 필터를 대체한다 (ADR 0007). */
   urlFilter?: string;
+  /** urlFilter의 매치 방식 (ADR 0008) — 부재 = regex. */
+  urlMatchType?: UrlMatchType;
 }
 
 /** Redirect — regex 매칭 + 캡처 그룹 치환으로 URL을 재작성한다. */

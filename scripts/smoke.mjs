@@ -1331,12 +1331,12 @@ try {
     koToggle && koMenu && koSidebarItem && koRowToggle,
     `toggle=${koToggle}, menu=${koMenu}, sidebar=${koSidebarItem}, row=${koRowToggle}`);
 
-  // N15: 규칙 단위 URL 필터 (ADR 0007) — 같은 프로필에서 스코프 규칙은 매칭 URL에만,
-  // 무스코프 규칙은 어디서나. 프로필 필터는 건드리지 않는다.
+  // N15: 규칙 단위 URL 필터 (ADR 0007/0008) — contains(비정규식)와 regex 두 방식 모두
+  // 매칭 URL에만 적용되고, 무스코프 규칙은 전역이며, 프로필 필터는 건드리지 않는다.
   // 상태: Renamed(k-a, 켬, X-K:1) + KeyB. 팝업은 Renamed 선택.
-  // 1) 기존 규칙(X-K)에 자체 스코프 부여
+  // 1) 기존 규칙(X-K)에 contains 스코프(기본 방식) 부여 — 평문 부분 문자열
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
-  await popup.getByLabel('URL filter').fill(`127\\.0\\.0\\.1:${port}/headers\\?scope=1`);
+  await popup.getByLabel('URL filter').fill('scope=1');
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
   // 2) 무스코프 규칙(X-U) 추가
   await popup.getByRole('button', { name: 'Add rule' }).click();
@@ -1349,36 +1349,46 @@ try {
       const prof = state.profiles.find((x) => x.id === 'k-a');
       return { mods: prof?.modifications ?? [], filters: prof?.filters ?? [] };
     }),
-    (s) => s.mods.length === 2 && s.mods[0]?.urlFilter?.includes('scope=1') === true,
+    (s) => s.mods.length === 2 && s.mods[0]?.urlFilter === 'scope=1' && s.mods[0]?.urlMatchType === 'contains',
   );
   const inScope = await pollUntil(
     () => fetchEchoHeaders(pageB, '/headers?scope=1'),
     (h) => h['x-k'] === '1' && h['x-u'] === 'u',
   );
   const outScope = await fetchEchoHeaders(pageB, '/headers');
-  // 행 요약에 스코프 → 효과 프리픽스
   const scopedSummary = await popup.getByText(/scope=1.*→.*X-K/i).first().isVisible().catch(() => false);
-  // 3) 스코프 비우면 규칙 필드 제거 → 어디서나 적용
+  // 3) regex(고급) 방식으로 전환 — 실요청 검증
+  await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
+  await popup.getByLabel('URL match type').selectOption('regex');
+  await popup.getByLabel('URL filter').fill(`127\\.0\\.0\\.1:${port}/headers\\?scope=2`);
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  const regexIn = await pollUntil(
+    () => fetchEchoHeaders(pageB, '/headers?scope=2'),
+    (h) => h['x-k'] === '1',
+  );
+  const regexOut = await fetchEchoHeaders(pageB, '/headers');
+  // 4) 스코프 비우면 두 필드 모두 제거 → 어디서나 적용
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
   await popup.getByLabel('URL filter').fill('');
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
   const cleared = await pollUntil(
     () => sw.evaluate(async () => {
       const { state } = await chrome.storage.local.get('state');
-      const prof = state.profiles.find((x) => x.id === 'k-a');
-      return { url: prof?.modifications[0]?.urlFilter ?? null, filters: prof?.filters?.length ?? -1 };
+      const mod = state.profiles.find((x) => x.id === 'k-a')?.modifications[0] ?? {};
+      return { hasFilter: 'urlFilter' in mod, hasType: 'urlMatchType' in mod };
     }),
-    (s) => s.url === null,
+    (s) => !s.hasFilter && !s.hasType,
   );
   const clearedHeaders = await pollUntil(
     () => fetchEchoHeaders(pageB, '/headers'),
     (h) => h['x-k'] === '1',
   );
-  record('N15: 규칙 단위 URL 필터 — 스코프 규칙만 제한, 무스코프는 전역, 비우면 해제',
+  record('N15: 규칙 URL 필터 — contains·regex 스코핑, 무스코프 전역, 비우면 해제',
     kaState.filters.length === 0 && inScope['x-k'] === '1' && inScope['x-u'] === 'u'
       && outScope['x-k'] === undefined && outScope['x-u'] === 'u'
-      && scopedSummary && cleared.filters === 0 && clearedHeaders['x-k'] === '1',
-    `filters=${kaState.filters.length}, in=[${inScope['x-k']},${inScope['x-u']}], out=[${outScope['x-k']},${outScope['x-u']}], summary=${scopedSummary}, cleared=${clearedHeaders['x-k']}`);
+      && scopedSummary && regexIn['x-k'] === '1' && regexOut['x-k'] === undefined
+      && !cleared.hasFilter && !cleared.hasType && clearedHeaders['x-k'] === '1',
+    `filters=${kaState.filters.length}, contains=[${inScope['x-k']},${outScope['x-k']}], regex=[${regexIn['x-k']},${regexOut['x-k']}], summary=${scopedSummary}, storage-cleared=[${cleared.hasFilter},${cleared.hasType}], cleared=${clearedHeaders['x-k']}`);
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

@@ -28,7 +28,10 @@ export function isModification(value: unknown): value is Modification {
     typeof value.comment !== 'string' ||
     typeof value.enabled !== 'boolean' ||
     // 규칙 자체 URL 필터(ADR 0007)는 선택 문자열 — redirect에는 없다.
-    (value.urlFilter !== undefined && (typeof value.urlFilter !== 'string' || value.kind === 'redirect'))
+    (value.urlFilter !== undefined && (typeof value.urlFilter !== 'string' || value.kind === 'redirect')) ||
+    // 매치 방식(ADR 0008)은 enum — backfill이 무효값을 치유한 뒤라 여기선 형만 지킨다.
+    (value.urlMatchType !== undefined &&
+      !['domain', 'contains', 'prefix', 'regex'].includes(value.urlMatchType as string))
   ) {
     return false;
   }
@@ -118,7 +121,15 @@ export function backfillModification(value: unknown): unknown {
   if (value.kind === 'csp') {
     return { comment: '', ...value };
   }
-  return { mode: 'override', emptyMeans: 'remove', comment: '', ...value };
+  // 무효 urlMatchType은 치유로 벗긴다(부재 = regex 하위 호환) — 전량 거부 방지.
+  const healed: Record<string, unknown> = { mode: 'override', emptyMeans: 'remove', comment: '', ...value };
+  if (
+    healed.urlMatchType !== undefined &&
+    !['domain', 'contains', 'prefix', 'regex'].includes(healed.urlMatchType as string)
+  ) {
+    delete healed.urlMatchType;
+  }
+  return healed;
 }
 
 /**

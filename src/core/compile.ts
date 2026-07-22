@@ -1,6 +1,6 @@
 import { isProfileExpired } from './expiry';
 import { hasPlaceholders } from './placeholder';
-import type { Filter, HeaderMode, Modification, Profile } from './schema';
+import type { Filter, HeaderMode, Modification, Profile, UrlMatchType } from './schema';
 import { placeholderTemplate, UNSET_ID } from './schema';
 
 /** 값·mode를 가진 Modification 종류 (header/cookie/set-cookie). */
@@ -236,9 +236,11 @@ function emitRule(
 function conditionFor(
   compiled: CompiledFilters,
   regexFilter: string | undefined,
+  plainUrlFilter?: string,
 ): NetRule['condition'] {
   return {
     ...(regexFilter !== undefined ? { regexFilter } : {}),
+    ...(plainUrlFilter !== undefined ? { urlFilter: plainUrlFilter } : {}),
     resourceTypes: compiled.resourceTypes ?? [...ALL_RESOURCE_TYPES],
     ...(compiled.requestMethods ? { requestMethods: compiled.requestMethods } : {}),
     ...(compiled.initiatorDomains ? { initiatorDomains: compiled.initiatorDomains } : {}),
@@ -324,17 +326,25 @@ function emitModification(
 }
 
 
+/** 규칙 자체 스코프의 컴파일 결과 — regex 또는 DNR 비정규식 urlFilter (ADR 0007/0008). */
+type OwnScope =
+  | undefined // 자체 필터 없음 — 프로필 조인 사용
+  | null // 한도 초과 — 방출 금지(경고로 알림)
+  | { regexFilter: string }
+  | { urlFilter: string };
+
 /**
  * 규칙 자체 URL 필터 (ADR 0007) — 있으면 그 규칙의 조인을 대체한다.
- * 한도 초과면 null(방출 금지 신호) — 스코프를 조용히 넓히지 않는다.
+ * 매치 방식(ADR 0008): 부재/regex → regexFilter, 나머지는 DNR 비정규식 문법으로
+ * 매핑되어 regex 규칙 한도를 소모하지 않는다. 한도 초과면 방출 금지.
  */
-function ownScopeJoins(
-  modification: { id: string; urlFilter?: string },
+function ownScope(
+  modification: { id: string; urlFilter?: string; urlMatchType?: UrlMatchType },
   profileId: string,
   emitter: Emitter,
-): Array<string | undefined> | null | undefined {
+): OwnScope {
   const pattern = modification.urlFilter?.trim() ?? '';
-  if (pattern === '') return undefined; // 자체 필터 없음 — 프로필 조인 사용
+  if (pattern === '') return undefined;
   if (pattern.length > REGEX_JOIN_LIMIT) {
     emitter.warnings.push({
       code: 'regex-too-long',
@@ -342,9 +352,18 @@ function ownScopeJoins(
       modificationId: modification.id,
       limit: REGEX_JOIN_LIMIT,
     });
-    return null; // 방출 금지
+    return null;
   }
-  return [pattern];
+  switch (modification.urlMatchType ?? 'regex') {
+    case 'regex':
+      return { regexFilter: pattern };
+    case 'domain':
+      return { urlFilter: `||${pattern}` };
+    case 'prefix':
+      return { urlFilter: `|${pattern}` };
+    case 'contains':
+      return { urlFilter: pattern };
+  }
 }
 
 function emitHeaderRule(
@@ -366,20 +385,33 @@ function emitHeaderRule(
   }
 
   // 자체 필터 초과로 방출이 없을 규칙에 append 경고를 내지 않도록 먼저 검사한다.
-  const own = ownScopeJoins(modification, profileId, emitter);
+  const own = ownScope(modification, profileId, emitter);
   if (own === null) return; // 자체 필터가 한도 초과 — 규칙 없음 (경고로 알림)
   const info = resolveHeaderInfo(plan, modification, profileId, emitter);
-  for (const join of own ?? compiled.regexJoins) {
+  const action = {
+    type: 'modifyHeaders' as const,
+    ...(plan.isRequest ? { requestHeaders: [info] } : { responseHeaders: [info] }),
+  };
+  if (own !== undefined) {
     emitRule(
       emitter,
       {
         priority,
-        action: {
-          type: 'modifyHeaders',
-          ...(plan.isRequest ? { requestHeaders: [info] } : { responseHeaders: [info] }),
-        },
-        condition: conditionFor(compiled, join),
+        action,
+        condition: conditionFor(
+          compiled,
+          'regexFilter' in own ? own.regexFilter : undefined,
+          'urlFilter' in own ? own.urlFilter : undefined,
+        ),
       },
+      { profileId, modificationId: modification.id },
+    );
+    return;
+  }
+  for (const join of compiled.regexJoins) {
+    emitRule(
+      emitter,
+      { priority, action, condition: conditionFor(compiled, join) },
       { profileId, modificationId: modification.id },
     );
   }
@@ -427,19 +459,32 @@ function emitCspRule(
     .join('; ');
   if (value === '') return; // 빈 CSP는 규칙을 만들지 않는다
 
-  const own = ownScopeJoins(modification, profileId, emitter);
+  const own = ownScope(modification, profileId, emitter);
   if (own === null) return; // 자체 필터가 한도 초과 — 규칙 없음 (경고로 알림)
-  for (const join of own ?? compiled.regexJoins) {
+  const cspAction = {
+    type: 'modifyHeaders' as const,
+    responseHeaders: [{ header: 'Content-Security-Policy', operation: 'set' as const, value }],
+  };
+  if (own !== undefined) {
     emitRule(
       emitter,
       {
         priority,
-        action: {
-          type: 'modifyHeaders',
-          responseHeaders: [{ header: 'Content-Security-Policy', operation: 'set', value }],
-        },
-        condition: conditionFor(compiled, join),
+        action: cspAction,
+        condition: conditionFor(
+          compiled,
+          'regexFilter' in own ? own.regexFilter : undefined,
+          'urlFilter' in own ? own.urlFilter : undefined,
+        ),
       },
+      { profileId, modificationId: modification.id },
+    );
+    return;
+  }
+  for (const join of compiled.regexJoins) {
+    emitRule(
+      emitter,
+      { priority, action: cspAction, condition: conditionFor(compiled, join) },
       { profileId, modificationId: modification.id },
     );
   }

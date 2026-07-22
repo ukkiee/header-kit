@@ -47,9 +47,10 @@ async function validateCommand(command: Command): Promise<string | null> {
     if (command.modification.kind === 'redirect') {
       return validateRegexPattern(command.modification.pattern);
     }
-    // 규칙 자체 URL 필터(ADR 0007)도 같은 저장 시점 검증을 받는다.
-    if (command.modification.urlFilter !== undefined) {
-      return validateRegexPattern(command.modification.urlFilter);
+    // 규칙 자체 URL 필터(ADR 0007) — regex 방식만 플랫폼 검증을 받는다 (ADR 0008).
+    const mod = command.modification;
+    if (mod.urlFilter !== undefined && (mod.urlMatchType ?? 'regex') === 'regex') {
+      return validateRegexPattern(mod.urlFilter);
     }
     return null;
   }
@@ -67,7 +68,12 @@ async function validateCommand(command: Command): Promise<string | null> {
         }
       }
       for (const [index, mod] of profile.modifications.entries()) {
-        const pattern = mod.kind === 'redirect' ? mod.pattern : mod.urlFilter;
+        const pattern =
+          mod.kind === 'redirect'
+            ? mod.pattern
+            : (mod.urlMatchType ?? 'regex') === 'regex'
+              ? mod.urlFilter
+              : undefined;
         if (pattern === undefined) continue;
         const error = await validateRegexPattern(pattern);
         if (error !== null) {

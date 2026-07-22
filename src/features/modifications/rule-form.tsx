@@ -7,6 +7,7 @@ import {
   type CspModification,
   type Modification,
   type ModificationKind,
+  type UrlMatchType,
 } from '@/core/schema';
 import { hasPlaceholders } from '@/core/placeholder';
 import { Alert } from '@/ui/alert';
@@ -53,6 +54,9 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFormProps) {
   const t = useT();
   const [draft, setDraft] = useState<Modification>(() => initial ?? createModification('request-header'));
+  // 매치 방식 기본값: 기존 규칙에 필터가 있었으면 regex(하위 호환), 아니면 contains.
+  const defaultMatchType: UrlMatchType =
+    initial && 'urlFilter' in initial && initial.urlFilter ? 'regex' : 'contains';
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -74,7 +78,17 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
 
   const save = async () => {
     setSaving(true);
-    const result = await onSave(draft);
+    // 스코프 정리: 필터가 비면 매치 방식도 벗기고, 있으면 셀렉트 기본값을 확정한다.
+    let toSave = draft;
+    if (draft.kind !== 'redirect' && 'urlFilter' in draft) {
+      if (!draft.urlFilter) {
+        const { urlFilter: _f, urlMatchType: _m, ...rest } = draft;
+        toSave = rest as Modification;
+      } else if (!('urlMatchType' in draft) || draft.urlMatchType === undefined) {
+        toSave = { ...draft, urlMatchType: defaultMatchType } as Modification;
+      }
+    }
+    const result = await onSave(toSave);
     setSaving(false);
     if (!result.ok) setError(result.error ?? t('saveRejected'));
   };
@@ -112,17 +126,36 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
 
       {draft.kind !== 'redirect' && (
         <Field label={t('urlFilterScope')}>
-          <Input
-            font="mono"
-            value={'urlFilter' in draft ? (draft.urlFilter ?? '') : ''}
-            onChange={(e) =>
-              setDraft({
-                ...draft,
-                urlFilter: e.target.value === '' ? undefined : e.target.value,
-              } as Modification)
-            }
-            placeholder="api\\.example\\.com"
-          />
+          <div className="flex items-center gap-1.5">
+            <Select
+              variant="bordered"
+              size="md"
+              aria-label={t('ariaUrlMatchType')}
+              value={('urlMatchType' in draft ? draft.urlMatchType : undefined) ?? defaultMatchType}
+              onChange={(e) =>
+                setDraft({ ...draft, urlMatchType: e.target.value as UrlMatchType } as Modification)
+              }
+              className="shrink-0"
+            >
+              <option value="contains">{t('matchContains')}</option>
+              <option value="domain">{t('matchDomain')}</option>
+              <option value="prefix">{t('matchPrefix')}</option>
+              <option value="regex">{t('matchRegex')}</option>
+            </Select>
+            <Input
+              font="mono"
+              value={'urlFilter' in draft ? (draft.urlFilter ?? '') : ''}
+              onChange={(e) =>
+                setDraft({
+                  ...draft,
+                  urlFilter: e.target.value === '' ? undefined : e.target.value,
+                } as Modification)
+              }
+              placeholder="api.example.com"
+              aria-label={t('urlFilterScope')}
+              className="min-w-0 flex-1"
+            />
+          </div>
         </Field>
       )}
 
