@@ -6,6 +6,8 @@ import { ruleView } from './rule-summary';
 
 export interface RuleRowProps {
   modification: Modification;
+  /** 프로필 URL 필터 패턴 — 요약 앞에 `스코프 → 효과`로 붙는다. */
+  scope?: string;
   onToggleEnabled: (enabled: boolean) => void;
   onEdit: () => void;
   onRemove: () => void;
@@ -15,9 +17,9 @@ export interface RuleRowProps {
  * 규칙 읽기 요약 행 (ADR 0006) — 체크박스 + 제목/배지 + 효과 한 줄 + Edit/Delete.
  * 편집은 전부 폼에서 일어난다. 목록은 스캔용이다.
  */
-export function RuleRow({ modification, onToggleEnabled, onEdit, onRemove }: RuleRowProps) {
+export function RuleRow({ modification, scope, onToggleEnabled, onEdit, onRemove }: RuleRowProps) {
   const t = useT();
-  const view = ruleView(modification, t);
+  const view = ruleView(modification, t, scope);
 
   return (
     <div className="flex items-center gap-2.5 py-2">

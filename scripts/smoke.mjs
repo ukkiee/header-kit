@@ -1331,6 +1331,41 @@ try {
     koToggle && koMenu && koSidebarItem && koRowToggle,
     `toggle=${koToggle}, menu=${koMenu}, sidebar=${koSidebarItem}, row=${koRowToggle}`);
 
+  // N15: 폼 내 URL 필터(스코프) — 규칙과 함께 저장, 실요청 스코핑, 비우면 제거
+  // 상태: Renamed(k-a, 켬, X-K:1) + KeyB. 팝업은 Renamed 선택.
+  await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
+  await popup.getByLabel('URL filter').fill(`127\\.0\\.0\\.1:${port}/headers\\?scope=1`);
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  const scopedFilter = await pollUntil(
+    () => sw.evaluate(async () => {
+      const { state } = await chrome.storage.local.get('state');
+      return state.profiles.find((x) => x.id === 'k-a')?.filters ?? [];
+    }),
+    (f) => f.length === 1 && f[0]?.kind === 'url',
+  );
+  const inScope = await pollUntil(
+    () => fetchEchoHeaders(pageB, '/headers?scope=1').then((h) => h['x-k']),
+    (v) => v === '1',
+  );
+  const outOfScope = (await fetchEchoHeaders(pageB, '/headers'))['x-k'];
+  // 행 요약에 스코프 → 효과 프리픽스가 보인다
+  const scopedSummary = await popup.getByText(/scope=1.*→.*X-K/i).first().isVisible().catch(() => false);
+  // 스코프 비우고 저장 → 필터 제거
+  await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
+  await popup.getByLabel('URL filter').fill('');
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  const clearedFilters = await pollUntil(
+    () => sw.evaluate(async () => {
+      const { state } = await chrome.storage.local.get('state');
+      return state.profiles.find((x) => x.id === 'k-a')?.filters ?? [];
+    }),
+    (f) => f.length === 0,
+  );
+  record('N15: 폼 URL 필터 — 함께 저장·실요청 스코핑·비우면 제거',
+    scopedFilter.length === 1 && inScope === '1' && outOfScope === undefined
+      && scopedSummary && clearedFilters.length === 0,
+    `filter=${scopedFilter.length}, in=${inScope}, out=${outOfScope}, summary=${scopedSummary}, cleared=${clearedFilters.length}`);
+
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
   process.exitCode = failed.length === 0 ? 0 : 1;

@@ -23,7 +23,13 @@ const BADGES = {
   redirect: 'REDIRECT',
 } as const;
 
-export function ruleView(m: Modification, t: Translator): RuleView {
+export function ruleView(m: Modification, t: Translator, scope?: string): RuleView {
+  const view = bareView(m, t);
+  // 스코프(프로필 URL 필터)는 효과 앞에 붙는다 — `imtest.me/ → x-test: aaa`.
+  return scope ? { ...view, summary: `${scope} → ${view.summary}` } : view;
+}
+
+function bareView(m: Modification, t: Translator): RuleView {
   const badge = BADGES[m.kind];
 
   if (m.kind === 'csp') {

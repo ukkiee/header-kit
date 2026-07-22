@@ -24,6 +24,10 @@ const header: Modification = {
 
 export const RequestHeader: Story = { args: { modification: header } };
 
+export const WithScope: Story = {
+  args: { modification: { ...header, name: 'x-test', value: 'aaa' }, scope: 'imtest.me/' },
+};
+
 export const AppendMode: Story = {
   args: { modification: { ...header, name: 'Accept', value: 'application/json', mode: 'append', comment: '' } },
 };
