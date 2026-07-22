@@ -138,8 +138,6 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
     <ProfileSection
       key={selectedProfile.id}
       profile={selectedProfile}
-      index={selectedIndex}
-      profileCount={state.profiles.length}
       onCommand={dispatch}
       userHeaders={state.customHeaderNames}
       onCommandWithResult={dispatchWithResult}
@@ -180,6 +178,9 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
             selectedId={effectiveSelectedId}
             onSelect={setSelectedId}
             onCreate={createAndSelectProfile}
+            onReorder={(profileId, toIndex) =>
+              dispatch({ type: 'move-profile', profileId, toIndex })
+            }
           />
         </aside>
 

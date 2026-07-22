@@ -11,3 +11,4 @@
 - stage4 ticket 03: done — IconButton+Tooltip(4대상), 호버 액션, 환경설정 정리, smoke 69/69
 - stage4 ticket 04: done — 저장 검증(core 순수 함수)+폼 정리+키보드, 스테일 오류 버그 수정, smoke 73/73
 - stage4 ticket 05: done — 조건 배지 줄(6차원)+빈 상태 CTA, 만료 표기 단일화, AC2 실질 검증, smoke 75/75
+- stage4 ticket 06: done — dnd-kit 드래그·키보드 재정렬(Esc 취소 포함), 메뉴 이동 제거, smoke 75/75. 번들 +109KB는 티켓 08 게이트로 이월

@@ -1119,51 +1119,82 @@ try {
     emptyMeansMod?.emptyMeans === 'send-empty' && emptyMeansMod?.value === '',
     `emptyMeans=${emptyMeansMod?.emptyMeans}, value="${emptyMeansMod?.value}"`);
 
-  // N8: ⋯ 메뉴 이동 → 목록 순서 + 겹침 승자 실반영, 키보드로 복제
-  await seedProfiles([
+  // N8: 사이드바 드래그·키보드 재정렬 → 목록 순서 + 겹침 승자 실반영, 메뉴엔 이동 없음 (ui-refine 06)
+  const seedConf = () => seedProfiles([
     baseProfile('n-top', 'Top',
       [{ kind: 'request-header', id: 't1', name: 'X-Conf', value: 'top-wins', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }]),
     baseProfile('n-bottom', 'Bottom',
       [{ kind: 'request-header', id: 'b1', name: 'X-Conf', value: 'bottom-wins', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }]),
   ]);
+  await seedConf();
   await popup.reload();
   await pollSessionRuleCount(sw, 2);
   const winnerBefore = (await fetchEchoHeaders(pageB, '/headers'))['x-conf'];
-  // Bottom 선택 → 메뉴 '위로 이동'
-  await popup.getByRole('button', { name: 'Select profile Bottom' }).click();
-  await popup.getByRole('button', { name: 'Profile menu' }).click();
-  await popup.getByRole('menuitem', { name: 'Move up' }).click();
-  const chipOrder = await pollUntil(
-    () => popup.locator('[aria-label^="Select profile"]').allTextContents(),
-    (names) => names[0]?.startsWith('Bottom'),
-  );
-  const winnerAfter = await pollUntil(
+  const orderNames = () => popup.locator('[aria-label^="Select profile"]').allTextContents();
+
+  // (a) 마우스 드래그: Bottom 그립을 Top 위로 → 순서 뒤집힘 + 겹침 승자 반영
+  const bottomGrip = popup.getByRole('button', { name: 'Reorder Bottom' });
+  const topGrip = popup.getByRole('button', { name: 'Reorder Top' });
+  const topBox = await topGrip.boundingBox();
+  await bottomGrip.hover();
+  await popup.mouse.down();
+  await popup.mouse.move(topBox.x + topBox.width / 2, topBox.y - 4, { steps: 8 });
+  await popup.mouse.move(topBox.x + topBox.width / 2, topBox.y - 6, { steps: 4 });
+  await popup.mouse.up();
+  const dragOrder = await pollUntil(orderNames, (names) => names[0]?.startsWith('Bottom'), 5000, 100);
+  const dragWinner = await pollUntil(
     () => fetchEchoHeaders(pageB, '/headers').then((h) => h['x-conf']),
     (v) => v === 'bottom-wins',
   );
-  // 키보드로 메뉴 열고 복제 활성화: Enter 열기 → ArrowDown으로 'Duplicate' 하이라이트까지 → Enter
-  await popup.getByRole('button', { name: 'Profile menu' }).focus();
-  await popup.keyboard.press('Enter');
-  await popup.getByRole('menuitem', { name: 'Duplicate' }).waitFor({ timeout: 5000 });
-  for (let i = 0; i < 6; i++) {
-    const highlighted = await popup.evaluate(
-      () => document.querySelector('[role="menuitem"][data-highlighted]')?.textContent ?? '',
-    );
-    if (highlighted === 'Duplicate') break;
-    await popup.keyboard.press('ArrowDown');
-  }
-  await popup.keyboard.press('Enter');
-  const profilesAfterDup = await pollUntil(
-    () => sw.evaluate(async () => {
-      const { state } = await chrome.storage.local.get('state');
-      return state.profiles.map((p) => p.name);
-    }),
-    (names) => names.length === 3,
+
+  // (b) 키보드 재정렬: 그립 포커스 → Space 집기 → ArrowDown → Space 드롭 → 다시 Top이 위로
+  await seedConf();
+  await popup.reload();
+  await pollSessionRuleCount(sw, 2);
+  // dnd-kit KeyboardSensor는 키 사이에 좌표 재계산·재렌더가 필요하다 — 짧게 대기한다.
+  await popup.getByRole('button', { name: 'Reorder Top' }).focus();
+  await popup.keyboard.press('Space'); // 집기
+  await popup.waitForTimeout(150);
+  await popup.keyboard.press('ArrowDown'); // 아래로
+  await popup.waitForTimeout(150);
+  await popup.keyboard.press('Space'); // 드롭 → move-profile
+  const kbdOrder = await pollUntil(orderNames, (names) => names[0]?.startsWith('Bottom'), 5000, 100);
+  const kbdWinner = await pollUntil(
+    () => fetchEchoHeaders(pageB, '/headers').then((h) => h['x-conf']),
+    (v) => v === 'bottom-wins',
   );
-  record('N8: 메뉴 이동→목록 순서+승자 반영, 키보드 복제',
-    winnerBefore === 'top-wins' && chipOrder[0]?.startsWith('Bottom') && winnerAfter === 'bottom-wins'
-      && profilesAfterDup.length === 3,
-    `before=${winnerBefore}, chips=[${chipOrder.join('|')}], after=${winnerAfter}, profiles=${profilesAfterDup.length}`);
+
+  // (c) Esc 취소: 집기→화살표→Esc면 순서가 원상 복귀하고 포커스는 그립에 남는다 (plan r1 R-2)
+  // 현재 순서 [Bottom, Top]. Bottom 그립 집고 아래로 옮기다 Esc → 순서 유지.
+  const beforeCancel = await orderNames();
+  await popup.getByRole('button', { name: 'Reorder Bottom' }).focus();
+  await popup.keyboard.press('Space');
+  await popup.waitForTimeout(150);
+  await popup.keyboard.press('ArrowDown');
+  await popup.waitForTimeout(150);
+  await popup.keyboard.press('Escape');
+  await popup.waitForTimeout(300);
+  const afterCancel = await orderNames();
+  const cancelKeptOrder = beforeCancel.join('|') === afterCancel.join('|');
+  const focusOnGrip = await popup.evaluate(
+    () => document.activeElement?.getAttribute('aria-label') ?? '',
+  );
+  const focusKept = /Reorder Bottom/.test(focusOnGrip);
+
+  // (d) 메뉴엔 이동 항목이 없다 — 복제·삭제만
+  await popup.getByRole('button', { name: 'Select profile Bottom' }).click();
+  await popup.getByRole('button', { name: 'Profile menu' }).click();
+  await popup.getByRole('menuitem', { name: 'Duplicate' }).waitFor({ timeout: 5000 });
+  const moveUpGone = (await popup.getByRole('menuitem', { name: 'Move up' }).count()) === 0;
+  const moveDownGone = (await popup.getByRole('menuitem', { name: 'Move down' }).count()) === 0;
+  await popup.keyboard.press('Escape');
+
+  record('N8: 드래그·키보드 재정렬+Esc 취소(원순서·포커스 유지), 메뉴 이동 제거',
+    winnerBefore === 'top-wins'
+      && dragOrder[0]?.startsWith('Bottom') && dragWinner === 'bottom-wins'
+      && kbdOrder[0]?.startsWith('Bottom') && kbdWinner === 'bottom-wins'
+      && cancelKeptOrder && focusKept && moveUpGone && moveDownGone,
+    `drag=[${dragOrder.join('|')}]/${dragWinner}, kbd=[${kbdOrder.join('|')}]/${kbdWinner}, cancel-kept=${cancelKeptOrder}, focus-kept=${focusKept}, menu-move-gone=[${moveUpGone},${moveDownGone}]`);
 
   // N9: 탭 앱 셸 — 사이드바 검색·선택, 레일 화면 전환 (슬라이스 08)
   await seedProfiles([

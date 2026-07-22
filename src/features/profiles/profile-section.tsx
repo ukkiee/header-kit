@@ -14,8 +14,6 @@ import { useT } from '@/ui/i18n-context';
 
 export interface ProfileSectionProps {
   profile: Profile;
-  index: number;
-  profileCount: number;
   onCommand: (command: Command) => void;
   /** 헤더 이름 autocomplete 사용자 항목. */
   userHeaders?: readonly string[];
@@ -25,8 +23,6 @@ export interface ProfileSectionProps {
 
 export function ProfileSection({
   profile,
-  index,
-  profileCount,
   onCommand,
   userHeaders,
   onCommandWithResult,
@@ -98,22 +94,7 @@ export function ProfileSection({
             <Ellipsis size={16} strokeWidth={1.75} />
           </MenuTrigger>
           <MenuPopup>
-            <MenuItem
-              disabled={index === 0}
-              onClick={() =>
-                onCommand({ type: 'move-profile', profileId: profile.id, toIndex: index - 1 })
-              }
-            >
-              {t('menuMoveUp')}
-            </MenuItem>
-            <MenuItem
-              disabled={index === profileCount - 1}
-              onClick={() =>
-                onCommand({ type: 'move-profile', profileId: profile.id, toIndex: index + 1 })
-              }
-            >
-              {t('menuMoveDown')}
-            </MenuItem>
+            {/* 순서 변경은 사이드바 드래그로 이동됐다 (ui-refine 06) — 메뉴는 복제·삭제만. */}
             <MenuItem onClick={() => onCommand({ type: 'duplicate-profile', profileId: profile.id })}>
               {t('menuDuplicate')}
             </MenuItem>

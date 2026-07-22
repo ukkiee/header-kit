@@ -43,8 +43,6 @@ function InteractiveProfileSection({ initial }: { initial: Profile }) {
   return (
     <ProfileSection
       profile={profile}
-      index={0}
-      profileCount={1}
       onCommand={onCommand}
       onCommandWithResult={onCommandWithResult}
     />
@@ -54,8 +52,6 @@ function InteractiveProfileSection({ initial }: { initial: Profile }) {
 export const Active: Story = {
   args: {
     profile: sampleProfile,
-    index: 0,
-    profileCount: 1,
     onCommand: () => {},
     onCommandWithResult: async () => ({ ok: true }),
   },
@@ -65,8 +61,6 @@ export const Active: Story = {
 export const Inactive: Story = {
   args: {
     profile: { ...sampleProfile, active: false, modifications: [] },
-    index: 0,
-    profileCount: 1,
     onCommand: () => {},
     onCommandWithResult: async () => ({ ok: true }),
   },
