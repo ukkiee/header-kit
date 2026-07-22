@@ -1,27 +1,11 @@
-import type { MessageKey } from '@/core/i18n';
 import { ALL_RESOURCE_TYPES, REQUEST_METHODS } from '@/core/rules';
 import type { Filter } from '@/core/schema';
 import type { TabPickerOptions } from '@/platform/tabs';
 import { Chip } from '@/ui/chip';
-import { DraftInput } from '@/ui/draft-input';
 import { useT } from '@/ui/i18n-context';
 import { Input } from '@/ui/input';
 import { NoteText } from '@/ui/note-text';
 import { Select } from '@/ui/select';
-
-/** 필터 종류별 짧은 라벨(KindLabel)의 메시지 키 — FilterRow·FilterEditor 공유. */
-export const KIND_LABEL_KEYS: Record<Filter['kind'], MessageKey> = {
-  url: 'filterShortUrl',
-  'exclude-url': 'filterShortExcludeUrl',
-  'resource-type': 'filterShortResourceType',
-  'request-method': 'filterShortRequestMethod',
-  'initiator-domain': 'filterShortInitiatorDomain',
-  tab: 'filterShortTab',
-  'tab-group': 'filterShortTabGroup',
-  window: 'filterShortWindow',
-  'tab-domain': 'filterShortTabDomain',
-  time: 'filterShortTime',
-};
 
 function epochToLocalInput(ms: number): string {
   if (ms <= 0) return '';
@@ -119,9 +103,9 @@ export function FilterEditor({ filter, onChange, pickerOptions }: FilterEditorPr
     case 'tab-domain':
       return (
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <DraftInput
+          <Input
             value={filter.domain}
-            onCommit={(domain) => onChange({ ...filter, domain })}
+            onChange={(e) => onChange({ ...filter, domain: e.target.value })}
             placeholder="example.com"
             aria-label={t('ariaTabDomain')}
             size="sm"
@@ -145,9 +129,9 @@ export function FilterEditor({ filter, onChange, pickerOptions }: FilterEditorPr
     case 'url':
     case 'exclude-url':
       return (
-        <DraftInput
+        <Input
           value={filter.pattern}
-          onCommit={(pattern) => onChange({ ...filter, pattern })}
+          onChange={(e) => onChange({ ...filter, pattern: e.target.value })}
           placeholder={t('filterRegexPattern')}
           aria-label={t(filter.kind === 'url' ? 'ariaUrlPattern' : 'ariaExcludePattern')}
           size="sm"
@@ -188,9 +172,9 @@ export function FilterEditor({ filter, onChange, pickerOptions }: FilterEditorPr
     case 'initiator-domain':
       return (
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <DraftInput
+          <Input
             value={filter.domain}
-            onCommit={(domain) => onChange({ ...filter, domain })}
+            onChange={(e) => onChange({ ...filter, domain: e.target.value })}
             placeholder="example.com"
             aria-label={t('ariaInitiatorDomain')}
             size="sm"

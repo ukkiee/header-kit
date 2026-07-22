@@ -979,7 +979,8 @@ try {
     () => fetchLanding('/redir-src?q=1'),
     (v) => /\/redir-alt\?q=1/.test(v),
   );
-  // 패턴도 UI로 편집 — 매칭 소스가 /redir-two 로 바뀌어 실제 매칭에 반영된다
+  // 패턴도 UI로 편집 — 매칭 소스가 /redir-two 로 바뀌어 실제 매칭에 반영된다 (폼 닫힘 대기 후)
+  await popup.getByRole('button', { name: 'Save', exact: true }).waitFor({ state: 'detached', timeout: 5000 });
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
   await popup.getByLabel('Redirect pattern').fill(`^http://127\\.0\\.0\\.1:${port}/redir-two(.*)`);
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
@@ -1060,42 +1061,32 @@ try {
     .then(() => true, () => false);
   record('N4: 빈 목록 → 빈 상태 안내 표시', emptyShown, `visible=${emptyShown}`);
 
-  // N5: 탭 뱃지 개수 일치 + 탭 전환으로 필터 패널 진입 (슬라이스 03)
+  // 폼 Save 후 닫힘(재렌더)까지 대기 — 다음 Edit 클릭의 인덱스 밀림 방지
+  const waitFormClosed = () =>
+    popup.getByRole('button', { name: 'Save', exact: true }).waitFor({ state: 'detached', timeout: 5000 });
+
+  // N5: 통합 목록(ADR 0009) — 규칙 행 + '적용 조건' 캡션 + FILTER 행이 한 화면에
   await seedProfiles([
     baseProfile('n-tab', 'Tabbed',
       [
         { kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
-        // append 허용목록 헤더 — N7이 확장 영역에서 Append 모드 전환을 검증한다
+        // append 허용목록 헤더 — N7이 폼에서 Append 모드 전환을 검증한다
         { kind: 'request-header', id: 'm2', name: 'Accept', value: 'application/json', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
       ],
       [{ kind: 'url', id: 'f1', enabled: true, pattern: 'example\\.com' }]),
   ]);
   await popup.reload();
-  const modTabName = await popup.getByRole('tab', { name: /Modifications/ }).textContent();
-  const filterTabName = await popup.getByRole('tab', { name: /Filters/ }).textContent();
-  await popup.getByRole('tab', { name: /Filters/ }).click();
-  const urlPatternVisible = await popup
-    .getByLabel('URL pattern')
+  const captionVisible = await popup
+    .getByText('Conditions (whole profile)')
     .waitFor({ timeout: 5000 })
     .then(() => true, () => false);
-  // 키보드: 화살표로 이동하고 Enter로 활성화한다 (Base UI roving tabindex)
-  await popup.getByRole('tab', { name: /Filters/ }).focus();
-  await popup.keyboard.press('ArrowLeft');
-  await popup.keyboard.press('Enter');
-  const kbActivated = await popup
-    .getByRole('button', { name: 'Add rule' })
-    .waitFor({ timeout: 5000 })
-    .then(() => true, () => false);
-  record('N5: 탭 뱃지 개수 + 필터 탭 전환 + 키보드 활성화',
-    /2/.test(modTabName ?? '') && /1/.test(filterTabName ?? '') && urlPatternVisible && kbActivated,
-    `mod="${modTabName}", filter="${filterTabName}", panel=${urlPatternVisible}, kb=${kbActivated}`);
-  await popup.getByRole('tab', { name: /Filters/ }).click();
+  const filterRowVisible = await popup.getByText(/example\\.com/).first().isVisible().catch(() => false);
+  const editCount = await popup.getByRole('button', { name: 'Edit', exact: true }).count();
+  record('N5: 통합 목록 — 규칙+조건 캡션+FILTER 행, 탭 없음',
+    captionVisible && filterRowVisible && editCount === 3,
+    `caption=${captionVisible}, filter-row=${filterRowVisible}, edit-buttons=${editCount}`);
 
-  // N6: 탭 경유 필터 추가·편집·삭제가 상태에 반영된다
-  await popup.getByLabel('Add filter').selectOption({ label: 'URL filter' });
-  await popup.getByLabel('URL pattern').nth(1).waitFor({ timeout: 5000 });
-  await popup.getByLabel('URL pattern').nth(1).fill('api\\.staging\\.example\\.com');
-  await popup.getByLabel('URL pattern').nth(1).blur();
+  // N6: 통합 폼 경유 조건 추가·편집·삭제 (optgroup 조건 종류 선택)
   const pollFilters = (test, timeoutMs = 5000) =>
     pollUntil(
       () => sw.evaluate(async () => {
@@ -1106,15 +1097,26 @@ try {
       timeoutMs,
       100,
     );
+  await popup.getByRole('button', { name: 'Add rule' }).click();
+  await popup.getByLabel('Type', { exact: true }).selectOption({ label: 'URL filter' });
+  await popup.getByLabel('URL pattern').fill('api\\.staging\\.example\\.com');
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
   const added = await pollFilters((f) => f.length === 2 && f[1]?.pattern === 'api\\.staging\\.example\\.com');
-  await popup.getByRole('button', { name: 'Remove filter' }).nth(1).click();
+  // 조건 편집: 새 조건 행이 렌더된 뒤(Edit 4개) 마지막 Edit → 패턴 변경 → Save
+  await popup.getByRole('button', { name: 'Edit', exact: true }).nth(3).waitFor({ timeout: 5000 });
+  await popup.getByRole('button', { name: 'Edit', exact: true }).last().click();
+  await popup.getByLabel('URL pattern').fill('api\\.prod\\.example\\.com');
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  const edited = await pollFilters((f) => f[1]?.pattern === 'api\\.prod\\.example\\.com');
+  await waitFormClosed();
+  // 조건 삭제: 마지막 Delete
+  await popup.getByRole('button', { name: 'Delete', exact: true }).last().click();
   const removed = await pollFilters((f) => f.length === 1);
-  record('N6: 탭 경유 필터 추가·편집·삭제 반영',
-    added.length === 2 && added[1]?.pattern === 'api\\.staging\\.example\\.com' && removed.length === 1,
-    `added=${added.length}, pattern=${added[1]?.pattern}, after-remove=${removed.length}`);
+  record('N6: 통합 폼 조건 추가·편집·삭제 반영',
+    added.length === 2 && edited[1]?.pattern === 'api\\.prod\\.example\\.com' && removed.length === 1,
+    `added=${added.length}, edited=${edited[1]?.pattern}, after-remove=${removed.length}`);
 
   // N7: 규칙 폼 편집(ADR 0006) — Edit → 모드·메모 변경 → Save가 원자 반영
-  await popup.getByRole('tab', { name: /Modifications/ }).click();
   const pollMod = (test, timeoutMs = 5000) =>
     pollUntil(
       () => sw.evaluate(async () => {
@@ -1135,6 +1137,7 @@ try {
   record('N7: 규칙 폼 편집 — 모드·메모 원자 저장',
     formCount === 1 && editedMod?.mode === 'append' && editedMod?.comment === 'smoke comment',
     `forms=${formCount}, mode=${editedMod?.mode}, comment="${editedMod?.comment}"`);
+  await waitFormClosed();
 
   // N7b: 빈 값 처리 — 폼에서 값 비우고 When empty=Send empty 저장
   await popup.getByRole('button', { name: 'Edit', exact: true }).nth(1).click();
@@ -1343,6 +1346,7 @@ try {
   await popup.getByLabel('Header name', { exact: true }).fill('X-U');
   await popup.getByLabel('Header value').fill('u');
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  await waitFormClosed();
   const kaState = await pollUntil(
     () => sw.evaluate(async () => {
       const { state } = await chrome.storage.local.get('state');
@@ -1358,6 +1362,7 @@ try {
   const outScope = await fetchEchoHeaders(pageB, '/headers');
   const scopedSummary = await popup.getByText(/scope=1.*→.*X-K/i).first().isVisible().catch(() => false);
   // 3) regex(고급) 방식으로 전환 — 실요청 검증
+  await waitFormClosed();
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
   await popup.getByLabel('URL match type').selectOption('regex');
   await popup.getByLabel('URL filter').fill(`127\\.0\\.0\\.1:${port}/headers\\?scope=2`);
@@ -1368,6 +1373,7 @@ try {
   );
   const regexOut = await fetchEchoHeaders(pageB, '/headers');
   // 4) 스코프 비우면 두 필드 모두 제거 → 어디서나 적용
+  await waitFormClosed();
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
   await popup.getByLabel('URL filter').fill('');
   await popup.getByRole('button', { name: 'Save', exact: true }).click();

@@ -1,40 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { Ellipsis, Plus } from 'lucide-react';
 import type { Command } from '@/core/commands';
-import {
-  createFilter,
-  type FilterKind,
-  type Modification,
-  type Profile,
-} from '@/core/schema';
+import type { Modification, Profile } from '@/core/schema';
 import { format, type MessageKey } from '@/core/i18n';
 import type { TabPickerOptions } from '@/platform/tabs';
 import { Button } from '@/ui/button';
 import { Card } from '@/ui/card';
 import { Input } from '@/ui/input';
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from '@/ui/menu';
-import { Select } from '@/ui/select';
-import { Tab, TabList, TabPanel, Tabs } from '@/ui/tabs';
 import { ToggleSwitch } from '@/ui/toggle-switch';
-import { FilterRow } from '@/features/filters/filter-row';
-import { RuleForm } from '@/features/modifications/rule-form';
+import { ConditionRow } from '@/features/filters/condition-row';
+import { isRuleItem, RuleForm, type FormItem } from '@/features/modifications/rule-form';
 import { RuleRow } from '@/features/modifications/rule-row';
 import { useT } from '@/ui/i18n-context';
-
-const FILTER_KINDS: Array<{ kind: FilterKind; labelKey: MessageKey }> = [
-  { kind: 'url', labelKey: 'filterUrl' },
-  { kind: 'exclude-url', labelKey: 'filterExcludeUrl' },
-  { kind: 'resource-type', labelKey: 'filterResourceType' },
-  { kind: 'request-method', labelKey: 'filterRequestMethod' },
-  { kind: 'initiator-domain', labelKey: 'filterInitiatorDomain' },
-  { kind: 'tab', labelKey: 'filterTab' },
-  { kind: 'tab-group', labelKey: 'filterTabGroup' },
-  { kind: 'window', labelKey: 'filterWindow' },
-  { kind: 'tab-domain', labelKey: 'filterTabDomain' },
-  { kind: 'time', labelKey: 'filterTime' },
-];
-
-export type ProfileTab = 'modifications' | 'filters';
 
 export interface ProfileSectionProps {
   profile: Profile;
@@ -44,9 +22,6 @@ export interface ProfileSectionProps {
   pickerOptions?: TabPickerOptions;
   /** 헤더 이름 autocomplete 사용자 항목. */
   userHeaders?: readonly string[];
-  /** 활성 탭 — 앱 레이어 뷰 상태(스펙 결정). 미지정 시 비제어(수정 탭 시작). */
-  activeTab?: ProfileTab;
-  onActiveTabChange?: (tab: ProfileTab) => void;
   /** 규칙 저장 — 권위 실행 결과를 폼이 돌려받아 거부를 인라인으로 보여준다. */
   onCommandWithResult: (command: Command) => Promise<{ ok: boolean; error?: string }>;
 }
@@ -58,8 +33,6 @@ export function ProfileSection({
   onCommand,
   pickerOptions,
   userHeaders,
-  activeTab,
-  onActiveTabChange,
   onCommandWithResult,
 }: ProfileSectionProps) {
   const t = useT();
@@ -68,6 +41,20 @@ export function ProfileSection({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const confirmTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(confirmTimer.current), []);
+
+  /** 폼 항목 저장 — 규칙/조건을 kind로 판별해 해당 커맨드로 원자 전송 (ADR 0009). */
+  const saveItem = async (item: FormItem, op: 'add' | 'update') => {
+    const command: Command = isRuleItem(item)
+      ? op === 'add'
+        ? { type: 'add-modification', profileId: profile.id, modification: item }
+        : { type: 'update-modification', profileId: profile.id, modification: item }
+      : op === 'add'
+        ? { type: 'add-filter', profileId: profile.id, filter: item }
+        : { type: 'update-filter', profileId: profile.id, filter: item };
+    const result = await onCommandWithResult(command);
+    if (result.ok) setEditingRule(null);
+    return result;
+  };
 
   const meta = { name: profile.name, shortLabel: profile.shortLabel, color: profile.color };
   const updateMeta = (patch: Partial<typeof meta>) =>
@@ -157,130 +144,103 @@ export function ProfileSection({
         </Menu>
       </div>
 
-      <Tabs
-        defaultValue="modifications"
-        value={activeTab}
-        onValueChange={onActiveTabChange ? (v) => onActiveTabChange(v as ProfileTab) : undefined}
-      >
-        <TabList>
-          <Tab value="modifications" count={profile.modifications.length}>
-            {t('tabModifications')}
-          </Tab>
-          <Tab value="filters" count={profile.filters.length}>
-            {t('tabFilters')}
-          </Tab>
-        </TabList>
+      {profile.modifications.length === 0 && profile.filters.length === 0 && editingRule === null && (
+        <p className="py-1 text-xs text-zinc-500 dark:text-zinc-400">{t('noRulesYet')}</p>
+      )}
 
-        <TabPanel value="modifications" className="flex flex-col gap-2 pt-2">
-          {profile.modifications.length === 0 && editingRule === null && (
-            <p className="py-1 text-xs text-zinc-500 dark:text-zinc-400">{t('noRulesYet')}</p>
-          )}
+      <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+        {profile.modifications.map((modification) =>
+          editingRule === modification.id ? (
+            <div key={modification.id} className="py-2">
+              <RuleForm
+                initial={modification}
+                userHeaders={userHeaders}
+                pickerOptions={pickerOptions}
+                onCancel={() => setEditingRule(null)}
+                onSave={(next) => saveItem(next, 'update')}
+              />
+            </div>
+          ) : (
+            <RuleRow
+              key={modification.id}
+              modification={modification}
+              onToggleEnabled={(enabled) =>
+                onCommand({
+                  type: 'update-modification',
+                  profileId: profile.id,
+                  modification: { ...modification, enabled } as Modification,
+                })
+              }
+              onEdit={() => setEditingRule(modification.id)}
+              onRemove={() =>
+                onCommand({
+                  type: 'remove-modification',
+                  profileId: profile.id,
+                  modificationId: modification.id,
+                })
+              }
+            />
+          ),
+        )}
+      </div>
+
+      {profile.filters.length > 0 && (
+        <>
+          <div className="flex items-center gap-2 pt-1">
+            <span className="text-[10px] font-medium tracking-wide text-zinc-400 uppercase dark:text-zinc-500">
+              {t('conditionsCaption')}
+            </span>
+            <span className="h-px flex-1 bg-zinc-100 dark:bg-zinc-800" />
+          </div>
           <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
-            {profile.modifications.map((modification) =>
-              editingRule === modification.id ? (
-                <div key={modification.id} className="py-2">
+            {profile.filters.map((filter) =>
+              editingRule === filter.id ? (
+                <div key={filter.id} className="py-2">
                   <RuleForm
-                    initial={modification}
+                    initial={filter}
                     userHeaders={userHeaders}
+                    pickerOptions={pickerOptions}
                     onCancel={() => setEditingRule(null)}
-                    onSave={async (next) => {
-                      const result = await onCommandWithResult({
-                        type: 'update-modification',
-                        profileId: profile.id,
-                        modification: next,
-                      });
-                      if (result.ok) setEditingRule(null);
-                      return result;
-                    }}
+                    onSave={(next) => saveItem(next, 'update')}
                   />
                 </div>
               ) : (
-                <RuleRow
-                  key={modification.id}
-                  modification={modification}
+                <ConditionRow
+                  key={filter.id}
+                  filter={filter}
+                  pickerOptions={pickerOptions}
                   onToggleEnabled={(enabled) =>
-                    onCommand({
-                      type: 'update-modification',
-                      profileId: profile.id,
-                      modification: { ...modification, enabled } as Modification,
-                    })
+                    onCommand({ type: 'update-filter', profileId: profile.id, filter: { ...filter, enabled } })
                   }
-                  onEdit={() => setEditingRule(modification.id)}
+                  onEdit={() => setEditingRule(filter.id)}
                   onRemove={() =>
-                    onCommand({
-                      type: 'remove-modification',
-                      profileId: profile.id,
-                      modificationId: modification.id,
-                    })
+                    onCommand({ type: 'remove-filter', profileId: profile.id, filterId: filter.id })
                   }
                 />
               ),
             )}
           </div>
+        </>
+      )}
 
-          {editingRule === 'new' ? (
-            <RuleForm
-              userHeaders={userHeaders}
-              onCancel={() => setEditingRule(null)}
-              onSave={async (next) => {
-                const result = await onCommandWithResult({
-                  type: 'add-modification',
-                  profileId: profile.id,
-                  modification: next,
-                });
-                if (result.ok) setEditingRule(null);
-                return result;
-              }}
-            />
-          ) : (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="self-start"
-              onClick={() => setEditingRule('new')}
-            >
-              <Plus size={14} strokeWidth={1.75} className="mr-1" />
-              {t('addRule')}
-            </Button>
-          )}
-        </TabPanel>
-
-        <TabPanel value="filters" className="flex flex-col gap-1.5 pt-2">
-          {profile.filters.map((filter) => (
-            <FilterRow
-              key={filter.id}
-              filter={filter}
-              pickerOptions={pickerOptions}
-              onChange={(next) =>
-                onCommand({ type: 'update-filter', profileId: profile.id, filter: next })
-              }
-              onRemove={() =>
-                onCommand({ type: 'remove-filter', profileId: profile.id, filterId: filter.id })
-              }
-            />
-          ))}
-          <Select
-            variant="ghost"
-            size="sm"
-            value=""
-            aria-label={t('ariaAddFilter')}
-            className="self-start"
-            onChange={(e) => {
-              const kind = e.target.value as FilterKind | '';
-              if (kind !== '') {
-                onCommand({ type: 'add-filter', profileId: profile.id, filter: createFilter(kind) });
-              }
-            }}
-          >
-            <option value="">+ {t('addFilterMenu')}</option>
-            {FILTER_KINDS.map(({ kind, labelKey }) => (
-              <option key={kind} value={kind}>
-                {t(labelKey)}
-              </option>
-            ))}
-          </Select>
-        </TabPanel>
-      </Tabs>
+      {editingRule === 'new' ? (
+        <RuleForm
+          userHeaders={userHeaders}
+          pickerOptions={pickerOptions}
+          onCancel={() => setEditingRule(null)}
+          onSave={(next) => saveItem(next, 'add')}
+        />
+      ) : (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="self-start"
+          onClick={() => setEditingRule('new')}
+        >
+          <Plus size={14} strokeWidth={1.75} className="mr-1" />
+          {t('addRule')}
+        </Button>
+      )}
 
     </Card>
   );
