@@ -4,10 +4,12 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** done — commit e3cf772
 
-- [ ] 규칙이 요약 행으로 보이고 Edit 폼에서 종류별 필드로 편집·저장된다 (smoke — 헤더/CSP/리다이렉트 각 1 경로)
-- [ ] Add rule → 종류 선택 → Save가 실제 요청에 반영된다 (smoke)
-- [ ] ruleSummary 순수 함수 단위 테스트 (전 종류)
-- [ ] 유니코드 글리프 0, lucide 단일 패밀리 (grep 감사)
-- [ ] 전 게이트 green (tsc·vitest·build·smoke·storybook·diag)
+- [x] 규칙이 요약 행으로 보이고 Edit 폼에서 종류별 필드로 편집·저장된다 (smoke N7/N7b 헤더, M3b CSP, M4b 리다이렉트, J3 대형 편집기)
+- [x] Add rule → 종류 선택 → Save가 실제 요청에 반영된다 (smoke N10 — `x-from-tab: yes` 실요청)
+- [x] ruleView 순수 함수 단위 테스트 전 종류 (vitest 7 — 배지/제목 폴백/append·빈 값 지역화)
+- [x] 유니코드 글리프 0(스토리 포함), lucide 단일 패밀리 strokeWidth 1.75 (grep 감사)
+- [x] 전 게이트 green (tsc0·vitest178·build·smoke67/67·storybook·diag exit 0)
+
+참고: code-review 2축 반영 — ADR 0004 대체 각주(테이블 행→0006), 카탈로그 우회 2건(emptyMarker/saveRejected), 사장 키 4개 제거, kindLabel 맵화, 스토리 글리프. 의도적 결정: 요약의 URL 스코프 생략(필터는 프로필 수준 — 행마다 반복은 반미니멀), 규칙 삭제 무확인 유지(기존과 동일, 프로필 삭제만 확인), materialized 값 UI 표시 제거(동작은 smoke G가 네트워크 수준 검증). 잔여 판단 노트: RuleForm 캐스트 밀도·종류 분기(7번째 종류 추가 시 종류별 필드 서브컴포넌트로 추출)."
