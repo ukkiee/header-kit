@@ -1,5 +1,6 @@
 import type { Translator } from '@/core/i18n';
-import type { Modification } from '@/core/schema';
+import type { Modification, RuleConditions } from '@/core/schema';
+import { formatExpiryBadge } from './expiry-format';
 
 /**
  * 규칙의 읽기 요약 (ADR 0006) — 목록은 이걸로만 그린다. 배지는 프로토콜 성격의
@@ -12,6 +13,15 @@ export interface RuleView {
   badge: 'REQ' | 'RES' | 'COOKIE' | 'SET-COOKIE' | 'CSP' | 'REDIRECT';
   /** 한 줄 효과 요약 (mono 렌더 가정). */
   summary: string;
+  /** 조건 배지 줄 (ADR 0010, ui-refine 05) — 없으면 빈 배열이라 행 높이가 불변. */
+  conditionBadges: ConditionBadge[];
+}
+
+/** 조건 배지 하나 — tone은 제외(부정) 방향을, icon은 만료 시계를 나타낸다. */
+export interface ConditionBadge {
+  label: string;
+  tone: 'neutral' | 'exclude';
+  icon?: 'clock';
 }
 
 const BADGES = {
@@ -23,18 +33,44 @@ const BADGES = {
   redirect: 'REDIRECT',
 } as const;
 
+/** 조건을 값 배지 목록으로 (ui-refine 05) — 차원이 구별되는 표기. */
+export function conditionBadges(conditions: RuleConditions | undefined): ConditionBadge[] {
+  if (!conditions) return [];
+  const badges: ConditionBadge[] = [];
+  for (const method of conditions.requestMethods ?? []) {
+    badges.push({ label: method.toUpperCase(), tone: 'neutral' });
+  }
+  for (const type of conditions.resourceTypes ?? []) {
+    badges.push({ label: type, tone: 'neutral' });
+  }
+  for (const domain of conditions.initiatorDomains ?? []) {
+    badges.push({ label: `@${domain}`, tone: 'neutral' });
+  }
+  for (const domain of conditions.tabDomains ?? []) {
+    badges.push({ label: `tab:${domain}`, tone: 'neutral' });
+  }
+  // 제외 도메인은 부정 접두(~)와 exclude 톤으로 방향을 드러낸다.
+  for (const domain of conditions.excludedDomains ?? []) {
+    badges.push({ label: `~${domain}`, tone: 'exclude' });
+  }
+  if (conditions.expiresAt !== undefined && conditions.expiresAt > 0) {
+    badges.push({ label: formatExpiryBadge(conditions.expiresAt), tone: 'neutral', icon: 'clock' });
+  }
+  return badges;
+}
+
 export function ruleView(m: Modification, t: Translator): RuleView {
   const view = bareView(m, t);
   // 규칙 자신의 URL 필터(ADR 0007)는 효과 앞에 붙는다 — `imtest.me/ → x-test: aaa`.
   const scope = 'urlFilter' in m ? m.urlFilter?.trim() : undefined;
-  let summary = scope ? `${scope} → ${view.summary}` : view.summary;
-  // 조건(ADR 0010)은 개수만 표기 — 상세는 폼의 disclosure에서 본다.
-  const condCount = m.conditions ? Object.keys(m.conditions).length : 0;
-  if (condCount > 0) summary = `${summary} · ${t('conditionsCaption')}: ${condCount}`;
-  return { ...view, summary };
+  const summary = scope ? `${scope} → ${view.summary}` : view.summary;
+  return { ...view, summary, conditionBadges: conditionBadges(m.conditions) };
 }
 
-function bareView(m: Modification, t: Translator): RuleView {
+/** 조건·스코프를 뺀 기본 뷰 — ruleView가 스코프·조건 배지를 얹는다. */
+type BareView = Omit<RuleView, 'conditionBadges'>;
+
+function bareView(m: Modification, t: Translator): BareView {
   const badge = BADGES[m.kind];
 
   if (m.kind === 'csp') {

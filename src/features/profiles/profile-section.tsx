@@ -138,7 +138,13 @@ export function ProfileSection({
       </div>
 
       {profile.modifications.length === 0 && editingRule === null && (
-        <p className="py-1 text-xs text-zinc-500 dark:text-zinc-400">{t('noRulesYet')}</p>
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-zinc-200 py-6 text-center dark:border-zinc-800">
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">{t('noRulesYet')}</p>
+          <Button size="sm" onClick={() => setEditingRule('new')}>
+            <Plus size={14} strokeWidth={1.75} className="mr-1" />
+            {t('addRule')}
+          </Button>
+        </div>
       )}
 
       <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -183,15 +189,18 @@ export function ProfileSection({
           onSave={(next) => saveItem(next, 'add')}
         />
       ) : (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="self-start"
-          onClick={() => setEditingRule('new')}
-        >
-          <Plus size={14} strokeWidth={1.75} className="mr-1" />
-          {t('addRule')}
-        </Button>
+        // 빈 상태 CTA가 추가를 유도하므로 하단 버튼은 규칙이 있을 때만 노출한다.
+        profile.modifications.length > 0 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="self-start"
+            onClick={() => setEditingRule('new')}
+          >
+            <Plus size={14} strokeWidth={1.75} className="mr-1" />
+            {t('addRule')}
+          </Button>
+        )
       )}
 
     </Card>

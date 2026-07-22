@@ -38,3 +38,6 @@ export const canvas = 'bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-10
 
 /** 마이크로 캡션(종류 라벨 등) — KindLabel이 쓴다. */
 export const microCaption = 'text-[10px] font-medium uppercase tracking-wide text-zinc-400';
+
+/** 작은 배지 알약 — 규칙 종류 배지·조건 배지가 색만 달리해 공유한다. */
+export const badgePill = 'rounded px-1 py-px text-[10px] font-medium';

@@ -24,6 +24,7 @@ describe('ruleView', () => {
       title: 'test',
       badge: 'REQ',
       summary: 'X-Test: aaa',
+      conditionBadges: [],
     });
     expect(ruleView(header(), t).title).toBe('X-Test');
   });
@@ -67,7 +68,7 @@ describe('ruleView', () => {
       },
       t,
     );
-    expect(view).toEqual({ title: 'CSP', badge: 'CSP', summary: "default-src 'self' · img-src data:" });
+    expect(view).toEqual({ title: 'CSP', badge: 'CSP', summary: "default-src 'self' · img-src data:", conditionBadges: [] });
   });
 
   it('리다이렉트: 패턴 → 치환 요약, 메모가 제목', () => {
@@ -86,6 +87,7 @@ describe('ruleView', () => {
       title: 'to staging',
       badge: 'REDIRECT',
       summary: '^https://a/(.*) → https://b/\\1',
+      conditionBadges: [],
     });
   });
 
@@ -97,19 +99,46 @@ describe('ruleView', () => {
     expect(ruleView(header({ urlFilter: '  ' }), t).summary).toBe('X-Test: aaa');
   });
 
-  it('조건이 있으면 개수를 요약 뒤에 표기한다 (ADR 0010)', () => {
-    expect(
-      ruleView(header({ conditions: { resourceTypes: ['script'], expiresAt: 100 } }), t).summary,
-    ).toBe('X-Test: aaa · Conditions: 2');
-    expect(
-      ruleView(header({ urlFilter: 'a.io', conditions: { excludedDomains: ['b.io'] } }), ko).summary,
-    ).toBe('a.io → X-Test: aaa · 조건: 1');
+  it('조건 없으면 conditionBadges는 빈 배열 — 요약은 순수 효과만 (ui-refine 05)', () => {
+    const view = ruleView(header(), t);
+    expect(view.summary).toBe('X-Test: aaa');
+    expect(view.conditionBadges).toEqual([]);
+  });
+
+  it('조건은 요약이 아니라 배지 줄로 나온다 — 차원별 표기 (ui-refine 05)', () => {
+    const view = ruleView(
+      header({
+        conditions: {
+          requestMethods: ['post'],
+          resourceTypes: ['script'],
+          initiatorDomains: ['init.io'],
+          tabDomains: ['tab.io'],
+          excludedDomains: ['skip.io'],
+          expiresAt: 1_700_000_000_000,
+        },
+      }),
+      t,
+    );
+    // 요약엔 조건이 섞이지 않는다
+    expect(view.summary).toBe('X-Test: aaa');
+    expect(view.conditionBadges).toEqual([
+      { label: 'POST', tone: 'neutral' },
+      { label: 'script', tone: 'neutral' },
+      { label: '@init.io', tone: 'neutral' },
+      { label: 'tab:tab.io', tone: 'neutral' },
+      { label: '~skip.io', tone: 'exclude' },
+      expect.objectContaining({ tone: 'neutral', icon: 'clock' }),
+    ]);
+  });
+
+  it('미설정 만료(0 이하)는 배지를 만들지 않는다', () => {
+    expect(ruleView(header({ conditions: { expiresAt: 0 } }), t).conditionBadges).toEqual([]);
   });
 
   it('이름이 비면 종류 라벨로 폴백한다', () => {
     expect(ruleView(header({ name: '', comment: '' }), t).title).toBe('REQ');
     expect(
       ruleView({ kind: 'redirect', id: 'r', pattern: '', substitution: '', enabled: true, comment: '' }, t),
-    ).toEqual({ title: 'REDIRECT', badge: 'REDIRECT', summary: '(empty)' });
+    ).toEqual({ title: 'REDIRECT', badge: 'REDIRECT', summary: '(empty)', conditionBadges: [] });
   });
 });

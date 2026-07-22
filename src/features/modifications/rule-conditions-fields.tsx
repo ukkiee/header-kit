@@ -5,17 +5,7 @@ import { Field, fieldCaption } from '@/ui/field';
 import { Input } from '@/ui/input';
 import { NoteText } from '@/ui/note-text';
 import { useT } from '@/ui/i18n-context';
-
-function epochToLocalInput(ms: number | undefined): string {
-  if (ms === undefined || ms <= 0) return '';
-  const date = new Date(ms - new Date(ms).getTimezoneOffset() * 60_000);
-  return date.toISOString().slice(0, 16);
-}
-
-function localInputToEpoch(value: string): number | undefined {
-  const ms = new Date(value).getTime();
-  return Number.isNaN(ms) || ms <= 0 ? undefined : ms;
-}
+import { epochToLocalInput, localInputToEpoch } from './expiry-format';
 
 const splitCsv = (value: string): string[] =>
   value

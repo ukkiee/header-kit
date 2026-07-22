@@ -10,3 +10,4 @@
 - stage4 ticket 02: done — ChipGroup(ToggleGroup)·Collapsible 교체, 호버 버그 구조 해소, smoke 67/67
 - stage4 ticket 03: done — IconButton+Tooltip(4대상), 호버 액션, 환경설정 정리, smoke 69/69
 - stage4 ticket 04: done — 저장 검증(core 순수 함수)+폼 정리+키보드, 스테일 오류 버그 수정, smoke 73/73
+- stage4 ticket 05: done — 조건 배지 줄(6차원)+빈 상태 CTA, 만료 표기 단일화, AC2 실질 검증, smoke 75/75

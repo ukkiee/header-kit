@@ -1055,7 +1055,7 @@ try {
     editCount === 2 && profileCaptionGone,
     `edit-buttons=${editCount}, profile-caption-gone=${profileCaptionGone}`);
 
-  // N6: 폼 조건 disclosure — 제외 도메인 추가 → 요약 표기 → 비우면 conditions 제거 (ADR 0010)
+  // N6: 폼 조건 disclosure — 제외 도메인 추가 → 배지 표기 → 비우면 conditions 제거 (ADR 0010)
   const pollFirstMod = (test, timeoutMs = 5000) =>
     pollUntil(
       () => sw.evaluate(async () => {
@@ -1072,7 +1072,8 @@ try {
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
   const condAdded = await pollFirstMod((m) => m?.conditions?.excludedDomains?.[0] === 'skip.example.com');
   await waitFormClosed();
-  const condSummaryShown = await popup.getByText(/Conditions: 1/).first().isVisible().catch(() => false);
+  // 조건은 이제 배지 줄로 표시된다 (ui-refine 05) — 제외 도메인은 부정 접두(~)
+  const condSummaryShown = await popup.getByText('~skip.example.com', { exact: true }).first().isVisible().catch(() => false);
   // 조건이 있는 규칙의 폼은 disclosure가 열린 채 시작 — 비우면 conditions 자체가 제거된다
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
   const disclosureOpen = await popup.getByLabel('Excluded domains').isVisible().catch(() => false);
@@ -1538,6 +1539,43 @@ try {
   record('N18d: Cmd/Ctrl+Enter 저장 + Select 팝업 Esc는 폼 유지 + 폼 Esc는 닫힘',
     kbdSaved === true && popupClosedFormKept === 0 && formStillOpen && escClosed,
     `saved=${kbdSaved}, popup-only-close=${popupClosedFormKept === 0 && formStillOpen}, form-esc-closed=${escClosed}`);
+
+  // N19: 조건 배지 줄 + 빈 상태 CTA (ui-refine 05)
+  const expiryMs = Date.now() + 3_600_000;
+  await seedProfiles([
+    baseProfile('p-badge', 'Badges', [
+      { kind: 'request-header', id: 'm1', name: 'X-Plain', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+      { kind: 'request-header', id: 'm2', name: 'X-Cond', value: '2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
+        conditions: { requestMethods: ['post'], excludedDomains: ['cdn.example.com'], expiresAt: expiryMs } },
+    ]),
+  ]);
+  await popup.reload();
+  const rows = popup.locator('.group').filter({ has: popup.getByRole('button', { name: 'Edit', exact: true }) });
+  // 조건 없는 행의 높이 = 내부 텍스트(제목+요약) + 세로 패딩(py-2=16px). 배지 줄이
+  // 없으므로 높이에 0을 기여해야 한다 — '기존 높이 유지'의 실질 불변식(AC2).
+  const plainRowH = await rows.nth(0).evaluate((el) => el.getBoundingClientRect().height);
+  const plainContentH = await rows.nth(0).locator('.min-w-0').evaluate((el) => el.getBoundingClientRect().height);
+  const condRowH = await rows.nth(1).evaluate((el) => el.getBoundingClientRect().height);
+  const plainHeightIsContentOnly = Math.abs(plainRowH - (plainContentH + 16)) <= 1.5;
+  // 조건 있는 행에만 배지 노출: POST(메서드), ~cdn(제외, 부정 접두), 만료(시계)
+  const methodBadge = await popup.getByText('POST', { exact: true }).isVisible().catch(() => false);
+  const excludeBadge = await popup.getByText('~cdn.example.com', { exact: true }).isVisible().catch(() => false);
+  const plainHasNoBadge = (await rows.nth(0).getByText('POST', { exact: true }).count()) === 0;
+  record('N19a: 조건 배지 줄 — 값 배지·제외 부정 접두, 조건 없는 행은 배지 줄이 높이에 0 기여',
+    methodBadge && excludeBadge && plainHasNoBadge && plainHeightIsContentOnly && plainRowH < condRowH,
+    `method=${methodBadge}, exclude=${excludeBadge}, plain-no-badge=${plainHasNoBadge}, plainH=${Math.round(plainRowH)}=content(${Math.round(plainContentH)})+16?${plainHeightIsContentOnly}, condH=${Math.round(condRowH)}`);
+
+  // 빈 상태: 규칙 0개 프로필 → 안내 + CTA로 폼 열림
+  await popup.getByRole('button', { name: '+ New profile' }).click();
+  await pollProfileName((v) => /^Profile \d+$/.test(v));
+  const emptyHintShown = await popup.getByText('No rules yet. Add one below.').isVisible().catch(() => false);
+  // 빈 상태 CTA(Add rule)를 누르면 규칙 폼이 열린다
+  await popup.getByRole('button', { name: 'Add rule' }).click();
+  const formOpened = await popup.getByRole('combobox', { name: 'Type', exact: true })
+    .waitFor({ timeout: 5000 }).then(() => true, () => false);
+  record('N19b: 빈 상태 안내 + CTA로 규칙 폼 열림',
+    emptyHintShown && formOpened,
+    `hint=${emptyHintShown}, form-opened=${formOpened}`);
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
