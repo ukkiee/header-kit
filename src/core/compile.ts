@@ -365,9 +365,10 @@ function emitHeaderRule(
     return;
   }
 
-  const info = resolveHeaderInfo(plan, modification, profileId, emitter);
+  // 자체 필터 초과로 방출이 없을 규칙에 append 경고를 내지 않도록 먼저 검사한다.
   const own = ownScopeJoins(modification, profileId, emitter);
   if (own === null) return; // 자체 필터가 한도 초과 — 규칙 없음 (경고로 알림)
+  const info = resolveHeaderInfo(plan, modification, profileId, emitter);
   for (const join of own ?? compiled.regexJoins) {
     emitRule(
       emitter,

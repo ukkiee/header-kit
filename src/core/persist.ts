@@ -109,7 +109,13 @@ function isProfile(value: unknown): value is Profile {
 export function backfillModification(value: unknown): unknown {
   if (!isRecord(value)) return value;
   // csp/redirect는 mode/emptyMeans가 없다 — 헤더 계열(및 cookie/set-cookie)만 채운다.
-  if (value.kind === 'csp' || value.kind === 'redirect') {
+  if (value.kind === 'redirect') {
+    // redirect의 urlFilter(ADR 0007 비대상)는 치유로 제거 — 검증 거부가 전체
+    // 상태를 기본값으로 리셋하는 것보다 필드 하나를 벗기는 쪽이 안전하다.
+    const { urlFilter: _stripped, ...rest } = value;
+    return { comment: '', ...rest };
+  }
+  if (value.kind === 'csp') {
     return { comment: '', ...value };
   }
   return { mode: 'override', emptyMeans: 'remove', comment: '', ...value };

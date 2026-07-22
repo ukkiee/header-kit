@@ -21,15 +21,17 @@ describe('parseStoredState', () => {
 
     // 비문자열 urlFilter → 프로필 전체 거부(기본 상태 대체)
     const bad = structuredClone(base);
-    (bad.profiles[0].modifications[0] as Record<string, unknown>).urlFilter = 42;
+    (bad.profiles[0]!.modifications[0] as Record<string, unknown>).urlFilter = 42;
     expect(parseStoredState(bad).profiles.some((p) => p.id === 'p1')).toBe(false);
 
-    // redirect에 urlFilter → 거부 (pattern이 매처)
+    // redirect에 urlFilter → 치유(필드 제거) — 전체 상태 리셋 대신 프로필 보존
     const redirectBad = structuredClone(base);
-    redirectBad.profiles[0].modifications = [
+    redirectBad.profiles[0]!.modifications = [
       { kind: 'redirect', id: 'r1', pattern: '^a', substitution: 'b', enabled: true, comment: '', urlFilter: 'x' } as never,
     ];
-    expect(parseStoredState(redirectBad).profiles.some((p) => p.id === 'p1')).toBe(false);
+    const healed = parseStoredState(redirectBad);
+    expect(healed.profiles[0]?.id).toBe('p1');
+    expect('urlFilter' in (healed.profiles[0]?.modifications[0] ?? {})).toBe(false);
   });
 
   it('유효한 상태는 그대로 통과한다', () => {

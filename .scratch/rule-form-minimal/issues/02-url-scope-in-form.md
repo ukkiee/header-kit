@@ -4,7 +4,7 @@
 
 **Blocked by:** None.
 
-**Status:** done — commit 3114b1e
+**Status:** done — commit 3114b1e · **superseded by 03**: 프로필 스코프 편집은 규칙 단위 urlFilter(ADR 0007)로 대체됨
 
 - [x] 폼에서 URL 필터 입력 → Save가 규칙+필터를 함께 저장 (smoke N15 — 스토리지 + 매칭 URL에만 헤더 적용)
 - [x] 규칙 행 요약이 `스코프 → 효과` 형태로 표시 (ruleView scope 케이스, 렌더 감사 확인)
