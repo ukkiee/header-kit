@@ -7,3 +7,4 @@
 - stage3 slice: done — 티켓 8개 발행 (01 스켈레톤 → 구조 게이트 예정)
 - stage4 ticket 01: done — Base UI Select/Input/Checkbox/Field 교체, 팝업·캡션 토큰화, smoke 66/66 ×3
 - stage4 structure gate: done — r1 needs-attention(S-1 accept: Select 제네릭화) → r2 approve
+- stage4 ticket 02: done — ChipGroup(ToggleGroup)·Collapsible 교체, 호버 버그 구조 해소, smoke 67/67

@@ -1,7 +1,7 @@
 import { ALL_RESOURCE_TYPES, REQUEST_METHODS } from '@/core/rules';
 import type { RuleConditions } from '@/core/schema';
-import { Chip } from '@/ui/chip';
-import { Field } from '@/ui/field';
+import { ChipGroup } from '@/ui/chip-group';
+import { Field, fieldCaption } from '@/ui/field';
 import { Input } from '@/ui/input';
 import { NoteText } from '@/ui/note-text';
 import { useT } from '@/ui/i18n-context';
@@ -15,10 +15,6 @@ function epochToLocalInput(ms: number | undefined): string {
 function localInputToEpoch(value: string): number | undefined {
   const ms = new Date(value).getTime();
   return Number.isNaN(ms) || ms <= 0 ? undefined : ms;
-}
-
-function toggleItem<T>(list: readonly T[], item: T): T[] {
-  return list.includes(item) ? list.filter((x) => x !== item) : [...list, item];
 }
 
 const splitCsv = (value: string): string[] =>
@@ -54,45 +50,34 @@ export function RuleConditionsFields({ conditions, onChange }: RuleConditionsFie
     </Field>
   );
 
+  // 칩 그룹 캡션은 span — ToggleGroup은 aria-label로 이름을 갖는다 (ADR 0011).
+  const chipField = <T extends string>(
+    labelKey: 'condResourceTypes' | 'condMethods',
+    values: readonly T[],
+    options: readonly { value: T; label: string }[],
+    apply: (values: T[]) => RuleConditions,
+  ) => (
+    <div className="flex flex-col gap-1">
+      <span className={fieldCaption}>{t(labelKey)}</span>
+      <ChipGroup values={values} options={options} onValuesChange={(next) => onChange(apply(next))} aria-label={t(labelKey)} />
+    </div>
+  );
+
   return (
     <div className="flex flex-col gap-3">
       {csvField('condExcludedDomains', 'excludedDomains', t('commaHint'))}
-      <Field label={t('condResourceTypes')}>
-        <div className="flex flex-wrap gap-1">
-          {ALL_RESOURCE_TYPES.map((type) => (
-            <Chip
-              key={type}
-              active={(conditions.resourceTypes ?? []).includes(type)}
-              onClick={() =>
-                onChange({
-                  ...conditions,
-                  resourceTypes: toggleItem(conditions.resourceTypes ?? [], type),
-                })
-              }
-            >
-              {type}
-            </Chip>
-          ))}
-        </div>
-      </Field>
-      <Field label={t('condMethods')}>
-        <div className="flex flex-wrap gap-1">
-          {REQUEST_METHODS.map((method) => (
-            <Chip
-              key={method}
-              active={(conditions.requestMethods ?? []).includes(method)}
-              onClick={() =>
-                onChange({
-                  ...conditions,
-                  requestMethods: toggleItem(conditions.requestMethods ?? [], method),
-                })
-              }
-            >
-              {method.toUpperCase()}
-            </Chip>
-          ))}
-        </div>
-      </Field>
+      {chipField(
+        'condResourceTypes',
+        conditions.resourceTypes ?? [],
+        ALL_RESOURCE_TYPES.map((type) => ({ value: type, label: type })),
+        (resourceTypes) => ({ ...conditions, resourceTypes }),
+      )}
+      {chipField(
+        'condMethods',
+        conditions.requestMethods ?? [],
+        REQUEST_METHODS.map((method) => ({ value: method, label: method.toUpperCase() })),
+        (requestMethods) => ({ ...conditions, requestMethods }),
+      )}
       {csvField('condInitiator', 'initiatorDomains', t('condInitiatorNote'))}
       {csvField('condTabDomains', 'tabDomains', t('condTabDomainNote'))}
       <Field label={t('condExpires')}>

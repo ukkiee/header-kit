@@ -1,3 +1,4 @@
+import { Collapsible as BaseCollapsible } from '@base-ui-components/react/collapsible';
 import type { ReactNode } from 'react';
 import { Button } from './button';
 import { PanelSection } from './panel-section';
@@ -15,8 +16,8 @@ export interface CollapsiblePanelProps {
 }
 
 /**
- * show/hide 토글을 내장한 접이식 패널 — PanelSection 셸 위에 open 상태 관리를 얹는다.
- * Backup/Preferences의 `useState(open)` + 토글 버튼 + `{open && …}` 삼중 중복을 흡수한다.
+ * show/hide 토글을 내장한 접이식 패널 — Base UI Collapsible 기반 (ADR 0011).
+ * aria-expanded·패널 연결 시맨틱은 Base UI가 제공하고, 표면은 PanelSection 셸 그대로다.
  * (Transfer는 mode 기반이라 PanelSection을 직접 쓴다 — 게이팅 모델이 다르다.)
  */
 export function CollapsiblePanel({
@@ -30,21 +31,20 @@ export function CollapsiblePanel({
   children,
 }: CollapsiblePanelProps) {
   return (
-    <PanelSection
-      title={title}
-      actions={
-        <Button
-          variant="ghost"
-          size="sm"
-          aria-label={toggleAriaLabel}
-          onClick={() => onOpenChange(!open)}
-        >
-          {open ? hideLabel : showLabel}
-        </Button>
-      }
-    >
-      {banner}
-      {open && children}
-    </PanelSection>
+    <BaseCollapsible.Root open={open} onOpenChange={onOpenChange}>
+      <PanelSection
+        title={title}
+        actions={
+          <BaseCollapsible.Trigger
+            render={<Button variant="ghost" size="sm" aria-label={toggleAriaLabel} />}
+          >
+            {open ? hideLabel : showLabel}
+          </BaseCollapsible.Trigger>
+        }
+      >
+        {banner}
+        <BaseCollapsible.Panel>{children}</BaseCollapsible.Panel>
+      </PanelSection>
+    </BaseCollapsible.Root>
   );
 }

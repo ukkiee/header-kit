@@ -14,9 +14,10 @@ export const ghostInteractive =
   'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800';
 
 /**
- * accent 배경 조각 — Button.primary / Chip.active / Checkbox.Indicator 가 클래스
- * 문자열로 재사용한다. accent의 실제 단일 출처는 global css의 @theme(`--color-blue-600`)다 —
- * ToggleSwitch의 `data-[checked]:bg-blue-600`도 그 토큰을 통해 테마된다.
+ * accent 배경 조각 — Button.primary / Checkbox.Indicator 가 클래스 문자열로
+ * 재사용한다. accent의 실제 단일 출처는 global css의 @theme(`--color-blue-600`)다 —
+ * ToggleSwitch의 `data-[checked]:bg-blue-600`, ChipGroup의 `data-[pressed]:bg-blue-600`도
+ * 그 토큰을 통해 테마된다 (data 수식어는 문자열 조각과 합성 불가라 인라인 표기).
  */
 export const accentBg = 'bg-blue-600';
 

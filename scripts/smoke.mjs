@@ -1362,6 +1362,50 @@ try {
       && !cleared.hasFilter && !cleared.hasType && clearedHeaders['x-k'] === '1',
     `mods=${kaState.mods.length}, contains=[${inScope['x-k']},${outScope['x-k']}], regex=[${regexIn['x-k']},${regexOut['x-k']}], summary=${scopedSummary}, storage-cleared=[${cleared.hasFilter},${cleared.hasType}], cleared=${clearedHeaders['x-k']}`);
 
+  // N16: 칩 그룹 (ADR 0011) — 캡션 호버가 첫 칩에 전파되지 않고, 칩 토글이 저장된다
+  await seedProfiles([
+    baseProfile('p-chip', 'Chips',
+      [{ kind: 'request-header', id: 'm1', name: 'X-Chip', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }]),
+  ]);
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
+  await popup.locator('summary', { hasText: 'Conditions' }).click();
+  const firstChip = popup.getByRole('button', { name: 'main_frame', exact: true });
+  await firstChip.waitFor({ timeout: 5000 });
+  const chipBg = () => firstChip.evaluate((el) => getComputedStyle(el).backgroundColor);
+  const bgIdle = await chipBg();
+  // transition-colors가 있으므로 호버 후 정착값을 폴링으로 읽는다
+  await popup.getByText('Resource types', { exact: true }).hover();
+  await popup.waitForTimeout(300);
+  const bgCaptionHover = await chipBg();
+  await firstChip.hover();
+  const bgChipHover = await pollUntil(chipBg, (v) => v !== bgIdle, 3000, 100);
+  await firstChip.click();
+  const pressedAfterClick = await firstChip.getAttribute('aria-pressed');
+  // 다중 선택: 두 번째 칩도 켜서 함께 저장된다
+  await popup.getByRole('button', { name: 'script', exact: true }).click();
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  const pollChipConditions = (test) =>
+    pollUntil(
+      () => sw.evaluate(async () => {
+        const { state } = await chrome.storage.local.get('state');
+        return state.profiles[0]?.modifications[0]?.conditions ?? null;
+      }),
+      test,
+    );
+  const chipSaved = await pollChipConditions((c) => c?.resourceTypes?.length === 2);
+  await waitFormClosed();
+  // 해제: 첫 칩을 끄고 저장하면 배열에서 빠진다
+  await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
+  await popup.getByRole('button', { name: 'main_frame', exact: true }).click();
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  const chipDeselected = await pollChipConditions((c) => c?.resourceTypes?.length === 1);
+  record('N16: 칩 그룹 — 캡션 호버 비전파, 다중 토글 저장, 해제 반영',
+    bgIdle === bgCaptionHover && bgChipHover !== bgIdle && pressedAfterClick === 'true'
+      && chipSaved?.resourceTypes?.includes('main_frame') && chipSaved?.resourceTypes?.includes('script')
+      && chipDeselected?.resourceTypes?.join() === 'script',
+    `idle=${bgIdle}, caption-hover=${bgCaptionHover}, chip-hover=${bgChipHover}, pressed=${pressedAfterClick}, saved=${JSON.stringify(chipSaved?.resourceTypes)}, deselected=${JSON.stringify(chipDeselected?.resourceTypes)}`);
+
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
   process.exitCode = failed.length === 0 ? 0 : 1;
