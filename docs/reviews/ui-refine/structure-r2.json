@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "structure",
+  "verdict": "approve",
+  "summary": "Ship: S-1 is resolved. Select now preserves one generic string-union type across value, options, and callback; rule-form’s domain casts were removed. Direct TypeScript checking passed, and the fix introduced no new critical issue within the Round 2 scope.",
+  "planFile": "docs/reviews/ui-refine/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 32,
+  "target": "branch diff against main",
+  "reviewedSha": "a8d2d15ce2bf75b43f18b6f5385ca63d61ca60ac",
+  "reviewedTree": "8a1273f8f63e6a785674a5a32d0d27850b8a3092",
+  "headMovedDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 0,
+  "planFindingCount": 0,
+  "triage": "Clean verdict: note it in your report and COMMIT this artifact with the next bookkeeping commit.",
+  "findings": [],
+  "next_steps": []
+}
