@@ -14,3 +14,4 @@
 - stage4 ticket 06: done — dnd-kit 드래그·키보드 재정렬(Esc 취소 포함), 메뉴 이동 제거, smoke 75/75. 번들 +109KB는 티켓 08 게이트로 이월
 - stage4 ticket 07: done — 삭제 Undo 토스트(restore-modification 원자 복원, Placeholder 값 보존), Close 제거, smoke 77/77
 - stage4 ticket 08: done — motion 전면(행/폼/disclosure/레일)+dnd-kit·motion 지연 로드, 번들 게이트 재설정(+120KB) PASS +116.8KB, smoke 78/78
+- stage5 release gate: done — r1 needs-attention(R-1·R-2 accept) → r2 approve. 세 게이트 전부 통과

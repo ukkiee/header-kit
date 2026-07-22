@@ -26,3 +26,7 @@
 
 - R-1 accept — 프로필 삭제 후 Undo가 고아 materialized 데이터를 복원한다
 - R-2 accept — CSP 검증이 필수 aria-invalid를 누락한다
+
+### release r2
+
+- approve — 발견 0건 (R-1·R-2 반영 확인)

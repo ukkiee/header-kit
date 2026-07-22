@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "release",
+  "verdict": "approve",
+  "summary": "Ship. Round 2 re-verification found both release findings resolved: restoreModification now returns the unchanged state when its profile is absent, preventing orphaned materialized values; CSP directive-name inputs expose aria-invalid and reference the inline error. The focused tests exercise the relevant guard and accessibility/storage behavior, and the fixes introduce no new critical issue. Live test execution was blocked by the read-only sandbox because Vite attempted to create temporary files; diff inspection and git diff --check succeeded.",
+  "planFile": "docs/reviews/ui-refine/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 75,
+  "target": "branch diff against main",
+  "reviewedSha": "5b6a8f322d28680b7811505e25cc079b8b9f1d2b",
+  "reviewedTree": "0404e168ed34986733fc784545eda0c176120c1c",
+  "headMovedDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 0,
+  "planFindingCount": 0,
+  "triage": "Clean verdict: note it in your report and COMMIT this artifact with the next bookkeeping commit.",
+  "findings": [],
+  "next_steps": []
+}
