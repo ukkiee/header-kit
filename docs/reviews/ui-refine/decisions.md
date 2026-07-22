@@ -9,3 +9,7 @@
 ### plan r2
 
 - approve — 발견 0건 (R-1~R-3 반영 확인)
+
+### structure r1
+
+- S-1 accept — Select의 공개 계약이 옵션의 도메인 타입을 전부 지운다

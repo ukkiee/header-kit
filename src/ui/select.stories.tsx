@@ -15,7 +15,7 @@ const options = [
   { value: 'response-header', label: 'Response header' },
 ];
 
-function Interactive(args: SelectProps) {
+function Interactive(args: SelectProps<string>) {
   const [value, setValue] = useState(args.value);
   return <Select {...args} value={value} onValueChange={setValue} />;
 }

@@ -26,22 +26,23 @@ const trigger = cva(
   },
 );
 
-export interface SelectOption {
-  value: string;
+export interface SelectOption<T extends string = string> {
+  value: T;
   label: string;
 }
 
-export interface SelectProps extends VariantProps<typeof trigger> {
-  value: string;
-  onValueChange: (value: string) => void;
-  options: readonly SelectOption[];
+/** 값 타입 T가 현재 값·옵션·콜백에 일관 적용된다 — 호출부가 도메인 union을 그대로 쓴다. */
+export interface SelectProps<T extends string> extends VariantProps<typeof trigger> {
+  value: T;
+  onValueChange: (value: T) => void;
+  options: readonly SelectOption<T>[];
   'aria-label'?: string;
   id?: string;
   disabled?: boolean;
   className?: string;
 }
 
-export function Select({
+export function Select<T extends string>({
   variant,
   size,
   className,
@@ -51,13 +52,13 @@ export function Select({
   disabled,
   id,
   'aria-label': ariaLabel,
-}: SelectProps) {
+}: SelectProps<T>) {
   return (
     <BaseSelect.Root
       items={options}
       value={value}
       onValueChange={(next) => {
-        if (typeof next === 'string') onValueChange(next);
+        if (next !== null) onValueChange(next);
       }}
       disabled={disabled}
     >

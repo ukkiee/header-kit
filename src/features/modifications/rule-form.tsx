@@ -121,7 +121,7 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
           size="md"
           value={draft.kind}
           aria-label={t('ruleKind')}
-          onValueChange={(value) => switchKind(value as ModificationKind)}
+          onValueChange={switchKind}
           options={RULE_KINDS.map((kind) => ({ value: kind, label: t(KIND_LABELS[kind]) }))}
         />
       </Field>
@@ -138,7 +138,7 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
               aria-label={t('ariaUrlMatchType')}
               value={('urlMatchType' in draft ? draft.urlMatchType : undefined) ?? defaultMatchType}
               onValueChange={(value) =>
-                setDraft({ ...draft, urlMatchType: value as UrlMatchType } as Modification)
+                setDraft({ ...draft, urlMatchType: value } as Modification)
               }
               className="shrink-0"
               options={[
@@ -200,9 +200,7 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
                 variant="bordered"
                 size="md"
                 value={draft.mode}
-                onValueChange={(value) =>
-                  setDraft({ ...draft, mode: value as 'override' | 'append' } as Modification)
-                }
+                onValueChange={(value) => setDraft({ ...draft, mode: value } as Modification)}
                 disabled={!appendAllowed}
                 options={[
                   { value: 'override', label: t('override') },
@@ -216,10 +214,7 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
                 size="md"
                 value={draft.emptyMeans}
                 onValueChange={(value) =>
-                  setDraft({
-                    ...draft,
-                    emptyMeans: value as 'remove' | 'send-empty',
-                  } as Modification)
+                  setDraft({ ...draft, emptyMeans: value } as Modification)
                 }
                 options={[
                   { value: 'remove', label: t('remove') },

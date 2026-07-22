@@ -1,0 +1,36 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "structure",
+  "verdict": "needs-attention",
+  "summary": "Do not ship the walking skeleton yet: the new shared Select seam erases domain value types, forcing unsafe casts that later increments are likely to copy.",
+  "planFile": "docs/reviews/ui-refine/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 31,
+  "target": "branch diff against main",
+  "reviewedSha": "b37004be65786449282fd445a4ce8356eb041131",
+  "reviewedTree": "fe9b9aae2f406ae20fb5ae4bd29601f49f07ceeb",
+  "headMovedDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 1,
+  "planFindingCount": 0,
+  "triage": "review-gate SKILL.md rules govern: render EVERY finding as a full table row, the human decides each row (accept/reject/defer/question — free text), echo back before applying, max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "medium",
+      "title": "Select’s public contract erases every option’s domain type",
+      "body": "Select hard-codes value, option values, and the change callback to string. Callers therefore recover ModificationKind, UrlMatchType, mode, and empty-value policy using assertions in rule-form.tsx. The compiler cannot ensure that the current value, available options, and callback output belong to the same domain. As later increments add or modify form controls through this shared primitive, this cast-based pattern can admit invalid values into Modification drafts and becomes increasingly expensive to unwind.",
+      "file": "src/ui/select.tsx",
+      "line_start": 29,
+      "line_end": 41,
+      "confidence": 0.94,
+      "recommendation": "Make SelectOption and SelectProps generic over T extends string, using T consistently for value, options[].value, and onValueChange. Let callers infer or specify their domain union and remove the assertions in rule-form.tsx.",
+      "isPlanFinding": false
+    }
+  ],
+  "next_steps": [
+    "Make Select’s value contract generic and remove the corresponding domain casts from its consumers.",
+    "Run type checking, the Select Storybook gate, and the existing add/edit/save smoke paths."
+  ]
+}
