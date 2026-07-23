@@ -7,6 +7,7 @@ import { Button } from '@/ui/button';
 import { Card } from '@/ui/card';
 import { Input } from '@/ui/input';
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from '@/ui/menu';
+import { MotionSwap } from '@/ui/motion-swap';
 import { AnimatePresence, MotionRow } from '@/ui/motion-row';
 import { ToggleSwitch } from '@/ui/toggle-switch';
 import { RuleForm } from '@/features/modifications/rule-form';
@@ -116,7 +117,7 @@ export function ProfileSection({
                 confirmTimer.current = setTimeout(() => setConfirmingDelete(false), 3000);
               }}
             >
-              {confirmingDelete ? t('confirmDelete') : t('menuDelete')}
+              <MotionSwap>{confirmingDelete ? t('confirmDelete') : t('menuDelete')}</MotionSwap>
             </MenuItem>
           </MenuPopup>
         </Menu>

@@ -1,8 +1,8 @@
 import { useReducedMotion } from 'motion/react';
 import type { ButtonHTMLAttributes } from 'react';
+import { PRESS_SPRING } from './motion-tokens';
 
-/** 누름·호버 spring — 좁은 팝업(760×580)에서 과하지 않게, 그러나 분명히 보이는 폭. */
-const PRESS_SPRING = { type: 'spring', stiffness: 420, damping: 26, mass: 0.6 } as const;
+/** 호버·누름 배율 — 좁은 팝업(760×580)에서 과하지 않게, 그러나 분명히 보이는 폭. */
 const HOVER_SCALE = 1.02;
 const TAP_SCALE = 0.95;
 

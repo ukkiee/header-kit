@@ -1,9 +1,25 @@
 import { Menu as BaseMenu } from '@base-ui-components/react/menu';
 import { cva, type VariantProps } from 'class-variance-authority';
-import { m } from 'motion/react';
+import { m, useReducedMotion } from 'motion/react';
 import type { ComponentProps } from 'react';
+import { MENU_ITEM_FADE_S, MENU_ITEM_STAGGER_S } from './motion-tokens';
 import { usePressMotion } from './press-motion';
 import { popupItem, popupSurface } from './tokens';
+
+/**
+ * 항목 순차 등장 (ADR 0012) — 한꺼번에 튀어나오지 않고 눈이 따라갈 수 있게 한다.
+ * 팝업이 오케스트레이터고 항목이 자식이다. 타이밍은 motion-tokens가 단일 출처이며
+ * 스모크가 같은 값을 import해 "아직 진행 중" 창을 잡는다.
+ */
+const popupStagger = {
+  hidden: {},
+  visible: { transition: { staggerChildren: MENU_ITEM_STAGGER_S } },
+};
+
+const itemAppear = {
+  hidden: { opacity: 0, y: -4 },
+  visible: { opacity: 1, y: 0, transition: { duration: MENU_ITEM_FADE_S } },
+};
 
 /**
  * 드롭다운 메뉴 — 빈도 낮은 조작(이동/복제/삭제)을 헤더의 아이콘 나열 대신
@@ -23,10 +39,17 @@ export function MenuPopup({
   children,
   ...props
 }: ComponentProps<typeof BaseMenu.Popup>) {
+  const reduce = useReducedMotion();
   return (
     <BaseMenu.Portal>
       <BaseMenu.Positioner align="end" sideOffset={4}>
-        <BaseMenu.Popup className={`min-w-36 ${popupSurface} ${className ?? ''}`} {...props}>
+        <BaseMenu.Popup
+          className={`min-w-36 ${popupSurface} ${className ?? ''}`}
+          // reduced-motion이면 오케스트레이션 자체를 걸지 않는다 — 자식도 variants를
+          // 받지 않으므로 항목이 처음부터 완성된 상태로 그려진다.
+          render={reduce ? undefined : <m.div variants={popupStagger} initial="hidden" animate="visible" />}
+          {...props}
+        >
           {children}
         </BaseMenu.Popup>
       </BaseMenu.Positioner>
@@ -54,11 +77,12 @@ export interface MenuItemProps
 export function MenuItem({ tone, className, ...props }: MenuItemProps) {
   // 메뉴 항목도 버튼 프리미티브다 (ADR 0012) — 누름·호버를 같은 헬퍼로 통일한다.
   // 비활성은 cva의 data-[disabled]:pointer-events-none이 이미 제스처를 막는다.
+  const reduce = useReducedMotion();
   const press = usePressMotion();
   return (
     <BaseMenu.Item
       className={menuItem({ tone, className })}
-      render={<m.div {...press} />}
+      render={<m.div {...press} {...(reduce ? {} : { variants: itemAppear })} />}
       {...props}
     />
   );

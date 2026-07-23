@@ -1,5 +1,6 @@
 import { AnimatePresence, m, useReducedMotion } from 'motion/react';
 import type { ReactNode } from 'react';
+import { ROW_TRANSITION } from './motion-tokens';
 
 export { AnimatePresence };
 
@@ -17,7 +18,7 @@ export function MotionRow({ children }: { children: ReactNode }) {
       initial={{ opacity: 0, height: 0 }}
       animate={{ opacity: 1, height: 'auto' }}
       exit={{ opacity: 0, height: 0 }}
-      transition={{ duration: 0.18, ease: 'easeOut' }}
+      transition={ROW_TRANSITION}
       style={{ overflow: 'hidden' }}
     >
       {children}

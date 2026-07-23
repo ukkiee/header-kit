@@ -11,6 +11,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import { menuStaggerTotalMs } from '../src/ui/motion-tokens.ts';
 
 const EXT_PATH = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -1052,7 +1053,7 @@ try {
 
   // 삭제는 ⋯ 메뉴의 2단 확인(Delete → Delete?)으로 수행한다 (슬라이스 06)
   const deleteSelected = async () => {
-    await popup.getByRole('button', { name: 'Profile menu' }).click();
+    await popup.getByRole('button', { name: 'Profile menu', exact: true }).click();
     await popup.getByRole('menuitem', { name: 'Delete' }).click();
     await popup.getByRole('menuitem', { name: 'Delete?' }).click();
   };
@@ -1252,7 +1253,7 @@ try {
 
   // (d) 메뉴엔 이동 항목이 없다 — 복제·삭제만
   await popup.getByRole('button', { name: 'Select profile Bottom' }).click();
-  await popup.getByRole('button', { name: 'Profile menu' }).click();
+  await popup.getByRole('button', { name: 'Profile menu', exact: true }).click();
   await popup.getByRole('menuitem', { name: 'Duplicate' }).waitFor({ timeout: 5000 });
   const moveUpGone = (await popup.getByRole('menuitem', { name: 'Move up' }).count()) === 0;
   const moveDownGone = (await popup.getByRole('menuitem', { name: 'Move down' }).count()) === 0;
@@ -1827,7 +1828,11 @@ try {
     const icon = await transformStates(page, page.getByRole('button', { name: 'Edit', exact: true }));
     const button = await transformStates(page, page.getByRole('button', { name: 'Add rule' }));
     const chip = await transformStates(page, page.getByRole('button', { name: 'New profile' }));
-    await page.getByRole('button', { name: 'Profile menu' }).click();
+    await page.getByRole('button', { name: 'Profile menu', exact: true }).click();
+    // 항목은 열릴 때 순차 등장한다(ui-polish 05) — 그 y 애니메이션이 도는 중에 읽으면
+    // "rest"가 진행 중 변형을 잡는다. 스태거가 끝날 때까지 기다린 뒤 누름·호버를 본다.
+    await page.getByRole('menuitem', { name: 'Duplicate' }).first().waitFor({ timeout: 5000 });
+    await page.waitForTimeout(menuStaggerTotalMs(2) + 150);
     const item = await transformStates(page, page.getByRole('menuitem', { name: 'Duplicate' }));
     return { button, chip, icon, item };
   };
@@ -1927,6 +1932,130 @@ try {
   record('N22c: 탭 표면도 ScrollArea가 스크롤을 소유한다(문서가 스크롤되지 않는다)',
     tabThumbAppeared && !tabOverflow.docScrolls && tabThumbs >= 1,
     `thumbAppeared=${tabThumbAppeared}, docScrolls=${tabOverflow.docScrolls} (${tabOverflow.scrollH}>${tabOverflow.clientH}), thumbs=${tabThumbs}`);
+
+  // N23: 메뉴 순차 등장 + 삭제 2단 확인 라벨 전환 (ui-polish 05, ADR 0012).
+  // 관측 창이 한 프레임이라 Playwright 왕복으로는 못 잡는다 — 페이지 안에 관측자를
+  // 심어 두고, 대상이 나타난 **다음 애니메이션 프레임**의 계산 opacity를 찍는다.
+  // 대기 시간은 motion-tokens의 상수에서 온다(테스트가 자기 숫자를 들지 않는다).
+  const firstFrameMenuOpacities = async (page, openMenu) => {
+    await page.evaluate(() => {
+      window.__menuProbe = null;
+      const observer = new MutationObserver(() => {
+        const menu = document.querySelector('[role="menu"]');
+        if (!menu) return;
+        observer.disconnect();
+        requestAnimationFrame(() => {
+          window.__menuProbe = [...menu.querySelectorAll('[role="menuitem"]')].map((el) =>
+            Number(getComputedStyle(el).opacity),
+          );
+        });
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    });
+    await openMenu();
+    const observed = await page
+      .waitForFunction(() => window.__menuProbe !== null, null, { timeout: 5000 })
+      .then(() => true, () => false);
+    return observed ? page.evaluate(() => window.__menuProbe) : null;
+  };
+
+  const firstFrameLabelOpacity = async (page, labelText, act) => {
+    await page.evaluate((text) => {
+      window.__labelProbe = null;
+      const observer = new MutationObserver(() => {
+        const el = [...document.querySelectorAll('[role="menuitem"], [role="menuitem"] *')].find(
+          (node) => node.children.length === 0 && node.textContent?.trim() === text,
+        );
+        if (!el) return;
+        observer.disconnect();
+        requestAnimationFrame(() => {
+          window.__labelProbe = Number(getComputedStyle(el).opacity);
+        });
+      });
+      observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    }, labelText);
+    await act();
+    const observed = await page
+      .waitForFunction(() => window.__labelProbe !== null, null, { timeout: 3000 })
+      .then(() => true, () => false);
+    return observed ? page.evaluate(() => window.__labelProbe) : null;
+  };
+
+  const openProfileMenu = (page) => () =>
+    page.getByRole('button', { name: 'Profile menu', exact: true }).click();
+  const settleMs = menuStaggerTotalMs(2) + 200;
+
+  await seedProfiles([baseProfile('p-menu', 'Kebab', [])]);
+
+  // N23a: 순차 등장 — 기본 모션에서는 첫 프레임에 아직 덜 나온 항목이 있고(대조),
+  // reduced-motion에서는 처음부터 전부 완성돼 있다(부재). 대조를 먼저 둬 지연 로드된
+  // features가 그 시점에 도착했음을 근거로 남긴다(티켓 04와 같은 이유).
+  await popup.emulateMedia({ reducedMotion: null });
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Profile menu', exact: true }).waitFor({ timeout: 5000 });
+  await popup.waitForTimeout(700);
+  const staggerLively = await firstFrameMenuOpacities(popup, openProfileMenu(popup));
+  await popup.waitForTimeout(settleMs);
+  const staggerSettled = await popup.evaluate(() =>
+    [...document.querySelectorAll('[role="menuitem"]')].map((el) => Number(getComputedStyle(el).opacity)),
+  );
+  await popup.keyboard.press('Escape');
+
+  await popup.emulateMedia({ reducedMotion: 'reduce' });
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Profile menu', exact: true }).waitFor({ timeout: 5000 });
+  await popup.waitForTimeout(700);
+  const staggerStill = await firstFrameMenuOpacities(popup, openProfileMenu(popup));
+  record('N23a: 메뉴 순차 등장 — 기본 모션은 첫 프레임이 진행 중, reduced-motion은 즉시 완성',
+    Array.isArray(staggerLively) && staggerLively.some((o) => o < 1) &&
+      staggerSettled.length > 0 && staggerSettled.every((o) => o === 1) &&
+      Array.isArray(staggerStill) && staggerStill.length > 0 && staggerStill.every((o) => o === 1),
+    `lively=${JSON.stringify(staggerLively)}, settled=${JSON.stringify(staggerSettled)}, reduced=${JSON.stringify(staggerStill)} (창 ${settleMs}ms)`);
+
+  // N23b: 삭제 2단 확인 라벨 — 첫 클릭은 메뉴를 열어 둔 채 라벨만 바꾼다.
+  const reducedLabel = await firstFrameLabelOpacity(popup, 'Delete?', () =>
+    popup.getByRole('menuitem', { name: 'Delete', exact: true }).click());
+  const reducedMenuOpen = await popup.getByRole('menuitem').count();
+  await popup.keyboard.press('Escape');
+
+  await popup.emulateMedia({ reducedMotion: null });
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Profile menu', exact: true }).waitFor({ timeout: 5000 });
+  await popup.waitForTimeout(700);
+  await popup.getByRole('button', { name: 'Profile menu', exact: true }).click();
+  await popup.getByRole('menuitem', { name: 'Delete', exact: true }).waitFor({ timeout: 5000 });
+  await popup.waitForTimeout(settleMs);
+  const livelyLabel = await firstFrameLabelOpacity(popup, 'Delete?', () =>
+    popup.getByRole('menuitem', { name: 'Delete', exact: true }).click());
+  record('N23b: 삭제 확인 라벨 — 기본 모션은 fade 중, reduced-motion은 즉시 완성(메뉴 유지)',
+    reducedLabel === 1 && typeof livelyLabel === 'number' && livelyLabel < 1 && reducedMenuOpen === 2,
+    `reduced=${reducedLabel}, lively=${livelyLabel}, reduced-menu-items=${reducedMenuOpen}`);
+
+  // N23c: 메뉴 조작 기능 회귀 없음 — 키보드 이동·Esc·항목 선택.
+  await popup.keyboard.press('Escape');
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Profile menu', exact: true }).waitFor({ timeout: 5000 });
+  await popup.getByRole('button', { name: 'Profile menu', exact: true }).click();
+  await popup.getByRole('menuitem').first().waitFor({ timeout: 5000 });
+  await popup.keyboard.press('ArrowDown');
+  await popup.waitForTimeout(150);
+  // Base UI 메뉴는 aria-activedescendant 방식이라 activeElement는 팝업 컨테이너다 —
+  // 하이라이트는 항목의 data-highlighted로 읽어야 한다(popupItem 토큰이 쓰는 그 속성).
+  const highlighted = await popup.evaluate(
+    () => document.querySelector('[role="menuitem"][data-highlighted]')?.textContent?.trim() ?? '');
+  await popup.keyboard.press('Escape');
+  const closedByEsc = await popup
+    .getByRole('menuitem')
+    .first()
+    .waitFor({ state: 'detached', timeout: 3000 })
+    .then(() => true, () => false);
+  await popup.getByRole('button', { name: 'Profile menu', exact: true }).click();
+  await popup.getByRole('menuitem', { name: 'Duplicate', exact: true }).click();
+  const duplicated = await sw.evaluate(async () =>
+    (await chrome.storage.local.get('state')).state.profiles.length);
+  record('N23c: 메뉴 기능 회귀 없음 — 키보드 이동·Esc 닫기·항목 선택',
+    highlighted.length > 0 && closedByEsc && duplicated === 2,
+    `highlighted="${highlighted}", esc-closed=${closedByEsc}, profiles=${duplicated}`);
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

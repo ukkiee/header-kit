@@ -1,5 +1,6 @@
 import { m, useReducedMotion } from 'motion/react';
 import type { ReactNode } from 'react';
+import { VIEW_TRANSITION } from './motion-tokens';
 
 /**
  * 레일 화면 전환 fade-in (ui-refine 08) — 화면이 바뀌었음을 짧은 fade로 알린다.
@@ -14,7 +15,7 @@ export function MotionView({ viewKey, children }: { viewKey: string; children: R
       key={viewKey}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ duration: 0.12 }}
+      transition={VIEW_TRANSITION}
       className="flex flex-col gap-3"
     >
       {children}
