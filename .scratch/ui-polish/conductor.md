@@ -17,3 +17,6 @@
 - ticket 03 start: 2001587
 - ticket 03 done: b25d8cc — Autocomplete 채택 + 지연 로드(26.5KB deferred, 즉시 합계 +1.6KB로 한도 내). React.lazy 대신 모듈 스코프 로더(lazy 서스펜드 왕복 ~250ms 실측), 유휴 프리로드는 첫 페인트 악화로 철회. **리뷰가 편집 소실 결함 발견** — 후보 없을 때 팝업이 열려 폼이 aria-hidden에 덮이고 Esc가 폼을 닫았다 → open 제어 + 조건부 팝업, L2d 신설. smoke 85/85, 전 게이트 green
 - ticket 04 start: b25d8cc
+- ticket 04 done: b571845 — 버튼 누름·호버 motion 통일 + reduced-motion 관측 계약. 공유 헬퍼 usePressMotion(reduced-motion·disabled 둘 다 빈 객체). **리뷰가 ADR 0012의 네 번째 프리미티브(메뉴 항목) 누락과 비활성 무방비를 발견** → 둘 다 반영. smoke N21b(감도 대조)/N21c(부재 단언)를 네 프리미티브로 확대, 대조를 먼저 실행. 시작 지표 회귀 없음. smoke 87/87, 전 게이트 green
+- ticket 05 start: b571845
+- 티켓 05·06에 넘긴 것: (a) 모션 타이밍 3곳 분산(press-motion·motion-row·motion-view) 공유 토큰으로 모으기, (b) 비활성 버튼 모션 부재 스모크 단언(06이 저장 중 비활성 버튼을 만들 때)
