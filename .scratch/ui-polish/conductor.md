@@ -19,4 +19,7 @@
 - ticket 04 start: b25d8cc
 - ticket 04 done: b571845 — 버튼 누름·호버 motion 통일 + reduced-motion 관측 계약. 공유 헬퍼 usePressMotion(reduced-motion·disabled 둘 다 빈 객체). **리뷰가 ADR 0012의 네 번째 프리미티브(메뉴 항목) 누락과 비활성 무방비를 발견** → 둘 다 반영. smoke N21b(감도 대조)/N21c(부재 단언)를 네 프리미티브로 확대, 대조를 먼저 실행. 시작 지표 회귀 없음. smoke 87/87, 전 게이트 green
 - ticket 05 start: b571845
+- ticket 05 done: d4d39b2 — 메뉴 순차 등장 + 삭제 확인 라벨 전환. 모션 타이밍을 src/ui/motion-tokens.ts 단일 출처로 모음(04에서 넘긴 것), 스모크가 Node 타입 스트리핑으로 그 .ts를 직접 import해 관측 창을 잡는다. **리뷰가 "순차를 검증하지 않는 단언"을 발견** → 앞 항목이 뒤보다 앞섬을 단언하도록 강화(stagger 0으로 FAIL 확인). smoke 90/90, 전 게이트 green
+- ticket 06 start: d4d39b2
+- 티켓 06에 넘긴 것: 비활성 버튼 모션 부재 스모크 단언 (06이 저장 중 비활성 버튼을 만들 때)
 - 티켓 05·06에 넘긴 것: (a) 모션 타이밍 3곳 분산(press-motion·motion-row·motion-view) 공유 토큰으로 모으기, (b) 비활성 버튼 모션 부재 스모크 단언(06이 저장 중 비활성 버튼을 만들 때)
