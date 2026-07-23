@@ -21,5 +21,7 @@
 - ticket 05 start: b571845
 - ticket 05 done: d4d39b2 — 메뉴 순차 등장 + 삭제 확인 라벨 전환. 모션 타이밍을 src/ui/motion-tokens.ts 단일 출처로 모음(04에서 넘긴 것), 스모크가 Node 타입 스트리핑으로 그 .ts를 직접 import해 관측 창을 잡는다. **리뷰가 "순차를 검증하지 않는 단언"을 발견** → 앞 항목이 뒤보다 앞섬을 단언하도록 강화(stagger 0으로 FAIL 확인). smoke 90/90, 전 게이트 green
 - ticket 06 start: d4d39b2
+- ticket 06 done: 98d5bd9 — 저장 중 상태(라벨·양 버튼 비활성·성공/거부 전이). **키보드 경로가 disabled를 우회해 규칙이 두 번 저장되던 버그**를 ref 가드로 차단, **신규 폼이 AnimatePresence 밖이라 닫힘 전이가 없던 것**도 수정. 04에서 넘긴 비활성 버튼 모션 부재 단언도 닫힘. **리뷰가 치명적 회귀 발견** — onSave가 던지면 폼이 영구히 갇혀 초안 소실(내가 마지막 탈출구를 없앰) → try/finally + N24bb 신설. smoke 94/94, 전 게이트 green
+- ticket 07 start: 98d5bd9
 - 티켓 06에 넘긴 것: 비활성 버튼 모션 부재 스모크 단언 (06이 저장 중 비활성 버튼을 만들 때)
 - 티켓 05·06에 넘긴 것: (a) 모션 타이밍 3곳 분산(press-motion·motion-row·motion-view) 공유 토큰으로 모으기, (b) 비활성 버튼 모션 부재 스모크 단언(06이 저장 중 비활성 버튼을 만들 때)
