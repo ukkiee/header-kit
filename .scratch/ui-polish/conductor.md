@@ -12,3 +12,4 @@
 - ticket 02 start: 8618db5
 - ticket 02 done: 69b90f3 — ScrollArea 채택(+12.6KB), 랜드마크를 render 합성으로. **번들 한도 +120 → +135KB 사용자 재트리아지**(decisions.md 기록, 정본은 issues/02). smoke N22a/N22b로 다크 모드 가드 신설(81/81). 전 게이트 green
 - ticket 03 조건 추가: Autocomplete 지연 로드가 수용 기준에 들어감 (실측 +14.5KB, 규칙 폼 전용이라 초기 청크 불필요)
+- stage4 structure gate r1: done — needs-attention 2건, 사용자 트리아지 **둘 다 accept**. S-1 번들 게이트가 즉시 청크 하나만 측정(→ popup.html에서 즉시 그래프 도출, 한도는 여유 유지하도록 재표현 135→143), S-2 탭 셸이 min-h-screen이라 ScrollArea가 스크롤을 소유 못함(→ h-screen, smoke N22c 신설). smoke 82/82. r2 재검증 필요

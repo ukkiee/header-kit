@@ -175,14 +175,18 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
   );
 
   // 단일 셸 (ADR 0005) — 두 표면이 같은 레일+사이드바+본문을 쓴다.
-  // 차이는 크기(팝업 760×580 고정+본문 스크롤 / 탭 전폭·전고)와 "탭에서 열기"뿐.
+  // 차이는 크기(팝업 760×580 고정 / 탭 전폭·전고)와 "탭에서 열기"뿐.
+  //
+  // 두 표면 모두 **확정 높이**여야 한다. 탭이 min-h-screen이면 행이 내용만큼 늘어나
+  // 뷰포트가 넘칠 일이 없고, 스크롤이 ScrollArea가 아니라 문서로 떨어진다 — 탭에서만
+  // OS 기본 스크롤바가 뜨고 앱 스타일 스크롤바는 아예 렌더되지 않는다 (structure r1 S-2).
   return (
     <LocaleProvider locale={locale}>
       <MotionProvider>
       <IconTooltipProvider>
       <div
         className={`grid grid-cols-[3rem_14rem_minmax(0,1fr)] ${canvas} ${
-          surface === 'tab' ? 'min-h-screen' : 'h-[580px] w-[760px]'
+          surface === 'tab' ? 'h-screen' : 'h-[580px] w-[760px]'
         }`}
       >
         <nav className="flex flex-col items-center gap-1 border-r border-zinc-200 py-3 dark:border-zinc-800">

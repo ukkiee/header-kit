@@ -1750,6 +1750,29 @@ try {
     thumbsWhenShort === 0,
     `thumbs=${thumbsWhenShort}`);
 
+  // N22c: 탭 표면도 ScrollArea가 세로 스크롤을 소유한다 (ui-polish structure r1 S-2).
+  // 셸 높이가 min-h-screen이면 행이 내용만큼 늘어나 뷰포트가 넘칠 일이 없고, 스크롤이
+  // 문서로 떨어져 탭에서만 OS 기본 스크롤바가 뜬다 — 두 표면이 같은 셸이라는 ADR 0005의
+  // 약속이 조용히 깨지는 자리라 문서 스크롤 여부까지 단언한다.
+  await seedProfiles([baseProfile('p-tabscroll', 'TabScroll', manyRules)]);
+  const tabScroll = await context.newPage();
+  await tabScroll.setViewportSize({ width: 900, height: 700 });
+  await tabScroll.goto(`chrome-extension://${extId}/app.html?locale=en`);
+  // 스크롤바가 안 뜨는 것이 바로 이 테스트가 잡으려는 회귀다 — waitFor가 던져 스위트를
+  // 중단시키면 FAIL로 기록되지 않으므로, 실패를 값으로 받는다.
+  const tabThumbAppeared = await tabScroll.locator(THUMB).first()
+    .waitFor({ timeout: 5000 })
+    .then(() => true, () => false);
+  const tabOverflow = await tabScroll.evaluate(() => {
+    const root = document.documentElement;
+    return { docScrolls: root.scrollHeight > root.clientHeight, scrollH: root.scrollHeight, clientH: root.clientHeight };
+  });
+  const tabThumbs = await tabScroll.locator(THUMB).count();
+  await tabScroll.close();
+  record('N22c: 탭 표면도 ScrollArea가 스크롤을 소유한다(문서가 스크롤되지 않는다)',
+    tabThumbAppeared && !tabOverflow.docScrolls && tabThumbs >= 1,
+    `thumbAppeared=${tabThumbAppeared}, docScrolls=${tabOverflow.docScrolls} (${tabOverflow.scrollH}>${tabOverflow.clientH}), thumbs=${tabThumbs}`);
+
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
   process.exitCode = failed.length === 0 ? 0 : 1;
