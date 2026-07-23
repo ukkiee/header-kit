@@ -25,5 +25,7 @@
 - ticket 07 start: 98d5bd9
 - ticket 07 done: fd1cf3a — 매치 방식 셀렉트 폭 고정(en/ko 136px, 패턴 입력 좌변 455px 고정). **실측이 설계를 바꿈** — 네 셀렉트 중 출렁이는 것은 하나뿐이라 고정 폭을 프리미티브 기본값으로 두지 않고 width 변형(auto 기본/fixed)으로. smoke N25가 폭 동일+라벨 미절단을 함께 단언, 두 퇴화 경로 FAIL 확인. smoke 95/95, 전 게이트 green. **리뷰가 절단 단언의 공허 통과 경로 발견** → .truncate 겨냥 + 노드 부재 시 실패, 폭 변형 스토리북 추가
 - ticket 08 start: 1785b47
+- ticket 08 done: 7bd22f0 — 검증 실패 포커스. focusTargets를 해석 시점 함수로 — CSP는 directives가 빈 배열이라 포커스할 입력이 없을 수 있고 그때는 '디렉티브 추가' 버튼으로. 헤더 이름 ref를 두 표현 모두에(03 메모). smoke N26 여섯 경우, 포커스 이동 제거 시 전부 MISS 확인. smoke 96/96, 전 게이트 green. **번들 여유 1.8KB로 얇아짐(+141.2/143KB)**
+- ticket 09 start: 7bd22f0
 - 티켓 06에 넘긴 것: 비활성 버튼 모션 부재 스모크 단언 (06이 저장 중 비활성 버튼을 만들 때)
 - 티켓 05·06에 넘긴 것: (a) 모션 타이밍 3곳 분산(press-motion·motion-row·motion-view) 공유 토큰으로 모으기, (b) 비활성 버튼 모션 부재 스모크 단언(06이 저장 중 비활성 버튼을 만들 때)
