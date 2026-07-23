@@ -32,11 +32,18 @@ export type MotionButtonAttributes = Omit<
  * (Button만 `disabled:pointer-events-none`을 갖고 있어 나머지는 무방비였다).
  */
 export function usePressMotion(disabled?: boolean) {
+  return useMotionProps(
+    { whileHover: { scale: HOVER_SCALE }, whileTap: { scale: TAP_SCALE }, transition: PRESS_SPRING },
+    disabled,
+  );
+}
+
+/**
+ * 위 계약을 실제로 집행하는 한 곳 — 모션이 꺼져야 하면 **빈 객체**를 돌려준다.
+ * 누름·호버 말고 다른 모션(메뉴 항목 등장 등)도 이 함수를 거쳐야 각 컴포넌트가
+ * reduced-motion 분기를 제 나름대로 반복하지 않는다.
+ */
+export function useMotionProps<T extends object>(props: T, off?: boolean): T | Record<string, never> {
   const reduce = useReducedMotion();
-  if (reduce || disabled) return {};
-  return {
-    whileHover: { scale: HOVER_SCALE },
-    whileTap: { scale: TAP_SCALE },
-    transition: PRESS_SPRING,
-  };
+  return reduce || off ? {} : props;
 }

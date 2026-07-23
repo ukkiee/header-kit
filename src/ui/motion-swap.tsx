@@ -11,7 +11,7 @@ import { LABEL_SWAP_S } from './motion-tokens';
  */
 export function MotionSwap({ children }: { children: string }) {
   const reduce = useReducedMotion();
-  if (reduce) return <span>{children}</span>;
+  if (reduce) return <span className="inline-block">{children}</span>;
   return (
     <AnimatePresence mode="wait" initial={false}>
       <m.span

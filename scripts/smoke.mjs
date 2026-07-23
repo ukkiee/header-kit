@@ -1832,7 +1832,7 @@ try {
     // 항목은 열릴 때 순차 등장한다(ui-polish 05) — 그 y 애니메이션이 도는 중에 읽으면
     // "rest"가 진행 중 변형을 잡는다. 스태거가 끝날 때까지 기다린 뒤 누름·호버를 본다.
     await page.getByRole('menuitem', { name: 'Duplicate' }).first().waitFor({ timeout: 5000 });
-    await page.waitForTimeout(menuStaggerTotalMs(2) + 150);
+    await page.waitForTimeout(menuStaggerTotalMs(await page.getByRole('menuitem').count()) + 150);
     const item = await transformStates(page, page.getByRole('menuitem', { name: 'Duplicate' }));
     return { button, chip, icon, item };
   };
@@ -1951,6 +1951,7 @@ try {
         });
       });
       observer.observe(document.body, { childList: true, subtree: true });
+      setTimeout(() => observer.disconnect(), 5000);
     });
     await openMenu();
     const observed = await page
@@ -1973,6 +1974,7 @@ try {
         });
       });
       observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+      setTimeout(() => observer.disconnect(), 3000);
     }, labelText);
     await act();
     const observed = await page
@@ -1983,7 +1985,6 @@ try {
 
   const openProfileMenu = (page) => () =>
     page.getByRole('button', { name: 'Profile menu', exact: true }).click();
-  const settleMs = menuStaggerTotalMs(2) + 200;
 
   await seedProfiles([baseProfile('p-menu', 'Kebab', [])]);
 
@@ -1995,6 +1996,8 @@ try {
   await popup.getByRole('button', { name: 'Profile menu', exact: true }).waitFor({ timeout: 5000 });
   await popup.waitForTimeout(700);
   const staggerLively = await firstFrameMenuOpacities(popup, openProfileMenu(popup));
+  const menuItemCount = await popup.getByRole('menuitem').count();
+  const settleMs = menuStaggerTotalMs(menuItemCount) + 200;
   await popup.waitForTimeout(settleMs);
   const staggerSettled = await popup.evaluate(() =>
     [...document.querySelectorAll('[role="menuitem"]')].map((el) => Number(getComputedStyle(el).opacity)),
@@ -2006,11 +2009,17 @@ try {
   await popup.getByRole('button', { name: 'Profile menu', exact: true }).waitFor({ timeout: 5000 });
   await popup.waitForTimeout(700);
   const staggerStill = await firstFrameMenuOpacities(popup, openProfileMenu(popup));
-  record('N23a: 메뉴 순차 등장 — 기본 모션은 첫 프레임이 진행 중, reduced-motion은 즉시 완성',
-    Array.isArray(staggerLively) && staggerLively.some((o) => o < 1) &&
+  // "앞 항목이 뒤 항목보다 더 진행돼 있다"까지 봐야 **순차**를 단언한 것이다.
+  // 단순히 "1 미만인 항목이 있다"로는 stagger를 0으로 만들어 전부 동시에 fade해도 통과한다.
+  const isSequential =
+    Array.isArray(staggerLively) &&
+    staggerLively.length > 1 &&
+    staggerLively.every((o, i) => i === 0 || staggerLively[i - 1] > o);
+  record('N23a: 메뉴 순차 등장 — 앞 항목이 뒤보다 앞서고, reduced-motion은 즉시 완성',
+    isSequential &&
       staggerSettled.length > 0 && staggerSettled.every((o) => o === 1) &&
       Array.isArray(staggerStill) && staggerStill.length > 0 && staggerStill.every((o) => o === 1),
-    `lively=${JSON.stringify(staggerLively)}, settled=${JSON.stringify(staggerSettled)}, reduced=${JSON.stringify(staggerStill)} (창 ${settleMs}ms)`);
+    `lively=${JSON.stringify(staggerLively)}, sequential=${isSequential}, settled=${JSON.stringify(staggerSettled)}, reduced=${JSON.stringify(staggerStill)} (항목 ${menuItemCount}, 창 ${settleMs}ms)`);
 
   // N23b: 삭제 2단 확인 라벨 — 첫 클릭은 메뉴를 열어 둔 채 라벨만 바꾼다.
   const reducedLabel = await firstFrameLabelOpacity(popup, 'Delete?', () =>

@@ -1,9 +1,9 @@
 import { Menu as BaseMenu } from '@base-ui-components/react/menu';
 import { cva, type VariantProps } from 'class-variance-authority';
-import { m, useReducedMotion } from 'motion/react';
+import { m } from 'motion/react';
 import type { ComponentProps } from 'react';
 import { MENU_ITEM_FADE_S, MENU_ITEM_STAGGER_S } from './motion-tokens';
-import { usePressMotion } from './press-motion';
+import { useMotionProps, usePressMotion } from './press-motion';
 import { popupItem, popupSurface } from './tokens';
 
 /**
@@ -39,7 +39,7 @@ export function MenuPopup({
   children,
   ...props
 }: ComponentProps<typeof BaseMenu.Popup>) {
-  const reduce = useReducedMotion();
+  const stagger = useMotionProps({ variants: popupStagger, initial: 'hidden', animate: 'visible' });
   return (
     <BaseMenu.Portal>
       <BaseMenu.Positioner align="end" sideOffset={4}>
@@ -47,7 +47,9 @@ export function MenuPopup({
           className={`min-w-36 ${popupSurface} ${className ?? ''}`}
           // reduced-motion이면 오케스트레이션 자체를 걸지 않는다 — 자식도 variants를
           // 받지 않으므로 항목이 처음부터 완성된 상태로 그려진다.
-          render={reduce ? undefined : <m.div variants={popupStagger} initial="hidden" animate="visible" />}
+          // 호출자가 render를 넘기면 이 모션이 사라진다 — 앱 내부 프리미티브라 현재는
+          // 호출자가 하나뿐이고, 넘길 일이 생기면 합성 방식을 다시 정해야 한다.
+          render={<m.div {...stagger} />}
           {...props}
         >
           {children}
@@ -77,12 +79,12 @@ export interface MenuItemProps
 export function MenuItem({ tone, className, ...props }: MenuItemProps) {
   // 메뉴 항목도 버튼 프리미티브다 (ADR 0012) — 누름·호버를 같은 헬퍼로 통일한다.
   // 비활성은 cva의 data-[disabled]:pointer-events-none이 이미 제스처를 막는다.
-  const reduce = useReducedMotion();
   const press = usePressMotion();
+  const appear = useMotionProps({ variants: itemAppear });
   return (
     <BaseMenu.Item
       className={menuItem({ tone, className })}
-      render={<m.div {...press} {...(reduce ? {} : { variants: itemAppear })} />}
+      render={<m.div {...press} {...appear} />}
       {...props}
     />
   );

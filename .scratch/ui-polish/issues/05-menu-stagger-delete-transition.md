@@ -36,3 +36,20 @@
 N21b(누름·호버 감도 대조)가 실패했다. 메뉴 항목에 등장 애니메이션(`y: -4 → 0`)이 생기면서, 04의 프로브가 읽던 "rest"가 **스태거 진행 중 변형**을 잡았기 때문이다. 04의 프로브가 메뉴를 열자마자 항목을 재던 것을, `menuStaggerTotalMs`만큼 기다린 뒤 재도록 고쳤다 — 같은 상수를 두 테스트가 공유한다.
 
 부수로 선택자 모호성도 하나 걷어냈다. 시드 프로필 이름이 'Menu'였는데 `getByRole('button', { name: 'Profile menu' })`가 사이드바 칩("Select profile Menu (on)")과도 매치돼 strict 위반으로 스위트가 죽었다. 해당 선택자를 전부 `exact: true`로 바꾸고 시드 이름도 바꿨다.
+
+## 리뷰 반영 (2축)
+
+**Spec이 잡은 핵심 — 내 단언은 "순차"를 검증하지 않았다.** N23a의 대조가 `staggerLively.some((o) => o < 1)`이었는데, 이건 `MENU_ITEM_STAGGER_S = 0`으로 **전부 동시에 fade**해도 통과한다. story 19가 요구한 것은 "애니메이션이 있다"가 아니라 "순차로 등장한다"다. 앞 항목이 뒤 항목보다 더 진행돼 있음(`staggerLively[i-1] > staggerLively[i]`)을 단언하도록 바꾸고, stagger를 0으로 만들어 실제로 FAIL하는 것까지 확인했다(`lively=[0.074, 0.074], sequential=false`).
+
+**Standards: reduced-motion 분기가 다시 흩어졌다.** `press-motion.ts`가 "넷이 각자 분기를 반복하지 않도록 여기 한 곳에 둔다"고 적어 놓고, `MenuItem`이 `useReducedMotion()`과 `usePressMotion()`을 함께 부르고 `MenuPopup`이 세 번째로 불렀다. 계약을 집행하는 `useMotionProps(props, off?)`를 헬퍼에 두고 `usePressMotion`도 그 위에 얹었다 — 이제 "모션이 꺼지면 빈 객체"를 아는 곳이 하나다.
+
+**Standards: `MotionSwap`의 두 갈래가 박스 모델이 달랐다** (`<span>` vs `<m.span className="inline-block">`). ADR 0012의 "reduced-motion에서는 모션만 꺼지고 기능은 동일" 경계에 어긋나 양쪽을 맞췄다.
+
+**Standards: 테스트가 메뉴 항목 수 `2`를 하드코딩했다.** 항목 수는 호출부(`profile-section`) 소관이라, 항목이 늘면 관측 창이 조용히 어긋난다. 실제 렌더된 항목 수를 세어 `menuStaggerTotalMs`에 넘긴다.
+
+**Standards: 관측자가 못 찾으면 페이지에 남았다.** `subtree`+`characterData` 관측자가 매 변경마다 전체 문서를 훑게 된다. 타이머로 스스로 물러나게 했다.
+
+**반영하지 않은 것**
+- `render`가 `{...props}`보다 앞이라 호출자가 `render`를 넘기면 모션이 조용히 사라진다. 앱 내부 프리미티브라 호출자가 하나뿐이고, 어느 쪽이 이겨야 하는지는 합성 정책 결정이라 지금 임의로 정하지 않았다 — 주석으로 남겼다.
+- `MENU_ITEM_STAGGER_S`가 전이 객체가 아니라 초 단위 숫자인 것은 `staggerChildren`이 숫자를 받기 때문이다. 이름의 `_S`가 단위를 말한다.
+- `mode="wait"` 때문에 확인 라벨 인지가 ~120ms 늦고 3초 타이머 중 실효 확인 창이 ~2.76초가 된다. 리뷰도 결함은 아니라고 봤고, 겹쳐 보이지 않는 편이 단계 전환에는 낫다고 판단해 유지했다.
