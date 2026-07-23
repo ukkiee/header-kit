@@ -201,24 +201,25 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
           ))}
         </nav>
 
-        {/* 랜드마크(aside/main)는 유지하고 그 안을 ScrollArea가 스크롤한다 — 스크롤바가
-            앱 스타일이 되면서도 보조기술이 보는 구조는 그대로다. */}
-        <aside className="flex min-h-0 flex-col border-r border-zinc-200 dark:border-zinc-800">
-          <ScrollArea className="flex-1" viewportClassName="flex flex-col gap-2 p-3">
-            <ProfileSidebar
-              profiles={state.profiles}
-              selectedId={effectiveSelectedId}
-              onSelect={setSelectedId}
-              onCreate={createAndSelectProfile}
-              onReorder={(profileId, toIndex) =>
-                dispatch({ type: 'move-profile', profileId, toIndex })
-              }
-            />
-          </ScrollArea>
-        </aside>
+        {/* 랜드마크(aside/main)가 곧 스크롤 컨테이너다 — render 합성이라 껍데기 div가
+            한 겹 더 끼지 않고, 높이는 그리드 칸에서 확정된다. */}
+        <ScrollArea
+          render={<aside />}
+          className="border-r border-zinc-200 dark:border-zinc-800"
+          viewportClassName="flex flex-col gap-2 p-3"
+        >
+          <ProfileSidebar
+            profiles={state.profiles}
+            selectedId={effectiveSelectedId}
+            onSelect={setSelectedId}
+            onCreate={createAndSelectProfile}
+            onReorder={(profileId, toIndex) =>
+              dispatch({ type: 'move-profile', profileId, toIndex })
+            }
+          />
+        </ScrollArea>
 
-        <main className="flex min-h-0 min-w-0 flex-col">
-        <ScrollArea className="flex-1" viewportClassName="flex flex-col gap-3 p-4">
+        <ScrollArea render={<main />} className="min-w-0" viewportClassName="flex flex-col gap-3 p-4">
           <div className="flex items-center justify-between">
             <h1 className="text-base font-semibold">{t(locale, 'appName')}</h1>
             <div className="flex items-center gap-1">
@@ -253,7 +254,6 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
             )}
           </MotionView>
         </ScrollArea>
-        </main>
       </div>
       </IconTooltipProvider>
       </MotionProvider>

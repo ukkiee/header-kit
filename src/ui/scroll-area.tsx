@@ -15,16 +15,24 @@ import { scrollbarThumb, scrollbarTrack } from './tokens';
  * 레이아웃 결함이므로 숨은 스크롤로 흡수하지 않고 진단(ui-diag)이 실패로 잡는다.
  */
 export interface ScrollAreaProps {
-  /** 바깥 컨테이너 — 크기·보더 등 장식. 스크롤 박스가 아니다. */
+  /**
+   * 바깥 컨테이너 — 보더 등 장식. **높이는 여기서 확정돼야 한다**(그리드 칸, `flex-1`,
+   * 고정 높이 중 무엇이든). 높이가 auto면 뷰포트가 넘칠 일이 없어 스크롤이 조용히 죽는다.
+   */
   className?: string;
   /** 스크롤 박스 — 패딩과 내부 레이아웃은 여기에 준다. */
   viewportClassName?: string;
+  /**
+   * 바깥 컨테이너로 쓸 엘리먼트 — Base UI render 합성(IconButton과 같은 방식). 랜드마크
+   * (`<aside>`/`<main>`)를 껍데기 div 안에 한 겹 더 넣지 않고 그 자리를 그대로 차지한다.
+   */
+  render?: BaseScrollArea.Root.Props['render'];
   children: ReactNode;
 }
 
-export function ScrollArea({ className, viewportClassName, children }: ScrollAreaProps) {
+export function ScrollArea({ className, viewportClassName, render, children }: ScrollAreaProps) {
   return (
-    <BaseScrollArea.Root className={`min-h-0 ${className ?? ''}`}>
+    <BaseScrollArea.Root render={render} className={`min-h-0 ${className ?? ''}`}>
       <BaseScrollArea.Viewport className={`size-full ${viewportClassName ?? ''}`}>
         {children}
       </BaseScrollArea.Viewport>

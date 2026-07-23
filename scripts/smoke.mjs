@@ -1711,6 +1711,45 @@ try {
     afterAdd && afterDelete && prefsAfterFade,
     `add=${afterAdd}, delete=${afterDelete}, rail-fade=${prefsAfterFade}`);
 
+  // N22: 스크롤바 테마 (ui-polish 02) — 앱 스타일 스크롤바가 다크 모드를 따르는지.
+  // 토큰에서 dark: 변형을 지워도 tsc·vitest·smoke·번들·스토리북은 전부 통과하므로,
+  // story 9("다크 모드 포함")를 지키는 것은 이 단언뿐이다. 선택자는 Base UI가 붙이는
+  // 속성만 쓴다 — 프로덕션 코드에 테스트 전용 훅을 심지 않는다.
+  // 트랙(= data-orientation + data-has-overflow-y를 모두 가진 요소)의 자식이 thumb다.
+  // Root에도 data-has-overflow-y가 붙으므로 두 속성을 함께 요구해야 트랙만 잡힌다.
+  const THUMB = '[data-has-overflow-y][data-orientation="vertical"] > [data-orientation="vertical"]';
+  const manyRules = Array.from({ length: 25 }, (_, i) => ({
+    kind: 'request-header', id: `s${i}`, name: `X-S${i}`, value: 'v',
+    enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
+  }));
+  await seedProfiles([baseProfile('p-scroll', 'Scroll', manyRules)]);
+  await popup.emulateMedia({ colorScheme: 'light' });
+  await popup.reload();
+  await popup.locator(THUMB).first().waitFor({ timeout: 5000 });
+  const thumbLight = await popup.locator(THUMB).first()
+    .evaluate((el) => getComputedStyle(el).backgroundColor);
+  await popup.emulateMedia({ colorScheme: 'dark' });
+  await popup.waitForTimeout(200);
+  const thumbDark = await popup.locator(THUMB).first()
+    .evaluate((el) => getComputedStyle(el).backgroundColor);
+  await popup.emulateMedia({ colorScheme: 'light' });
+  const thumbCount = await popup.locator(THUMB).count();
+  const opaque = (color) => color !== 'rgba(0, 0, 0, 0)' && color !== 'transparent';
+  // count도 함께 본다 — 선택자가 트랙까지 잡으면 투명색을 읽어 조용히 오판한다(실제로 겪음).
+  record('N22a: 스크롤바 테마 — 라이트/다크 색이 다르고 둘 다 불투명',
+    thumbCount === 1 && opaque(thumbLight) && opaque(thumbDark) && thumbLight !== thumbDark,
+    `thumbs=${thumbCount}, light=${thumbLight}, dark=${thumbDark}`);
+
+  // 넘치지 않으면 스크롤바가 DOM에 아예 없어야 한다 — 트랙을 기본 노출(opacity-60)로 둔
+  // 근거가 이것이다. 보이면 곧 "넘치는 내용이 있다"는 신호여야 어포던스가 성립한다.
+  await seedProfiles([baseProfile('p-short', 'Short', manyRules.slice(0, 1))]);
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Add rule' }).waitFor({ timeout: 5000 });
+  const thumbsWhenShort = await popup.locator(THUMB).count();
+  record('N22b: 넘치지 않으면 스크롤바가 렌더되지 않는다',
+    thumbsWhenShort === 0,
+    `thumbs=${thumbsWhenShort}`);
+
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
   process.exitCode = failed.length === 0 ? 0 : 1;

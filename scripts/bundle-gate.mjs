@@ -4,10 +4,11 @@
 //
 // 한도 이력: 60KB(ui-refine 08 초기 추정) → 120KB(ui-refine 08 재트리아지, plan r1 R-3)
 // → 135KB(ui-polish 02 재트리아지). 마지막 재조정 근거는 추정이 아니라 실측이다 —
-// ScrollArea 도입(+12.6KB) 후 ui-diag 시작 지표가 first paint 60.0ms(기준선 64.0),
-// dom ready 37.9ms(기준선 36.7)로 회귀가 없었다. 이 게이트는 체감 속도의 대리 지표인데
-// 이제 직접 지표(ui-diag 시작 성능)가 있고, 그쪽이 실제 판정을 맡는다.
-// 자세한 경위는 .scratch/ui-polish/issues/02-scroll-area.md.
+// ScrollArea 도입 후 ui-diag 시작 지표에 회귀가 없었다. 이 게이트는 체감 속도의 대리
+// 지표인데 이제 직접 지표(ui-diag 시작 성능)가 있고, 그쪽이 실제 판정을 맡는다.
+//
+// 측정치와 경위의 정본은 .scratch/ui-polish/issues/02-scroll-area.md 하나다 —
+// 숫자를 여기 옮겨 적지 않는다(여러 곳에 베껴 두면 곧 서로 어긋난다).
 import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
