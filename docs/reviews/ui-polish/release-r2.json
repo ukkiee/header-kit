@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "release",
+  "verdict": "approve",
+  "summary": "R-1 resolved within the accepted scope. Failure path: L2g proves the form remains functional on the native datalist, saves successfully, makes no ineffective same-document retry, and recovers after a document reload (scripts/smoke.mjs:892-943). Delayed swap: focus is transferred only when the fallback still owns it, and L2e/L2f cover both focus-stealing and focus-loss regressions (src/features/modifications/header-name-input.tsx:104-134; scripts/smoke.mjs:827-890). Degraded coverage: committed verification records all three tests passing plus negative controls that fail when each protection is removed (docs/reviews/ui-polish/verification.md:102-120). The fix introduces no new critical or high issue.",
+  "planFile": "docs/reviews/ui-polish/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 54,
+  "target": "branch diff against main",
+  "reviewedSha": "4da143abdd02362ad89b4be11e36d01aadb0fdc8",
+  "reviewedTree": "17c46fe86d534804e5803d4b2df8c891adddd8c2",
+  "reviewedPlanSha256": "9973af1ae044f8c3ec6d6a7a8f87bea306bbcc46332b8c2acba625b2db2f7b38",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 0,
+  "planFindingCount": 0,
+  "triage": "Clean verdict: note it in your report and COMMIT this artifact with the next bookkeeping commit.",
+  "findings": [],
+  "next_steps": []
+}
