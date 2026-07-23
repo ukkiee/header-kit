@@ -1,0 +1,71 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "plan",
+  "verdict": "needs-attention",
+  "summary": "Do not slice this plan yet: several user-visible requirements can be omitted or broken while every proposed gate still passes.",
+  "planFile": "docs/reviews/ui-polish/spec.md",
+  "planInDiff": true,
+  "reviewedFileCount": 1,
+  "target": "working tree diff",
+  "reviewedSha": "d01a54400dd36b9d134912c184a52ec5715e8752",
+  "reviewedTree": "cf85b2a84b9f8f24576927845ec35d08a4e13669",
+  "reviewedPlanSha256": "a6670c6e7835045335d2063b1e0a9d0d2bfa1a47fbe36574adfe7964a31dd37f",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 4,
+  "planFindingCount": 4,
+  "triage": "review-gate SKILL.md rules govern: render EVERY finding as a full table row, the human decides each row (accept/reject/defer/question — free text), echo back before applying, max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "medium",
+      "title": "Reduced-motion acceptance does not verify that motion is disabled",
+      "body": "The plan requires every new animation to be disabled under reduced motion, but the smoke test only checks that menu, delete confirmation, and form closing remain functional. Functionality can pass while spring, stagger, or exit animations still run, violating both user story 23 and ADR 0012.",
+      "file": "docs/reviews/ui-polish/spec.md",
+      "line_start": 60,
+      "line_end": 62,
+      "confidence": 0.99,
+      "recommendation": "Specify how each new motion primitive observes reduced-motion and add an observable assertion that press/hover, stagger, label, and form transitions are absent—not merely functional.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "medium",
+      "title": "Fixed-width test permits clipped labels and locale regressions",
+      "body": "The only planned assertion compares trigger width before and after changing match type. An arbitrarily narrow fixed width would pass while clipping the longest English or Korean label, directly violating stories 2 and 3.",
+      "file": "docs/reviews/ui-polish/spec.md",
+      "line_start": 62,
+      "line_end": 62,
+      "confidence": 0.98,
+      "recommendation": "Test the longest label in both en and ko for full visibility and stable width, or define an exact width/token whose adequacy is verified in both locales.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "medium",
+      "title": "Saving-state story has no implementation or verification contract",
+      "body": "Story 22 requires a visible saving state, but none of the Implementation Decisions defines which control changes, what users see, whether repeated submission is blocked, or how rejection restores the state. The Testing Decisions omit it entirely, so an engineer can complete every planned task without implementing this accepted behavior.",
+      "file": "docs/reviews/ui-polish/spec.md",
+      "line_start": 36,
+      "line_end": 36,
+      "confidence": 0.96,
+      "recommendation": "Define the saving-state behavior, including visible label/indicator, disabled or retry semantics, success and rejection transitions, and add a delayed-save Playwright test.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "medium",
+      "title": "Popup performance acceptance is not measurable",
+      "body": "The plan promises that the popup remains fast, but provides no latency threshold or startup measurement. The bundle gate only measures asset size; the plan itself introduces per-button motion components and ScrollArea/Autocomplete runtime work, so it can remain under the byte limit while materially delaying first paint or interaction.",
+      "file": "docs/reviews/ui-polish/spec.md",
+      "line_start": 65,
+      "line_end": 65,
+      "confidence": 0.94,
+      "recommendation": "Define a reproducible popup startup metric and budget on representative data, record the baseline, and add a gate or explicit measurement procedure covering first render and readiness for interaction.",
+      "isPlanFinding": true
+    }
+  ],
+  "next_steps": [
+    "Close the four acceptance gaps in the plan before generating implementation tickets.",
+    "Re-run the plan gate after the implementation and testing decisions are updated."
+  ]
+}
