@@ -1,0 +1,38 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "release",
+  "verdict": "needs-attention",
+  "summary": "Do not ship yet: the Autocomplete requirement degrades back to the browser-native UI on a visible loading-failure path and can disrupt keyboard focus during delayed loading.",
+  "planFile": "docs/reviews/ui-polish/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 53,
+  "target": "branch diff against main",
+  "reviewedSha": "547ac578d3772e17e02a0538c74dc2e58ad8cd59",
+  "reviewedTree": "7179a2fa68add631f6bb05f5fa3897305b4c36e3",
+  "reviewedPlanSha256": "9973af1ae044f8c3ec6d6a7a8f87bea306bbcc46332b8c2acba625b2db2f7b38",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 1,
+  "planFindingCount": 0,
+  "triage": "review-gate SKILL.md rules govern: render EVERY finding as a full table row, the human decides each row (accept/reject/defer/question — free text), echo back before applying, max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "Autocomplete fallback restores the UI the feature promises to remove",
+      "body": "The component begins loading Autocomplete only after the field subscribes, renders a native datalist until that import resolves, and resets the rejected promise without notifying or retrying for the currently mounted subscriber. A failed chunk request therefore leaves that form on the browser-dependent datalist indefinitely. On a delayed request, the eventual replacement also mounts a second input with autoFocus, which can reclaim focus after the user has moved to another field. The implementation explicitly anticipates chunk failures, while committed smoke evidence covers only successful normal-speed loading, so stories 4 and 13 are not protected under this visible degraded path.",
+      "file": "src/features/modifications/header-name-input.tsx",
+      "line_start": 26,
+      "line_end": 144,
+      "confidence": 0.96,
+      "recommendation": "Use a fallback that does not expose native datalist UI, preserve focus across the component transition without remount-driven autoFocus, retry or surface chunk-load failures for the mounted form, and add delayed/rejected-import tests proving focus is not stolen.",
+      "isPlanFinding": false
+    }
+  ],
+  "next_steps": [
+    "Correct the Autocomplete loading and focus behavior.",
+    "Add delayed and rejected dynamic-import coverage, then rerun the committed release suite."
+  ]
+}
