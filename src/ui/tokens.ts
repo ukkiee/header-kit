@@ -6,8 +6,12 @@
 /** 실선 필드 표면 — Input.solid / Select.bordered 가 공유한다. */
 export const fieldSolid = 'border border-zinc-300 bg-white dark:border-zinc-700 dark:bg-zinc-900';
 
-/** 필드 포커스 — Input / Select 가 공유한다. */
-export const fieldFocus = 'outline-none focus:border-blue-500';
+/**
+ * 필드 포커스 — Input / Select 가 공유한다.
+ * 보더 색이 툭 바뀌지 않도록 전이를 함께 둔다 — Button이 `transition-colors`로 하는 것과
+ * 같은 규율이고, 길이도 같은 CSS 기본값이라 두 표면의 색 변화가 어긋나지 않는다.
+ */
+export const fieldFocus = 'outline-none transition-colors focus:border-blue-500';
 
 /** ghost 상호작용 표면 — Button.ghost / Select.ghost 가 공유한다. */
 export const ghostInteractive =

@@ -1,6 +1,7 @@
 import { Select as BaseSelect } from '@base-ui-components/react/select';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { Check, ChevronDown } from 'lucide-react';
+import { useReducedMotion } from 'motion/react';
 import {
   fieldFocus,
   fieldSolid,
@@ -78,6 +79,7 @@ export function Select<T extends string>({
   id,
   'aria-label': ariaLabel,
 }: SelectProps<T>) {
+  const reduce = useReducedMotion();
   return (
     <BaseSelect.Root
       items={options}
@@ -94,8 +96,52 @@ export function Select<T extends string>({
         </BaseSelect.Icon>
       </BaseSelect.Trigger>
       <BaseSelect.Portal>
-        <BaseSelect.Positioner sideOffset={4} className={popupPositioner}>
-          <BaseSelect.Popup className={popupAnchored}>
+        {/*
+          `alignItemWithTrigger={false}` — Base UI의 기본값은 true이고, 그때는 **선택된
+          항목이 트리거 위에 겹치도록** 팝업 전체를 끌어올린다(macOS 네이티브 셀렉트 방식).
+          그 모드에서는 `side`·`align`·`sideOffset`이 무시되므로 팝업이 트리거를 가리고
+          좌우도 항목 안쪽 여백만큼 밀려 보인다.
+
+          이 앱의 다른 팝업(Menu·Autocomplete)은 전부 앵커 아래로 떨어지는 드롭다운이다.
+          셀렉트만 다른 규칙을 쓰면 같은 표면이 자리마다 다르게 움직인다.
+        */}
+        <BaseSelect.Positioner
+          side="bottom"
+          align="start"
+          alignItemWithTrigger={false}
+          sideOffset={4}
+          // 팝업 셸이 760×580으로 작아, 아래로 열리면 목록이 뷰포트를 넘길 수 있다.
+          // 가장자리에 여백을 남겨 뒤집힘·밀림 판정이 화면에 붙기 전에 일어나게 한다.
+          collisionPadding={8}
+          className={popupPositioner}
+        >
+          {/*
+            열림/닫힘 — 열릴 때 트리거 쪽(위)에서 아래로 내려오고, 닫힐 때 위로 접힌다.
+            Base UI가 첫 프레임에 `data-starting-style`, 마지막 프레임에 `data-ending-style`을
+            붙이므로 그 두 지점만 "위 + 투명"으로 잡으면 나머지는 전이가 잇는다.
+
+            길이·곡선은 CSS 변수로 받는다 — Base UI가 Popup의 인라인 `style`을 덮어써서
+            여기서 직접 줄 수 없다(실측). 변수는 MotionProvider가 문서 루트에 올린다.
+
+            열림만 오버슈트가 있는 spring 곡선이고 닫힘은 평범한 ease-out이다 — 사라지는
+            것이 되돌아오는 인상은 어색하다. `[data-ending-style]` 수식어가 특이도에서
+            이겨 닫힐 때만 곡선을 갈아끼운다.
+
+            reduced-motion이면 전이 클래스를 아예 붙이지 않는다 — 부재가 계약이다
+            (ADR 0012 경계).
+          */}
+          {/*
+            `--available-height`로 상한을 잡고 넘치면 팝업 안에서 스크롤한다. 없으면
+            옵션이 많거나 트리거가 아래쪽에 있을 때 목록이 화면 밖으로 나가고, 그때
+            floating-ui가 계속 자리를 다시 잡느라 팝업이 멎지 않는다(실측).
+          */}
+          <BaseSelect.Popup
+            className={`max-h-[var(--available-height)] overflow-y-auto ${popupAnchored} ${
+              reduce
+                ? ''
+                : 'transition-[opacity,translate] duration-[var(--popup-fade)] ease-[var(--popup-ease)] data-[ending-style]:-translate-y-1 data-[ending-style]:opacity-0 data-[ending-style]:ease-out data-[starting-style]:-translate-y-1 data-[starting-style]:opacity-0'
+            }`}
+          >
             {options.map((option) => (
               <BaseSelect.Item
                 key={option.value}

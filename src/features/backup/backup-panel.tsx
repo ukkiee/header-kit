@@ -30,7 +30,9 @@ export function BackupPanel({
   loadSnapshotText = defaultLoadSnapshotText,
 }: BackupPanelProps) {
   const t = useT();
-  const [open, setOpen] = useState(false);
+  // 처음부터 펼쳐 둔다 — 환경설정 패널과 같은 이유(레일에서 이 화면으로 온 사람은
+  // 이미 백업을 보러 온 것이다).
+  const [open, setOpen] = useState(true);
   const [snapshots, setSnapshots] = useState<SnapshotStatus[]>([]);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);

@@ -121,6 +121,19 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
     });
   };
 
+  /**
+   * 프로필 선택 — 고르면 프로필 화면으로 돌아온다.
+   *
+   * 사이드바는 레일 화면과 무관하게 항상 보인다(ADR 0005). 그래서 백업·환경설정을 보는
+   * 중에도 프로필을 누를 수 있는데, 본문이 그대로면 선택이 어디에도 반영되지 않아
+   * **눌러도 아무 일이 안 일어난 것처럼** 보였다. 고르는 행위 자체가 "이 프로필을 보겠다"는
+   * 뜻이므로 화면을 함께 옮긴다.
+   */
+  const selectProfile = (id: string) => {
+    setSelectedId(id);
+    setRailView('profiles');
+  };
+
   const createAndSelectProfile = () => {
     const profile = createProfile(`Profile ${state.profiles.length + 1}`, {
       color: PROFILE_COLORS[state.profiles.length % PROFILE_COLORS.length],
@@ -129,7 +142,8 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
     void sendCommand({ type: 'add-profile', profile }).then((result) => {
       if (result.ok) {
         setState(result.state);
-        setSelectedId(profile.id);
+        // 새 프로필도 같은 이유로 화면을 옮긴다 — 만들어 놓고 안 보이면 만든 줄 모른다.
+        selectProfile(profile.id);
         setCommandError(null);
       } else {
         setCommandError(result.error);
@@ -216,7 +230,7 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
           <ProfileSidebar
             profiles={state.profiles}
             selectedId={effectiveSelectedId}
-            onSelect={setSelectedId}
+            onSelect={selectProfile}
             onCreate={createAndSelectProfile}
             onReorder={(profileId, toIndex) =>
               dispatch({ type: 'move-profile', profileId, toIndex })

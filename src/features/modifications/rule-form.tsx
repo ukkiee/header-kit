@@ -468,11 +468,13 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
         </Alert>
       )}
 
-      <div className="flex items-center justify-end gap-1.5">
-        <Button variant="ghost" size="sm" onClick={onCancel} disabled={saving}>
+      {/* 폼 액션 쌍 — 좌우 여백을 넓히고(pad) 두 버튼의 모서리를 8px로 맞춘다(radius).
+          기본값은 primary가 pill, ghost가 6px이라 나란히 두면 서로 다른 모양이었다. */}
+      <div className="flex items-center justify-end gap-2">
+        <Button variant="ghost" size="sm" pad="wide" radius="lg" onClick={onCancel} disabled={saving}>
           {t('cancel')}
         </Button>
-        <Button size="sm" onClick={() => void save()} disabled={saving}>
+        <Button size="sm" pad="wide" radius="lg" onClick={() => void save()} disabled={saving}>
           {saving ? t('saving') : t('save')}
         </Button>
       </div>

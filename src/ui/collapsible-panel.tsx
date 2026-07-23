@@ -1,9 +1,8 @@
 import { Collapsible as BaseCollapsible } from '@base-ui-components/react/collapsible';
 import { ChevronDown } from 'lucide-react';
-import { m } from 'motion/react';
+import { useReducedMotion } from 'motion/react';
 import type { ReactNode } from 'react';
 import { PanelSection } from './panel-section';
-import { usePressMotion } from './press-motion';
 import { focusRing, ghostInteractive } from './tokens';
 
 export interface CollapsiblePanelProps {
@@ -37,10 +36,16 @@ export function CollapsiblePanel({
   banner,
   children,
 }: CollapsiblePanelProps) {
-  // 헤더 행도 버튼 프리미티브다 (ADR 0012) — IconButton을 걷어내면서 누름·호버 계약이
-  // 함께 사라졌던 것을 되돌린다. 사이드바의 SwitcherChip도 w-full인 채 같은 배율을
-  // 쓰므로 폭이 넓다고 예외를 둘 이유가 없다.
-  const press = usePressMotion();
+  /**
+   * 헤더는 누름·호버 spring을 **쓰지 않는다** (ADR 0012의 명시적 예외).
+   *
+   * 한때 다른 버튼 프리미티브와 같은 `usePressMotion`을 썼다. 폭이 좁은 버튼에서
+   * 자연스러운 1.02배가 화면 폭을 다 쓰는 헤더 행에서는 이동 거리가 그만큼 커져
+   * 과하게 보였다 — 같은 배율이 같은 인상을 주지 않는다. 대신 이 표면의 피드백은
+   * 색 전이(`ghostInteractive`)와 **열림/닫힘 높이 전환**이 맡는다. 상태가 실제로
+   * 바뀌는 표면이라 그쪽이 더 많은 것을 알려 준다.
+   */
+  const reduce = useReducedMotion();
   return (
     <BaseCollapsible.Root open={open} onOpenChange={onOpenChange}>
       <PanelSection
@@ -55,14 +60,13 @@ export function CollapsiblePanel({
         renderHeader={({ className, children }) => (
           <BaseCollapsible.Trigger
             render={
-              <m.button
+              <button
                 type="button"
                 aria-label={toggleAriaLabel}
-                {...press}
                 // w-full은 두지 않는다 — PanelSection의 flex-col이 이미 행 전체로 늘린다.
                 // min-h-6은 WCAG 2.5.8의 24×24 최소 타깃 — 폭만 넓히고 높이를 줄이면
                 // "조준하지 않아도 된다"가 세로로는 나빠진다.
-                className={`min-h-6 cursor-pointer rounded-md px-1 text-left ${ghostInteractive} ${focusRing} ${className}`}
+                className={`min-h-6 cursor-pointer rounded-md px-1 text-left transition-colors ${ghostInteractive} ${focusRing} ${className}`}
               />
             }
           >
@@ -71,7 +75,29 @@ export function CollapsiblePanel({
         )}
       >
         {banner}
-        <BaseCollapsible.Panel>{children}</BaseCollapsible.Panel>
+        {/*
+          높이 전환 — Base UI가 패널 실측 높이를 `--collapsible-panel-height`로 주고,
+          열리는 첫 프레임과 닫히는 마지막 프레임에 `data-starting-style`/`data-ending-style`을
+          붙인다. 그 두 지점만 0으로 잡으면 나머지 구간은 CSS 전이가 잇는다.
+
+          motion이 아니라 CSS인 이유 — 여기서 움직이는 것은 Base UI가 마운트를 소유한
+          패널이다. AnimatePresence를 겹치면 두 라이브러리가 같은 노드의 생사를 두고
+          다툰다. 대신 **길이는 여전히 motion-tokens 한 곳**에서 온다.
+
+          reduced-motion이면 전이 클래스를 아예 붙이지 않는다 — 지속시간 0으로 대체하는
+          것이 아니라 부재다(ADR 0012 경계, press-motion과 같은 규율).
+
+          길이를 CSS 변수로 받는 이유 — Panel에 `style`을 직접 주든 `render`로 주든 Base UI가
+          자기 변수(`--collapsible-panel-height`)로 **덮어써서 사라진다**(둘 다 실측).
+          변수는 MotionProvider가 문서 루트에 올린다(거기 주석 참고).
+        */}
+        <BaseCollapsible.Panel
+          className={`h-[var(--collapsible-panel-height)] overflow-hidden data-[ending-style]:h-0 data-[starting-style]:h-0 ${
+            reduce ? '' : 'transition-[height] duration-[var(--panel-collapse)] ease-out'
+          }`}
+        >
+          {children}
+        </BaseCollapsible.Panel>
       </PanelSection>
     </BaseCollapsible.Root>
   );

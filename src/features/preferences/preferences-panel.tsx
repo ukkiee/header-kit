@@ -23,7 +23,9 @@ export function PreferencesPanel({
   incognitoAllowed,
 }: PreferencesPanelProps) {
   const t = useT();
-  const [open, setOpen] = useState(false);
+  // 처음부터 펼쳐 둔다 — 이 화면은 환경설정 하나를 보러 들어오는 곳이라, 닫힌 채로
+  // 두면 도착하자마자 한 번 더 눌러야 했다.
+  const [open, setOpen] = useState(true);
   const [draft, setDraft] = useState('');
 
   const add = () => {

@@ -76,7 +76,9 @@ export function ProfileSection({
           value={profile.name}
           onChange={(e) => updateMeta({ name: e.target.value })}
           aria-label={t('ariaProfileName')}
-          className="h-8 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 text-sm font-medium outline-none focus:border-blue-500"
+          // transition-colors — 이 입력만 `fieldFocus` 토큰을 안 쓰고 직접 적어서, 다른
+          // 필드가 전이를 얻을 때 혼자 툭 바뀌었다.
+          className="h-8 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 text-sm font-medium outline-none transition-colors focus:border-blue-500"
         />
         <Input
           align="center"

@@ -62,6 +62,29 @@ async function fetchEchoHeaders(page, path = '/headers', method = 'GET') {
   );
 }
 
+/**
+ * 목록 행 enter/exit가 끝나기까지의 대기(ms) — `ROW_TRANSITION`에서 **유도한다.**
+ *
+ * 예전에는 이 자리마다 200ms를 손으로 적었다. 전이가 180ms일 땐 넉넉했는데 260ms로
+ * 늘리자 폼이 아직 빠지는 중에 다음 조작이 들어가 N26이 통째로 무너졌다(폼이 이미
+ * 닫혀 Cancel을 못 찾았다). 테스트가 자기 숫자를 들고 있으면 값이 바뀌는 순간 어긋난다.
+ */
+const rowSettleMs = () => Math.round(ROW_TRANSITION.duration * 1000) + 120;
+
+/**
+ * 접이식 패널을 **열린 상태로 만든다** — 이미 열려 있으면 아무것도 하지 않는다.
+ *
+ * 예전에는 각 시나리오가 토글을 그냥 한 번 눌러 열었다. 그 방식은 "기본은 닫힘"에
+ * 의존하는데, 기본값이 열림으로 바뀌자 같은 클릭이 패널을 **닫아** 뒤따르는 단언이
+ * 전부 무너졌다. 여는 것이 목적인 자리에서는 목적을 그대로 적는다.
+ */
+async function ensurePanelOpen(page, label) {
+  const toggle = page.getByRole('button', { name: label });
+  await toggle.waitFor({ timeout: 5000 });
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
+  await page.waitForTimeout(300); // 높이 전환이 끝난 뒤에 안쪽을 만진다
+}
+
 /** 범용 폴러 — probe를 test가 참일 때까지 재시도하고 마지막 값을 돌려준다. */
 async function pollUntil(probe, test, timeoutMs = 8000, intervalMs = 200) {
   const start = Date.now();
@@ -605,7 +628,7 @@ try {
   await popup.reload();
   // 단일 셸(ADR 0005): 백업은 팝업에서도 레일 화면 경유
   await popup.getByRole('button', { name: 'Show backups' }).click();
-  await popup.getByRole('button', { name: 'Toggle backups' }).click();
+  await ensurePanelOpen(popup, 'Toggle backups');
   const restoreRow = popup.locator('li').filter({ hasText: 'profile' }).first();
   await restoreRow.getByRole('button', { name: 'Restore backup' }).click();
   await restoreRow.getByRole('button', { name: 'Confirm restore' }).click();
@@ -752,7 +775,7 @@ try {
   await popup.reload();
   // 단일 셸(ADR 0005): 환경설정은 레일 화면 경유, datalist 검사는 프로필 화면 복귀 후
   await popup.getByRole('button', { name: 'Show preferences' }).click();
-  await popup.getByRole('button', { name: 'Toggle preferences' }).click();
+  await ensurePanelOpen(popup, 'Toggle preferences');
   await popup.getByLabel('New autocomplete header').fill('X-Team-Custom');
   await popup.getByRole('button', { name: 'Add autocomplete header' }).click();
   const savedCustom = await sw.evaluate(async () =>
@@ -1217,9 +1240,37 @@ try {
 
   // Base UI Select 조작 (ADR 0011) — 트리거(combobox) 클릭 → 팝업의 option 클릭
   // (getByLabel은 트리거와 숨은 input 둘 다 잡으므로 role로 조준한다)
+  /**
+   * 셀렉트에서 값을 고른다 — 팝업이 **완전히 열린 뒤에** 누르고, **완전히 닫힌 뒤에** 돌아온다.
+   *
+   * 셀렉트 팝업이 열림/닫힘 전이를 갖게 되면서(N30) 두 가지가 새로 생겼다. (1) 열리는
+   * 중에 누르면 항목이 아직 제자리가 아니라 옆 항목을 집을 수 있다 — Playwright의 stable
+   * 판정만으로는 부족하다(오버슈트 곡선이라 되돌아오는 순간 두 프레임 동안 같은 자리에
+   * 머문다). (2) 닫히는 팝업이 잠시 DOM에 남아, 곧바로 다음 조작을 하면 그 잔상과 겹친다.
+   *
+   * 그래서 앞뒤로 상태를 확정한다. 기다림을 호출부마다 흩어 두면 새 시나리오를 쓸 때마다
+   * 같은 함정을 다시 밟는다.
+   */
+  const settledListboxes = (page, expected) =>
+    page
+      .waitForFunction(
+        (want) => {
+          const boxes = [...document.querySelectorAll('[role="listbox"]')];
+          if (boxes.length !== want) return false;
+          return boxes.every((b) => Number(getComputedStyle(b).opacity) === 1);
+        },
+        expected,
+        { timeout: 5000 },
+      )
+      .catch(() => {});
+
   const pickOption = async (page, triggerLabel, optionName) => {
     await page.getByRole('combobox', { name: triggerLabel, exact: true }).click();
-    await page.getByRole('option', { name: optionName, exact: true }).click();
+    const option = page.getByRole('option', { name: optionName, exact: true });
+    await option.waitFor({ timeout: 5000 });
+    await settledListboxes(page, 1);
+    await option.click();
+    await settledListboxes(page, 0);
   };
 
   // N5: 통합 목록(ADR 0009) — 규칙 행 + '적용 조건' 캡션 + FILTER 행이 한 화면에
@@ -1668,7 +1719,7 @@ try {
 
   // 환경설정: 단축키 문구 없음, 기본 사전 비제거 pill, 사용자 항목만 X
   await popup.getByRole('button', { name: 'Show preferences' }).click();
-  await popup.getByRole('button', { name: 'Toggle preferences' }).click();
+  await ensurePanelOpen(popup, 'Toggle preferences');
   const hintGone = !(await popup.getByText(/chrome:\/\/extensions\/shortcuts/).isVisible().catch(() => false));
   const acceptPill = popup.locator('li').filter({ hasText: /^Accept$/ }).first();
   const stdShown = await acceptPill.waitFor({ timeout: 5000 }).then(() => true, () => false);
@@ -1943,7 +1994,11 @@ try {
     return { rest, hover, down };
   };
 
-  // ADR 0012가 열거한 버튼 프리미티브를 같은 프로브로 훑는다(아코디언 헤더 포함).
+  // ADR 0012가 열거한 버튼 프리미티브를 같은 프로브로 훑는다.
+  //
+  // **아코디언 헤더는 이 목록에 없다** — ADR 0012의 명시적 예외다. 폭이 화면 전체인 행에서
+  // 같은 1.02배는 이동 거리가 훨씬 커져 과하게 보였고, 그 표면의 피드백은 색 전이와
+  // 열림/닫힘 높이 전환이 맡는다. 그 전환의 존재·부재는 N29가 따로 본다.
   const probePressPrimitives = async (page) => {
     // 행 액션은 opacity-0 → group-hover다. 행을 먼저 호버해야 아이콘 버튼의 rest를
     // "보이지만 호버되지 않은" 상태로 읽을 수 있다.
@@ -1951,21 +2006,13 @@ try {
     const icon = await transformStates(page, page.getByRole('button', { name: 'Edit', exact: true }));
     const button = await transformStates(page, page.getByRole('button', { name: 'Add rule' }));
     const chip = await transformStates(page, page.getByRole('button', { name: 'New profile' }));
-    // 아코디언 헤더도 버튼 프리미티브다(ADR 0012). 이 표면이 목록에 없어서, 티켓 09가
-    // IconButton을 걷어내며 누름·호버 계약을 떨어뜨린 것을 게이트가 못 봤다.
-    await page.getByRole('button', { name: 'Show preferences' }).click();
-    const accordion = await transformStates(
-      page,
-      page.getByRole('button', { name: 'Toggle preferences', exact: true }),
-    );
-    await page.getByRole('button', { name: 'Show profiles' }).click();
     await page.getByRole('button', { name: 'Profile menu', exact: true }).click();
     // 항목은 열릴 때 순차 등장한다(ui-polish 05) — 그 y 애니메이션이 도는 중에 읽으면
     // "rest"가 진행 중 변형을 잡는다. 스태거가 끝날 때까지 기다린 뒤 누름·호버를 본다.
     await page.getByRole('menuitem', { name: 'Duplicate' }).first().waitFor({ timeout: 5000 });
     await page.waitForTimeout(menuStaggerTotalMs(await page.getByRole('menuitem').count()) + 150);
     const item = await transformStates(page, page.getByRole('menuitem', { name: 'Duplicate' }));
-    return { button, chip, icon, item, accordion };
+    return { button, chip, icon, item };
   };
 
   await seedProfiles([
@@ -1983,7 +2030,7 @@ try {
   const allMoving = Object.values(lively).every(
     (s) => s.rest === 'none' && s.hover !== 'none' && s.down !== 'none',
   );
-  record('N21b: 감도 대조 — 버튼·칩·아이콘버튼·메뉴항목·아코디언 헤더가 호버·누름에 변형한다',
+  record('N21b: 감도 대조 — 버튼·칩·아이콘버튼·메뉴항목이 호버·누름에 변형한다',
     allMoving,
     Object.entries(lively).map(([k, v]) => `${k}=${v.hover}/${v.down}`).join(' '));
 
@@ -1996,7 +2043,7 @@ try {
   const allNone = Object.values(still).every(
     (s) => s.rest === 'none' && s.hover === 'none' && s.down === 'none',
   );
-  record('N21c: reduced-motion — 다섯 표면 모두 호버·누름에 transform이 없다',
+  record('N21c: reduced-motion — 네 표면 모두 호버·누름에 transform이 없다',
     allNone,
     Object.entries(still).map(([k, v]) => `${k}=${v.hover}/${v.down}`).join(' '));
   await popup.emulateMedia({ reducedMotion: null });
@@ -2522,7 +2569,7 @@ try {
     if (setup) await setup();
     await page.getByRole('combobox', { name: 'Type', exact: true }).focus();
     await page.getByRole('button', { name: 'Save', exact: true }).click();
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(rowSettleMs());
     // 기대 요소와 **동일한 노드**인지 본다 — 접근성 이름은 aria-label일 수도 <label>
     // 연결일 수도 있어(이 폼은 둘 다 쓴다) 문자열 비교로는 어느 쪽인지 알 수 없다.
     // 기대 요소와 **동일한 노드**인지 본다. 시간 상한을 둬 회귀가 기본 30초 타임아웃으로
@@ -2541,7 +2588,7 @@ try {
     }
     const errorShown = (await page.getByText('Required.', { exact: true }).count()) > 0;
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(rowSettleMs());
     return { onTarget, typeable, errorShown };
   };
 
@@ -2625,12 +2672,15 @@ try {
       height: Math.round(el.getBoundingClientRect().height),
     })).catch(() => ({ expanded: 'missing', innerFocusables: -1, iconRotate: 'missing', spansRow: false, height: 0 }));
 
-  const closed = await headerState();
-  // 1) 제목 텍스트를 눌러 열린다
+  // 패널은 이제 **열린 채로 시작한다** — 그래서 첫 상태가 expanded=true이고, 아래 세
+  // 클릭은 닫힘→열림→닫힘으로 교대한다. 이 값을 하드코딩된 false로 두면 기본값이 바뀔 때
+  // "토글이 동작한다"가 아니라 "처음이 닫힘이다"를 검사하는 테스트가 된다.
+  const opened = await headerState();
+  // 1) 제목 텍스트를 눌러 닫는다
   await popup.getByText('Preferences', { exact: true }).first().click().catch(() => {});
   await popup.waitForTimeout(250);
   const afterTitle = await headerState();
-  // 2) 여백(아이콘 왼쪽)을 눌러 닫힌다
+  // 2) 여백(아이콘 왼쪽)을 눌러 다시 연다
   // 클릭 지점을 아이콘의 **실제 사각형**에서 유도한다 — 매직 px로 잡으면 아이콘이
   // 커지거나 패딩이 바뀌었을 때 "여백"이 조용히 두 번째 아이콘 클릭이 된다.
   const geometry = await prefsHeader
@@ -2678,19 +2728,183 @@ try {
 
   record('N27: 아코디언 헤더 — 제목·여백·아이콘 어디를 눌러도 토글, 포커스 대상은 하나',
     headerIsButton &&
-      closed.expanded === 'false' &&
-      afterTitle.expanded === 'true' &&
-      afterGap.expanded === 'false' &&
-      afterIcon.expanded === 'true' &&
-      [closed, afterTitle, afterGap, afterIcon].every((s) => s.innerFocusables === 0) &&
-      closed.iconRotate === 'none' && afterTitle.iconRotate !== 'none' &&
-      closed.spansRow &&
-      closed.height >= 24 &&
+      opened.expanded === 'true' &&
+      afterTitle.expanded === 'false' &&
+      afterGap.expanded === 'true' &&
+      afterIcon.expanded === 'false' &&
+      [opened, afterTitle, afterGap, afterIcon].every((s) => s.innerFocusables === 0) &&
+      opened.iconRotate !== 'none' && afterTitle.iconRotate === 'none' &&
+      opened.spansRow &&
+      opened.height >= 24 &&
       clickedGap &&
       backupsIsFullRow,
-    `헤더=버튼:${headerIsButton}, expanded=${closed.expanded}→제목:${afterTitle.expanded}→여백:${afterGap.expanded}→아이콘:${afterIcon.expanded}, ` +
-    `내부 focusable=${closed.innerFocusables}, 행 전체=${closed.spansRow}, 높이=${closed.height}px, ` +
-    `아이콘 회전=${closed.iconRotate}→${afterTitle.iconRotate}, 백업도 전체행=${backupsIsFullRow}`);
+    `헤더=버튼:${headerIsButton}, expanded=${opened.expanded}→제목:${afterTitle.expanded}→여백:${afterGap.expanded}→아이콘:${afterIcon.expanded}, ` +
+    `내부 focusable=${opened.innerFocusables}, 행 전체=${opened.spansRow}, 높이=${opened.height}px, ` +
+    `아이콘 회전=${opened.iconRotate}→${afterTitle.iconRotate}, 백업도 전체행=${backupsIsFullRow}`);
+
+  // ---------- N29~N32: ui-polish 후속 다듬기 ----------
+  //
+  // 이 넷은 전부 "Base UI가 마운트를 소유하는 표면의 CSS 전이"이거나 순수 배치라, 값이
+  // 조용히 사라져도 기능 테스트는 통과한다. 티켓 09에서 아코디언 헤더의 누름 계약이
+  // 목록에 없어 게이트를 그냥 지나간 적이 있어, 새로 만든 계약은 곧바로 목록에 올린다.
+
+  // N29: 접이식 패널 — 기본 열림 + 높이 전환. reduced-motion이면 전이가 **없다**.
+  // 높이를 매 프레임 읽어 중간값의 개수를 센다 — "끝값이 0"만 보면 전이가 없어도 통과한다.
+  const panelCollapseTrace = async (page, label) =>
+    page.evaluate(async (name) => {
+      const trigger = document.querySelector(`button[aria-label="${name}"]`);
+      const panel = document.getElementById(trigger.getAttribute('aria-controls'));
+      const heights = [];
+      trigger.click();
+      const t0 = performance.now();
+      while (performance.now() - t0 < 450) {
+        heights.push(Math.round(panel.getBoundingClientRect().height));
+        await new Promise((r) => requestAnimationFrame(r));
+      }
+      return { steps: new Set(heights).size, from: heights[0], to: heights.at(-1) };
+    }, label);
+
+  // 이 블록은 상태를 직접 심는다 — 앞 시나리오가 남긴 프로필에 기대면 순서가 바뀔 때
+  // 조용히 깨진다. 아래 N30·N31이 규칙 폼을 열어야 하므로 규칙 하나를 함께 심는다.
+  await seedProfiles([baseProfile('p-tune', 'Tune', [hdr({ id: 'm1', name: 'X-P', value: '1' })])]);
+
+  await popup.emulateMedia({ reducedMotion: null });
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Show preferences' }).click();
+  await popup.getByRole('button', { name: 'Toggle preferences', exact: true }).waitFor({ timeout: 5000 });
+  const prefsDefaultOpen = await popup
+    .getByRole('button', { name: 'Toggle preferences', exact: true })
+    .getAttribute('aria-expanded');
+  const livelyCollapse = await panelCollapseTrace(popup, 'Toggle preferences');
+
+  await popup.emulateMedia({ reducedMotion: 'reduce' });
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Show preferences' }).click();
+  await popup.getByRole('button', { name: 'Toggle preferences', exact: true }).waitFor({ timeout: 5000 });
+  const reducedCollapse = await panelCollapseTrace(popup, 'Toggle preferences');
+  await popup.emulateMedia({ reducedMotion: null });
+  await popup.reload();
+
+  await popup.getByRole('button', { name: 'Show backups' }).click();
+  const backupsDefaultOpen = await popup
+    .getByRole('button', { name: 'Toggle backups', exact: true })
+    .getAttribute('aria-expanded');
+
+  record('N29: 접이식 패널 — 기본 열림 + 높이 전환(reduced-motion에서는 없음)',
+    prefsDefaultOpen === 'true' && backupsDefaultOpen === 'true' &&
+      livelyCollapse.steps > 3 && livelyCollapse.to === 0 && reducedCollapse.steps <= 2,
+    `기본열림 환경설정=${prefsDefaultOpen}·백업=${backupsDefaultOpen}, ` +
+    `높이 단계 기본=${livelyCollapse.steps}(${livelyCollapse.from}→${livelyCollapse.to}) reduced=${reducedCollapse.steps}`);
+
+  // N30: Select 팝업 — 트리거 **아래**로 떨어지고 좌변이 맞는다 + 위에서 아래로 내려온다.
+  // 기본값(alignItemWithTrigger)은 선택된 항목을 트리거 위에 겹쳐 띄우므로, 이 단언이
+  // 없으면 되돌아가도 아무도 모른다. 세로 이동 방향까지 봐야 "내려온다"가 지켜진다.
+  await popup.getByRole('button', { name: 'Show profiles' }).click();
+  await popup.getByText('X-P').first().hover();
+  await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
+  await popup.getByLabel('Header name', { exact: true }).first().waitFor({ timeout: 5000 });
+  await popup.waitForTimeout(400);
+
+  const selectTrace = async (page) => {
+    const trg = page.getByRole('combobox').first();
+    const t = await trg.boundingBox();
+    await trg.click();
+    await page.getByRole('option').first().waitFor({ timeout: 5000 });
+    const motion = await page.evaluate(async () => {
+      const pop = document.querySelector('[role="listbox"]');
+      const opacity = [];
+      const ys = [];
+      const t0 = performance.now();
+      while (performance.now() - t0 < 400) {
+        opacity.push(Number(getComputedStyle(pop).opacity).toFixed(2));
+        ys.push(Math.round(pop.getBoundingClientRect().y));
+        await new Promise((r) => requestAnimationFrame(r));
+      }
+      return { steps: new Set(opacity).size, yFrom: ys[0], yTo: ys.at(-1) };
+    });
+    await page.waitForTimeout(150);
+    const p = await page.getByRole('listbox').first().boundingBox();
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+    return {
+      below: p.y >= t.y + t.height - 1,
+      gap: Math.round(p.y - t.y - t.height),
+      leftDelta: Math.round(p.x - t.x),
+      atLeastAnchorWidth: p.width >= t.width - 1,
+      ...motion,
+    };
+  };
+
+  const livelySelect = await selectTrace(popup);
+  await popup.emulateMedia({ reducedMotion: 'reduce' });
+  await popup.reload();
+  await popup.getByText('X-P').first().hover();
+  await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
+  await popup.getByLabel('Header name', { exact: true }).first().waitFor({ timeout: 5000 });
+  await popup.waitForTimeout(400);
+  const reducedSelect = await selectTrace(popup);
+  await popup.emulateMedia({ reducedMotion: null });
+
+  record('N30: Select 팝업 — 트리거 아래·좌변 정렬, 위에서 아래로 내려옴(reduced는 즉시)',
+    livelySelect.below && livelySelect.leftDelta === 0 && livelySelect.atLeastAnchorWidth &&
+      livelySelect.steps > 3 && livelySelect.yTo > livelySelect.yFrom &&
+      reducedSelect.below && reducedSelect.steps <= 2,
+    `아래=${livelySelect.below} 좌변차=${livelySelect.leftDelta}px 간격=${livelySelect.gap}px 앵커폭이상=${livelySelect.atLeastAnchorWidth}, ` +
+    `opacity 단계 기본=${livelySelect.steps}/reduced=${reducedSelect.steps}, y ${livelySelect.yFrom}→${livelySelect.yTo}`);
+
+  // N31: 폼 액션 쌍 — 취소·저장이 같은 8px 모서리와 넓은 좌우 여백을 쓴다.
+  // 기본값은 primary가 pill, ghost가 6px이라 나란히 두면 서로 다른 모양이었다.
+  await popup.reload();
+  await popup.getByText('X-P').first().hover();
+  await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
+  await popup.getByLabel('Header name', { exact: true }).first().waitFor({ timeout: 5000 });
+  const actionPair = await popup.evaluate(() => {
+    const all = [...document.querySelectorAll('button')];
+    const pick = (text) => all.find((b) => b.textContent.trim() === text);
+    const read = (el) => {
+      const cs = getComputedStyle(el);
+      return { radius: cs.borderRadius, padL: cs.paddingLeft, padR: cs.paddingRight };
+    };
+    const cancel = pick('Cancel');
+    const save = pick('Save');
+    return cancel && save ? { cancel: read(cancel), save: read(save) } : null;
+  });
+  record('N31: 폼 액션 쌍 — 취소·저장이 같은 8px 모서리와 넓은 좌우 여백',
+    actionPair !== null &&
+      actionPair.cancel.radius === '8px' && actionPair.save.radius === '8px' &&
+      actionPair.cancel.padL === '16px' && actionPair.save.padL === '16px' &&
+      actionPair.cancel.padR === '16px' && actionPair.save.padR === '16px',
+    actionPair
+      ? `취소 r=${actionPair.cancel.radius} px=${actionPair.cancel.padL}/${actionPair.cancel.padR}, 저장 r=${actionPair.save.radius} px=${actionPair.save.padL}/${actionPair.save.padR}`
+      : '버튼을 찾지 못함');
+  await popup.getByRole('button', { name: 'Cancel', exact: true }).click();
+
+  // N32: 레일 화면(백업·환경설정)에서 프로필을 고르면 프로필 화면으로 돌아온다.
+  // 사이드바는 늘 보이므로 거기서 고를 수 있는데, 본문이 그대로면 선택이 어디에도
+  // 반영되지 않아 눌러도 아무 일이 없는 것처럼 보였다.
+  await seedProfiles([
+    baseProfile('p-a', 'Alpha', [hdr({ id: 'm1', name: 'X-A', value: '1' })]),
+    { ...baseProfile('p-b', 'Beta', []), active: false },
+  ]);
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Show preferences' }).click();
+  await popup.waitForTimeout(300);
+  const onPrefs = await popup.evaluate(() =>
+    [...document.querySelectorAll('nav button')].map((b) => b.getAttribute('aria-pressed')));
+  await popup.getByRole('button', { name: /^Select profile Beta/ }).click();
+  await popup.waitForTimeout(400);
+  const afterSelect = await popup.evaluate(() => ({
+    rail: [...document.querySelectorAll('nav button')].map((b) => b.getAttribute('aria-pressed')),
+    // 프로필 화면으로 돌아왔다면 규칙 편집기가 있다.
+    hasEditor: [...document.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Add rule'),
+    // 그리고 편집 중인 것이 방금 고른 프로필이어야 한다.
+    editing: document.querySelector('input[aria-label="Profile name"]')?.value ?? null,
+  }));
+  record('N32: 레일 화면에서 프로필을 고르면 프로필 화면으로 돌아온다',
+    onPrefs[2] === 'true' && afterSelect.rail[0] === 'true' &&
+      afterSelect.hasEditor && afterSelect.editing === 'Beta',
+    `환경설정 화면 pressed=${JSON.stringify(onPrefs)} → 선택 후 pressed=${JSON.stringify(afterSelect.rail)}, ` +
+    `편집기=${afterSelect.hasEditor}, 편집중="${afterSelect.editing}"`);
 
   // N28: 레일 아이콘 툴팁 (ui-polish 10, stories 28~30).
   // 레일만 툴팁 없는 맨 버튼이었다 — 다른 아이콘 버튼과 같은 셸로 옮긴다. 셸을 바꾸면
