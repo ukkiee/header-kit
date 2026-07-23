@@ -1,0 +1,25 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "plan",
+  "verdict": "approve",
+  "summary": "Ship to slicing. R-1 resolved: lines 54-59 and 74-78 define reduced-motion behavior, four observable assertions, and a positive sensitivity control. R-2 resolved: lines 49 and 77 verify stable width and unclipped labels across every en/ko option. R-3 resolved: lines 60-65 and 79 define visible in-flight state, duplicate-submit prevention, success/rejection behavior, and delayed-response tests. R-4 resolved: lines 82-87 and 103 define startup metrics, baseline ordering, sampling, budget, and same-device comparison. The fixes introduce no defensible new critical or high issue.",
+  "planFile": "docs/reviews/ui-polish/spec.md",
+  "planInDiff": true,
+  "reviewedFileCount": 1,
+  "target": "working tree diff",
+  "reviewedSha": "52bd1af33a936b2393d31c34724f08416e8bdb1e",
+  "reviewedTree": "457c7b387a5081395ed5238809e4ff1e87e55d5f",
+  "reviewedPlanSha256": "e854a6929143ce00556b51f0651e8455ec9fdbfbe49ef7e74662dc86f2ec6ae6",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 0,
+  "planFindingCount": 0,
+  "triage": "Clean verdict: note it in your report and COMMIT this artifact with the next bookkeeping commit.",
+  "findings": [],
+  "next_steps": [
+    "Proceed with implementation-ticket slicing."
+  ]
+}
