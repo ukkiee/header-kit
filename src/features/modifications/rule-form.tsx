@@ -54,6 +54,9 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
     initial && 'urlFilter' in initial && initial.urlFilter ? 'regex' : 'contains';
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // 진행 중 여부의 단일 출처. state는 UI를 그리고, 이 ref가 재진입을 막는다 —
+  // 같은 틱에 두 번 불려도 state는 아직 갱신 전이라 둘 다 통과해 버린다.
+  const inFlight = useRef(false);
   // 조건 disclosure 열림 — 기존 조건이 있으면 펼쳐서 시작.
   const [condOpen, setCondOpen] = useState(draft.conditions !== undefined);
   // 저장 차단 검증 (ui-refine 04) — Save 시점에 계산, 다음 Save까지 유지.
@@ -88,10 +91,14 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
   };
 
   const save = async () => {
+    // 이미 보낸 저장이 응답을 기다리는 중이면 아무것도 하지 않는다. 버튼의 disabled는
+    // 포인터 경로만 막고, Cmd/Ctrl+Enter는 여기를 직접 부른다.
+    if (inFlight.current) return;
     // 빈 필수 필드는 저장을 통과하지 못한다 — 인라인 오류로 그 자리에서 알린다.
     const missing = missingRequiredFields(draft);
     setFieldErrors(missing);
     if (missing.length > 0) return;
+    inFlight.current = true;
     setSaving(true);
     // 스코프 정리: 필터가 비면 매치 방식도 벗기고, 있으면 셀렉트 기본값을 확정한다.
     let toSave = draft;
@@ -112,6 +119,7 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
       toSave = rest as Modification;
     }
     const result = await onSave(toSave);
+    inFlight.current = false;
     setSaving(false);
     if (!result.ok) setSaveError(result.error ?? t('saveRejected'));
   };
@@ -145,7 +153,9 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       e.stopPropagation();
-      onCancel();
+      // 저장이 떠 있는 동안은 닫지 않는다 — 응답을 받을 폼이 사라진 뒤 명령이 착지하는
+      // 창을 없앤다(취소 버튼을 비활성화하는 것과 같은 이유).
+      if (!inFlight.current) onCancel();
     } else if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault();
       void save();
@@ -405,11 +415,11 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
       )}
 
       <div className="flex items-center justify-end gap-1.5">
-        <Button variant="ghost" size="sm" onClick={onCancel}>
+        <Button variant="ghost" size="sm" onClick={onCancel} disabled={saving}>
           {t('cancel')}
         </Button>
         <Button size="sm" onClick={() => void save()} disabled={saving}>
-          {t('save')}
+          {saving ? t('saving') : t('save')}
         </Button>
       </div>
     </div>

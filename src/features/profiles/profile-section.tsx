@@ -170,16 +170,21 @@ export function ProfileSection({
         </AnimatePresence>
       </div>
 
-      {editingRule === 'new' ? (
-        // 새 규칙 폼도 열릴 때 height-in (ui-refine 08).
-        <MotionRow>
-          <RuleForm
-            userHeaders={userHeaders}
-            onCancel={() => setEditingRule(null)}
-            onSave={(next) => saveItem(next, 'add')}
-          />
-        </MotionRow>
-      ) : (
+      {/* 새 규칙 폼은 열릴 때 height-in(ui-refine 08), 닫힐 때 height-out 한다.
+          AnimatePresence가 없으면 열림만 애니메이션되고 닫힘은 즉시 사라진다 —
+          story 21("취소·저장을 누르면 폼이 자연스럽게 접힌다")이 절반만 성립했다. */}
+      <AnimatePresence initial={false}>
+        {editingRule === 'new' && (
+          <MotionRow key="new-rule-form">
+            <RuleForm
+              userHeaders={userHeaders}
+              onCancel={() => setEditingRule(null)}
+              onSave={(next) => saveItem(next, 'add')}
+            />
+          </MotionRow>
+        )}
+      </AnimatePresence>
+      {editingRule === 'new' ? null : (
         // 빈 상태 CTA가 추가를 유도하므로 하단 버튼은 규칙이 있을 때만 노출한다.
         profile.modifications.length > 0 && (
           <Button
