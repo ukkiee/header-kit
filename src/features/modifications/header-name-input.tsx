@@ -1,4 +1,4 @@
-import { useId, useState, useSyncExternalStore, type ComponentType, type Ref } from 'react';
+import { useId, useRef, useState, useSyncExternalStore, type ComponentType, type Ref } from 'react';
 import { suggestHeaderNames } from '@/core/autocomplete';
 import { Input, type InputProps } from '@/ui/input';
 import { useT } from '@/ui/i18n-context';
@@ -30,10 +30,19 @@ function loadAutocomplete(): Promise<void> {
       for (const notify of subscribers) notify();
     })
     .catch(() => {
-      // 다음 시도가 다시 받을 수 있게 캐시를 비운다. 확장 업데이트로 해시 파일명이
-      // 바뀌면 열려 있던 팝업의 청크 요청이 404가 되는데, 실패를 그대로 굳히면
-      // 그 세션 내내 datalist 표현에 갇힌다. 기능은 fallback으로 계속 동작한다.
-      pending = null;
+      // 삼키기만 한다 — 여기서 재시도할 방법이 없다.
+      //
+      // 실패는 **이 문서 수명 동안 회복되지 않는다.** 브라우저 모듈 맵이 실패한 fetch를
+      // 캐시하기 때문에, 자체 캐시(`pending`)를 비워도 `import()`는 재요청 없이 같은
+      // 거절을 그대로 돌려준다. 실측으로 확인했다 — 폼을 닫았다 다시 열어도 청크 요청
+      // 누계가 1에 고정됐고, 문서를 새로 고쳐야 2가 됐다. 예전에 여기서 `pending = null`을
+      // 했었는데, 회복을 주지 못하면서 준다고 주장하는 코드였다. 우회하려면 해시된 청크
+      // URL에 캐시버스터를 붙여야 하는데 그 URL은 번들러가 소유해 코드에서 알 수 없다.
+      //
+      // 대신 폴백(datalist)이 계속 동작한다 — 제안·타이핑·저장 전부 유효하고, 팝업을
+      // 다시 열면 새 문서라 회복된다. 실제 트리거는 확장 업데이트로 해시 파일명이 바뀌어
+      // 열려 있던 팝업의 청크 요청이 404가 되는 경우이고, 그 시점엔 확장 컨텍스트도 함께
+      // 무효화돼 있다. 이 계약은 smoke L2g가 고정한다.
     });
   return pending;
 }
@@ -92,15 +101,37 @@ export function HeaderNameInput({
   const suggestions = suggestHeaderNames(value, userHeaders);
   const Autocomplete = useAutocompleteComponent();
 
-  // autoFocus를 양쪽에 그대로 넘긴다. 교체가 0~7ms라 fallback이 포커스를 잡았다가
-  // 새 입력이 이어받는 것이 한 프레임 안에서 끝난다. "이미 소비했으면 넘기지 않는다"는
-  // 가드를 뒀다가 되돌렸다 — 교체가 빠른 정상 경로에서 fallback이 포커스를 쥔 채
-  // 사라지고 새 입력은 포커스를 안 받아, 폼을 열어도 아무 데도 포커스가 없었다.
-  // 원래 우려했던 "사용자가 다른 필드로 옮긴 뒤 포커스를 도로 뺏김"은 React.lazy의
-  // ~250ms 창에서 나온 것이고, lazy를 걷어내면서 그 창 자체가 사라졌다.
-  const rendered = { value, onChange, suggestions, label, className, variant, size, autoFocus, ref };
+  /**
+   * 교체 시 포커스 — 릴리스 게이트 R-1.
+   *
+   * 두 표현은 컴포넌트 타입이 달라 교체가 **리마운트**다. 새 입력에 `autoFocus`를 그대로
+   * 넘기면 마운트 시점에 포커스를 가져가는데, 청크 도착이 늦으면 그 사이 다른 필드로 옮긴
+   * 사용자가 헤더 이름으로 끌려온다. 청크 응답을 900ms 늦춰 실측 재현했다.
+   *
+   * 그렇다고 교체 때 `autoFocus`를 무조건 끄면 안 된다 — 정상 경로(0~7ms)에서는 폴백이
+   * 포커스를 쥔 채 사라지고 새 입력이 받지 않아 폼을 열어도 포커스가 아무 데도 없다.
+   * "이미 소비했으면 안 넘긴다" 가드를 뒀다가 되돌린 이유가 그것이다.
+   *
+   * 그래서 기준을 "소비 여부"가 아니라 **"교체 직전에 폴백이 포커스를 쥐고 있었는가"**로
+   * 바꾼다. 폴백이 자기 focus/blur로 알려 주므로 별도 DOM 조회가 없고, 관측한 적이 없으면
+   * (`null`) 원래 `autoFocus`를 그대로 흘린다 — 이 가드는 **포커스를 보류할 수만 있고**
+   * 없던 동작을 새로 만들지 않는다.
+   */
+  const fallbackFocus = useRef<boolean | null>(null);
 
-  return Autocomplete ? <Autocomplete {...rendered} /> : <PlainHeaderNameInput {...rendered} />;
+  const shared = { value, onChange, suggestions, label, className, variant, size, ref };
+
+  return Autocomplete ? (
+    <Autocomplete {...shared} autoFocus={fallbackFocus.current ?? autoFocus} />
+  ) : (
+    <PlainHeaderNameInput
+      {...shared}
+      autoFocus={autoFocus}
+      onFocusedChange={(focused) => {
+        fallbackFocus.current = focused;
+      }}
+    />
+  );
 }
 
 /**
@@ -118,9 +149,17 @@ function PlainHeaderNameInput({
   size,
   autoFocus,
   ref,
-}: HeaderNameAutocompleteProps) {
+  onFocusedChange,
+}: HeaderNameAutocompleteProps & {
+  /** 교체 시 포커스 판단에 쓰인다 — 위 `fallbackFocus` 참고. */
+  onFocusedChange: (focused: boolean) => void;
+}) {
   const listId = useId();
   const [focused, setFocused] = useState(false);
+  const reportFocus = (next: boolean) => {
+    setFocused(next);
+    onFocusedChange(next);
+  };
 
   return (
     <>
@@ -131,8 +170,8 @@ function PlainHeaderNameInput({
         autoFocus={autoFocus}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
+        onFocus={() => reportFocus(true)}
+        onBlur={() => reportFocus(false)}
         placeholder={label}
         aria-label={label}
         list={listId}

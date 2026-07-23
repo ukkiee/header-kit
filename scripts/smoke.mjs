@@ -824,6 +824,126 @@ try {
 
   await popup.getByRole('button', { name: 'Cancel' }).click();
 
+  // L2e/L2f: 지연 청크 교체와 포커스 (릴리스 게이트 R-1).
+  //
+  // 두 표현은 컴포넌트 타입이 달라 교체가 리마운트다 — 새 입력이 autoFocus로 뜨면 포커스를
+  // 가져간다. 로컬에서는 도착이 0~7ms라 이 창이 안 보이므로 **청크 응답 자체를 늦춘다.**
+  // `page.route`가 chrome-extension:// 하위 리소스에도 걸린다(실증). 프로덕션 코드에 훅은 없다.
+  //
+  // 두 방향을 함께 건다 — 한쪽만 있으면 반대쪽으로 퇴화한다. 교체 때 autoFocus를 무조건
+  // 끄면 L2e는 통과하고 L2f가 깨지고(폼을 열어도 포커스가 아무 데도 없음), 무조건 넘기면
+  // L2f는 통과하고 L2e가 깨진다(사용자가 옮긴 포커스를 도로 뺏음).
+  const AUTOCOMPLETE_CHUNK = '**/header-name-autocomplete-*.js';
+  const CHUNK_DELAY_MS = 900;
+  const waitForCombobox = (page, timeout = 8000) =>
+    page
+      .waitForFunction(
+        () => document.querySelector('input[aria-label="Header name"]')?.getAttribute('role') === 'combobox',
+        null,
+        { timeout },
+      )
+      .then(() => true, () => false);
+  const openRuleFormAt = async (page) => {
+    await page.setViewportSize({ width: 760, height: 580 });
+    await page.goto(`chrome-extension://${extensionId}/popup.html?locale=en`);
+    await page.getByRole('button', { name: 'Edit', exact: true }).first().click();
+    await page.getByLabel('Header name', { exact: true }).first().waitFor({ timeout: 5000 });
+  };
+
+  {
+    const delayed = await context.newPage();
+    await delayed.route(AUTOCOMPLETE_CHUNK, async (route) => {
+      await new Promise((r) => setTimeout(r, CHUNK_DELAY_MS));
+      await route.continue();
+    });
+    await openRuleFormAt(delayed);
+    const delayedName = delayed.getByLabel('Header name', { exact: true }).first();
+    // 폴백 창이 실제로 열렸는지부터 본다 — 교체가 이미 끝난 뒤라면 이 테스트는 공허하다.
+    const fallbackWindow =
+      (await delayedName.getAttribute('role')) === null &&
+      (await delayedName.getAttribute('list')) !== null;
+    const delayedValue = delayed.getByLabel('Value', { exact: true }).first();
+    await delayedValue.click();
+    const swapped = await waitForCombobox(delayed);
+    await delayed.waitForTimeout(150);
+    // Value 입력은 aria-label이 아니라 Field 라벨로 이름을 얻으므로 요소 동일성으로 본다.
+    const keptFocus = await delayedValue.evaluate((el) => el === document.activeElement);
+    record('L2e: 지연 교체가 사용자가 옮긴 포커스를 뺏지 않는다',
+      fallbackWindow && swapped && keptFocus,
+      `폴백 창=${fallbackWindow}, 교체됨=${swapped}, Value 포커스 유지=${keptFocus}`);
+    await delayed.close();
+  }
+
+  {
+    const prompt = await context.newPage();
+    await openRuleFormAt(prompt);
+    const swapped = await waitForCombobox(prompt);
+    await prompt.waitForTimeout(150);
+    const nameFocused = await prompt
+      .getByLabel('Header name', { exact: true })
+      .first()
+      .evaluate((el) => el === document.activeElement);
+    record('L2f: 정상 교체 후에도 헤더 이름이 포커스를 갖는다',
+      swapped && nameFocused,
+      `교체됨=${swapped}, 헤더 이름 포커스=${nameFocused}`);
+    await prompt.close();
+  }
+
+  // L2g: 청크가 실패한 뒤의 계약 (릴리스 게이트 R-1).
+  //
+  // 실패한 fetch는 브라우저 모듈 맵에 캐시돼 `import()`가 재요청 없이 같은 거절을 돌려준다.
+  // 그래서 회복은 마운트 단위가 아니라 **문서 단위**다. 요청 누계로 못박는 이유 — 요청을
+  // 세지 않으면 "재시도하는데 마침 또 실패했다"와 "아예 재시도하지 않는다"를 못 가른다.
+  // 저장까지 밀어 보는 것도 같은 이유다: 저하 경로가 "보이기만 하고 안 되는" 상태면
+  // 폴백이 있다는 사실 자체가 위안이 안 된다.
+  {
+    const broken = await context.newPage();
+    const chunkRequests = [];
+    broken.on('request', (r) => {
+      if (r.url().includes('header-name-autocomplete')) chunkRequests.push(r.url());
+    });
+    let blockChunk = true;
+    await broken.route(AUTOCOMPLETE_CHUNK, async (route) => {
+      if (blockChunk) await route.abort('failed');
+      else await route.continue();
+    });
+    await openRuleFormAt(broken);
+    await broken.waitForTimeout(400);
+    const brokenName = broken.getByLabel('Header name', { exact: true }).first();
+    const degraded = {
+      role: await brokenName.getAttribute('role'),
+      hasDatalist: (await brokenName.getAttribute('list')) !== null,
+    };
+    await brokenName.fill('X-Fallback-Works');
+    await broken.getByRole('button', { name: 'Save', exact: true }).first().click();
+    await broken.waitForTimeout(400);
+    const storedName = await sw.evaluate(
+      async () => (await chrome.storage.local.get('state')).state.profiles[0].modifications[0].name,
+    );
+
+    // 네트워크를 정상으로 돌려도 같은 문서 안에서는 재요청이 나가지 않는다.
+    blockChunk = false;
+    await broken.getByRole('button', { name: 'Edit', exact: true }).first().click();
+    await broken.getByLabel('Header name', { exact: true }).first().waitFor({ timeout: 5000 });
+    await broken.waitForTimeout(600);
+    const reopened = {
+      role: await broken.getByLabel('Header name', { exact: true }).first().getAttribute('role'),
+      requests: chunkRequests.length,
+    };
+
+    // 새 문서(팝업을 다시 여는 것과 동등)에서는 회복된다.
+    await broken.reload();
+    await broken.getByRole('button', { name: 'Edit', exact: true }).first().click();
+    const recovered = await waitForCombobox(broken);
+
+    record('L2g: 청크 실패 — 폴백으로 저장까지 동작, 같은 문서엔 재요청 없음, 새 문서에서 회복',
+      degraded.role === null && degraded.hasDatalist &&
+        storedName === 'X-Fallback-Works' &&
+        reopened.role === null && reopened.requests === 1 && recovered,
+      `폴백 datalist=${degraded.hasDatalist}, 저장="${storedName}", 재개봉 role=${reopened.role} 요청누계=${reopened.requests}, 새 문서 회복=${recovered}`);
+    await broken.close();
+  }
+
   // L3: 시크릿 안내가 노출된다 (기본 로드 확장은 시크릿 미허용)
   const incognitoNote = await popup
     .getByText(/incognito|시크릿/i)
