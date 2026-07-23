@@ -760,22 +760,51 @@ try {
   await popup.getByRole('button', { name: 'Show profiles' }).click();
   // 이름 입력은 규칙 폼 안에만 있다 — Edit로 폼을 연다 (ADR 0006)
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
-  await popup.getByLabel('Header name', { exact: true }).first().waitFor({ timeout: 5000 });
-  const datalistHasCustom = await popup.evaluate(async () => {
-    const nameInput = document.querySelector('input[aria-label="Header name"]');
-    if (!nameInput) return false;
-    nameInput.focus();
-    nameInput.value = 'X-Team';
-    nameInput.dispatchEvent(new Event('input', { bubbles: true }));
-    await new Promise((r) => setTimeout(r, 100));
-    const list = nameInput.getAttribute('list');
-    const options = list ? [...document.getElementById(list).options].map((o) => o.value) : [];
-    return options.includes('X-Team-Custom');
-  });
+  const acNameInput = popup.getByLabel('Header name', { exact: true }).first();
+  await acNameInput.waitFor({ timeout: 5000 });
+  // 브라우저 기본 datalist가 아니라 앱 팝업(combobox)인지부터 확인한다 — 지연 청크라
+  // 도착이 늦으면 잠시 datalist 표현이 뜰 수 있고, 그 상태로 제안을 검사하면 이 테스트가
+  // 정작 story 4("앱의 다른 팝업과 같은 모양")를 안 보게 된다 (ui-polish 03).
+  const isCombobox = await popup
+    .waitForFunction(
+      () => document.querySelector('input[aria-label="Header name"]')?.getAttribute('role') === 'combobox',
+      null,
+      { timeout: 5000 },
+    )
+    .then(() => true, () => false);
+
+  await acNameInput.click();
+  await acNameInput.pressSequentially('X', { delay: 20 });
+  await popup.getByRole('option').first().waitFor({ timeout: 5000 });
+  const options = await popup.getByRole('option').allTextContents();
+  record('L2a: autocomplete — 앱 팝업으로 제안, 사용자 항목 우선, 접두 필터',
+    isCombobox &&
+      Array.isArray(savedCustom) && savedCustom.includes('X-Team-Custom') &&
+      options[0] === 'X-Team-Custom' &&
+      options.length > 1 && options.every((name) => name.toLowerCase().startsWith('x')),
+    `combobox=${isCombobox}, custom=${JSON.stringify(savedCustom)}, options=${JSON.stringify(options)}`);
+
+  // L2b: 마우스 없이 화살표+Enter로 고른다
+  await acNameInput.fill('');
+  await acNameInput.pressSequentially('X-Te', { delay: 20 });
+  await popup.getByRole('option').first().waitFor({ timeout: 5000 });
+  await popup.keyboard.press('ArrowDown');
+  await popup.keyboard.press('Enter');
+  const pickedValue = await acNameInput.inputValue();
+  record('L2b: 화살표+Enter로 제안을 고른다', pickedValue === 'X-Team-Custom', `value="${pickedValue}"`);
+
+  // L2c: Esc는 제안 팝업만 닫고 폼은 살려 둔다 — 실수로 편집이 취소되면 안 된다
+  await acNameInput.fill('');
+  await acNameInput.pressSequentially('X-Te', { delay: 20 });
+  await popup.getByRole('option').first().waitFor({ timeout: 5000 });
+  await popup.keyboard.press('Escape');
+  await popup.waitForTimeout(200);
+  const optionsAfterEsc = await popup.getByRole('option').count();
+  const formAfterEsc = await popup.getByRole('button', { name: 'Cancel' }).count();
+  record('L2c: Esc는 제안 팝업만 닫고 폼은 유지',
+    optionsAfterEsc === 0 && formAfterEsc > 0,
+    `options=${optionsAfterEsc}, form=${formAfterEsc}`);
   await popup.getByRole('button', { name: 'Cancel' }).click();
-  record('L2: autocomplete 사용자 항목이 등록되고 제안에 노출',
-    Array.isArray(savedCustom) && savedCustom.includes('X-Team-Custom') && datalistHasCustom,
-    `custom=${JSON.stringify(savedCustom)}, inDatalist=${datalistHasCustom}`);
 
   // L3: 시크릿 안내가 노출된다 (기본 로드 확장은 시크릿 미허용)
   const incognitoNote = await popup
@@ -1030,6 +1059,21 @@ try {
   const waitFormClosed = () =>
     popup.getByRole('button', { name: 'Save', exact: true }).waitFor({ state: 'detached', timeout: 5000 });
 
+  // 헤더 이름 입력은 이제 combobox다(ui-polish 03). 제안 팝업이 열려 있는 동안
+  // floating-ui가 바깥 요소를 aria-hidden 처리하므로(typeable combobox 규약,
+  // FloatingFocusManager의 markOthers) 폼의 다른 컨트롤을 role로 조준할 수 없다.
+  // 실제 사용자도 제안을 닫고 다음 필드로 가므로, 조작 전에 닫아 준다.
+  // 팝업이 닫혀 있을 때 Escape를 누르면 폼이 닫히므로(N18d) 열린 경우에만 누른다.
+  const closeSuggestions = async (page) => {
+    if ((await page.getByRole('option').count()) === 0) return;
+    await page.keyboard.press('Escape');
+    await page
+      .getByRole('option')
+      .first()
+      .waitFor({ state: 'detached', timeout: 2000 })
+      .catch(() => {});
+  };
+
   // Base UI Select 조작 (ADR 0011) — 트리거(combobox) 클릭 → 팝업의 option 클릭
   // (getByLabel은 트리거와 숨은 input 둘 다 잡으므로 role로 조준한다)
   const pickOption = async (page, triggerLabel, optionName) => {
@@ -1239,6 +1283,7 @@ try {
   await tabApp.getByRole('button', { name: 'Add rule' }).click();
   await tabApp.getByLabel('Header name', { exact: true }).waitFor({ timeout: 5000 });
   await tabApp.getByLabel('Header name', { exact: true }).fill('X-From-Tab');
+  await closeSuggestions(tabApp);
   await tabApp.getByLabel('Value', { exact: true }).fill('yes');
   await tabApp.getByRole('button', { name: 'Save', exact: true }).click();
   await tabApp.getByRole('switch', { name: 'Toggle Gamma' }).click();
@@ -1356,6 +1401,7 @@ try {
   // 2) 무스코프 규칙(X-U) 추가
   await popup.getByRole('button', { name: 'Add rule' }).click();
   await popup.getByLabel('Header name', { exact: true }).fill('X-U');
+  await closeSuggestions(popup);
   await popup.getByLabel('Value', { exact: true }).fill('u');
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
   await waitFormClosed();
@@ -1557,8 +1603,10 @@ try {
   // c: 모드 숨김 — 비허용 요청 헤더 이름이면 Mode 미노출, 허용(Accept)이면 노출
   await pickOption(popup, 'Type', 'Request header');
   await popup.getByLabel('Header name', { exact: true }).fill('X-Custom');
+  await closeSuggestions(popup);
   const modeHidden = (await popup.getByRole('combobox', { name: 'Mode' }).count()) === 0;
   await popup.getByLabel('Header name', { exact: true }).fill('Accept');
+  await closeSuggestions(popup);
   const modeShown = (await popup.getByRole('combobox', { name: 'Mode' }).count()) === 1;
   // d: regex 선택 시 placeholder 분기
   await pickOption(popup, 'URL match type', 'Regex (advanced)');
@@ -1569,6 +1617,7 @@ try {
 
   // e: 키보드 — Cmd/Ctrl+Enter 저장, Esc 닫기
   await popup.getByLabel('Header name', { exact: true }).fill('X-Kbd');
+  await closeSuggestions(popup);
   await popup.getByLabel('Value', { exact: true }).fill('kbd');
   await popup.keyboard.press(process.platform === 'darwin' ? 'Meta+Enter' : 'Control+Enter');
   const kbdSaved = await pollUntil(
@@ -1695,6 +1744,7 @@ try {
   // 규칙 추가(행 enter): 폼으로 추가 → 목록에 반영
   await popup.getByRole('button', { name: 'Add rule' }).click();
   await popup.getByLabel('Header name', { exact: true }).fill('X-M3');
+  await closeSuggestions(popup);
   await popup.getByLabel('Value', { exact: true }).fill('3');
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
   const afterAdd = await pollSessionRuleCount(sw, 3).then(() => true, () => false);

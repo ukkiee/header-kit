@@ -36,7 +36,7 @@ const ENTRY_HTML = join(OUT_DIR, 'popup.html');
  * 이 목록은 그 결과에 거는 단언일 뿐이다. 청크가 사라지면(이름 변경·번들러 병합)
  * 그것도 실패로 잡아, 이름만 바뀌어 단언이 조용히 무력해지는 일을 막는다.
  */
-const MUST_BE_DEFERRED = ['sortable-profile-list', 'motion'];
+const MUST_BE_DEFERRED = ['sortable-profile-list', 'motion', 'header-name-autocomplete'];
 
 if (!existsSync(ENTRY_HTML)) {
   console.error(`FAIL: ${ENTRY_HTML}를 찾을 수 없습니다 — 먼저 \`bun run build\`를 실행하세요.`);
