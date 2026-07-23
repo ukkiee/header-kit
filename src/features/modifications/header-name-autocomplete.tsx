@@ -1,6 +1,7 @@
 import { Autocomplete } from '@base-ui-components/react/autocomplete';
+import { useState } from 'react';
 import { Input, type InputProps } from '@/ui/input';
-import { popupItem, popupSurface } from '@/ui/tokens';
+import { popupAnchored, popupItemText, popupPositioner } from '@/ui/tokens';
 
 export interface HeaderNameAutocompleteProps
   extends Pick<InputProps, 'variant' | 'size' | 'autoFocus'> {
@@ -35,8 +36,19 @@ export default function HeaderNameAutocomplete({
   size,
   autoFocus,
 }: HeaderNameAutocompleteProps) {
+  const [open, setOpen] = useState(false);
+
   return (
-    <Autocomplete.Root mode="none" items={suggestions} value={value} onValueChange={onChange}>
+    <Autocomplete.Root
+      mode="none"
+      items={suggestions}
+      value={value}
+      onValueChange={onChange}
+      // 후보가 없으면 열림 상태로도 가지 않는다 — 아래 팝업을 안 그리는 것만으로는
+      // aria-expanded가 참으로 남아 "펼쳐졌다"고 알리면서 보여 줄 것이 없다.
+      open={open && suggestions.length > 0}
+      onOpenChange={setOpen}
+    >
       <Autocomplete.Input
         render={
           <Input
@@ -50,24 +62,30 @@ export default function HeaderNameAutocomplete({
           />
         }
       />
-      <Autocomplete.Portal>
-        <Autocomplete.Positioner sideOffset={4} className="z-50 outline-none">
-          {/* 앵커 폭 이상으로 열린다 — Select 팝업과 같은 규칙. */}
-          <Autocomplete.Popup className={`min-w-[var(--anchor-width)] outline-none ${popupSurface}`}>
-            <Autocomplete.List>
-              {(item: string) => (
-                <Autocomplete.Item
-                  key={item}
-                  value={item}
-                  className={`text-zinc-700 dark:text-zinc-200 ${popupItem}`}
-                >
-                  {item}
-                </Autocomplete.Item>
-              )}
-            </Autocomplete.List>
-          </Autocomplete.Popup>
-        </Autocomplete.Positioner>
-      </Autocomplete.Portal>
+      {/*
+        후보가 없으면 팝업 자체를 렌더하지 않는다. Base UI는 입력이 바뀌면 후보 수와
+        무관하게 열림 상태로 가는데, 그대로 두면 (1) 빈 상자가 뜨고 (2) 팝업이 열린
+        동안 floating-ui가 바깥을 aria-hidden 처리해 **폼 전체가 보조기술에서 사라진다.**
+        커스텀 헤더 이름은 후보가 없는 게 정상이라 가장 흔한 입력에서 벌어진다.
+
+        Esc도 이걸로 옳아진다 — 후보가 있으면 팝업만 닫히고(story 8), 없으면 애초에
+        팝업이 없으므로 Esc가 폼을 닫는 기존 동작(N18d)이 그대로 유지된다.
+      */}
+      {suggestions.length > 0 && (
+        <Autocomplete.Portal>
+          <Autocomplete.Positioner sideOffset={4} className={popupPositioner}>
+            <Autocomplete.Popup className={popupAnchored}>
+              <Autocomplete.List>
+                {(item: string) => (
+                  <Autocomplete.Item key={item} value={item} className={popupItemText}>
+                    {item}
+                  </Autocomplete.Item>
+                )}
+              </Autocomplete.List>
+            </Autocomplete.Popup>
+          </Autocomplete.Positioner>
+        </Autocomplete.Portal>
+      )}
     </Autocomplete.Root>
   );
 }

@@ -1,4 +1,4 @@
-import { useEffect, useId, useReducer, useState, type ComponentType } from 'react';
+import { useId, useState, useSyncExternalStore, type ComponentType } from 'react';
 import { suggestHeaderNames } from '@/core/autocomplete';
 import { Input, type InputProps } from '@/ui/input';
 import { useT } from '@/ui/i18n-context';
@@ -19,30 +19,43 @@ import type { HeaderNameAutocompleteProps } from './header-name-autocomplete';
  * 교체가 이미 눈에 띄지 않는 이상, story 31이 지키려는 시작 속도를 내주면서까지 앞당길
  * 이유가 없다.
  */
-let resolved: ComponentType<HeaderNameAutocompleteProps> | null = null;
+let loadedComponent: ComponentType<HeaderNameAutocompleteProps> | null = null;
 let pending: Promise<void> | null = null;
-const waiting = new Set<() => void>();
+const subscribers = new Set<() => void>();
 
 function loadAutocomplete(): Promise<void> {
-  pending ??= import('./header-name-autocomplete').then((module) => {
-    resolved = module.default;
-    for (const notify of waiting) notify();
-  });
+  pending ??= import('./header-name-autocomplete')
+    .then((module) => {
+      loadedComponent = module.default;
+      for (const notify of subscribers) notify();
+    })
+    .catch(() => {
+      // 다음 시도가 다시 받을 수 있게 캐시를 비운다. 확장 업데이트로 해시 파일명이
+      // 바뀌면 열려 있던 팝업의 청크 요청이 404가 되는데, 실패를 그대로 굳히면
+      // 그 세션 내내 datalist 표현에 갇힌다. 기능은 fallback으로 계속 동작한다.
+      pending = null;
+    });
   return pending;
 }
 
-/** 도착해 있으면 그 컴포넌트를, 아니면 null을 준다. 아직이면 도착 시 다시 렌더한다. */
+const subscribeToAutocomplete = (onChange: () => void) => {
+  subscribers.add(onChange);
+  void loadAutocomplete();
+  return () => {
+    subscribers.delete(onChange);
+  };
+};
+const getLoadedComponent = () => loadedComponent;
+
+/**
+ * 도착해 있으면 그 컴포넌트를, 아니면 null을 준다.
+ *
+ * `useSyncExternalStore`인 이유 — 이펙트에서 구독하면 렌더와 이펙트 사이에 청크가
+ * 도착하는 창이 생기고, 그 사이에 도착하면 구독 시점에 이미 값이 있어 알림이 오지 않아
+ * 그 입력만 datalist에 갇힌다. 이 훅은 구독 직후 스냅샷을 다시 읽어 그 창을 닫는다.
+ */
 function useAutocompleteComponent(): ComponentType<HeaderNameAutocompleteProps> | null {
-  const [, rerender] = useReducer((n: number) => n + 1, 0);
-  useEffect(() => {
-    if (resolved) return;
-    waiting.add(rerender);
-    void loadAutocomplete();
-    return () => {
-      waiting.delete(rerender);
-    };
-  }, []);
-  return resolved;
+  return useSyncExternalStore(subscribeToAutocomplete, getLoadedComponent, getLoadedComponent);
 }
 
 export interface HeaderNameInputProps extends Pick<InputProps, 'variant' | 'size' | 'autoFocus'> {
@@ -78,17 +91,9 @@ export function HeaderNameInput({
   // 사라지고 새 입력은 포커스를 안 받아, 폼을 열어도 아무 데도 포커스가 없었다.
   // 원래 우려했던 "사용자가 다른 필드로 옮긴 뒤 포커스를 도로 뺏김"은 React.lazy의
   // ~250ms 창에서 나온 것이고, lazy를 걷어내면서 그 창 자체가 사라졌다.
-  const shared = { value, onChange, suggestions, label, className, variant, size, autoFocus };
+  const rendered = { value, onChange, suggestions, label, className, variant, size, autoFocus };
 
-  return Autocomplete ? <Autocomplete {...shared} /> : <PlainHeaderNameInput {...shared} />;
-}
-
-interface PlainHeaderNameInputProps extends Pick<InputProps, 'variant' | 'size' | 'autoFocus'> {
-  value: string;
-  onChange: (next: string) => void;
-  suggestions: readonly string[];
-  label: string;
-  className?: string;
+  return Autocomplete ? <Autocomplete {...rendered} /> : <PlainHeaderNameInput {...rendered} />;
 }
 
 /**
@@ -105,7 +110,7 @@ function PlainHeaderNameInput({
   variant,
   size,
   autoFocus,
-}: PlainHeaderNameInputProps) {
+}: HeaderNameAutocompleteProps) {
   const listId = useId();
   const [focused, setFocused] = useState(false);
 

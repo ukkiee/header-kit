@@ -1,7 +1,7 @@
 import { Select as BaseSelect } from '@base-ui-components/react/select';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { Check, ChevronDown } from 'lucide-react';
-import { fieldFocus, fieldSolid, ghostInteractive, popupItem, popupSurface } from './tokens';
+import { fieldFocus, fieldSolid, ghostInteractive, popupAnchored, popupItemText, popupPositioner } from './tokens';
 
 /**
  * Select — Base UI Select 기반 (ADR 0011). 팝업이 OS 네이티브가 아니라 앱 표면
@@ -69,13 +69,13 @@ export function Select<T extends string>({
         </BaseSelect.Icon>
       </BaseSelect.Trigger>
       <BaseSelect.Portal>
-        <BaseSelect.Positioner sideOffset={4} className="z-50 outline-none">
-          <BaseSelect.Popup className={`min-w-[var(--anchor-width)] outline-none ${popupSurface}`}>
+        <BaseSelect.Positioner sideOffset={4} className={popupPositioner}>
+          <BaseSelect.Popup className={popupAnchored}>
             {options.map((option) => (
               <BaseSelect.Item
                 key={option.value}
                 value={option.value}
-                className={`justify-between gap-2 text-zinc-700 dark:text-zinc-200 ${popupItem}`}
+                className={`justify-between gap-2 ${popupItemText}`}
               >
                 <BaseSelect.ItemText>{option.label}</BaseSelect.ItemText>
                 <BaseSelect.ItemIndicator className="flex text-blue-600 dark:text-blue-400">

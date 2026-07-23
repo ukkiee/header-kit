@@ -21,13 +21,22 @@ export const ghostInteractive =
  */
 export const accentBg = 'bg-blue-600';
 
-/** 떠 있는 팝업 표면 — Menu.Popup / Select.Popup 이 공유한다 (보더+명도, 무그림자). */
+/** 떠 있는 팝업 표면 — Menu / Select / Autocomplete 팝업이 공유한다 (보더+명도, 무그림자). */
 export const popupSurface =
   'rounded-lg border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-zinc-900';
 
-/** 팝업 항목 — Menu.Item / Select.Item 이 공유한다 (하이라이트는 data-highlighted). */
+/** 팝업 항목 — Menu / Select / Autocomplete 항목이 공유한다 (하이라이트는 data-highlighted). */
 export const popupItem =
   'flex cursor-pointer items-center rounded-md px-2 py-1.5 text-xs outline-none select-none data-[highlighted]:bg-zinc-100 dark:data-[highlighted]:bg-zinc-800';
+
+/** 팝업 포지셔너 — 앵커에 붙는 떠 있는 레이어. Select / Autocomplete 가 공유한다. */
+export const popupPositioner = 'z-50 outline-none';
+
+/** 앵커 폭 이상으로 열리는 팝업 — 트리거보다 좁아 보이지 않게 한다. Select / Autocomplete 공유. */
+export const popupAnchored = `min-w-[var(--anchor-width)] outline-none ${popupSurface}`;
+
+/** 본문 색이 붙은 팝업 항목 — 값 목록(Select / Autocomplete)이 공유한다. */
+export const popupItemText = `text-zinc-700 dark:text-zinc-200 ${popupItem}`;
 
 /** 툴팁 표면 — 반전 명도(라이트에서 어두운 배경). IconButton 계열이 공유한다. */
 export const tooltipPopup =

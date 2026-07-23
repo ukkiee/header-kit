@@ -804,6 +804,23 @@ try {
   record('L2c: Esc는 제안 팝업만 닫고 폼은 유지',
     optionsAfterEsc === 0 && formAfterEsc > 0,
     `options=${optionsAfterEsc}, form=${formAfterEsc}`);
+
+  // L2d: 후보가 **없는** 이름 — 커스텀 헤더를 치는 가장 흔한 경우다. 이때 팝업이 열리면
+  // 빈 상자가 뜨고, 팝업이 열린 동안 바깥이 aria-hidden 처리돼 폼 전체가 보조기술에서
+  // 사라지며, Esc가 팝업이 아니라 폼을 닫아 편집이 날아간다(실제로 그랬다).
+  // L2c는 후보가 있는 쿼리만 봐서 이걸 놓쳤다 — 그 공백을 메운다.
+  await acNameInput.fill('');
+  await acNameInput.pressSequentially('ZZZ-No-Match', { delay: 15 });
+  await popup.waitForTimeout(300);
+  const noMatch = {
+    options: await popup.getByRole('option').count(),
+    expanded: await acNameInput.getAttribute('aria-expanded'),
+    formReachable: await popup.getByRole('button', { name: 'Cancel' }).count(),
+  };
+  record('L2d: 후보가 없으면 팝업이 열리지 않고 폼이 가려지지 않는다',
+    noMatch.options === 0 && noMatch.expanded === 'false' && noMatch.formReachable > 0,
+    `options=${noMatch.options}, aria-expanded=${noMatch.expanded}, form=${noMatch.formReachable}`);
+
   await popup.getByRole('button', { name: 'Cancel' }).click();
 
   // L3: 시크릿 안내가 노출된다 (기본 로드 확장은 시크릿 미허용)
