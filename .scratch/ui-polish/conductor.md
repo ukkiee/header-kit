@@ -1,0 +1,5 @@
+# ui-polish conductor
+
+- stage0 preflight: done — 브랜치 feature/ui-polish, 트래커 .scratch/ui-polish (main=6a0495f)
+- stage1 align: done — 8개 항목 결정(셀렉트 폭 고정·Autocomplete+기존 필터·ScrollArea 양쪽·ref 포커스·모션 전면·아코디언 헤더·레일 툴팁), ADR 0012 작성
+- stage2 spec: done — .scratch/ui-polish/spec.md 게시, 시임 확인(기존 5개, 신규 0)
