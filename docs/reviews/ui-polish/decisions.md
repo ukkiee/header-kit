@@ -16,6 +16,11 @@
 - S-1 accept — Bundle gate measures only one eager chunk
 - S-2 accept — Tab surface cannot satisfy ScrollArea's height contract; 탭 앱이 "페이지 전체 스크롤"에서 "본문만 스크롤"로 바뀌는 것을 감수하기로 사용자가 확인
 
+### structure r2
+
+- 발견 0건 — verdict approve. S-1·S-2 모두 resolved로 재검증, 수정이 새로 들인 critical·high 이슈 없음. 트리아지할 행 없음.
+- 유의: 리뷰 샌드박스에서 127.0.0.1 바인딩이 막혀 smoke를 직접 재실행하지 못했다(코드 판독으로 검증). smoke 82/82 및 두 수정의 음성 검증(되돌리면 FAIL)은 로컬 실행 결과가 근거다.
+
 ### bundle-gate 재트리아지 (티켓 02)
 
 - WAIVED by user: 번들 한도 +120KB → **+135KB**. ScrollArea·Autocomplete 어느 하나만 넣어도 기존 한도 초과, ScrollArea는 초기 셸이라 지연 로드 불가, 네이티브+CSS 대안은 콘텐츠 폭을 잠식해 구현 결정과 충돌. ui-diag 시작 지표는 회귀 없음 — 대리 지표(바이트)보다 직접 지표(시작 시간)를 채택. Autocomplete 지연 로드는 티켓 03의 수용 기준으로 남는다. **측정치·경위 정본:** `.scratch/ui-polish/issues/02-scroll-area.md`.

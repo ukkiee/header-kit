@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "structure",
+  "verdict": "approve",
+  "summary": "S-1 resolved: scripts/bundle-gate.mjs:46-79 derives popup roots from generated popup.html, closes static imports, and gates the 523.8KB eager total against the re-expressed 529KB ceiling; the gate passes with global/react/popup included. S-2 resolved: src/app/app.tsx:177-190 gives the tab shell a definite h-screen height, while scripts/smoke.mjs:1753-1774 asserts a rendered ScrollArea thumb and no document overflow. The smoke suite could not be rerun in this read-only sandbox because binding 127.0.0.1 was denied. Scanning a8abbce found no new critical or high issue introduced by either fix.",
+  "planFile": "docs/reviews/ui-polish/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 26,
+  "target": "branch diff against main",
+  "reviewedSha": "a8abbce7046782a91163aa927bb7a470504b05cd",
+  "reviewedTree": "67557f4e602d9e4b51cee24fd821f44e74bcd8a5",
+  "reviewedPlanSha256": "9973af1ae044f8c3ec6d6a7a8f87bea306bbcc46332b8c2acba625b2db2f7b38",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 0,
+  "planFindingCount": 0,
+  "triage": "Clean verdict: note it in your report and COMMIT this artifact with the next bookkeeping commit.",
+  "findings": [],
+  "next_steps": []
+}
