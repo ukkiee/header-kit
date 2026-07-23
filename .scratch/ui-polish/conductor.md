@@ -29,7 +29,7 @@
 - ticket 09 start: 7bd22f0
 - ticket 09 done: ecda314 — 헤더 행 전체가 트리거. IconButton 제거(중첩 버튼 방지), PanelSection에 renderHeader 훅. showLabel/hideLabel prop과 show/hide 카탈로그 키가 고아가 돼 함께 정리. smoke N27(세 지점 클릭·focusable 0·회전·24px 타깃). **리뷰가 티켓 04 계약 손실 발견** — IconButton을 걷어내며 usePressMotion도 사라졌고 N21b/N21c 목록에 이 표면이 없어 게이트가 못 봤다 → 계약 복구 + 목록에 추가. smoke 97/97, 전 게이트 green
 - ticket 10 start: ecda314
-- ticket 10 done: 989e8cb — 레일 아이콘 툴팁. IconButton에 size 변형(md 32x28/16px)과 focusRing 프리팩터 — 없었으면 클릭 대상과 포커스 표시를 잃었다. smoke N28(en/ko 호버·포커스 툴팁, 크기, 선택 표시). smoke 98/98, 전 게이트 green
+- ticket 10 done: 989e8cb — 레일 아이콘 툴팁. IconButton에 size 변형(md 32x28/16px)과 focusRing 프리팩터 — 없었으면 클릭 대상과 포커스 표시를 잃었다. smoke N28(en/ko 세 아이콘 × 호버·포커스·Tab 툴팁, 크기, 선택 표시). **리뷰가 포커스 단언이 호버 툴팁을 탈 수 있는 구조임을 발견** → 소멸 단언 + 실제 Tab 경로 추가, 한 개만 보던 것을 6개로. smoke 98/98, 전 게이트 green
 - **티켓 10개 전부 done — 다음은 Stage 5 릴리스 게이트**
 - 티켓 06에 넘긴 것: 비활성 버튼 모션 부재 스모크 단언 (06이 저장 중 비활성 버튼을 만들 때)
 - 티켓 05·06에 넘긴 것: (a) 모션 타이밍 3곳 분산(press-motion·motion-row·motion-view) 공유 토큰으로 모으기, (b) 비활성 버튼 모션 부재 스모크 단언(06이 저장 중 비활성 버튼을 만들 때)
