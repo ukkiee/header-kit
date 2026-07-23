@@ -1823,7 +1823,7 @@ try {
     return { rest, hover, down };
   };
 
-  // ADR 0012가 열거한 버튼 프리미티브 넷을 같은 프로브로 훑는다.
+  // ADR 0012가 열거한 버튼 프리미티브를 같은 프로브로 훑는다(아코디언 헤더 포함).
   const probePressPrimitives = async (page) => {
     // 행 액션은 opacity-0 → group-hover다. 행을 먼저 호버해야 아이콘 버튼의 rest를
     // "보이지만 호버되지 않은" 상태로 읽을 수 있다.
@@ -1831,13 +1831,21 @@ try {
     const icon = await transformStates(page, page.getByRole('button', { name: 'Edit', exact: true }));
     const button = await transformStates(page, page.getByRole('button', { name: 'Add rule' }));
     const chip = await transformStates(page, page.getByRole('button', { name: 'New profile' }));
+    // 아코디언 헤더도 버튼 프리미티브다(ADR 0012). 이 표면이 목록에 없어서, 티켓 09가
+    // IconButton을 걷어내며 누름·호버 계약을 떨어뜨린 것을 게이트가 못 봤다.
+    await page.getByRole('button', { name: 'Show preferences' }).click();
+    const accordion = await transformStates(
+      page,
+      page.getByRole('button', { name: 'Toggle preferences', exact: true }),
+    );
+    await page.getByRole('button', { name: 'Show profiles' }).click();
     await page.getByRole('button', { name: 'Profile menu', exact: true }).click();
     // 항목은 열릴 때 순차 등장한다(ui-polish 05) — 그 y 애니메이션이 도는 중에 읽으면
     // "rest"가 진행 중 변형을 잡는다. 스태거가 끝날 때까지 기다린 뒤 누름·호버를 본다.
     await page.getByRole('menuitem', { name: 'Duplicate' }).first().waitFor({ timeout: 5000 });
     await page.waitForTimeout(menuStaggerTotalMs(await page.getByRole('menuitem').count()) + 150);
     const item = await transformStates(page, page.getByRole('menuitem', { name: 'Duplicate' }));
-    return { button, chip, icon, item };
+    return { button, chip, icon, item, accordion };
   };
 
   await seedProfiles([
@@ -1855,7 +1863,7 @@ try {
   const allMoving = Object.values(lively).every(
     (s) => s.rest === 'none' && s.hover !== 'none' && s.down !== 'none',
   );
-  record('N21b: 감도 대조 — 기본 모션에서 버튼·칩·아이콘버튼·메뉴항목이 호버·누름에 변형한다',
+  record('N21b: 감도 대조 — 버튼·칩·아이콘버튼·메뉴항목·아코디언 헤더가 호버·누름에 변형한다',
     allMoving,
     Object.entries(lively).map(([k, v]) => `${k}=${v.hover}/${v.down}`).join(' '));
 
@@ -1868,7 +1876,7 @@ try {
   const allNone = Object.values(still).every(
     (s) => s.rest === 'none' && s.hover === 'none' && s.down === 'none',
   );
-  record('N21c: reduced-motion — 네 프리미티브 모두 호버·누름에 transform이 없다',
+  record('N21c: reduced-motion — 다섯 표면 모두 호버·누름에 transform이 없다',
     allNone,
     Object.entries(still).map(([k, v]) => `${k}=${v.hover}/${v.down}`).join(' '));
   await popup.emulateMedia({ reducedMotion: null });
@@ -2492,7 +2500,10 @@ try {
           el.getBoundingClientRect().width -
             (el.closest('section')?.getBoundingClientRect().width ?? 0),
         ) <= 1,
-    })).catch(() => ({ expanded: 'missing', innerFocusables: -1, iconRotate: 'missing', spansRow: false }));
+      // 폭만 넓히고 높이를 줄이면 "조준하지 않아도 된다"가 세로로는 나빠진다.
+      // WCAG 2.5.8의 최소 타깃 24px.
+      height: Math.round(el.getBoundingClientRect().height),
+    })).catch(() => ({ expanded: 'missing', innerFocusables: -1, iconRotate: 'missing', spansRow: false, height: 0 }));
 
   const closed = await headerState();
   // 1) 제목 텍스트를 눌러 열린다
@@ -2500,16 +2511,32 @@ try {
   await popup.waitForTimeout(250);
   const afterTitle = await headerState();
   // 2) 여백(아이콘 왼쪽)을 눌러 닫힌다
-  const box = await prefsHeader.boundingBox().catch(() => null);
-  const clickedGap = box !== null;
+  // 클릭 지점을 아이콘의 **실제 사각형**에서 유도한다 — 매직 px로 잡으면 아이콘이
+  // 커지거나 패딩이 바뀌었을 때 "여백"이 조용히 두 번째 아이콘 클릭이 된다.
+  const geometry = await prefsHeader
+    .evaluate((el) => {
+      const header = el.getBoundingClientRect();
+      const icon = el.querySelector('svg')?.getBoundingClientRect();
+      if (!icon) return null;
+      return {
+        iconX: icon.x + icon.width / 2,
+        iconY: icon.y + icon.height / 2,
+        // 아이콘 왼쪽 가장자리와 제목 오른쪽 사이의 빈 구간 한가운데
+        gapX: (icon.x + header.x + header.width * 0.55) / 2,
+        gapY: header.y + header.height / 2,
+        gapIsLeftOfIcon: (icon.x + header.x + header.width * 0.55) / 2 < icon.x - 2,
+      };
+    })
+    .catch(() => null);
+  const clickedGap = geometry !== null && geometry.gapIsLeftOfIcon;
   if (clickedGap) {
-    await popup.mouse.click(box.x + box.width - 40, box.y + box.height / 2);
+    await popup.mouse.click(geometry.gapX, geometry.gapY);
     await popup.waitForTimeout(250);
   }
   const afterGap = await headerState();
   // 3) 아이콘 자체를 눌러도 같은 동작
-  if (clickedGap) {
-    await popup.mouse.click(box.x + box.width - 8, box.y + box.height / 2);
+  if (geometry) {
+    await popup.mouse.click(geometry.iconX, geometry.iconY);
     await popup.waitForTimeout(250);
   }
   const afterIcon = await headerState();
@@ -2538,10 +2565,11 @@ try {
       [closed, afterTitle, afterGap, afterIcon].every((s) => s.innerFocusables === 0) &&
       closed.iconRotate === 'none' && afterTitle.iconRotate !== 'none' &&
       closed.spansRow &&
+      closed.height >= 24 &&
       clickedGap &&
       backupsIsFullRow,
     `헤더=버튼:${headerIsButton}, expanded=${closed.expanded}→제목:${afterTitle.expanded}→여백:${afterGap.expanded}→아이콘:${afterIcon.expanded}, ` +
-    `내부 focusable=${closed.innerFocusables}, 행 전체=${closed.spansRow}, ` +
+    `내부 focusable=${closed.innerFocusables}, 행 전체=${closed.spansRow}, 높이=${closed.height}px, ` +
     `아이콘 회전=${closed.iconRotate}→${afterTitle.iconRotate}, 백업도 전체행=${backupsIsFullRow}`);
 
   const failed = results.filter((r) => !r.ok);

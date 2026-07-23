@@ -1,7 +1,9 @@
 import { Collapsible as BaseCollapsible } from '@base-ui-components/react/collapsible';
 import { ChevronDown } from 'lucide-react';
+import { m } from 'motion/react';
 import type { ReactNode } from 'react';
 import { PanelSection } from './panel-section';
+import { usePressMotion } from './press-motion';
 import { focusRing, ghostInteractive } from './tokens';
 
 export interface CollapsiblePanelProps {
@@ -35,6 +37,10 @@ export function CollapsiblePanel({
   banner,
   children,
 }: CollapsiblePanelProps) {
+  // 헤더 행도 버튼 프리미티브다 (ADR 0012) — IconButton을 걷어내면서 누름·호버 계약이
+  // 함께 사라졌던 것을 되돌린다. 사이드바의 SwitcherChip도 w-full인 채 같은 배율을
+  // 쓰므로 폭이 넓다고 예외를 둘 이유가 없다.
+  const press = usePressMotion();
   return (
     <BaseCollapsible.Root open={open} onOpenChange={onOpenChange}>
       <PanelSection
@@ -46,18 +52,23 @@ export function CollapsiblePanel({
             className={`shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
           />
         }
-        renderHeader={
+        renderHeader={({ className, children }) => (
           <BaseCollapsible.Trigger
             render={
-              <button
+              <m.button
                 type="button"
                 aria-label={toggleAriaLabel}
+                {...press}
                 // w-full은 두지 않는다 — PanelSection의 flex-col이 이미 행 전체로 늘린다.
-                className={`cursor-pointer rounded-md px-1 py-0.5 text-left ${ghostInteractive} ${focusRing}`}
+                // min-h-6은 WCAG 2.5.8의 24×24 최소 타깃 — 폭만 넓히고 높이를 줄이면
+                // "조준하지 않아도 된다"가 세로로는 나빠진다.
+                className={`min-h-6 cursor-pointer rounded-md px-1 text-left ${ghostInteractive} ${focusRing} ${className}`}
               />
             }
-          />
-        }
+          >
+            {children}
+          </BaseCollapsible.Trigger>
+        )}
       >
         {banner}
         <BaseCollapsible.Panel>{children}</BaseCollapsible.Panel>
