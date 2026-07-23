@@ -2572,6 +2572,75 @@ try {
     `내부 focusable=${closed.innerFocusables}, 행 전체=${closed.spansRow}, 높이=${closed.height}px, ` +
     `아이콘 회전=${closed.iconRotate}→${afterTitle.iconRotate}, 백업도 전체행=${backupsIsFullRow}`);
 
+  // N28: 레일 아이콘 툴팁 (ui-polish 10, stories 28~30).
+  // 레일만 툴팁 없는 맨 버튼이었다 — 다른 아이콘 버튼과 같은 셸로 옮긴다. 셸을 바꾸면
+  // 크기가 24×24로 줄어들 수 있어(기존 IconButton 기본값) 클릭 대상 크기도 함께 본다.
+  const railProbe = async (page, name) => {
+    const button = page.getByRole('button', { name, exact: true });
+    const found = await button.waitFor({ timeout: 5000 }).then(() => true, () => false);
+    if (!found) return { found: false };
+    const geom = await button.evaluate((el) => {
+      const rect = el.getBoundingClientRect();
+      const icon = el.querySelector('svg')?.getBoundingClientRect();
+      return {
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+        icon: icon ? Math.round(icon.width) : -1,
+      };
+    });
+    await button.hover();
+    const hoverTip = await page
+      .getByRole('tooltip')
+      .filter({ hasText: name })
+      .first()
+      .waitFor({ timeout: 3000 })
+      .then(() => true, () => false);
+    await page.mouse.move(1, 1);
+    await page.waitForTimeout(300);
+    // 마우스 없이 키보드 포커스만으로도 같은 정보를 얻어야 한다(story 29).
+    await button.focus();
+    const focusTip = await page
+      .getByRole('tooltip')
+      .filter({ hasText: name })
+      .first()
+      .waitFor({ timeout: 3000 })
+      .then(() => true, () => false);
+    return { found: true, ...geom, hoverTip, focusTip };
+  };
+
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Show profiles', exact: true }).waitFor({ timeout: 5000 });
+  const railEn = await railProbe(popup, 'Show backups');
+  // 선택 상태 표시는 유지된다 — 툴팁을 얻으려고 "지금 보고 있는 화면"을 잃으면 안 된다.
+  await popup.getByRole('button', { name: 'Show backups', exact: true }).click();
+  await popup.waitForTimeout(250);
+  const railSelected = await popup
+    .getByRole('button', { name: 'Show backups', exact: true })
+    .evaluate((el) => ({
+      pressed: el.getAttribute('aria-pressed'),
+      background: getComputedStyle(el).backgroundColor,
+    }));
+  await popup.getByRole('button', { name: 'Show profiles', exact: true }).click();
+
+  const railPopupKo = await context.newPage();
+  await railPopupKo.setViewportSize({ width: 760, height: 580 });
+  await railPopupKo.goto(`chrome-extension://${extensionId}/popup.html?locale=ko`);
+  await railPopupKo.getByRole('button', { name: '프로필 화면', exact: true }).waitFor({ timeout: 5000 });
+  const railKo = await railProbe(railPopupKo, '백업 화면');
+  await railPopupKo.close();
+
+  const transparent = (color) => color === 'rgba(0, 0, 0, 0)' || color === 'transparent';
+  record('N28: 레일 아이콘 — en/ko 호버·키보드 포커스 툴팁, 클릭 대상·선택 표시 유지',
+    railEn.found && railEn.hoverTip && railEn.focusTip &&
+      railKo.found && railKo.hoverTip && railKo.focusTip &&
+      // 셸을 바꾸며 32×28 / 아이콘 16px보다 작아지지 않았는지
+      railEn.width >= 32 && railEn.height >= 28 && railEn.icon >= 16 &&
+      railKo.width >= 32 && railKo.height >= 28 && railKo.icon >= 16 &&
+      railSelected.pressed === 'true' && !transparent(railSelected.background),
+    `en=${railEn.width}x${railEn.height}/icon${railEn.icon} 호버:${railEn.hoverTip} 포커스:${railEn.focusTip}, ` +
+    `ko=${railKo.width}x${railKo.height}/icon${railKo.icon} 호버:${railKo.hoverTip} 포커스:${railKo.focusTip}, ` +
+    `선택=pressed:${railSelected.pressed} bg:${railSelected.background}`);
+
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
   process.exitCode = failed.length === 0 ? 0 : 1;

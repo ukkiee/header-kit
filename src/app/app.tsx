@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { IconTooltipProvider } from '@/ui/icon-button';
+import { IconButton, IconTooltipProvider } from '@/ui/icon-button';
 import { MotionProvider } from '@/ui/motion-provider';
 import { MotionView } from '@/ui/motion-view';
 import { useToastManager } from '@/ui/toast';
@@ -190,18 +190,19 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
         }`}
       >
         <nav className="flex flex-col items-center gap-1 border-r border-zinc-200 py-3 dark:border-zinc-800">
+          {/* 레일 아이콘도 다른 아이콘 버튼과 같은 셸을 쓴다 — 툴팁(호버·키보드 포커스)과
+              접근성 이름이 같은 카탈로그 키에서 나와 갈라지지 않는다. size="md"는 기존
+              클릭 대상(32×28)과 아이콘 크기(16px)를 그대로 유지하기 위한 것이다. */}
           {RAIL_ITEMS.map(({ view, Icon, labelKey }) => (
-            <Button
+            <IconButton
               key={view}
-              variant="ghost"
-              size="sm"
-              aria-label={t(locale, labelKey)}
+              size="md"
+              label={t(locale, labelKey)}
+              icon={Icon}
               aria-pressed={railView === view}
               className={railView === view ? 'bg-zinc-100 dark:bg-zinc-800' : ''}
               onClick={() => setRailView(view)}
-            >
-              <Icon size={16} strokeWidth={1.75} />
-            </Button>
+            />
           ))}
         </nav>
 
