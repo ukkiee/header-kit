@@ -42,6 +42,20 @@ export const microCaption = 'text-[10px] font-medium uppercase tracking-wide tex
 /** 작은 배지 알약 — 규칙 종류 배지·조건 배지가 색만 달리해 공유한다. */
 export const badgePill = 'rounded px-1 py-px text-[10px] font-medium';
 
+/**
+ * 스크롤바 트랙 — ScrollArea가 쓴다. 스크롤바는 오버레이라 콘텐츠 폭을 잠식하지 않는다
+ * (팝업이 760×580 고정이라 폭을 뺏기면 곧바로 좁아진다, ADR 0005).
+ *
+ * 기본이 투명이 아니라 opacity-60인 이유 — Base UI는 스크롤 불가일 때 스크롤바를 DOM에서
+ * 아예 뺀다(keepMounted 기본 false). 즉 이 트랙이 보인다는 것 자체가 "넘치는 내용이 있다"는
+ * 신호라, 숨겨 두면 스크롤 가능하다는 어포던스를 잃는다. 호버·스크롤 중에만 진해진다.
+ */
+export const scrollbarTrack =
+  'flex w-1.5 justify-center rounded-full opacity-60 transition-opacity duration-150 data-[hovering]:opacity-100 data-[scrolling]:opacity-100';
+
+/** 스크롤바 썸 — 트랙과 짝. 다크 모드에서 명도가 뒤집힌다. */
+export const scrollbarThumb = 'w-full rounded-full bg-zinc-300 dark:bg-zinc-600';
+
 /** 키보드 포커스 링 — Button·SwitcherChip·사이드바 그립이 공유한다(offset 일관). */
 export const focusRing =
   'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500';

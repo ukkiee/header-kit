@@ -335,6 +335,14 @@ try {
   await boundaryPopup.screenshot({ path: `${OUT}/diag-6-popup-boundary.png`, fullPage: true });
   // 문서 수준 오버플로 + 요소 수준 가로 스크롤러 스캔 — 스펙은 내부 가로 스크롤
   // 표면 자체를 금지하므로(칩 결정), 내부에서 스크롤로 흡수된 오버플로도 실패다.
+  //
+  // ui-polish 02 검토 결과 — ScrollArea viewport를 이 스캔에서 **제외하지 않는다.**
+  // 스펙은 viewport가 `overflow: scroll`이라 걸릴 것을 우려해 예외를 두라고 했지만,
+  // 이 스캔은 `scrollWidth > clientWidth`를 함께 요구한다. ScrollArea.Content
+  // (min-width: fit-content)를 쓰지 않기로 해 실제 가로 오버플로가 없고, 실측에서도
+  // inner-scrollers=0이라 예외가 필요 없었다. 오히려 예외를 두면 viewport가 가로
+  // 오버플로를 **보이지 않는 스크롤로 조용히 흡수**하는 경우를 놓친다 — 세로 스크롤바만
+  // 렌더하므로 사용자에겐 아무 단서가 없는 바로 그 상황이다. 예외 없이 두는 편이 세다.
   const { overflowPx, innerScrollers } = await boundaryPopup.evaluate(() => {
     const bad = [];
     for (const el of document.querySelectorAll('*')) {

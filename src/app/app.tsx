@@ -13,6 +13,7 @@ import { TransferPanel } from '@/features/transfer/transfer-panel';
 import { Alert } from '@/ui/alert';
 import { Button } from '@/ui/button';
 import { LocaleProvider } from '@/ui/i18n-context';
+import { ScrollArea } from '@/ui/scroll-area';
 import type { Command } from '@/core/commands';
 import { resolveLocale, t, type Locale, type MessageKey } from '@/core/i18n';
 import { createProfile, PROFILE_COLORS, type StoredState } from '@/core/schema';
@@ -200,19 +201,24 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
           ))}
         </nav>
 
-        <aside className="flex min-h-0 flex-col gap-2 overflow-y-auto border-r border-zinc-200 p-3 dark:border-zinc-800">
-          <ProfileSidebar
-            profiles={state.profiles}
-            selectedId={effectiveSelectedId}
-            onSelect={setSelectedId}
-            onCreate={createAndSelectProfile}
-            onReorder={(profileId, toIndex) =>
-              dispatch({ type: 'move-profile', profileId, toIndex })
-            }
-          />
+        {/* 랜드마크(aside/main)는 유지하고 그 안을 ScrollArea가 스크롤한다 — 스크롤바가
+            앱 스타일이 되면서도 보조기술이 보는 구조는 그대로다. */}
+        <aside className="flex min-h-0 flex-col border-r border-zinc-200 dark:border-zinc-800">
+          <ScrollArea className="flex-1" viewportClassName="flex flex-col gap-2 p-3">
+            <ProfileSidebar
+              profiles={state.profiles}
+              selectedId={effectiveSelectedId}
+              onSelect={setSelectedId}
+              onCreate={createAndSelectProfile}
+              onReorder={(profileId, toIndex) =>
+                dispatch({ type: 'move-profile', profileId, toIndex })
+              }
+            />
+          </ScrollArea>
         </aside>
 
-        <main className="flex min-h-0 min-w-0 flex-col gap-3 overflow-y-auto p-4">
+        <main className="flex min-h-0 min-w-0 flex-col">
+        <ScrollArea className="flex-1" viewportClassName="flex flex-col gap-3 p-4">
           <div className="flex items-center justify-between">
             <h1 className="text-base font-semibold">{t(locale, 'appName')}</h1>
             <div className="flex items-center gap-1">
@@ -246,6 +252,7 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
               />
             )}
           </MotionView>
+        </ScrollArea>
         </main>
       </div>
       </IconTooltipProvider>
