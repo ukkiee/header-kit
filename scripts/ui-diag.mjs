@@ -11,8 +11,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
-const EXT_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.output/chrome-mv3');
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const EXT_PATH = path.join(REPO_ROOT, '.output/chrome-mv3');
 const OUT = process.env.DIAG_OUT || '/tmp';
+
+/** 팝업 크기 — ADR 0005의 고정 셸(760×580). 계측은 실제 팝업과 같은 크기에서 재야 한다. */
+const POPUP_SIZE = { width: 760, height: 580 };
 
 /**
  * 팝업 시작 성능 (plan r1 R-4) — 번들 게이트는 바이트만 재므로 한도 안에 있으면서도
@@ -26,7 +30,18 @@ const PERF_SAMPLES = 5; // 채택 표본 수 (중앙값)
 const PERF_WARMUP = 1; // 버리는 워밍업 로드 수 — 첫 로드의 리소스 캐시 효과를 표본에서 제외한다
 const PERF_TOLERANCE_RATIO = 1.3;
 const PERF_TOLERANCE_ABS_MS = 150;
-const BASELINE_FILE = 'docs/reviews/ui-polish/perf-baseline.md';
+/**
+ * 스크립트 기준 절대 경로 — cwd 상대로 두면 저장소 루트 밖에서 실행할 때 파일이 없는
+ * 것으로 보여 "기준선 없음" 분기를 타고, 이 게이트가 조용히 무장 해제된다.
+ */
+const BASELINE_FILE = path.join(REPO_ROOT, 'docs/reviews/ui-polish/perf-baseline.md');
+const BASELINE_REL = path.relative(REPO_ROOT, BASELINE_FILE);
+
+/** 지표 정의의 단일 출처 — 읽기·판정·출력이 같은 표를 본다. */
+const METRICS = [
+  { key: 'firstPaintMs', label: 'first paint' },
+  { key: 'interactiveMs', label: 'dom ready' },
+];
 
 /** 배수만 쓰면 작은 절대값에서 과민해지고 절대값만 쓰면 느린 기기에서 무뎌지므로 병용한다. */
 const perfCeiling = (baseline) =>
@@ -51,9 +66,12 @@ const startupProbe = () => {
     }
   }).observe({ type: 'paint', buffered: true });
 
-  // 상호작용 준비 = 규칙 추가 버튼이 존재하고 **활성화**된 순간. 존재만으로는 부족하다.
+  // 상호작용 준비 = 아래 라벨의 버튼이 존재하고 **활성화**된 순간. 존재만으로는 부족하다.
   // 주의 — 이 시각은 DOM 삽입 시점이라 first paint보다 **빠를 수 있다**(실측 확인).
   // 두 지표는 시작 구간의 양 끝을 잡는 것이지 서로의 상한이 아니다.
+  // READY_LABEL은 i18n 카탈로그의 en `addRule` 값을 그대로 적은 것이다(브라우저 컨텍스트로
+  // 직렬화되는 함수라 import할 수 없다). 카탈로그가 바뀌면 아래 실행부가 읽을 수 있는
+  // 오류로 알려준다 — 조용한 타임아웃으로 끝나지 않는다.
   const READY_LABEL = 'Add rule';
   const isReady = () => {
     for (const el of document.querySelectorAll('button')) {
@@ -76,11 +94,11 @@ const startupProbe = () => {
 function readBaseline() {
   if (!existsSync(BASELINE_FILE)) return null;
   const fence = readFileSync(BASELINE_FILE, 'utf8').match(/```json\n([\s\S]*?)```/);
-  if (!fence) throw new Error(`${BASELINE_FILE}에 json 블록이 없습니다`);
+  if (!fence) throw new Error(`${BASELINE_REL}에 json 블록이 없습니다`);
   const parsed = JSON.parse(fence[1]);
-  for (const key of ['firstPaintMs', 'interactiveMs']) {
+  for (const { key } of METRICS) {
     if (typeof parsed[key]?.median !== 'number') {
-      throw new Error(`${BASELINE_FILE}의 ${key}.median이 숫자가 아닙니다`);
+      throw new Error(`${BASELINE_REL}의 ${key}.median이 숫자가 아닙니다`);
     }
   }
   return parsed;
@@ -89,12 +107,15 @@ function readBaseline() {
 /** 기준선 문서 — 사람이 읽을 맥락 + 스크립트가 읽을 json 블록을 한 파일에 둔다. */
 const baselineDoc = (measured, device) => `# 팝업 시작 성능 기준선 — ui-polish
 
+<!-- 생성물 — scripts/ui-diag.mjs가 DIAG_WRITE_BASELINE=1로 덮어쓴다. 손으로 고치면
+     다음 재측정에서 사라지므로, 문구를 바꾸려면 스크립트의 baselineDoc()을 고칠 것. -->
+
 이 피처의 UI 변경이 **들어가기 전** 빌드에서 측정한 값이다. 이후 진단 실행은 이 값을
 기준으로 회귀를 판정한다(상한 = \`max(기준선 × ${PERF_TOLERANCE_RATIO}, 기준선 + ${PERF_TOLERANCE_ABS_MS}ms)\`).
 
 - **first paint** (\`firstPaintMs\`) — 팝업 문서의 first-contentful-paint
-- **dom ready** (\`interactiveMs\`) — 문서 시작부터 규칙 추가 버튼이 존재하고 활성화될
-  때까지. 페이지 내부 시계로 재 자동화 왕복 지연이 섞이지 않는다
+- **dom ready** (\`interactiveMs\`) — 문서 시작부터 \`Add rule\` 라벨의 버튼이 존재하고
+  활성화될 때까지. 페이지 내부 시계로 재 자동화 왕복 지연이 섞이지 않는다
 - 표본 ${PERF_SAMPLES}회(매회 새 문서), 워밍업 ${PERF_WARMUP}회 폐기, 중앙값 채택
 
 **두 지표의 관계** — dom ready는 DOM 삽입 시점을 찍으므로 first paint보다 **빠를 수
@@ -158,8 +179,10 @@ try {
   const extensionId = new URL(sw.url()).host;
   await sw.evaluate(async (state) => chrome.storage.local.set({ state }), richState);
 
+  // 스크린샷 페이지는 세로 600 — ADR 0005의 580보다 조금 높게 잡아 하단이 잘리지 않은
+  // 전체 샷을 얻는다(기존 동작 유지). 계측 페이지는 아래에서 실제 팝업 크기로 잰다.
   const popup = await context.newPage();
-  await popup.setViewportSize({ width: 760, height: 600 });
+  await popup.setViewportSize({ width: POPUP_SIZE.width, height: 600 });
   await popup.goto(`chrome-extension://${extensionId}/popup.html?locale=ko`);
   await popup.waitForTimeout(500);
 
@@ -194,47 +217,69 @@ try {
   await tab.screenshot({ path: `${OUT}/diag-5-tabapp-dark.png`, fullPage: true });
   console.log('shot 5: tab app (dark)');
 
-  // 팝업 시작 성능 (R-4) — 경계 프로필을 붙이기 **전에** 잰다. 지표는 위 richState라는
-  // 대표 데이터 기준이어야 하고, 프로필 18개로 불린 뒤 재면 다른 것을 재게 된다.
-  const samples = { firstPaintMs: [], interactiveMs: [] };
+  /**
+   * 팝업 시작 성능 (R-4). 배치가 곧 측정 조건이다 — 두 가지를 동시에 만족해야 한다.
+   *
+   * 1. **다른 페이지가 없어야 한다.** 동일 출처 확장 문서는 렌더러 프로세스를 공유하므로
+   *    스크린샷용 팝업·탭이 떠 있으면 그 작업이 매 측정과 경합해, 시작 회귀가 아닌 잡음을
+   *    지표에 싣는다(이후 티켓이 그 표면에 모션을 얹으면 악화된다). 그래서 먼저 닫는다.
+   * 2. **프로세스는 데워져 있어야 한다.** 반대로 스크린샷보다 앞서 재면 확장이 콜드라
+   *    초기 표본이 두 배까지 튀고(실측), 워밍업 1회로는 걷히지 않아 중앙값이 불안정해진다.
+   *
+   * 경계 프로필을 붙이기 전이기도 하다 — 지표는 위 richState라는 대표 데이터 기준이고,
+   * 프로필 18개로 불린 뒤 재면 다른 것을 재게 된다.
+   */
+  await popup.close();
+  await tab.close();
+
+  const samples = Object.fromEntries(METRICS.map(({ key }) => [key, []]));
   for (let i = 0; i < PERF_WARMUP + PERF_SAMPLES; i++) {
     const perfPage = await context.newPage();
     await perfPage.addInitScript(startupProbe);
-    await perfPage.setViewportSize({ width: 760, height: 600 });
+    await perfPage.setViewportSize(POPUP_SIZE);
     // ?locale=en — 준비 신호를 버튼 라벨로 잡으므로 로케일이 고정돼야 선택이 흔들리지 않는다.
     await perfPage.goto(`chrome-extension://${extensionId}/popup.html?locale=en`);
-    await perfPage.waitForFunction(
-      () => window.__diagFirstPaint !== undefined && window.__diagInteractive !== undefined,
-      null,
-      { timeout: 15_000 },
-    );
+    try {
+      await perfPage.waitForFunction(
+        () => window.__diagFirstPaint !== undefined && window.__diagInteractive !== undefined,
+        null,
+        { timeout: 15_000 },
+      );
+    } catch {
+      // 준비 라벨을 못 찾은 것이 압도적으로 흔한 원인이다 — 원인을 지목해서 알린다.
+      throw new Error(
+        '팝업 시작 지표를 관측하지 못했습니다. startupProbe의 READY_LABEL이 ' +
+          'src/core/i18n.ts의 en `addRule` 값과 일치하는지 확인하세요.',
+      );
+    }
     const run = await perfPage.evaluate(() => ({
       firstPaintMs: window.__diagFirstPaint,
       interactiveMs: window.__diagInteractive,
     }));
     await perfPage.close();
     if (i < PERF_WARMUP) continue;
-    samples.firstPaintMs.push(run.firstPaintMs);
-    samples.interactiveMs.push(run.interactiveMs);
+    for (const { key } of METRICS) samples[key].push(run[key]);
   }
 
-  const measured = {
-    firstPaintMs: { median: median(samples.firstPaintMs), samples: samples.firstPaintMs },
-    interactiveMs: { median: median(samples.interactiveMs), samples: samples.interactiveMs },
-  };
+  const measured = Object.fromEntries(
+    METRICS.map(({ key }) => [key, { median: median(samples[key]), samples: samples[key] }]),
+  );
   const device = `${os.platform()}/${os.arch()} · ${os.cpus()[0]?.model ?? 'unknown'} · ${(os.totalmem() / 1024 ** 3).toFixed(0)}GB`;
   const ms = (n) => `${n.toFixed(1)}ms`;
-  const raw = (list) => list.map((v) => v.toFixed(0)).join(', ');
+  const pad = (s) => s.padEnd(Math.max(...METRICS.map((m) => m.label.length)));
   console.log(
     `popup startup (표본 ${PERF_SAMPLES} · 워밍업 ${PERF_WARMUP} 폐기 · 중앙값)\n` +
-      `  first paint  ${ms(measured.firstPaintMs.median)}  [${raw(samples.firstPaintMs)}]\n` +
-      `  dom ready    ${ms(measured.interactiveMs.median)}  [${raw(samples.interactiveMs)}]  (버튼 존재·활성 — 삽입 시점이라 paint보다 빠를 수 있음)\n` +
-      `  device: ${device}`,
+      METRICS.map(
+        ({ key, label }) =>
+          `  ${pad(label)}  ${ms(measured[key].median)}  [${samples[key].map((v) => v.toFixed(0)).join(', ')}]`,
+      ).join('\n') +
+      '\n  dom ready는 DOM 삽입 시점이라 first paint보다 빠를 수 있습니다 (서로의 상한이 아님).' +
+      `\n  device: ${device}`,
   );
 
   if (process.env.DIAG_WRITE_BASELINE) {
     writeFileSync(BASELINE_FILE, baselineDoc(measured, device));
-    console.log(`  기준선을 ${BASELINE_FILE}에 기록했습니다 — 변경 전 빌드인지 확인하세요.`);
+    console.log(`  기준선을 ${BASELINE_REL}에 기록했습니다 — 변경 전 빌드인지 확인하세요.`);
   }
 
   let baseline = null;
@@ -249,18 +294,15 @@ try {
     console.error(`FAIL: 기준선을 읽을 수 없습니다 — ${baselineError.message}`);
     process.exitCode = 1;
   } else if (!baseline) {
-    console.log('  기준선 없음 — 측정치만 출력하고 판정하지 않습니다.');
+    console.log(`  기준선 없음(${BASELINE_REL}) — 측정치만 출력하고 판정하지 않습니다.`);
   } else {
-    for (const [key, label] of [
-      ['firstPaintMs', 'first paint'],
-      ['interactiveMs', 'dom ready  '],
-    ]) {
+    for (const { key, label } of METRICS) {
       const base = baseline[key].median;
       const ceiling = perfCeiling(base);
       const now = measured[key].median;
       const pass = now <= ceiling;
       console.log(
-        `  ${label} ${ms(now)} vs 기준선 ${ms(base)} → 상한 ${ms(ceiling)} ` +
+        `  ${pad(label)} ${ms(now)} vs 기준선 ${ms(base)} → 상한 ${ms(ceiling)} ` +
           `= max(×${PERF_TOLERANCE_RATIO}, +${PERF_TOLERANCE_ABS_MS}ms) — ${pass ? 'PASS' : 'FAIL'}`,
       );
       if (!pass) process.exitCode = 1;
@@ -284,13 +326,16 @@ try {
     state.profiles = [...state.profiles, ...profiles];
     await chrome.storage.local.set({ state });
   }, boundaryProfiles);
-  await popup.emulateMedia({ colorScheme: 'light' });
-  await popup.reload();
-  await popup.waitForTimeout(500);
-  await popup.screenshot({ path: `${OUT}/diag-6-popup-boundary.png`, fullPage: true });
+  // 계측을 위해 위에서 스크린샷 페이지들을 닫았으므로 경계 검증용 팝업을 새로 연다.
+  // 새 페이지는 기본이 light 스킴이라 다크 에뮬레이션을 되돌릴 필요가 없다.
+  const boundaryPopup = await context.newPage();
+  await boundaryPopup.setViewportSize({ width: POPUP_SIZE.width, height: 600 });
+  await boundaryPopup.goto(`chrome-extension://${extensionId}/popup.html?locale=ko`);
+  await boundaryPopup.waitForTimeout(500);
+  await boundaryPopup.screenshot({ path: `${OUT}/diag-6-popup-boundary.png`, fullPage: true });
   // 문서 수준 오버플로 + 요소 수준 가로 스크롤러 스캔 — 스펙은 내부 가로 스크롤
   // 표면 자체를 금지하므로(칩 결정), 내부에서 스크롤로 흡수된 오버플로도 실패다.
-  const { overflowPx, innerScrollers } = await popup.evaluate(() => {
+  const { overflowPx, innerScrollers } = await boundaryPopup.evaluate(() => {
     const bad = [];
     for (const el of document.querySelectorAll('*')) {
       const st = getComputedStyle(el);
