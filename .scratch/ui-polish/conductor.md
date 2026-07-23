@@ -10,3 +10,5 @@
 - ticket 01 start: 5520d6e
 - ticket 01 done: 8618db5 — 팝업 시작 성능 계측 + 기준선(first paint 64.0ms / dom ready 36.7ms @ M5 Pro). 리뷰 2축 반영(cwd 상대 경로가 게이트를 무장 해제하던 결함 포함). 전 게이트 green. **structure 게이트는 아직 — 02 뒤에 돌린다**
 - ticket 02 start: 8618db5
+- ticket 02 done: 69b90f3 — ScrollArea 채택(+12.6KB), 랜드마크를 render 합성으로. **번들 한도 +120 → +135KB 사용자 재트리아지**(decisions.md 기록, 정본은 issues/02). smoke N22a/N22b로 다크 모드 가드 신설(81/81). 전 게이트 green
+- ticket 03 조건 추가: Autocomplete 지연 로드가 수용 기준에 들어감 (실측 +14.5KB, 규칙 폼 전용이라 초기 청크 불필요)
