@@ -1,7 +1,15 @@
 import { Select as BaseSelect } from '@base-ui-components/react/select';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { Check, ChevronDown } from 'lucide-react';
-import { fieldFocus, fieldSolid, ghostInteractive, popupAnchored, popupItemText, popupPositioner } from './tokens';
+import {
+  fieldFocus,
+  fieldSolid,
+  ghostInteractive,
+  popupAnchored,
+  popupItemText,
+  popupPositioner,
+  selectFixedWidth,
+} from './tokens';
 
 /**
  * Select — Base UI Select 기반 (ADR 0011). 팝업이 OS 네이티브가 아니라 앱 표면
@@ -21,8 +29,19 @@ const trigger = cva(
         sm: 'h-7 text-xs',
         md: 'h-8 text-xs',
       },
+      /**
+       * 폭 정책. 기본은 `auto` — 대부분의 셀렉트는 Field나 그리드가 폭을 정해 주므로
+       * 내용에 따라 흔들리지 않는다(실측: 종류 406px, 모드·빈 값 199px로 컨테이너 고정).
+       * `fixed`는 **다른 컨트롤과 같은 행에 있어 폭이 변하면 옆을 미는** 자리에만 준다.
+       * 기본을 fixed로 두면 컨테이너가 정해 주던 셋까지 좁아져 아무도 요청하지 않은
+       * 레이아웃 변경이 된다.
+       */
+      width: {
+        auto: '',
+        fixed: selectFixedWidth,
+      },
     },
-    defaultVariants: { variant: 'bordered', size: 'sm' },
+    defaultVariants: { variant: 'bordered', size: 'sm', width: 'auto' },
   },
 );
 
@@ -45,6 +64,7 @@ export interface SelectProps<T extends string> extends VariantProps<typeof trigg
 export function Select<T extends string>({
   variant,
   size,
+  width,
   className,
   value,
   onValueChange,
@@ -62,7 +82,7 @@ export function Select<T extends string>({
       }}
       disabled={disabled}
     >
-      <BaseSelect.Trigger id={id} aria-label={ariaLabel} className={trigger({ variant, size, className })}>
+      <BaseSelect.Trigger id={id} aria-label={ariaLabel} className={trigger({ variant, size, width, className })}>
         <BaseSelect.Value className="truncate" />
         <BaseSelect.Icon className="flex shrink-0 text-zinc-400">
           <ChevronDown size={12} strokeWidth={1.75} />

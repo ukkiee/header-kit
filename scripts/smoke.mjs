@@ -2284,6 +2284,95 @@ try {
     `취소 reduced=${reducedClose?.toFixed?.(0)}ms/lively=${livelyClose?.toFixed?.(0)}ms, ` +
     `저장 reduced=${reducedSave?.toFixed?.(0)}ms/lively=${livelySave?.toFixed?.(0)}ms (exit 창 ${exitWindowMs}ms)`);
 
+  // N25: URL 매치 방식 셀렉트 폭 고정 (ui-polish 07, stories 1·2·3).
+  // 폭 안정성만 보면 폭을 좁게 잡아 라벨이 잘려도 통과한다 — 두 단언을 함께 건다.
+  // 로케일마다 라벨 길이가 달라 en에서만 재면 ko 회귀를 놓치므로 양쪽을 순회한다.
+  const measureMatchTypeWidths = async (page, matchLabel, editLabel) => {
+    await page.getByRole('button', { name: editLabel, exact: true }).first().click();
+    const trigger = page.getByRole('combobox', { name: matchLabel, exact: true });
+    await trigger.waitFor({ timeout: 5000 });
+    const listbox = page.getByRole('listbox');
+    // 팝업이 닫히는 중에 다음 클릭이 들어가면 Base UI의 inert 백드롭이 가로챈다 —
+    // 열림·닫힘을 매번 명시적으로 기다린다.
+    const openPopup = async () => {
+      await trigger.click();
+      await listbox.first().waitFor({ timeout: 5000 });
+    };
+    const closePopup = () => listbox.first().waitFor({ state: 'detached', timeout: 5000 });
+
+    await openPopup();
+    const options = (await page.getByRole('option').allTextContents()).map((n) => n.trim());
+    await page.keyboard.press('Escape');
+    await closePopup();
+
+    const rows = [];
+    let popupAtLeastAnchor = true;
+    for (const name of options) {
+      await openPopup();
+      // 팝업은 앵커 폭 이상으로 열린다 — 트리거보다 좁아 보이면 안 된다.
+      const popupWidth = await listbox.first().evaluate((el) => el.getBoundingClientRect().width);
+      const triggerWidth = await trigger.evaluate((el) => el.getBoundingClientRect().width);
+      if (popupWidth + 0.5 < triggerWidth) popupAtLeastAnchor = false;
+      await page.getByRole('option', { name, exact: true }).click();
+      await closePopup();
+      rows.push(
+        await trigger.evaluate((el) => {
+          const value = el.querySelector('span');
+          return {
+            width: Number(el.getBoundingClientRect().width.toFixed(2)),
+            scroll: value?.scrollWidth ?? -1,
+            client: value?.clientWidth ?? -1,
+          };
+        }),
+      );
+    }
+    return { options, rows, popupAtLeastAnchor, trigger, listbox };
+  };
+
+  await seedProfiles([
+    baseProfile('p-width', 'Width', [
+      { kind: 'request-header', id: 'm1', name: 'Accept', value: 'v', enabled: true, mode: 'override',
+        emptyMeans: 'remove', comment: '', urlFilter: 'example.com' },
+    ]),
+  ]);
+  await popup.reload();
+  const widthEn = await measureMatchTypeWidths(popup, 'URL match type', 'Edit');
+  // 폭이 고정이면 옆의 패턴 입력도 자리를 지킨다 — 사용자가 말한 증상이 이것이다.
+  const patternLeftEdges = [];
+  for (const name of widthEn.options) {
+    await widthEn.trigger.click();
+    await widthEn.listbox.first().waitFor({ timeout: 5000 });
+    await popup.getByRole('option', { name, exact: true }).click();
+    await widthEn.listbox.first().waitFor({ state: 'detached', timeout: 5000 });
+    patternLeftEdges.push(
+      await popup.getByLabel('URL filter').first()
+        .evaluate((el) => Number(el.getBoundingClientRect().left.toFixed(2))),
+    );
+  }
+  await popup.getByRole('button', { name: 'Cancel', exact: true }).click();
+
+  const widthPopupKo = await context.newPage();
+  await widthPopupKo.setViewportSize({ width: 760, height: 580 });
+  await widthPopupKo.goto(`chrome-extension://${extensionId}/popup.html?locale=ko`);
+  await widthPopupKo.getByRole('button', { name: '규칙 추가' }).waitFor({ timeout: 5000 });
+  const widthKo = await measureMatchTypeWidths(widthPopupKo, 'URL 매치 방식', '편집');
+  await widthPopupKo.close();
+
+  const stableWidth = (rows) =>
+    rows.length > 1 &&
+    Math.max(...rows.map((r) => r.width)) - Math.min(...rows.map((r) => r.width)) <= 0.5;
+  const noClipping = (rows) => rows.every((r) => r.scroll <= r.client + 1);
+  const patternStable =
+    patternLeftEdges.length > 1 &&
+    Math.max(...patternLeftEdges) - Math.min(...patternLeftEdges) <= 0.5;
+  record('N25: 매치 방식 셀렉트 — en/ko 모든 옵션에서 폭 동일·라벨 미절단, 패턴 입력 고정',
+    stableWidth(widthEn.rows) && noClipping(widthEn.rows) &&
+      stableWidth(widthKo.rows) && noClipping(widthKo.rows) &&
+      widthEn.popupAtLeastAnchor && widthKo.popupAtLeastAnchor && patternStable,
+    `en 폭=${[...new Set(widthEn.rows.map((r) => r.width))].join('/')} 미절단=${noClipping(widthEn.rows)}, ` +
+    `ko 폭=${[...new Set(widthKo.rows.map((r) => r.width))].join('/')} 미절단=${noClipping(widthKo.rows)}, ` +
+    `패턴 좌변=${[...new Set(patternLeftEdges)].join('/')}, 팝업≥앵커=${widthEn.popupAtLeastAnchor && widthKo.popupAtLeastAnchor}`);
+
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
   process.exitCode = failed.length === 0 ? 0 : 1;
