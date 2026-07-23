@@ -27,7 +27,7 @@
 - ticket 08 start: 1785b47
 - ticket 08 done: 7bd22f0 — 검증 실패 포커스. focusTargets를 해석 시점 함수로 — CSP는 directives가 빈 배열이라 포커스할 입력이 없을 수 있고 그때는 '디렉티브 추가' 버튼으로. 헤더 이름 ref를 두 표현 모두에(03 메모). smoke N26 여섯 경우, 포커스 이동 제거 시 전부 MISS 확인. smoke 96/96, 전 게이트 green. **번들 여유 1.8KB로 얇아짐(+141.2/143KB)**. **리뷰가 '스펙을 구현에 맞춰 고침'을 발견** — CSP 0개일 때 버튼으로 포커스를 보내고 AC 두 조항(바로 타이핑·첫 디렉티브 이름)을 지웠던 것 → 조항 복원 + 빈 행 생성으로 수정, N26에 타이핑 단언 추가
 - ticket 09 start: 7bd22f0
-- ticket 09 done: ecda314 — 헤더 행 전체가 트리거. IconButton 제거(중첩 버튼 방지), PanelSection에 renderHeader 훅. showLabel/hideLabel prop과 show/hide 카탈로그 키가 고아가 돼 함께 정리. smoke N27(세 지점 클릭·focusable 0·회전). smoke 97/97, 전 게이트 green
+- ticket 09 done: ecda314 — 헤더 행 전체가 트리거. IconButton 제거(중첩 버튼 방지), PanelSection에 renderHeader 훅. showLabel/hideLabel prop과 show/hide 카탈로그 키가 고아가 돼 함께 정리. smoke N27(세 지점 클릭·focusable 0·회전·24px 타깃). **리뷰가 티켓 04 계약 손실 발견** — IconButton을 걷어내며 usePressMotion도 사라졌고 N21b/N21c 목록에 이 표면이 없어 게이트가 못 봤다 → 계약 복구 + 목록에 추가. smoke 97/97, 전 게이트 green
 - ticket 10 start: ecda314
 - 티켓 06에 넘긴 것: 비활성 버튼 모션 부재 스모크 단언 (06이 저장 중 비활성 버튼을 만들 때)
 - 티켓 05·06에 넘긴 것: (a) 모션 타이밍 3곳 분산(press-motion·motion-row·motion-view) 공유 토큰으로 모으기, (b) 비활성 버튼 모션 부재 스모크 단언(06이 저장 중 비활성 버튼을 만들 때)
