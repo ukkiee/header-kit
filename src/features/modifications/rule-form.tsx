@@ -62,6 +62,31 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
   const [condOpen, setCondOpen] = useState(draft.conditions !== undefined);
   // 저장 차단 검증 (ui-refine 04) — Save 시점에 계산, 다음 Save까지 유지.
   const [fieldErrors, setFieldErrors] = useState<readonly RequiredField[]>([]);
+
+  /**
+   * 필수 필드 → 그 값을 입력하는 요소. 저장이 검증으로 막히면 첫 누락 필드로 포커스를
+   * 옮겨, 사용자가 어디를 고쳐야 하는지 찾지 않게 한다(stories 12~16).
+   *
+   * ref 객체를 종류별 렌더 분기와 **1:1로** 둔다 — 콜백 ref를 매 렌더 새로 만들면
+   * React가 떼었다 붙이기를 반복하고, 맵 하나에 몰아넣으면 어느 분기가 어느 키를
+   * 채우는지 읽어 낼 수 없다. `RequiredField`가 늘면 여기서 타입이 먼저 깨진다.
+   */
+  const nameRef = useRef<HTMLInputElement>(null);
+  const patternRef = useRef<HTMLInputElement>(null);
+  const substitutionRef = useRef<HTMLInputElement>(null);
+  const cspDirectiveNameRef = useRef<HTMLInputElement>(null);
+  const addDirectiveRef = useRef<HTMLButtonElement>(null);
+  // 값이 아니라 **해석 시점 함수**다 — CSP는 디렉티브가 0개일 수 있고, 그때는 고칠
+  // 입력 자체가 존재하지 않아 렌더 시점에 대상을 확정할 수 없다.
+  const focusTargets: Record<RequiredField, () => HTMLElement | null> = {
+    name: () => nameRef.current,
+    pattern: () => patternRef.current,
+    substitution: () => substitutionRef.current,
+    // CSP는 "이름 있는 디렉티브가 하나도 없음"이 누락이다. 행이 있으면 첫 이름으로,
+    // 하나도 없으면 사용자가 눌러야 할 '디렉티브 추가' 버튼으로 보낸다 — 포커스가
+    // 아무 데도 안 가면 "어디를 고쳐야 할지 찾지 않아도 된다"가 그 자리에서 깨진다.
+    directives: () => cspDirectiveNameRef.current ?? addDirectiveRef.current,
+  };
   const requiredError = (field: RequiredField) =>
     fieldErrors.includes(field) ? t('requiredField') : undefined;
   // CSP 디렉티브 필수 검증 — 이름 있는 디렉티브가 없으면 활성 (release r1 R-2).
@@ -98,7 +123,13 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
     // 빈 필수 필드는 저장을 통과하지 못한다 — 인라인 오류로 그 자리에서 알린다.
     const missing = missingRequiredFields(draft);
     setFieldErrors(missing);
-    if (missing.length > 0) return;
+    // 첫 누락 항목으로 — Redirect에서 패턴·치환이 둘 다 비면 검증이 패턴을 먼저
+    // 돌려주므로(rule-validation의 push 순서) 자연스러운 입력 순서를 따른다.
+    const firstMissing = missing[0];
+    if (firstMissing) {
+      focusTargets[firstMissing]()?.focus();
+      return;
+    }
     inFlight.current = true;
     setSaving(true);
     // 스코프 정리: 필터가 비면 매치 방식도 벗기고, 있으면 셀렉트 기본값을 확정한다.
@@ -239,6 +270,7 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
                 {draft.kind === 'cookie' ? (
                   // 쿠키 이름은 헤더 사전 자동완성 대상이 아니다 — 평문 입력.
                   <Input
+                    ref={nameRef}
                     autoFocus
                     value={draft.name}
                     onChange={(e) => setDraft({ ...draft, name: e.target.value } as Modification)}
@@ -246,6 +278,7 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
                   />
                 ) : (
                   <HeaderNameInput
+                    ref={nameRef}
                     autoFocus
                     value={draft.name}
                     onChange={(name) => setDraft({ ...draft, name } as Modification)}
@@ -313,6 +346,7 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
           {draft.directives.map((directive, i) => (
             <div key={i} className="flex items-center gap-1">
               <Input
+                ref={i === 0 ? cspDirectiveNameRef : undefined}
                 autoFocus={i === 0}
                 size="sm"
                 value={directive.name}
@@ -352,6 +386,7 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
             </div>
           ))}
           <Button
+            ref={addDirectiveRef}
             variant="ghost"
             size="sm"
             className="self-start"
@@ -369,6 +404,7 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
           <div className="grid grid-cols-2 gap-2">
             <Field label={t('ariaRedirectPattern')} error={requiredError('pattern')}>
               <Input
+                ref={patternRef}
                 autoFocus
                 font="mono"
                 value={draft.pattern}
@@ -378,6 +414,7 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
             </Field>
             <Field label={t('ariaRedirectSubstitution')} error={requiredError('substitution')}>
               <Input
+                ref={substitutionRef}
                 font="mono"
                 value={draft.substitution}
                 onChange={(e) => setDraft({ ...draft, substitution: e.target.value })}

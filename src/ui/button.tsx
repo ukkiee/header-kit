@@ -1,5 +1,6 @@
 import { cva, type VariantProps } from 'class-variance-authority';
 import { m } from 'motion/react';
+import type { Ref } from 'react';
 import { usePressMotion, type MotionButtonAttributes } from './press-motion';
 import { focusRing } from './tokens';
 import { accentBg, ghostInteractive } from './tokens';
@@ -28,11 +29,19 @@ const button = cva(
   },
 );
 
-export interface ButtonProps extends MotionButtonAttributes, VariantProps<typeof button> {}
+export interface ButtonProps extends MotionButtonAttributes, VariantProps<typeof button> {
+  ref?: Ref<HTMLButtonElement>;
+}
 
-export function Button({ className, variant, size, type = 'button', ...props }: ButtonProps) {
+export function Button({ className, variant, size, type = 'button', ref, ...props }: ButtonProps) {
   const press = usePressMotion(props.disabled);
   return (
-    <m.button type={type} className={button({ variant, size, className })} {...press} {...props} />
+    <m.button
+      ref={ref}
+      type={type}
+      className={button({ variant, size, className })}
+      {...press}
+      {...props}
+    />
   );
 }

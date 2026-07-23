@@ -1,4 +1,4 @@
-import { useId, useState, useSyncExternalStore, type ComponentType } from 'react';
+import { useId, useState, useSyncExternalStore, type ComponentType, type Ref } from 'react';
 import { suggestHeaderNames } from '@/core/autocomplete';
 import { Input, type InputProps } from '@/ui/input';
 import { useT } from '@/ui/i18n-context';
@@ -63,6 +63,12 @@ export interface HeaderNameInputProps extends Pick<InputProps, 'variant' | 'size
   onChange: (next: string) => void;
   userHeaders: readonly string[];
   className?: string;
+  /**
+   * 실제 입력 요소로 가는 ref — 검증 실패 시 포커스를 옮기는 데 쓴다(티켓 08).
+   * **두 표현 모두**에 넘긴다. 청크가 도착하며 교체되면 React가 이전 노드에서 떼고 새
+   * 노드에 붙이므로, 어느 쪽이 렌더돼 있든 ref는 살아 있는 입력을 가리킨다.
+   */
+  ref?: Ref<HTMLInputElement>;
 }
 
 /**
@@ -79,6 +85,7 @@ export function HeaderNameInput({
   variant,
   size,
   autoFocus,
+  ref,
 }: HeaderNameInputProps) {
   const t = useT();
   const label = t('headerName');
@@ -91,7 +98,7 @@ export function HeaderNameInput({
   // 사라지고 새 입력은 포커스를 안 받아, 폼을 열어도 아무 데도 포커스가 없었다.
   // 원래 우려했던 "사용자가 다른 필드로 옮긴 뒤 포커스를 도로 뺏김"은 React.lazy의
   // ~250ms 창에서 나온 것이고, lazy를 걷어내면서 그 창 자체가 사라졌다.
-  const rendered = { value, onChange, suggestions, label, className, variant, size, autoFocus };
+  const rendered = { value, onChange, suggestions, label, className, variant, size, autoFocus, ref };
 
   return Autocomplete ? <Autocomplete {...rendered} /> : <PlainHeaderNameInput {...rendered} />;
 }
@@ -110,6 +117,7 @@ function PlainHeaderNameInput({
   variant,
   size,
   autoFocus,
+  ref,
 }: HeaderNameAutocompleteProps) {
   const listId = useId();
   const [focused, setFocused] = useState(false);
@@ -117,6 +125,7 @@ function PlainHeaderNameInput({
   return (
     <>
       <Input
+        ref={ref}
         variant={variant}
         size={size}
         autoFocus={autoFocus}

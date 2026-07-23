@@ -2377,6 +2377,79 @@ try {
     `ko 폭=${[...new Set(widthKo.rows.map((r) => r.width))].join('/')} 미절단=${noClipping(widthKo.rows)}, ` +
     `패턴 좌변=${[...new Set(patternLeftEdges)].join('/')}, 팝업≥앵커=${widthEn.popupAtLeastAnchor && widthKo.popupAtLeastAnchor}`);
 
+  // N26: 검증 실패 시 첫 누락 입력으로 포커스 (ui-polish 08, stories 12~16).
+  // 저장 전에 포커스를 일부러 딴 곳(종류 셀렉트)에 둔다 — 폼 열림 autoFocus가 남아
+  // 있는 상태로 재면 "이동했다"가 아니라 "원래 거기 있었다"를 보게 된다.
+  const focusAfterBlockedSave = async (page, { kind, expected, setup }) => {
+    await page.getByRole('button', { name: 'Add rule' }).click();
+    await page.getByRole('button', { name: 'Cancel', exact: true }).waitFor({ timeout: 5000 });
+    if (kind) {
+      const typeSelect = page.getByRole('combobox', { name: 'Type', exact: true });
+      const listbox = page.getByRole('listbox');
+      await typeSelect.click();
+      await listbox.first().waitFor({ timeout: 5000 });
+      await page.getByRole('option', { name: kind, exact: true }).click();
+      await listbox.first().waitFor({ state: 'detached', timeout: 5000 });
+    }
+    if (setup) await setup();
+    await page.getByRole('combobox', { name: 'Type', exact: true }).focus();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.waitForTimeout(200);
+    // 기대 요소와 **동일한 노드**인지 본다 — 접근성 이름은 aria-label일 수도 <label>
+    // 연결일 수도 있어(이 폼은 둘 다 쓴다) 문자열 비교로는 어느 쪽인지 알 수 없다.
+    const onTarget = await expected(page)
+      .first()
+      .evaluate((el) => document.activeElement === el)
+      .catch(() => false);
+    const errorShown = (await page.getByText('Required.', { exact: true }).count()) > 0;
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await page.waitForTimeout(200);
+    return { onTarget, errorShown };
+  };
+
+  await seedProfiles([baseProfile('p-focus', 'Focus', [])]);
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Add rule' }).waitFor({ timeout: 5000 });
+
+  const focusCases = {
+    '헤더 이름': await focusAfterBlockedSave(popup, {
+      kind: null,
+      expected: (page) => page.getByLabel('Header name', { exact: true }),
+    }),
+    '쿠키 이름': await focusAfterBlockedSave(popup, {
+      kind: 'Request cookie',
+      expected: (page) => page.getByLabel('Cookie name', { exact: true }),
+    }),
+    'Redirect 패턴': await focusAfterBlockedSave(popup, {
+      kind: 'Redirect',
+      expected: (page) => page.getByLabel('Redirect pattern', { exact: true }),
+    }),
+    'Redirect 치환(패턴만 채움)': await focusAfterBlockedSave(popup, {
+      kind: 'Redirect',
+      setup: () => popup.getByLabel('Redirect pattern', { exact: true }).first().fill('^https://a/(.*)'),
+      expected: (page) => page.getByLabel('Redirect substitution', { exact: true }),
+    }),
+    // 디렉티브가 0개면 고칠 입력이 없다 — 사용자가 눌러야 할 추가 버튼으로 보낸다.
+    'CSP(행 없음)': await focusAfterBlockedSave(popup, {
+      kind: 'CSP',
+      expected: (page) => page.getByRole('button', { name: 'directive', exact: true }),
+    }),
+    'CSP(행 있음)': await focusAfterBlockedSave(popup, {
+      kind: 'CSP',
+      setup: async () => {
+        await popup.getByRole('button', { name: 'directive', exact: true }).click();
+        await popup.waitForTimeout(150);
+      },
+      expected: (page) => page.getByLabel('CSP directive name', { exact: true }),
+    }),
+  };
+  const allOnTarget = Object.values(focusCases).every((r) => r.onTarget);
+  const allErrorsShown = Object.values(focusCases).every((r) => r.errorShown);
+  record('N26: 검증 차단 시 첫 누락 입력으로 포커스 — 종류별 매핑 + 인라인 오류 유지',
+    allOnTarget && allErrorsShown,
+    Object.entries(focusCases).map(([k, r]) => `${k}=${r.onTarget ? 'ok' : 'MISS'}`).join(' ') +
+      `, 오류표시=${allErrorsShown}`);
+
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
   process.exitCode = failed.length === 0 ? 0 : 1;

@@ -1,5 +1,5 @@
 import { Autocomplete } from '@base-ui-components/react/autocomplete';
-import { useState } from 'react';
+import { useState, type Ref } from 'react';
 import { Input, type InputProps } from '@/ui/input';
 import { popupAnchored, popupItemText, popupPositioner } from '@/ui/tokens';
 
@@ -12,6 +12,8 @@ export interface HeaderNameAutocompleteProps
   /** placeholder 겸 접근성 이름 (카탈로그는 eager 쪽에서 읽어 넘긴다). */
   label: string;
   className?: string;
+  /** 실제 입력 요소로 가는 ref — 검증 실패 포커스에 쓴다(티켓 08). */
+  ref?: Ref<HTMLInputElement>;
 }
 
 /**
@@ -35,6 +37,7 @@ export default function HeaderNameAutocomplete({
   variant,
   size,
   autoFocus,
+  ref,
 }: HeaderNameAutocompleteProps) {
   const [open, setOpen] = useState(false);
 
@@ -52,6 +55,7 @@ export default function HeaderNameAutocomplete({
       <Autocomplete.Input
         render={
           <Input
+            ref={ref}
             variant={variant}
             size={size}
             autoFocus={autoFocus}
