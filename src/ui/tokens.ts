@@ -74,6 +74,6 @@ export const scrollbarThumb = 'w-full rounded-full bg-zinc-300 dark:bg-zinc-600'
  */
 export const selectFixedWidth = 'w-34';
 
-/** 키보드 포커스 링 — Button·SwitcherChip·사이드바 그립이 공유한다(offset 일관). */
+/** 키보드 포커스 링 — Button·IconButton·SwitcherChip·아코디언 헤더·사이드바 그립이 공유한다(offset 일관). */
 export const focusRing =
   'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500';

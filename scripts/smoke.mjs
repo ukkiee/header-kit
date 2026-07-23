@@ -2578,7 +2578,7 @@ try {
   const railProbe = async (page, name) => {
     const button = page.getByRole('button', { name, exact: true });
     const found = await button.waitFor({ timeout: 5000 }).then(() => true, () => false);
-    if (!found) return { found: false };
+    if (!found) return { found: false, hoverTip: false, focusTip: false, width: 0, height: 0, icon: 0 };
     const geom = await button.evaluate((el) => {
       const rect = el.getBoundingClientRect();
       const icon = el.querySelector('svg')?.getBoundingClientRect();
@@ -2588,58 +2588,76 @@ try {
         icon: icon ? Math.round(icon.width) : -1,
       };
     });
+    const tip = page.getByRole('tooltip').filter({ hasText: name }).first();
     await button.hover();
-    const hoverTip = await page
-      .getByRole('tooltip')
-      .filter({ hasText: name })
-      .first()
-      .waitFor({ timeout: 3000 })
-      .then(() => true, () => false);
+    const hoverTip = await tip.waitFor({ timeout: 3000 }).then(() => true, () => false);
     await page.mouse.move(1, 1);
-    await page.waitForTimeout(300);
-    // 마우스 없이 키보드 포커스만으로도 같은 정보를 얻어야 한다(story 29).
-    await button.focus();
-    const focusTip = await page
-      .getByRole('tooltip')
-      .filter({ hasText: name })
-      .first()
-      .waitFor({ timeout: 3000 })
+    // 호버 툴팁이 **사라진 것을 확인하고** 포커스로 넘어간다 — 고정 대기만 두면 뒤이은
+    // 포커스 단언이 남아 있는 호버 툴팁을 타고 통과할 수 있다.
+    const hoverTipClosed = await tip
+      .waitFor({ state: 'detached', timeout: 3000 })
       .then(() => true, () => false);
-    return { found: true, ...geom, hoverTip, focusTip };
+    // 마우스 없이 포커스만으로도 같은 정보를 얻어야 한다(story 29).
+    await button.focus();
+    const focusTip = await tip.waitFor({ timeout: 3000 }).then(() => true, () => false);
+    await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
+    await tip.waitFor({ state: 'detached', timeout: 3000 }).catch(() => {});
+    return { found: true, ...geom, hoverTip, hoverTipClosed, focusTip };
   };
 
   await popup.reload();
   await popup.getByRole('button', { name: 'Show profiles', exact: true }).waitFor({ timeout: 5000 });
-  const railEn = await railProbe(popup, 'Show backups');
-  // 선택 상태 표시는 유지된다 — 툴팁을 얻으려고 "지금 보고 있는 화면"을 잃으면 안 된다.
-  await popup.getByRole('button', { name: 'Show backups', exact: true }).click();
+  // 세 아이콘 전부 — 하나만 보면 나머지 둘이 라벨을 잃어도 통과한다.
+  const railEn = {
+    profiles: await railProbe(popup, 'Show profiles'),
+    backups: await railProbe(popup, 'Show backups'),
+    preferences: await railProbe(popup, 'Show preferences'),
+  };
+  // 실제 Tab으로 도달했을 때도 열리는지 — 프로그램적 focus()와 focus-visible 판정이
+  // 다를 수 있어 키보드 경로를 한 번은 진짜로 밟는다.
+  await popup.getByRole('button', { name: 'Show profiles', exact: true }).focus();
+  await popup.keyboard.press('Tab');
+  const tabTip = await popup
+    .getByRole('tooltip')
+    .filter({ hasText: 'Show backups' })
+    .first()
+    .waitFor({ timeout: 3000 })
+    .then(() => true, () => false);
+
+  // 선택 표시는 유지된다 — 툴팁을 얻으려고 "지금 보고 있는 화면"을 잃으면 안 된다.
+  const railBackups = popup.getByRole('button', { name: 'Show backups', exact: true });
+  const unselectedBg = await railBackups.evaluate((el) => getComputedStyle(el).backgroundColor);
+  await railBackups.click();
   await popup.waitForTimeout(250);
-  const railSelected = await popup
-    .getByRole('button', { name: 'Show backups', exact: true })
-    .evaluate((el) => ({
-      pressed: el.getAttribute('aria-pressed'),
-      background: getComputedStyle(el).backgroundColor,
-    }));
+  const railSelected = await railBackups.evaluate((el) => ({
+    pressed: el.getAttribute('aria-pressed'),
+    background: getComputedStyle(el).backgroundColor,
+  }));
   await popup.getByRole('button', { name: 'Show profiles', exact: true }).click();
 
   const railPopupKo = await context.newPage();
   await railPopupKo.setViewportSize({ width: 760, height: 580 });
   await railPopupKo.goto(`chrome-extension://${extensionId}/popup.html?locale=ko`);
   await railPopupKo.getByRole('button', { name: '프로필 화면', exact: true }).waitFor({ timeout: 5000 });
-  const railKo = await railProbe(railPopupKo, '백업 화면');
+  const railKo = {
+    profiles: await railProbe(railPopupKo, '프로필 화면'),
+    backups: await railProbe(railPopupKo, '백업 화면'),
+    preferences: await railProbe(railPopupKo, '환경설정 화면'),
+  };
   await railPopupKo.close();
 
-  const transparent = (color) => color === 'rgba(0, 0, 0, 0)' || color === 'transparent';
-  record('N28: 레일 아이콘 — en/ko 호버·키보드 포커스 툴팁, 클릭 대상·선택 표시 유지',
-    railEn.found && railEn.hoverTip && railEn.focusTip &&
-      railKo.found && railKo.hoverTip && railKo.focusTip &&
+  const allRail = [...Object.values(railEn), ...Object.values(railKo)];
+  const everyIconOk = allRail.every(
+    (r) =>
+      r.found && r.hoverTip && r.hoverTipClosed && r.focusTip &&
       // 셸을 바꾸며 32×28 / 아이콘 16px보다 작아지지 않았는지
-      railEn.width >= 32 && railEn.height >= 28 && railEn.icon >= 16 &&
-      railKo.width >= 32 && railKo.height >= 28 && railKo.icon >= 16 &&
-      railSelected.pressed === 'true' && !transparent(railSelected.background),
-    `en=${railEn.width}x${railEn.height}/icon${railEn.icon} 호버:${railEn.hoverTip} 포커스:${railEn.focusTip}, ` +
-    `ko=${railKo.width}x${railKo.height}/icon${railKo.icon} 호버:${railKo.hoverTip} 포커스:${railKo.focusTip}, ` +
-    `선택=pressed:${railSelected.pressed} bg:${railSelected.background}`);
+      r.width >= 32 && r.height >= 28 && r.icon >= 16,
+  );
+  record('N28: 레일 아이콘 셋 — en/ko 호버·포커스·Tab 툴팁, 클릭 대상·선택 표시 유지',
+    everyIconOk && tabTip &&
+      railSelected.pressed === 'true' && railSelected.background !== unselectedBg,
+    `아이콘 ${allRail.length}개 전부 ok=${everyIconOk} (예: ${railEn.backups.width}x${railEn.backups.height}/icon${railEn.backups.icon}), ` +
+    `Tab 툴팁=${tabTip}, 선택 배경 ${unselectedBg} → ${railSelected.background} (pressed=${railSelected.pressed})`);
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
