@@ -1,6 +1,8 @@
 import { Menu as BaseMenu } from '@base-ui-components/react/menu';
 import { cva, type VariantProps } from 'class-variance-authority';
+import { m } from 'motion/react';
 import type { ComponentProps } from 'react';
+import { usePressMotion } from './press-motion';
 import { popupItem, popupSurface } from './tokens';
 
 /**
@@ -50,5 +52,14 @@ export interface MenuItemProps
     VariantProps<typeof menuItem> {}
 
 export function MenuItem({ tone, className, ...props }: MenuItemProps) {
-  return <BaseMenu.Item className={menuItem({ tone, className })} {...props} />;
+  // 메뉴 항목도 버튼 프리미티브다 (ADR 0012) — 누름·호버를 같은 헬퍼로 통일한다.
+  // 비활성은 cva의 data-[disabled]:pointer-events-none이 이미 제스처를 막는다.
+  const press = usePressMotion();
+  return (
+    <BaseMenu.Item
+      className={menuItem({ tone, className })}
+      render={<m.div {...press} />}
+      {...props}
+    />
+  );
 }

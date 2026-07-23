@@ -1581,7 +1581,7 @@ try {
         return !!el && document.activeElement === el;
       },
       null,
-      { timeout: 3000 },
+      { timeout: 500 },
     )
     .then(() => true, () => false);
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
@@ -1795,7 +1795,9 @@ try {
   // 남아야 한다 — "약한 전이"가 아니라 "전이 없음"이 계약이다. 기능이 도는지만 보던
   // N21로는 애니메이션이 살아 있어도 통과하므로 여기서 부재를 직접 관측한다.
   //
-  // 누른 뒤에는 요소 밖으로 옮기고 놓는다 — 그대로 놓으면 클릭이 발생해 화면이 바뀐다.
+  // **대조를 먼저 돌린다.** LazyMotion features는 지연 로드라, 로드 전에 부재를 재면
+  // 아무것도 구현하지 않아도 통과한다. 같은 대기 시간에 기본 모션이 실제로 움직이는 것을
+  // 먼저 확인하면, 뒤이은 부재 단언의 대기가 충분했다는 근거가 된다.
   const transformStates = async (page, locator) => {
     const el = locator.first();
     await el.waitFor({ timeout: 5000 });
@@ -1805,13 +1807,29 @@ try {
     await page.waitForTimeout(200);
     const hover = await read();
     const box = await el.boundingBox();
+    // 박스가 없으면 값으로 돌려준다 — 예외로 스위트를 죽이면 FAIL로 기록되지 않는다.
+    if (!box) return { rest, hover, down: 'no-bounding-box' };
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
     await page.waitForTimeout(150);
     const down = await read();
+    // 눌린 자리에서 놓으면 클릭이 발생해 화면이 바뀐다 — 밖으로 옮겨 놓는다.
     await page.mouse.move(1, 1);
     await page.mouse.up();
     return { rest, hover, down };
+  };
+
+  // ADR 0012가 열거한 버튼 프리미티브 넷을 같은 프로브로 훑는다.
+  const probePressPrimitives = async (page) => {
+    // 행 액션은 opacity-0 → group-hover다. 행을 먼저 호버해야 아이콘 버튼의 rest를
+    // "보이지만 호버되지 않은" 상태로 읽을 수 있다.
+    await page.getByText('X-P').first().hover();
+    const icon = await transformStates(page, page.getByRole('button', { name: 'Edit', exact: true }));
+    const button = await transformStates(page, page.getByRole('button', { name: 'Add rule' }));
+    const chip = await transformStates(page, page.getByRole('button', { name: 'New profile' }));
+    await page.getByRole('button', { name: 'Profile menu' }).click();
+    const item = await transformStates(page, page.getByRole('menuitem', { name: 'Duplicate' }));
+    return { button, chip, icon, item };
   };
 
   await seedProfiles([
@@ -1819,33 +1837,34 @@ try {
       { kind: 'request-header', id: 'm1', name: 'X-P', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
     ]),
   ]);
-  await popup.emulateMedia({ reducedMotion: 'reduce' });
-  await popup.reload();
-  // LazyMotion features는 지연 로드다 — 로드 전에는 어차피 정적이라 단언이 공짜로
-  // 통과한다. 기본 모션 대조가 실제로 움직이는 것을 보므로 그 시점엔 이미 로드돼 있다.
-  await popup.getByRole('button', { name: 'Add rule' }).first().waitFor({ timeout: 5000 });
-  await popup.waitForTimeout(700);
-  const reducedButton = await transformStates(popup, popup.getByRole('button', { name: 'Add rule' }));
-  const reducedChip = await transformStates(popup, popup.getByRole('button', { name: 'New profile' }));
-  await popup.getByRole('button', { name: 'Edit', exact: true }).first().hover();
-  const reducedIcon = await transformStates(popup, popup.getByRole('button', { name: 'Edit', exact: true }));
-  const allNone = [reducedButton, reducedChip, reducedIcon].every(
-    (s) => s.rest === 'none' && s.hover === 'none' && s.down === 'none',
-  );
-  record('N21b: reduced-motion — 버튼·칩·아이콘버튼의 호버·누름에 transform이 없다',
-    allNone,
-    `button=${JSON.stringify(reducedButton)}, chip=${JSON.stringify(reducedChip)}, icon=${JSON.stringify(reducedIcon)}`);
 
-  // N21c: 감도 대조 — 같은 프로브가 기본 모션에서는 움직임을 본다. 이게 없으면
-  // "아무것도 구현하지 않아도 N21b가 통과"로 퇴화한다.
+  // N21b: 감도 대조 — 프로브가 실제로 모션을 감지할 수 있음을 먼저 보인다.
   await popup.emulateMedia({ reducedMotion: null });
   await popup.reload();
   await popup.getByRole('button', { name: 'Add rule' }).first().waitFor({ timeout: 5000 });
   await popup.waitForTimeout(700);
-  const livelyButton = await transformStates(popup, popup.getByRole('button', { name: 'Add rule' }));
-  record('N21c: 감도 대조 — 기본 모션에서는 같은 프로브가 호버·누름 변형을 관측한다',
-    livelyButton.rest === 'none' && livelyButton.hover !== 'none' && livelyButton.down !== 'none',
-    JSON.stringify(livelyButton));
+  const lively = await probePressPrimitives(popup);
+  const allMoving = Object.values(lively).every(
+    (s) => s.rest === 'none' && s.hover !== 'none' && s.down !== 'none',
+  );
+  record('N21b: 감도 대조 — 기본 모션에서 버튼·칩·아이콘버튼·메뉴항목이 호버·누름에 변형한다',
+    allMoving,
+    Object.entries(lively).map(([k, v]) => `${k}=${v.hover}/${v.down}`).join(' '));
+
+  // N21c: 부재 단언 — 같은 프로브가 reduced-motion에서는 아무 변형도 보지 못한다.
+  await popup.emulateMedia({ reducedMotion: 'reduce' });
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Add rule' }).first().waitFor({ timeout: 5000 });
+  await popup.waitForTimeout(700);
+  const still = await probePressPrimitives(popup);
+  const allNone = Object.values(still).every(
+    (s) => s.rest === 'none' && s.hover === 'none' && s.down === 'none',
+  );
+  record('N21c: reduced-motion — 네 프리미티브 모두 호버·누름에 transform이 없다',
+    allNone,
+    Object.entries(still).map(([k, v]) => `${k}=${v.hover}/${v.down}`).join(' '));
+  await popup.emulateMedia({ reducedMotion: null });
+  await popup.reload();
 
   // N22: 스크롤바 테마 (ui-polish 02) — 앱 스타일 스크롤바가 다크 모드를 따르는지.
   // 토큰에서 dark: 변형을 지워도 tsc·vitest·smoke·번들·스토리북은 전부 통과하므로,

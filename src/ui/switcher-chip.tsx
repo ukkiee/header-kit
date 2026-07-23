@@ -23,7 +23,7 @@ const switcherChip = cva(
 export interface SwitcherChipProps extends MotionButtonAttributes, VariantProps<typeof switcherChip> {}
 
 export function SwitcherChip({ selected, className, type = 'button', ...props }: SwitcherChipProps) {
-  const press = usePressMotion();
+  const press = usePressMotion(props.disabled);
   return (
     <m.button
       type={type}

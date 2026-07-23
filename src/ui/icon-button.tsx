@@ -51,7 +51,7 @@ export function IconButton({
   ref,
   ...props
 }: IconButtonProps) {
-  const press = usePressMotion();
+  const press = usePressMotion(props.disabled);
   return (
     <Tooltip.Root>
       <Tooltip.Trigger
