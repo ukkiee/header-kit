@@ -15,3 +15,5 @@
 - stage4 structure gate r1: done — needs-attention 2건, 사용자 트리아지 **둘 다 accept**. S-1 번들 게이트가 즉시 청크 하나만 측정(→ popup.html에서 즉시 그래프 도출, 한도는 여유 유지하도록 재표현 135→143), S-2 탭 셸이 min-h-screen이라 ScrollArea가 스크롤을 소유 못함(→ h-screen, smoke N22c 신설). smoke 82/82. r2 재검증 필요
 - stage4 structure gate r2: done — ok:true, verdict approve, 발견 0건 (S-1·S-2 resolved, 신규 이슈 없음). **structure 게이트 통과** — 남은 티켓은 게이트 없이 03~10 진행, Stage 5에서 릴리스 게이트
 - ticket 03 start: 2001587
+- ticket 03 done: b25d8cc — Autocomplete 채택 + 지연 로드(26.5KB deferred, 즉시 합계 +1.6KB로 한도 내). React.lazy 대신 모듈 스코프 로더(lazy 서스펜드 왕복 ~250ms 실측), 유휴 프리로드는 첫 페인트 악화로 철회. **리뷰가 편집 소실 결함 발견** — 후보 없을 때 팝업이 열려 폼이 aria-hidden에 덮이고 Esc가 폼을 닫았다 → open 제어 + 조건부 팝업, L2d 신설. smoke 85/85, 전 게이트 green
+- ticket 04 start: b25d8cc
