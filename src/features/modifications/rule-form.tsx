@@ -197,6 +197,7 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
               size="md"
               aria-label={t('ariaUrlMatchType')}
               // 옆의 패턴 입력과 같은 행이라, 폭이 값에 따라 변하면 입력이 밀린다.
+              // width가 폭을 고정하고, 아래 shrink-0은 좁은 자리에서 눌리지 않게 지킨다.
               width="fixed"
               value={('urlMatchType' in draft ? draft.urlMatchType : undefined) ?? defaultMatchType}
               onValueChange={(value) =>

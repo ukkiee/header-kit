@@ -2287,7 +2287,7 @@ try {
   // N25: URL 매치 방식 셀렉트 폭 고정 (ui-polish 07, stories 1·2·3).
   // 폭 안정성만 보면 폭을 좁게 잡아 라벨이 잘려도 통과한다 — 두 단언을 함께 건다.
   // 로케일마다 라벨 길이가 달라 en에서만 재면 ko 회귀를 놓치므로 양쪽을 순회한다.
-  const measureMatchTypeWidths = async (page, matchLabel, editLabel) => {
+  const measureMatchTypeWidths = async (page, matchLabel, editLabel, probeAfterPick) => {
     await page.getByRole('button', { name: editLabel, exact: true }).first().click();
     const trigger = page.getByRole('combobox', { name: matchLabel, exact: true });
     await trigger.waitFor({ timeout: 5000 });
@@ -2306,6 +2306,7 @@ try {
     await closePopup();
 
     const rows = [];
+    const probes = [];
     let popupAtLeastAnchor = true;
     for (const name of options) {
       await openPopup();
@@ -2316,17 +2317,22 @@ try {
       await page.getByRole('option', { name, exact: true }).click();
       await closePopup();
       rows.push(
+        // 라벨 노드는 `truncate`가 붙은 것이다 — 위치로 고르면(첫 span) 아이콘 래퍼를
+        // 집을 수 있고, 아이콘은 절대 넘치지 않아 절단 단언이 조용히 무력해진다.
         await trigger.evaluate((el) => {
-          const value = el.querySelector('span');
+          const value = el.querySelector('.truncate');
           return {
             width: Number(el.getBoundingClientRect().width.toFixed(2)),
-            scroll: value?.scrollWidth ?? -1,
-            client: value?.clientWidth ?? -1,
+            scroll: value ? value.scrollWidth : -1,
+            client: value ? value.clientWidth : -1,
           };
         }),
       );
+      // 선택할 때마다 호출자가 원하는 것을 함께 잰다 — 여닫는 동작을 밖에서 한 번 더
+      // 흉내 내면 대기 규율이 두 곳으로 갈라진다.
+      if (probeAfterPick) probes.push(await probeAfterPick());
     }
-    return { options, rows, popupAtLeastAnchor, trigger, listbox };
+    return { options, rows, popupAtLeastAnchor, probes };
   };
 
   await seedProfiles([
@@ -2336,19 +2342,14 @@ try {
     ]),
   ]);
   await popup.reload();
-  const widthEn = await measureMatchTypeWidths(popup, 'URL match type', 'Edit');
   // 폭이 고정이면 옆의 패턴 입력도 자리를 지킨다 — 사용자가 말한 증상이 이것이다.
-  const patternLeftEdges = [];
-  for (const name of widthEn.options) {
-    await widthEn.trigger.click();
-    await widthEn.listbox.first().waitFor({ timeout: 5000 });
-    await popup.getByRole('option', { name, exact: true }).click();
-    await widthEn.listbox.first().waitFor({ state: 'detached', timeout: 5000 });
-    patternLeftEdges.push(
-      await popup.getByLabel('URL filter').first()
-        .evaluate((el) => Number(el.getBoundingClientRect().left.toFixed(2))),
-    );
-  }
+  const widthEn = await measureMatchTypeWidths(popup, 'URL match type', 'Edit', () =>
+    popup
+      .getByLabel('URL filter')
+      .first()
+      .evaluate((el) => Number(el.getBoundingClientRect().left.toFixed(2))),
+  );
+  const patternLeftEdges = widthEn.probes;
   await popup.getByRole('button', { name: 'Cancel', exact: true }).click();
 
   const widthPopupKo = await context.newPage();
@@ -2361,7 +2362,10 @@ try {
   const stableWidth = (rows) =>
     rows.length > 1 &&
     Math.max(...rows.map((r) => r.width)) - Math.min(...rows.map((r) => r.width)) <= 0.5;
-  const noClipping = (rows) => rows.every((r) => r.scroll <= r.client + 1);
+  // 노드를 못 찾으면(-1) 통과시키지 않는다 — R-2가 지키려는 단 하나의 단언이라
+  // 공허하게 참이 되면 안 된다.
+  const noClipping = (rows) =>
+    rows.length > 0 && rows.every((r) => r.scroll >= 0 && r.scroll <= r.client + 1);
   const patternStable =
     patternLeftEdges.length > 1 &&
     Math.max(...patternLeftEdges) - Math.min(...patternLeftEdges) <= 0.5;

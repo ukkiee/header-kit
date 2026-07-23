@@ -67,12 +67,12 @@ export const scrollbarThumb = 'w-full rounded-full bg-zinc-300 dark:bg-zinc-600'
 
 /**
  * 고정 폭 셀렉트 트리거 — 선택한 값에 따라 폭이 변하지 않아야 하는 자리에 쓴다.
- * 값이 8.5rem(136px)인 근거: 가장 긴 라벨은 매치 방식의 en `Regex (advanced)`로,
- * 라벨 폭 102px + 아이콘 12px + 간격 4px + 좌우 패딩 12px ≈ 130px이 필요하다(실측
- * 자연 폭 132px). 여유 4px을 얹었다. 라벨이 길어지면 폭보다 en/ko 미절단 스모크
- * 단언이 먼저 깨져 알려 준다.
+ * 값이 34(8.5rem = 136px)인 근거: 가장 긴 라벨은 매치 방식의 en `Regex (advanced)`로
+ * 라벨 102px + 아이콘 12px + 간격 4px + 좌우 패딩 12px = 130px, 여기에 좌우 보더 2px을
+ * 더해 실측 자연 폭이 132px이다. 여유 4px을 얹었다. 라벨이 길어지면 폭보다 en/ko
+ * 미절단 스모크 단언(N25)이 먼저 깨져 알려 준다.
  */
-export const selectFixedWidth = 'w-[8.5rem]';
+export const selectFixedWidth = 'w-34';
 
 /** 키보드 포커스 링 — Button·SwitcherChip·사이드바 그립이 공유한다(offset 일관). */
 export const focusRing =
