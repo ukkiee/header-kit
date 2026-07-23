@@ -1571,7 +1571,19 @@ try {
   // a: 빈 헤더 이름 Save → 인라인 오류 + aria-invalid + 저장 안 됨(폼 유지)
   await popup.getByRole('button', { name: 'Add rule' }).click();
   const nameInput = popup.getByLabel('Header name', { exact: true }).first();
-  const autofocused = await nameInput.evaluate((el) => document.activeElement === el);
+  // 클릭 직후 한 번만 읽으면 레이스다 — 헤더 이름 입력은 지연 청크가 도착하며 한 번
+  // 교체되고(ui-polish 03), 그 찰나에 읽으면 이전 노드나 body를 보게 된다. 사용자에게
+  // 보이는 계약은 "폼이 열리면 이 필드에 포커스가 있다"이므로 정착을 기다려 단언한다.
+  const autofocused = await popup
+    .waitForFunction(
+      () => {
+        const el = document.querySelector('input[aria-label="Header name"]');
+        return !!el && document.activeElement === el;
+      },
+      null,
+      { timeout: 3000 },
+    )
+    .then(() => true, () => false);
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
   const inlineError = await popup.getByText('Required.', { exact: true }).first()
     .waitFor({ timeout: 5000 }).then(() => true, () => false);
@@ -1777,6 +1789,63 @@ try {
   record('N21: motion 무결성 — reduced-motion에서도 행 추가/삭제·화면 전환 정상',
     afterAdd && afterDelete && prefsAfterFade,
     `add=${afterAdd}, delete=${afterDelete}, rail-fade=${prefsAfterFade}`);
+
+  // N21b/N21c: 누름·호버 모션 계약 (ui-polish 04, ADR 0012).
+  // reduced-motion에서는 애니메이션 prop 자체가 붙지 않으므로 계산 transform이 none으로
+  // 남아야 한다 — "약한 전이"가 아니라 "전이 없음"이 계약이다. 기능이 도는지만 보던
+  // N21로는 애니메이션이 살아 있어도 통과하므로 여기서 부재를 직접 관측한다.
+  //
+  // 누른 뒤에는 요소 밖으로 옮기고 놓는다 — 그대로 놓으면 클릭이 발생해 화면이 바뀐다.
+  const transformStates = async (page, locator) => {
+    const el = locator.first();
+    await el.waitFor({ timeout: 5000 });
+    const read = () => el.evaluate((node) => getComputedStyle(node).transform);
+    const rest = await read();
+    await el.hover();
+    await page.waitForTimeout(200);
+    const hover = await read();
+    const box = await el.boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(150);
+    const down = await read();
+    await page.mouse.move(1, 1);
+    await page.mouse.up();
+    return { rest, hover, down };
+  };
+
+  await seedProfiles([
+    baseProfile('p-press', 'Press', [
+      { kind: 'request-header', id: 'm1', name: 'X-P', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+    ]),
+  ]);
+  await popup.emulateMedia({ reducedMotion: 'reduce' });
+  await popup.reload();
+  // LazyMotion features는 지연 로드다 — 로드 전에는 어차피 정적이라 단언이 공짜로
+  // 통과한다. 기본 모션 대조가 실제로 움직이는 것을 보므로 그 시점엔 이미 로드돼 있다.
+  await popup.getByRole('button', { name: 'Add rule' }).first().waitFor({ timeout: 5000 });
+  await popup.waitForTimeout(700);
+  const reducedButton = await transformStates(popup, popup.getByRole('button', { name: 'Add rule' }));
+  const reducedChip = await transformStates(popup, popup.getByRole('button', { name: 'New profile' }));
+  await popup.getByRole('button', { name: 'Edit', exact: true }).first().hover();
+  const reducedIcon = await transformStates(popup, popup.getByRole('button', { name: 'Edit', exact: true }));
+  const allNone = [reducedButton, reducedChip, reducedIcon].every(
+    (s) => s.rest === 'none' && s.hover === 'none' && s.down === 'none',
+  );
+  record('N21b: reduced-motion — 버튼·칩·아이콘버튼의 호버·누름에 transform이 없다',
+    allNone,
+    `button=${JSON.stringify(reducedButton)}, chip=${JSON.stringify(reducedChip)}, icon=${JSON.stringify(reducedIcon)}`);
+
+  // N21c: 감도 대조 — 같은 프로브가 기본 모션에서는 움직임을 본다. 이게 없으면
+  // "아무것도 구현하지 않아도 N21b가 통과"로 퇴화한다.
+  await popup.emulateMedia({ reducedMotion: null });
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Add rule' }).first().waitFor({ timeout: 5000 });
+  await popup.waitForTimeout(700);
+  const livelyButton = await transformStates(popup, popup.getByRole('button', { name: 'Add rule' }));
+  record('N21c: 감도 대조 — 기본 모션에서는 같은 프로브가 호버·누름 변형을 관측한다',
+    livelyButton.rest === 'none' && livelyButton.hover !== 'none' && livelyButton.down !== 'none',
+    JSON.stringify(livelyButton));
 
   // N22: 스크롤바 테마 (ui-polish 02) — 앱 스타일 스크롤바가 다크 모드를 따르는지.
   // 토큰에서 dark: 변형을 지워도 tsc·vitest·smoke·번들·스토리북은 전부 통과하므로,

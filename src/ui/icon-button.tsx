@@ -1,7 +1,9 @@
 import { Tooltip } from '@base-ui-components/react/tooltip';
+import { m } from 'motion/react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import type { LucideIcon } from 'lucide-react';
-import type { ButtonHTMLAttributes, ReactNode, Ref } from 'react';
+import type { ReactNode, Ref } from 'react';
+import { usePressMotion, type MotionButtonAttributes } from './press-motion';
 import { ghostInteractive, tooltipPopup } from './tokens';
 
 /**
@@ -30,7 +32,7 @@ export function IconTooltipProvider({ children }: { children: ReactNode }) {
 }
 
 export interface IconButtonProps
-  extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'>,
+  extends Omit<MotionButtonAttributes, 'children'>,
     VariantProps<typeof iconButton> {
   /** aria-label 겸 기본 툴팁 텍스트. */
   label: string;
@@ -49,15 +51,17 @@ export function IconButton({
   ref,
   ...props
 }: IconButtonProps) {
+  const press = usePressMotion();
   return (
     <Tooltip.Root>
       <Tooltip.Trigger
         render={
-          <button
+          <m.button
             type="button"
             ref={ref}
             aria-label={label}
             className={iconButton({ tone, className })}
+            {...press}
             {...props}
           />
         }

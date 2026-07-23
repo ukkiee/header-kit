@@ -1,5 +1,6 @@
 import { cva, type VariantProps } from 'class-variance-authority';
-import type { ButtonHTMLAttributes } from 'react';
+import { m } from 'motion/react';
+import { usePressMotion, type MotionButtonAttributes } from './press-motion';
 import { focusRing } from './tokens';
 
 /**
@@ -7,7 +8,7 @@ import { focusRing } from './tokens';
  * 토글 상태를 표현하는 Chip과 달리 "지금 보고 있는 것"의 선택을 표현한다.
  */
 const switcherChip = cva(
-  `flex w-full shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-xs whitespace-nowrap transition active:scale-95 ${focusRing}`,
+  `flex w-full shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-xs whitespace-nowrap transition-colors ${focusRing}`,
   {
     variants: {
       selected: {
@@ -19,16 +20,16 @@ const switcherChip = cva(
   },
 );
 
-export interface SwitcherChipProps
-  extends ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof switcherChip> {}
+export interface SwitcherChipProps extends MotionButtonAttributes, VariantProps<typeof switcherChip> {}
 
 export function SwitcherChip({ selected, className, type = 'button', ...props }: SwitcherChipProps) {
+  const press = usePressMotion();
   return (
-    <button
+    <m.button
       type={type}
       aria-current={selected ? 'true' : undefined}
       className={switcherChip({ selected, className })}
+      {...press}
       {...props}
     />
   );

@@ -4,13 +4,31 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] 일반 버튼·아이콘 버튼·스위처 칩의 누름·호버가 CSS 전이가 아니라 spring으로 반응한다
-- [ ] reduced-motion에서 세 프리미티브가 **애니메이션 prop을 아예 받지 않는다** — 지속시간 0짜리 전이로 대체하지 않는다. 그래야 모션 부재가 계산 스타일로 관측된다
-- [ ] 세 프리미티브가 reduced-motion 분기를 각자 반복하지 않고 공유 헬퍼 하나를 통과한다 (프리팩터 — 지금 CSS 마이크로 인터랙션이 프리미티브마다 흩어져 있다)
-- [ ] smoke: reduced-motion에서 호버·포인터다운 중 해당 요소의 계산 `transform`이 `none`
-- [ ] smoke 감도 대조: 기본 모션에서 **같은 프로브**가 누름 중 `transform !== none`을 관측한다 — 부재 단언이 "아무것도 구현하지 않아도 통과"로 퇴화하지 않음을 보인다
-- [ ] 기존 버튼 기능 회귀 0 — 클릭, 포커스 링, 비활성 상태
-- [ ] 시작 지표 중앙값을 이 티켓 파일에 기록한다 — 전 버튼이 모션 컴포넌트가 되는 변경이라 첫 페인트에 가장 민감하다
-- [ ] 전 게이트 green
+- [x] 세 프리미티브의 누름·호버가 spring으로 반응한다 — 실측 hover `matrix(1.02…)`, press `matrix(0.951…)`. `active:scale-95`와 포괄 `transition`은 제거하고 색 전이만 CSS(`transition-colors`)에 남겼다
+- [x] reduced-motion에서 애니메이션 prop을 아예 받지 않는다 — `usePressMotion()`이 빈 객체를 돌려준다. 지속시간 0 대체 아님
+- [x] 공유 헬퍼 하나 — `src/ui/press-motion.ts`. reduced-motion 분기도, motion과 이름이 겹치는 DOM 핸들러 Omit 타입도 여기 한 곳에 있다
+- [x] smoke **N21b**: reduced-motion에서 버튼·칩·아이콘버튼 셋 다 rest·hover·down 전부 `none`
+- [x] smoke **N21c** 감도 대조: 기본 모션에서 같은 프로브가 hover·down 변형을 관측. **모션을 없애 보니 N21b는 그대로 통과하고 N21c만 FAIL했다** — 대조가 없으면 부재 단언이 정말로 퇴화한다는 증거다
+- [x] 기능 회귀 0 — smoke 87/87 (2회 연속)
+- [x] 시작 지표 기록 — 아래
+- [x] 전 게이트 green — tsc 0 · vitest 203/203 · build · bundle-gate PASS(+139.7KB/143KB) · smoke 87/87 · storybook · ui-diag(overflow 0, 시작 지표 PASS)
+
+## 측정치
+
+- **시작 지표:** first paint 64/60/64ms, dom ready 39.0/37.2/38.7ms (기준선 64.0 / 36.7). **회귀 없음.**
+  - ADR 0012는 "모든 버튼이 motion 컴포넌트가 되어 렌더 비용이 늘고(팝업 첫 페인트에 가장 민감)"를 트레이드오프로 적었는데, 실측으로는 잡히지 않는다. motion 런타임이 이미 초기 청크에 있었고 features는 지연 청크라, 추가된 것이 컴포넌트 래핑뿐이기 때문으로 보인다.
+- **번들:** 즉시 합계 525.5 → **525.7KB (+0.2KB)**. features는 여전히 지연 청크(36.4KB).
+
+## 딸려 온 것 둘
+
+**Storybook에 MotionProvider 데코레이터.** 버튼이 `m` 컴포넌트가 되면서 `LazyMotion strict`의 조상이 필요해졌다 — 데코레이터가 없으면 버튼을 쓰는 **모든** 스토리가 렌더 단계에서 실패한다. 스토리북이 프리미티브의 렌더 게이트라 이걸 안 하면 게이트가 통째로 깨진다.
+
+**`MotionButtonAttributes` 타입.** motion이 `onAnimationStart`·`onDrag*`를 자기 의미로 재정의해 DOM 핸들러 타입과 충돌한다. 세 프리미티브가 같은 Omit을 반복하지 않도록 헬퍼에 뒀다.
+
+## 티켓 03이 심어 둔 잠복 레이스를 드러냈다
+
+N18a(폼 열면 헤더 이름에 포커스)가 깨졌다. 원인은 이 티켓이 아니라 **티켓 03의 지연 청크 교체**다 — N18a는 클릭 직후 `document.activeElement`를 한 번만 읽는데, 그 찰나에 존재하는 것은 datalist 표현이고 곧 Autocomplete로 교체된다. 이 티켓이 렌더 비용을 조금 늘리면서 그 창에 걸리게 됐을 뿐이다.
+
+단독 실행으로 포커스가 3/3 정상 도달함을 먼저 확인하고(=제품 결함 아님), 사용자에게 보이는 계약("폼이 열리면 이 필드에 포커스가 있다")을 그대로 두되 정착을 기다려 단언하도록 고쳤다. 고친 뒤 2회 연속 87/87.

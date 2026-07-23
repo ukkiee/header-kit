@@ -1,10 +1,13 @@
 import { cva, type VariantProps } from 'class-variance-authority';
-import type { ButtonHTMLAttributes } from 'react';
+import { m } from 'motion/react';
+import { usePressMotion, type MotionButtonAttributes } from './press-motion';
 import { focusRing } from './tokens';
 import { accentBg, ghostInteractive } from './tokens';
 
+// 누름·호버는 motion이 소유한다 (ADR 0012) — active:scale-95는 여기서 사라진다.
+// 색 전이는 CSS가 계속 맡는다(transition-colors).
 const button = cva(
-  `inline-flex shrink-0 cursor-pointer items-center justify-center whitespace-nowrap font-medium transition active:scale-95 disabled:pointer-events-none disabled:opacity-50 ${focusRing}`,
+  `inline-flex shrink-0 cursor-pointer items-center justify-center whitespace-nowrap font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 ${focusRing}`,
   {
     variants: {
       // pill(rounded-full)은 주 액션 신호 — DESIGN의 primary CTA 문법.
@@ -25,10 +28,11 @@ const button = cva(
   },
 );
 
-export interface ButtonProps
-  extends ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof button> {}
+export interface ButtonProps extends MotionButtonAttributes, VariantProps<typeof button> {}
 
 export function Button({ className, variant, size, type = 'button', ...props }: ButtonProps) {
-  return <button type={type} className={button({ variant, size, className })} {...props} />;
+  const press = usePressMotion();
+  return (
+    <m.button type={type} className={button({ variant, size, className })} {...press} {...props} />
+  );
 }
