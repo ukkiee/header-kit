@@ -2397,14 +2397,24 @@ try {
     await page.waitForTimeout(200);
     // 기대 요소와 **동일한 노드**인지 본다 — 접근성 이름은 aria-label일 수도 <label>
     // 연결일 수도 있어(이 폼은 둘 다 쓴다) 문자열 비교로는 어느 쪽인지 알 수 없다.
-    const onTarget = await expected(page)
-      .first()
-      .evaluate((el) => document.activeElement === el)
-      .catch(() => false);
+    // 기대 요소와 **동일한 노드**인지 본다. 시간 상한을 둬 회귀가 기본 30초 타임아웃으로
+    // 번지지 않게 한다 — 없는 요소를 기다리는 것도 실패이지 지연이 아니다.
+    const target = expected(page).first();
+    const present = await target.waitFor({ timeout: 2000 }).then(() => true, () => false);
+    const onTarget = present
+      ? await target.evaluate((el) => document.activeElement === el).catch(() => false)
+      : false;
+    // story 13: 포커스만이 아니라 **바로 타이핑**돼야 한다. 버튼에 포커스가 가면
+    // 포커스 단언은 통과하지만 여기서 걸린다.
+    let typeable = false;
+    if (onTarget) {
+      await page.keyboard.type('zz');
+      typeable = (await target.inputValue().catch(() => '')) === 'zz';
+    }
     const errorShown = (await page.getByText('Required.', { exact: true }).count()) > 0;
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
     await page.waitForTimeout(200);
-    return { onTarget, errorShown };
+    return { onTarget, typeable, errorShown };
   };
 
   await seedProfiles([baseProfile('p-focus', 'Focus', [])]);
@@ -2429,10 +2439,10 @@ try {
       setup: () => popup.getByLabel('Redirect pattern', { exact: true }).first().fill('^https://a/(.*)'),
       expected: (page) => page.getByLabel('Redirect substitution', { exact: true }),
     }),
-    // 디렉티브가 0개면 고칠 입력이 없다 — 사용자가 눌러야 할 추가 버튼으로 보낸다.
+    // 디렉티브가 0개면 고칠 입력이 아직 없다 — 빈 행을 만들어 그 이름 입력으로 보낸다.
     'CSP(행 없음)': await focusAfterBlockedSave(popup, {
       kind: 'CSP',
-      expected: (page) => page.getByRole('button', { name: 'directive', exact: true }),
+      expected: (page) => page.getByLabel('CSP directive name', { exact: true }),
     }),
     'CSP(행 있음)': await focusAfterBlockedSave(popup, {
       kind: 'CSP',
@@ -2444,11 +2454,13 @@ try {
     }),
   };
   const allOnTarget = Object.values(focusCases).every((r) => r.onTarget);
+  const allTypeable = Object.values(focusCases).every((r) => r.typeable);
   const allErrorsShown = Object.values(focusCases).every((r) => r.errorShown);
-  record('N26: 검증 차단 시 첫 누락 입력으로 포커스 — 종류별 매핑 + 인라인 오류 유지',
-    allOnTarget && allErrorsShown,
-    Object.entries(focusCases).map(([k, r]) => `${k}=${r.onTarget ? 'ok' : 'MISS'}`).join(' ') +
-      `, 오류표시=${allErrorsShown}`);
+  record('N26: 검증 차단 시 첫 누락 입력으로 포커스 — 종류별 매핑·즉시 타이핑·오류 유지',
+    allOnTarget && allTypeable && allErrorsShown,
+    Object.entries(focusCases)
+      .map(([k, r]) => `${k}=${r.onTarget ? (r.typeable ? 'ok' : '포커스만') : 'MISS'}`)
+      .join(' ') + `, 오류표시=${allErrorsShown}`);
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

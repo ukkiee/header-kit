@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type RefObject } from 'react';
 import { Plus } from 'lucide-react';
 import type { MessageKey } from '@/core/i18n';
 import { missingRequiredFields, type RequiredField } from '@/core/rule-validation';
@@ -75,17 +75,12 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
   const patternRef = useRef<HTMLInputElement>(null);
   const substitutionRef = useRef<HTMLInputElement>(null);
   const cspDirectiveNameRef = useRef<HTMLInputElement>(null);
-  const addDirectiveRef = useRef<HTMLButtonElement>(null);
-  // 값이 아니라 **해석 시점 함수**다 — CSP는 디렉티브가 0개일 수 있고, 그때는 고칠
-  // 입력 자체가 존재하지 않아 렌더 시점에 대상을 확정할 수 없다.
-  const focusTargets: Record<RequiredField, () => HTMLElement | null> = {
-    name: () => nameRef.current,
-    pattern: () => patternRef.current,
-    substitution: () => substitutionRef.current,
-    // CSP는 "이름 있는 디렉티브가 하나도 없음"이 누락이다. 행이 있으면 첫 이름으로,
-    // 하나도 없으면 사용자가 눌러야 할 '디렉티브 추가' 버튼으로 보낸다 — 포커스가
-    // 아무 데도 안 가면 "어디를 고쳐야 할지 찾지 않아도 된다"가 그 자리에서 깨진다.
-    directives: () => cspDirectiveNameRef.current ?? addDirectiveRef.current,
+  const requiredFieldRefs: Record<RequiredField, RefObject<HTMLInputElement | null>> = {
+    name: nameRef,
+    pattern: patternRef,
+    substitution: substitutionRef,
+    // CSP는 "이름 있는 디렉티브가 하나도 없음"이 누락이므로 첫 디렉티브 이름으로 간다.
+    directives: cspDirectiveNameRef,
   };
   const requiredError = (field: RequiredField) =>
     fieldErrors.includes(field) ? t('requiredField') : undefined;
@@ -127,7 +122,16 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
     // 돌려주므로(rule-validation의 push 순서) 자연스러운 입력 순서를 따른다.
     const firstMissing = missing[0];
     if (firstMissing) {
-      focusTargets[firstMissing]()?.focus();
+      // CSP는 디렉티브 배열이 비어 있을 수 있다(`createModification('csp')`가 `[]`를
+      // 준다). 그러면 포커스를 옮길 입력이 **아직 존재하지 않는다** — 빈 행을 하나
+      // 만들어 준다. 새 행의 이름 입력은 `autoFocus={i === 0}`로 마운트하며 포커스를
+      // 가져가므로, story 16("첫 디렉티브 이름으로")과 story 13("바로 타이핑")이
+      // 함께 성립한다. 버튼으로 보내면 포커스는 가지만 타이핑은 못 한다.
+      if (firstMissing === 'directives' && draft.kind === 'csp' && draft.directives.length === 0) {
+        setCspDirectives([{ name: '', value: '' }]);
+        return;
+      }
+      requiredFieldRefs[firstMissing].current?.focus();
       return;
     }
     inFlight.current = true;
@@ -386,7 +390,6 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
             </div>
           ))}
           <Button
-            ref={addDirectiveRef}
             variant="ghost"
             size="sm"
             className="self-start"
