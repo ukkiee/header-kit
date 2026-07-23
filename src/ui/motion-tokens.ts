@@ -15,12 +15,7 @@ export const PRESS_SPRING = { type: 'spring', stiffness: 420, damping: 26, mass:
  * 0.18s는 동작이 끝난 것을 눈이 따라가기 전에 사라져 "툭 끊긴다"는 인상이었다.
  */
 export const ROW_TRANSITION = { duration: 0.26, ease: 'easeOut' } as const;
-
-/**
- * 접이식 패널 열림/닫힘 높이 전환 — CollapsiblePanel.
- * 목록 행보다 움직이는 양이 커서 같은 길이면 급하게 보인다.
- */
-export const PANEL_COLLAPSE_S = 0.22;
+// 접이식 패널(CollapsiblePanel)도 이 값을 쓴다 — 같은 MotionRow를 타므로 따로 두지 않는다.
 
 /**
  * 떠 있는 팝업 열림/닫힘 — Select 팝업. 열릴 때 위에서 아래로 내려오고 닫힐 때 위로 접힌다.

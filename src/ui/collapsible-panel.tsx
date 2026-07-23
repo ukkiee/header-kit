@@ -1,7 +1,6 @@
-import { Collapsible as BaseCollapsible } from '@base-ui-components/react/collapsible';
 import { ChevronDown } from 'lucide-react';
-import { useReducedMotion } from 'motion/react';
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
+import { AnimatePresence, MotionRow } from './motion-row';
 import { PanelSection } from './panel-section';
 import { focusRing, ghostInteractive } from './tokens';
 
@@ -16,8 +15,7 @@ export interface CollapsiblePanelProps {
 }
 
 /**
- * show/hide 토글을 내장한 접이식 패널 — Base UI Collapsible 기반 (ADR 0011).
- * aria-expanded·패널 연결 시맨틱은 Base UI가 제공하고, 표면은 PanelSection 셸 그대로다.
+ * show/hide 토글을 내장한 접이식 패널. 표면은 PanelSection 셸 그대로다.
  * (Transfer는 mode 기반이라 PanelSection을 직접 쓴다 — 게이팅 모델이 다르다.)
  *
  * **헤더 행 전체가 트리거다.** 제목·여백·아이콘 어디를 눌러도 열린다 — 오른쪽 끝의
@@ -27,6 +25,22 @@ export interface CollapsiblePanelProps {
  *
  * 접근성 이름은 `toggleAriaLabel`로 고정한다 — 보이는 제목("환경설정")이 그 이름에
  * 포함되므로(WCAG 2.5.3) 문제없고, 화면에 보이는 것보다 동작을 먼저 알린다.
+ *
+ * 헤더는 누름·호버 spring을 **쓰지 않는다** (ADR 0012의 명시적 예외). 폭이 좁은 버튼에서
+ * 자연스러운 1.02배가 화면 폭을 다 쓰는 헤더 행에서는 이동 거리가 그만큼 커져 과했다.
+ * 이 표면의 피드백은 색 전이와 열림/닫힘 전환이 맡는다.
+ *
+ * **Base UI Collapsible을 쓰지 않는다** (ADR 0011의 예외). 필요한 시맨틱은
+ * `aria-expanded` + `aria-controls` 둘뿐이라 직접 적는 편이 짧고, 무엇보다 열림/닫힘
+ * 애니메이션이 Base UI의 마운트 타이밍과 경합했다 — **20회 중 6~9회가 전이 없이 즉시
+ * 닫혔다.** `height`를 `grid-template-rows`로 바꿔도, `interpolate-size`를 켜도,
+ * `keepMounted`를 줘도, CSS 전이를 키프레임 애니메이션으로 바꿔도 비율은 그대로였다.
+ * 있다가 없다가 하는 결함이라 한 번 보고 넘기면 못 잡는다.
+ *
+ * 대신 이 저장소가 이미 쓰고 검증한 `MotionRow`(AnimatePresence + height)를 쓴다 —
+ * 규칙 폼이 같은 이유로 native `details`를 버리고 상태+MotionRow로 간 선례가 있다
+ * (ui-refine 08). reduced-motion 처리도 거기 한 곳에 이미 있다. smoke N29가 시간으로
+ * 못박는다.
  */
 export function CollapsiblePanel({
   title,
@@ -36,69 +50,42 @@ export function CollapsiblePanel({
   banner,
   children,
 }: CollapsiblePanelProps) {
-  /**
-   * 헤더는 누름·호버 spring을 **쓰지 않는다** (ADR 0012의 명시적 예외).
-   *
-   * 한때 다른 버튼 프리미티브와 같은 `usePressMotion`을 썼다. 폭이 좁은 버튼에서
-   * 자연스러운 1.02배가 화면 폭을 다 쓰는 헤더 행에서는 이동 거리가 그만큼 커져
-   * 과하게 보였다 — 같은 배율이 같은 인상을 주지 않는다. 대신 이 표면의 피드백은
-   * 색 전이(`ghostInteractive`)와 **열림/닫힘 높이 전환**이 맡는다. 상태가 실제로
-   * 바뀌는 표면이라 그쪽이 더 많은 것을 알려 준다.
-   */
-  const reduce = useReducedMotion();
+  const panelId = useId();
+
   return (
-    <BaseCollapsible.Root open={open} onOpenChange={onOpenChange}>
-      <PanelSection
-        title={title}
-        actions={
-          <ChevronDown
-            size={14}
-            strokeWidth={1.75}
-            className={`shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
-          />
-        }
-        renderHeader={({ className, children }) => (
-          <BaseCollapsible.Trigger
-            render={
-              <button
-                type="button"
-                aria-label={toggleAriaLabel}
-                // w-full은 두지 않는다 — PanelSection의 flex-col이 이미 행 전체로 늘린다.
-                // min-h-6은 WCAG 2.5.8의 24×24 최소 타깃 — 폭만 넓히고 높이를 줄이면
-                // "조준하지 않아도 된다"가 세로로는 나빠진다.
-                className={`min-h-6 cursor-pointer rounded-md px-1 text-left transition-colors ${ghostInteractive} ${focusRing} ${className}`}
-              />
-            }
-          >
-            {children}
-          </BaseCollapsible.Trigger>
-        )}
-      >
-        {banner}
-        {/*
-          높이 전환 — Base UI가 패널 실측 높이를 `--collapsible-panel-height`로 주고,
-          열리는 첫 프레임과 닫히는 마지막 프레임에 `data-starting-style`/`data-ending-style`을
-          붙인다. 그 두 지점만 0으로 잡으면 나머지 구간은 CSS 전이가 잇는다.
-
-          motion이 아니라 CSS인 이유 — 여기서 움직이는 것은 Base UI가 마운트를 소유한
-          패널이다. AnimatePresence를 겹치면 두 라이브러리가 같은 노드의 생사를 두고
-          다툰다. 대신 **길이는 여전히 motion-tokens 한 곳**에서 온다.
-
-          reduced-motion이면 전이 클래스를 아예 붙이지 않는다 — 지속시간 0으로 대체하는
-          것이 아니라 부재다(ADR 0012 경계, press-motion과 같은 규율).
-
-          길이를 CSS 변수로 받는 이유 — Panel에 `style`을 직접 주든 `render`로 주든 Base UI가
-          자기 변수(`--collapsible-panel-height`)로 **덮어써서 사라진다**(둘 다 실측).
-          변수는 MotionProvider가 문서 루트에 올린다(거기 주석 참고).
-        */}
-        <BaseCollapsible.Panel
-          className={`h-[var(--collapsible-panel-height)] overflow-hidden data-[ending-style]:h-0 data-[starting-style]:h-0 ${
-            reduce ? '' : 'transition-[height] duration-[var(--panel-collapse)] ease-out'
-          }`}
+    <PanelSection
+      title={title}
+      actions={
+        <ChevronDown
+          size={14}
+          strokeWidth={1.75}
+          className={`shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+        />
+      }
+      renderHeader={({ className, children: headerContent }) => (
+        <button
+          type="button"
+          aria-label={toggleAriaLabel}
+          aria-expanded={open}
+          aria-controls={panelId}
+          onClick={() => onOpenChange(!open)}
+          // w-full은 두지 않는다 — PanelSection의 flex-col이 이미 행 전체로 늘린다.
+          // min-h-6은 WCAG 2.5.8의 24×24 최소 타깃 — 폭만 넓히고 높이를 줄이면
+          // "조준하지 않아도 된다"가 세로로는 나빠진다.
+          className={`min-h-6 cursor-pointer rounded-md px-1 text-left transition-colors ${ghostInteractive} ${focusRing} ${className}`}
         >
-          {children}
-        </BaseCollapsible.Panel>
-      </PanelSection>
-    </BaseCollapsible.Root>
+          {headerContent}
+        </button>
+      )}
+    >
+      {banner}
+      <AnimatePresence initial={false}>
+        {open && (
+          <MotionRow>
+            <div id={panelId}>{children}</div>
+          </MotionRow>
+        )}
+      </AnimatePresence>
+    </PanelSection>
   );
 }

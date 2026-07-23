@@ -2748,20 +2748,27 @@ try {
   // 조용히 사라져도 기능 테스트는 통과한다. 티켓 09에서 아코디언 헤더의 누름 계약이
   // 목록에 없어 게이트를 그냥 지나간 적이 있어, 새로 만든 계약은 곧바로 목록에 올린다.
 
-  // N29: 접이식 패널 — 기본 열림 + 높이 전환. reduced-motion이면 전이가 **없다**.
-  // 높이를 매 프레임 읽어 중간값의 개수를 센다 — "끝값이 0"만 보면 전이가 없어도 통과한다.
-  const panelCollapseTrace = async (page, label) =>
+  // N29: 접이식 패널 — 기본 열림 + 닫힘 전환. reduced-motion이면 전이가 **없다**.
+  //
+  // **시간으로 잰다.** 처음에는 중간 높이의 개수를 셌는데, 그 단언은 전이가 20회 중 6~9회
+  // 통째로 사라지는 결함을 통과시켰다 — 한 번 돌려서 운 좋게 애니메이션이 걸리면 초록이었다.
+  // 닫히기까지 걸린 시간은 전이가 없으면 한 자릿수 ms로 떨어져 운에 기대지 않는다.
+  // 상한은 `ROW_TRANSITION`에서 유도한다(패널도 MotionRow를 탄다) — 값을 손으로 적으면
+  // 토큰이 바뀔 때 조용히 어긋난다.
+  const panelCloseMs = async (page, label) =>
     page.evaluate(async (name) => {
       const trigger = document.querySelector(`button[aria-label="${name}"]`);
-      const panel = document.getElementById(trigger.getAttribute('aria-controls'));
-      const heights = [];
+      const panelId = trigger.getAttribute('aria-controls');
+      let goneAt = null;
       trigger.click();
       const t0 = performance.now();
-      while (performance.now() - t0 < 450) {
-        heights.push(Math.round(panel.getBoundingClientRect().height));
+      while (performance.now() - t0 < 600) {
+        const panel = document.getElementById(panelId);
+        const height = panel ? Math.round(panel.getBoundingClientRect().height) : 0;
+        if (height === 0 && goneAt === null) goneAt = Math.round(performance.now() - t0);
         await new Promise((r) => requestAnimationFrame(r));
       }
-      return { steps: new Set(heights).size, from: heights[0], to: heights.at(-1) };
+      return goneAt;
     }, label);
 
   // 이 블록은 상태를 직접 심는다 — 앞 시나리오가 남긴 프로필에 기대면 순서가 바뀔 때
@@ -2775,13 +2782,13 @@ try {
   const prefsDefaultOpen = await popup
     .getByRole('button', { name: 'Toggle preferences', exact: true })
     .getAttribute('aria-expanded');
-  const livelyCollapse = await panelCollapseTrace(popup, 'Toggle preferences');
+  const livelyCloseMs = await panelCloseMs(popup, 'Toggle preferences');
 
   await popup.emulateMedia({ reducedMotion: 'reduce' });
   await popup.reload();
   await popup.getByRole('button', { name: 'Show preferences' }).click();
   await popup.getByRole('button', { name: 'Toggle preferences', exact: true }).waitFor({ timeout: 5000 });
-  const reducedCollapse = await panelCollapseTrace(popup, 'Toggle preferences');
+  const reducedCloseMs = await panelCloseMs(popup, 'Toggle preferences');
   await popup.emulateMedia({ reducedMotion: null });
   await popup.reload();
 
@@ -2790,11 +2797,15 @@ try {
     .getByRole('button', { name: 'Toggle backups', exact: true })
     .getAttribute('aria-expanded');
 
-  record('N29: 접이식 패널 — 기본 열림 + 높이 전환(reduced-motion에서는 없음)',
+  // 전이가 있으면 최소한 그 길이의 절반은 걸린다(마운트 지연·프레임 정렬 여유를 남긴다).
+  // 없으면 한 자릿수 ms다 — 둘 사이가 넓어 경계가 흔들리지 않는다.
+  const closeFloorMs = Math.round(ROW_TRANSITION.duration * 1000 * 0.5);
+  record('N29: 접이식 패널 — 기본 열림 + 닫힘 전환(reduced-motion에서는 없음)',
     prefsDefaultOpen === 'true' && backupsDefaultOpen === 'true' &&
-      livelyCollapse.steps > 3 && livelyCollapse.to === 0 && reducedCollapse.steps <= 2,
+      livelyCloseMs !== null && livelyCloseMs >= closeFloorMs &&
+      reducedCloseMs !== null && reducedCloseMs < closeFloorMs,
     `기본열림 환경설정=${prefsDefaultOpen}·백업=${backupsDefaultOpen}, ` +
-    `높이 단계 기본=${livelyCollapse.steps}(${livelyCollapse.from}→${livelyCollapse.to}) reduced=${reducedCollapse.steps}`);
+    `닫힘 기본=${livelyCloseMs}ms reduced=${reducedCloseMs}ms (하한 ${closeFloorMs}ms)`);
 
   // N30: Select 팝업 — 트리거 **아래**로 떨어지고 좌변이 맞는다 + 위에서 아래로 내려온다.
   // 기본값(alignItemWithTrigger)은 선택된 항목을 트리거 위에 겹쳐 띄우므로, 이 단언이
