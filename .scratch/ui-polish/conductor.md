@@ -34,3 +34,4 @@
 - 티켓 06에 넘긴 것: 비활성 버튼 모션 부재 스모크 단언 (06이 저장 중 비활성 버튼을 만들 때)
 - 티켓 05·06에 넘긴 것: (a) 모션 타이밍 3곳 분산(press-motion·motion-row·motion-view) 공유 토큰으로 모으기, (b) 비활성 버튼 모션 부재 스모크 단언(06이 저장 중 비활성 버튼을 만들 때)
 - session end (Stage 5 진입 전): 핸드오프 /tmp/handoff-header-kit-ui-polish-stage5.md. **재개는 /feature** — Stage 5는 (1) HEAD에서 전 스위트 실행 후 docs/reviews/ui-polish/verification.md 커밋, (2) 릴리스 게이트 r1 실행 순서다. 커밋 안 된 로컬 실행은 브랜치 리뷰에 안 잡힌다
+- stage5 verification: done — d2d751a(tree cc46c62)에서 전 스위트 7단계 재실행, 전부 exit 0. tsc 0 · vitest 203/203 · build · bundle-gate PASS(+141.4KB/143KB, 여유 1.6KB) · smoke **98/98** · storybook · ui-diag(overflow 0, inner-scrollers 0, 시작 지표 first paint 76.0/기준선 64.0·dom ready 48.9/36.7 둘 다 PASS). 티켓 10개 수용 기준 → 명령 매핑과 덮지 않는 것 5건을 docs/reviews/ui-polish/verification.md에 고정·커밋. 다음은 릴리스 게이트 r1
