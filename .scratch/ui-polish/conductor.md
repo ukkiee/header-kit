@@ -8,3 +8,5 @@
 - stage2 plan gate r2: done — ok:true, verdict approve, 발견 0건 (R-1~R-4 resolved 재검증, 신규 이슈 없음). 플랜 게이트 통과 — 다음은 /to-tickets
 - stage3 slice: done — 티켓 10개 발행(.scratch/ui-polish/issues/01~10). 사용자 확정 3건: (a) 리스크 우선 순서 — 번들 압박 ScrollArea(02)·Autocomplete(03)를 앞으로, (b) 세분도 10개 유지, (c) **structure 게이트는 01이 아니라 02 완료 후** — 01은 앱 코드를 안 건드리는 계측 티켓이라 워킹 스켈레톤이 아니다. 01은 기준선 티켓이라 반드시 첫 번째(변경 전 빌드에서 측정해야 유효)
 - ticket 01 start: 5520d6e
+- ticket 01 done: 8618db5 — 팝업 시작 성능 계측 + 기준선(first paint 64.0ms / dom ready 36.7ms @ M5 Pro). 리뷰 2축 반영(cwd 상대 경로가 게이트를 무장 해제하던 결함 포함). 전 게이트 green. **structure 게이트는 아직 — 02 뒤에 돌린다**
+- ticket 02 start: 8618db5
