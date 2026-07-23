@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
 import type { MessageKey } from '@/core/i18n';
 import { missingRequiredFields, type RequiredField } from '@/core/rule-validation';
@@ -54,8 +54,9 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
     initial && 'urlFilter' in initial && initial.urlFilter ? 'regex' : 'contains';
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  // 진행 중 여부의 단일 출처. state는 UI를 그리고, 이 ref가 재진입을 막는다 —
-  // 같은 틱에 두 번 불려도 state는 아직 갱신 전이라 둘 다 통과해 버린다.
+  // 진행 중 여부의 **권위 있는** 값. `saving` state는 이것을 렌더용으로 비출 뿐이다.
+  // 같은 틱에 save()가 두 번 불리면 state는 아직 갱신 전이라 둘 다 통과하므로,
+  // 재진입 차단은 반드시 ref로 해야 한다.
   const inFlight = useRef(false);
   // 조건 disclosure 열림 — 기존 조건이 있으면 펼쳐서 시작.
   const [condOpen, setCondOpen] = useState(draft.conditions !== undefined);
@@ -118,9 +119,19 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
       const { conditions: _c, ...rest } = toSave;
       toSave = rest as Modification;
     }
-    const result = await onSave(toSave);
-    inFlight.current = false;
-    setSaving(false);
+    // onSave는 거부를 `{ ok: false }`로 돌려주기도 하지만, background 왕복이
+    // 끊기면(워커 teardown, 확장 리로드, 컨텍스트 무효화) **던진다**. 그 경로에서
+    // 진행 중 플래그가 풀리지 않으면 저장·취소·Escape가 모두 막힌 채 폼이 갇히고
+    // 초안을 잃는다 — 이 변경 전에는 취소가 남아 있었으므로 회귀다.
+    let result;
+    try {
+      result = await onSave(toSave);
+    } catch (error) {
+      result = { ok: false, error: error instanceof Error ? error.message : String(error) };
+    } finally {
+      inFlight.current = false;
+      setSaving(false);
+    }
     if (!result.ok) setSaveError(result.error ?? t('saveRejected'));
   };
 

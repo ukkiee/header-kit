@@ -35,6 +35,13 @@ export function ProfileSection({
   const t = useT();
   // 규칙 폼 상태 — 'new' = 생성, id = 편집, null = 목록만 (ADR 0006, 의도적 로컬)
   const [editingRule, setEditingRule] = useState<'new' | string | null>(null);
+  // 신규 폼이 화면에 남아 있는 동안(퇴장 애니메이션 포함) '규칙 추가' 버튼을 감춘다.
+  // editingRule만 보면 폼이 아직 접히는 중인데 버튼이 그 밑에서 튀어나온다.
+  // 진입점이 여럿(하단 버튼·빈 상태 CTA)이라 editingRule에서 파생시켜 하나도 빠뜨리지 않는다.
+  const [newFormPresent, setNewFormPresent] = useState(false);
+  useEffect(() => {
+    if (editingRule === 'new') setNewFormPresent(true);
+  }, [editingRule]);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const confirmTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(confirmTimer.current), []);
@@ -173,7 +180,7 @@ export function ProfileSection({
       {/* 새 규칙 폼은 열릴 때 height-in(ui-refine 08), 닫힐 때 height-out 한다.
           AnimatePresence가 없으면 열림만 애니메이션되고 닫힘은 즉시 사라진다 —
           story 21("취소·저장을 누르면 폼이 자연스럽게 접힌다")이 절반만 성립했다. */}
-      <AnimatePresence initial={false}>
+      <AnimatePresence initial={false} onExitComplete={() => setNewFormPresent(false)}>
         {editingRule === 'new' && (
           <MotionRow key="new-rule-form">
             <RuleForm
@@ -184,19 +191,17 @@ export function ProfileSection({
           </MotionRow>
         )}
       </AnimatePresence>
-      {editingRule === 'new' ? null : (
-        // 빈 상태 CTA가 추가를 유도하므로 하단 버튼은 규칙이 있을 때만 노출한다.
-        profile.modifications.length > 0 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="self-start"
-            onClick={() => setEditingRule('new')}
-          >
-            <Plus size={14} strokeWidth={1.75} className="mr-1" />
-            {t('addRule')}
-          </Button>
-        )
+      {/* 빈 상태 CTA가 추가를 유도하므로 하단 버튼은 규칙이 있을 때만 노출한다. */}
+      {!newFormPresent && profile.modifications.length > 0 && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="self-start"
+          onClick={() => setEditingRule('new')}
+        >
+          <Plus size={14} strokeWidth={1.75} className="mr-1" />
+          {t('addRule')}
+        </Button>
       )}
 
     </Card>

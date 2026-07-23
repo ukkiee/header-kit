@@ -2077,24 +2077,27 @@ try {
   // 모든 네비게이션에 붙으므로 **전용 페이지**에서만 쓴다 — 공용 popup에 걸면 남은 테스트
   // 전체가 느려지고 명령 계수가 오염된다.
   const SAVE_DELAY_MS = 600;
-  const openDelayedSavePopup = async ({ reject }) => {
+  const openDelayedCommandPopup = async ({ reject, throwInstead } = {}) => {
     const page = await context.newPage();
     await page.addInitScript(
-      ({ delayMs, rejectSave }) => {
+      ({ delayMs, rejectSave, throwSave }) => {
         window.__commandCalls = 0;
         const original = chrome.runtime.sendMessage.bind(chrome.runtime);
         chrome.runtime.sendMessage = (message, ...rest) => {
           if (message?.type !== 'headerkit:command') return original(message, ...rest);
           window.__commandCalls += 1;
-          return new Promise((resolve) => {
+          return new Promise((resolve, rejectPromise) => {
             setTimeout(() => {
-              if (rejectSave) resolve({ ok: false, error: 'Rejected.' });
+              // 던지는 경로 — MV3에서 워커가 내려가면 sendMessage는 값이 아니라 예외로
+              // 끝난다. 앱이 이 경우에도 폼을 풀어 주는지가 이 시임의 핵심이다.
+              if (throwSave) rejectPromise(new Error('Could not establish connection.'));
+              else if (rejectSave) resolve({ ok: false, error: 'Injected refusal' });
               else original(message, ...rest).then(resolve);
             }, delayMs);
           });
         };
       },
-      { delayMs: SAVE_DELAY_MS, rejectSave: reject },
+      { delayMs: SAVE_DELAY_MS, rejectSave: reject, throwSave: throwInstead },
     );
     await page.setViewportSize({ width: 760, height: 580 });
     await page.goto(`chrome-extension://${extId}/popup.html?locale=en`);
@@ -2111,7 +2114,7 @@ try {
   // N24a: 진행 중 — 라벨 교체, 두 버튼 비활성, 재시도(키보드 경로 포함)가 명령을 늘리지 않음.
   await seedProfiles([baseProfile('p-save', 'Save', [])]);
   {
-    const page = await openDelayedSavePopup({ reject: false });
+    const page = await openDelayedCommandPopup({ reject: false });
     await fillNewRule(page, 'X-Saving');
     const savingButton = page.getByRole('button', { name: 'Saving…', exact: true });
     const cancelButton = page.getByRole('button', { name: 'Cancel', exact: true });
@@ -2163,38 +2166,82 @@ try {
   // N24b: 거부 — 라벨 복귀, 폼 유지, 초안 보존, 거부 메시지 노출.
   await seedProfiles([baseProfile('p-reject', 'Reject', [])]);
   {
-    const page = await openDelayedSavePopup({ reject: true });
+    const page = await openDelayedCommandPopup({ reject: true });
     await fillNewRule(page, 'X-Rejected');
     await page.getByRole('button', { name: 'Save', exact: true }).click();
-    const alertShown = await page.getByText('Rejected.', { exact: true }).first()
+    const alertShown = await page.getByRole('alert').filter({ hasText: 'Injected refusal' }).first()
       .waitFor({ timeout: 5000 }).then(() => true, () => false);
     const afterReject = await page.evaluate(() => {
       const buttons = [...document.querySelectorAll('button')];
       const save = buttons.find((b) => /^(Save|Saving…)$/.test(b.textContent?.trim() ?? ''));
       const cancel = buttons.find((b) => b.textContent?.trim() === 'Cancel');
-      const name = document.querySelector('input[aria-label="Header name"]');
       return {
         label: save?.textContent?.trim() ?? '',
         saveEnabled: save ? !save.disabled : false,
         cancelEnabled: cancel ? !cancel.disabled : false,
-        draft: name?.value ?? '',
       };
     });
+    // 초안은 로케이터로 읽는다 — Value 필드는 aria-label이 아니라 <label> 연결이라
+    // DOM 질의로는 잡히지 않는다(getByLabel은 둘 다 본다).
+    const draftName = await page.getByLabel('Header name', { exact: true }).first().inputValue();
+    const draftValue = await page.getByLabel('Value', { exact: true }).first().inputValue();
     const storedAfterReject = await sw.evaluate(async () =>
       (await chrome.storage.local.get('state')).state.profiles[0].modifications.length);
     await page.close();
     record('N24b: 저장 거부 — 라벨 복귀·버튼 재활성·폼과 초안 유지·거부 메시지',
       alertShown && afterReject.label === 'Save' && afterReject.saveEnabled && afterReject.cancelEnabled &&
-        afterReject.draft === 'X-Rejected' && storedAfterReject === 0,
-      `alert=${alertShown}, label="${afterReject.label}", save-enabled=${afterReject.saveEnabled}, ` +
-      `cancel-enabled=${afterReject.cancelEnabled}, draft="${afterReject.draft}", stored=${storedAfterReject}`);
+        draftName === 'X-Rejected' && draftValue === 'v' && storedAfterReject === 0,
+      `alert(role)=${alertShown}, label="${afterReject.label}", save-enabled=${afterReject.saveEnabled}, ` +
+      `cancel-enabled=${afterReject.cancelEnabled}, draft="${draftName}"/"${draftValue}", stored=${storedAfterReject}`);
+  }
+
+  // N24bb: 왕복이 **던지는** 경로 — MV3에서 워커가 내려가면 sendMessage는 값이 아니라
+  // 예외로 끝난다. 이때 진행 중 플래그가 풀리지 않으면 저장·취소·Escape가 모두 막힌 채
+  // 폼이 갇히고 초안을 잃는다(리뷰가 잡은 결함). 사용자에게 남는 탈출구가 있어야 한다.
+  await seedProfiles([baseProfile('p-throw', 'Throw', [])]);
+  {
+    const page = await openDelayedCommandPopup({ throwInstead: true });
+    await fillNewRule(page, 'X-Thrown');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    const recovered = await page
+      .getByRole('button', { name: 'Save', exact: true })
+      .waitFor({ timeout: 5000 })
+      .then(() => true, () => false);
+    const state = await page.evaluate(() => {
+      const buttons = [...document.querySelectorAll('button')];
+      const save = buttons.find((b) => /^(Save|Saving…)$/.test(b.textContent?.trim() ?? ''));
+      const cancel = buttons.find((b) => b.textContent?.trim() === 'Cancel');
+      return {
+        label: save?.textContent?.trim() ?? '',
+        saveEnabled: save ? !save.disabled : false,
+        cancelEnabled: cancel ? !cancel.disabled : false,
+        errorShown: [...document.querySelectorAll('[role="alert"]')].length > 0,
+      };
+    });
+    // 취소가 실제로 먹혀 폼을 빠져나올 수 있어야 한다.
+    let escaped = false;
+    if (state.cancelEnabled) {
+      await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+      escaped = await page.getByRole('button', { name: 'Cancel', exact: true })
+        .waitFor({ state: 'detached', timeout: 3000 }).then(() => true, () => false);
+    }
+    await page.close();
+    record('N24bb: 왕복이 예외로 끝나도 폼이 갇히지 않는다 — 버튼 복귀·오류 노출·취소 가능',
+      recovered && state.label === 'Save' && state.saveEnabled && state.cancelEnabled &&
+        state.errorShown && escaped,
+      `label="${state.label}", save-enabled=${state.saveEnabled}, cancel-enabled=${state.cancelEnabled}, ` +
+      `alert=${state.errorShown}, escaped=${escaped}`);
   }
 
   // N24c: 폼 닫힘 — reduced-motion에서는 exit 창 없이 즉시 제거된다(스펙의 관측 계약).
   // 기본 모션에서는 MotionRow의 height 전이만큼 남아 있어야 대조가 성립한다.
-  const measureFormRemoval = async (page) => {
+  const measureFormRemoval = async (page, { via }) => {
     await page.getByRole('button', { name: 'Add rule' }).click();
     await page.getByRole('button', { name: 'Cancel' }).waitFor({ timeout: 5000 });
+    if (via === 'save') {
+      await page.getByLabel('Header name', { exact: true }).first().fill(`X-Close-${Date.now() % 100000}`);
+      await page.getByLabel('Value', { exact: true }).first().fill('v');
+    }
     await page.evaluate(() => {
       window.__formGoneMs = null;
       const start = performance.now();
@@ -2207,7 +2254,9 @@ try {
       window.__armFormProbe = () => requestAnimationFrame(tick);
     });
     await page.evaluate(() => window.__armFormProbe());
-    await page.getByRole('button', { name: 'Cancel' }).click();
+    await page
+      .getByRole('button', { name: via === 'save' ? 'Save' : 'Cancel', exact: true })
+      .click();
     const observed = await page
       .waitForFunction(() => window.__formGoneMs != null, null, { timeout: 5000 })
       .then(() => true, () => false);
@@ -2219,16 +2268,21 @@ try {
   await popup.reload();
   await popup.getByRole('button', { name: 'Add rule' }).waitFor({ timeout: 5000 });
   await popup.waitForTimeout(700);
-  const livelyClose = await measureFormRemoval(popup);
+  const livelyClose = await measureFormRemoval(popup, { via: 'cancel' });
+  const livelySave = await measureFormRemoval(popup, { via: 'save' });
   await popup.emulateMedia({ reducedMotion: 'reduce' });
   await popup.reload();
   await popup.getByRole('button', { name: 'Add rule' }).waitFor({ timeout: 5000 });
-  const reducedClose = await measureFormRemoval(popup);
+  const reducedClose = await measureFormRemoval(popup, { via: 'cancel' });
+  const reducedSave = await measureFormRemoval(popup, { via: 'save' });
   await popup.emulateMedia({ reducedMotion: null });
   record('N24c: 폼 닫힘 — reduced-motion은 exit 창 없이 즉시, 기본 모션은 전이만큼 남는다',
     typeof reducedClose === 'number' && reducedClose < exitWindowMs &&
-      typeof livelyClose === 'number' && livelyClose >= exitWindowMs,
-    `reduced=${reducedClose?.toFixed?.(0)}ms, lively=${livelyClose?.toFixed?.(0)}ms (exit 창 ${exitWindowMs}ms)`);
+      typeof livelyClose === 'number' && livelyClose >= exitWindowMs &&
+      typeof reducedSave === 'number' && reducedSave < exitWindowMs &&
+      typeof livelySave === 'number' && livelySave >= exitWindowMs,
+    `취소 reduced=${reducedClose?.toFixed?.(0)}ms/lively=${livelyClose?.toFixed?.(0)}ms, ` +
+    `저장 reduced=${reducedSave?.toFixed?.(0)}ms/lively=${livelySave?.toFixed?.(0)}ms (exit 창 ${exitWindowMs}ms)`);
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
