@@ -2462,6 +2462,88 @@ try {
       .map(([k, r]) => `${k}=${r.onTarget ? (r.typeable ? 'ok' : '포커스만') : 'MISS'}`)
       .join(' ') + `, 오류표시=${allErrorsShown}`);
 
+  // N27: 아코디언 헤더 전체가 클릭 대상 (ui-polish 09, stories 24~27).
+  // 예전에는 오른쪽 끝 아이콘 버튼만 눌렸다 — 제목·여백을 눌러도 같은 동작이어야 하고,
+  // 그러면서 포커스 대상은 하나로 남아야 한다(Tab 정지가 늘면 키보드 사용자가 손해다).
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Show preferences' }).click();
+  const prefsHeader = popup.getByRole('button', { name: 'Toggle preferences', exact: true });
+  // 헤더가 버튼이 아니게 되는 것이 이 테스트가 잡으려는 회귀다 — waitFor가 던져
+  // 스위트를 중단시키면 FAIL로 기록되지 않는다(N22c·N24c에서 이미 겪었다).
+  const headerIsButton = await prefsHeader
+    .waitFor({ timeout: 5000 })
+    .then(() => true, () => false);
+
+  const headerState = () =>
+    prefsHeader.evaluate((el) => ({
+      expanded: el.getAttribute('aria-expanded'),
+      // 헤더 안에 포커스 가능한 것이 또 있으면 Tab 정지가 늘어난다.
+      innerFocusables: el.querySelectorAll('button, a, input, select, textarea, [tabindex]').length,
+      // 아이콘은 트리거 안의 시각 표시로만 남는다 — 회전으로 상태를 보인다.
+      // Tailwind v4의 rotate-180은 `transform`이 아니라 CSS `rotate` 속성을 쓴다 —
+      // transform만 읽으면 둘 다 'none'이라 회전 여부를 못 본다.
+      iconRotate: el.querySelector('svg')
+        ? getComputedStyle(el.querySelector('svg')).rotate
+        : 'no-icon',
+      // 클릭 대상이 정말 행 전체인지 — 부모 섹션 폭과 같아야 한다. 절대 px로 재면
+      // 레이아웃이 바뀌었을 때 무엇을 보는지 알 수 없다.
+      spansRow:
+        Math.abs(
+          el.getBoundingClientRect().width -
+            (el.closest('section')?.getBoundingClientRect().width ?? 0),
+        ) <= 1,
+    })).catch(() => ({ expanded: 'missing', innerFocusables: -1, iconRotate: 'missing', spansRow: false }));
+
+  const closed = await headerState();
+  // 1) 제목 텍스트를 눌러 열린다
+  await popup.getByText('Preferences', { exact: true }).first().click().catch(() => {});
+  await popup.waitForTimeout(250);
+  const afterTitle = await headerState();
+  // 2) 여백(아이콘 왼쪽)을 눌러 닫힌다
+  const box = await prefsHeader.boundingBox().catch(() => null);
+  const clickedGap = box !== null;
+  if (clickedGap) {
+    await popup.mouse.click(box.x + box.width - 40, box.y + box.height / 2);
+    await popup.waitForTimeout(250);
+  }
+  const afterGap = await headerState();
+  // 3) 아이콘 자체를 눌러도 같은 동작
+  if (clickedGap) {
+    await popup.mouse.click(box.x + box.width - 8, box.y + box.height / 2);
+    await popup.waitForTimeout(250);
+  }
+  const afterIcon = await headerState();
+
+  // 백업 패널도 같은 셸을 쓴다 — 한쪽만 고쳐 두는 일이 없게 함께 본다.
+  await popup.getByRole('button', { name: 'Show backups' }).click();
+  const backupsHeader = popup.getByRole('button', { name: 'Toggle backups', exact: true });
+  const backupsIsFullRow = await backupsHeader
+    .waitFor({ timeout: 5000 })
+    .then(() =>
+      backupsHeader.evaluate(
+        (el) =>
+          el.tagName === 'BUTTON' &&
+          el.querySelectorAll('button').length === 0 &&
+          Math.abs(el.getBoundingClientRect().width - (el.closest('section')?.getBoundingClientRect().width ?? 0)) <= 1,
+      ),
+    )
+    .catch(() => false);
+
+  record('N27: 아코디언 헤더 — 제목·여백·아이콘 어디를 눌러도 토글, 포커스 대상은 하나',
+    headerIsButton &&
+      closed.expanded === 'false' &&
+      afterTitle.expanded === 'true' &&
+      afterGap.expanded === 'false' &&
+      afterIcon.expanded === 'true' &&
+      [closed, afterTitle, afterGap, afterIcon].every((s) => s.innerFocusables === 0) &&
+      closed.iconRotate === 'none' && afterTitle.iconRotate !== 'none' &&
+      closed.spansRow &&
+      clickedGap &&
+      backupsIsFullRow,
+    `헤더=버튼:${headerIsButton}, expanded=${closed.expanded}→제목:${afterTitle.expanded}→여백:${afterGap.expanded}→아이콘:${afterIcon.expanded}, ` +
+    `내부 focusable=${closed.innerFocusables}, 행 전체=${closed.spansRow}, ` +
+    `아이콘 회전=${closed.iconRotate}→${afterTitle.iconRotate}, 백업도 전체행=${backupsIsFullRow}`);
+
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
   process.exitCode = failed.length === 0 ? 0 : 1;

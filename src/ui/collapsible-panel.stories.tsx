@@ -16,8 +16,6 @@ function Interactive() {
       title="Backups"
       open={open}
       onOpenChange={setOpen}
-      showLabel="Show"
-      hideLabel="Hide"
       toggleAriaLabel="Toggle backups"
     >
       <p className="text-xs text-zinc-400">No backups yet.</p>

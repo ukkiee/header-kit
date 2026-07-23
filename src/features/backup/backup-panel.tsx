@@ -65,8 +65,6 @@ export function BackupPanel({
       title={t('backups')}
       open={open}
       onOpenChange={setOpen}
-      showLabel={t('show')}
-      hideLabel={t('hide')}
       toggleAriaLabel={t('ariaToggleBackups')}
       banner={
         error && (
