@@ -23,7 +23,7 @@
 - ticket 06 start: d4d39b2
 - ticket 06 done: 98d5bd9 — 저장 중 상태(라벨·양 버튼 비활성·성공/거부 전이). **키보드 경로가 disabled를 우회해 규칙이 두 번 저장되던 버그**를 ref 가드로 차단, **신규 폼이 AnimatePresence 밖이라 닫힘 전이가 없던 것**도 수정. 04에서 넘긴 비활성 버튼 모션 부재 단언도 닫힘. **리뷰가 치명적 회귀 발견** — onSave가 던지면 폼이 영구히 갇혀 초안 소실(내가 마지막 탈출구를 없앰) → try/finally + N24bb 신설. smoke 94/94, 전 게이트 green
 - ticket 07 start: 98d5bd9
-- ticket 07 done: fd1cf3a — 매치 방식 셀렉트 폭 고정(en/ko 136px, 패턴 입력 좌변 455px 고정). **실측이 설계를 바꿈** — 네 셀렉트 중 출렁이는 것은 하나뿐이라 고정 폭을 프리미티브 기본값으로 두지 않고 width 변형(auto 기본/fixed)으로. smoke N25가 폭 동일+라벨 미절단을 함께 단언, 두 퇴화 경로 FAIL 확인. smoke 95/95, 전 게이트 green
-- ticket 08 start: fd1cf3a
+- ticket 07 done: fd1cf3a — 매치 방식 셀렉트 폭 고정(en/ko 136px, 패턴 입력 좌변 455px 고정). **실측이 설계를 바꿈** — 네 셀렉트 중 출렁이는 것은 하나뿐이라 고정 폭을 프리미티브 기본값으로 두지 않고 width 변형(auto 기본/fixed)으로. smoke N25가 폭 동일+라벨 미절단을 함께 단언, 두 퇴화 경로 FAIL 확인. smoke 95/95, 전 게이트 green. **리뷰가 절단 단언의 공허 통과 경로 발견** → .truncate 겨냥 + 노드 부재 시 실패, 폭 변형 스토리북 추가
+- ticket 08 start: 1785b47
 - 티켓 06에 넘긴 것: 비활성 버튼 모션 부재 스모크 단언 (06이 저장 중 비활성 버튼을 만들 때)
 - 티켓 05·06에 넘긴 것: (a) 모션 타이밍 3곳 분산(press-motion·motion-row·motion-view) 공유 토큰으로 모으기, (b) 비활성 버튼 모션 부재 스모크 단언(06이 저장 중 비활성 버튼을 만들 때)
