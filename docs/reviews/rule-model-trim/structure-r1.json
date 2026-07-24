@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "structure",
+  "verdict": "approve",
+  "summary": "Ship: no material macro-structure finding. The slice matches the plan: retired CSP data is filtered before validation at both persistence/import seams, tests pin parseStoredState and parseImport behavior, and the remaining initiator-label increment stays isolated from schema and matching logic. TypeScript passed; Vitest could not start because the read-only sandbox blocked Vite's temporary config write.",
+  "planFile": "docs/reviews/rule-model-trim/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 31,
+  "target": "branch diff against main",
+  "reviewedSha": "35db3556ecbbd34136e8faac0713a05c2ac47abf",
+  "reviewedTree": "509e79d523fe123097d64a26e1779daec0e3b68c",
+  "reviewedPlanSha256": "067e08f2d9429893c8bbdac05453006c70367905d165ebdd6db77ae758b9832f",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 0,
+  "planFindingCount": 0,
+  "triage": "Clean verdict: note it in your report and COMMIT this artifact with the next bookkeeping commit.",
+  "findings": [],
+  "next_steps": []
+}

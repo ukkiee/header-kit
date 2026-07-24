@@ -7,3 +7,8 @@
 ### plan r2
 
 - 발견 0건 — verdict **approve**. R-1이 양 경로(로드·import)에서 resolved로 재검증됐다: 검증 전 필터 순서가 명확하고, `parseStoredState`·`parseImport` 진입점 관통 테스트가 강제됐다(리셋/거부 없음·나머지 보존·import notice 없음). 스펙 수정이 새로 들인 critical·high 없음. **플랜 게이트 통과 — 다음은 /to-tickets.**
+
+### structure r1
+
+- 발견 0건 — verdict **approve**, 트리아지할 행 없음. 브랜치 diff(main…35db355, 31파일) 기준으로 "슬라이스가 플랜과 일치한다": 퇴역 CSP 데이터가 저장·import 두 시임 모두에서 **검증 전에** 걸러지고, `parseStoredState`·`parseImport`를 진입점으로 고정한 테스트가 그 행동을 못박으며, 남은 Initiator 라벨 증분(티켓 02)이 스키마·매칭 로직과 분리돼 있다. 거시 구조 지적 없음. **structure 게이트 통과 — 티켓 02 진행 가능.**
+- 게이트 환경 주의: Codex 샌드박스가 읽기 전용이라 Vite의 임시 설정 파일 쓰기가 막혀 **Vitest는 게이트 안에서 기동하지 못했다**(tsc는 통과). 테스트 증거는 게이트가 아니라 로컬 실행이 진다 — 티켓 01 커밋 시점 vitest 200/200·smoke 104/104·ui-diag PASS. 릴리스 게이트 전 `verification.md`가 이 증거를 커밋으로 고정해야 한다.
