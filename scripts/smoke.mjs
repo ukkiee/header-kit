@@ -1727,8 +1727,14 @@ try {
     .filter({ hasText: 'Edit' })
     .waitFor({ timeout: 5000 })
     .then(() => true, () => false);
-  record('N17a: 행 액션 — 호버 시 표시 + 아이콘 툴팁(호버·포커스)',
-    opacityIdle === '0' && opacityRowHover === '1' && tooltipOnHover && tooltipOnFocus,
+  // 계약이 바뀌었다 — 예전에는 idle이 **0**(호버 전에는 아예 안 보임)이었다. 그때는
+  // 편집·삭제가 존재한다는 사실 자체를 호버로만 알 수 있었고, 호버가 없는 입력(터치·펜)과
+  // 처음 쓰는 사용자에게는 규칙 편집 경로가 발견 불가였다 (ui-review UI-03).
+  //
+  // 이제 기본 0.6으로 존재만 알리고 호버·포커스에서 1이 된다. **0이 아니라는 것**이 계약의
+  // 핵심이라 값을 그대로 못박는다 — 다시 0으로 돌아가면 여기서 실패한다.
+  record('N17a: 행 액션 — 평소 은은히 보이고 호버·포커스에 또렷 + 아이콘 툴팁',
+    opacityIdle === '0.6' && opacityRowHover === '1' && tooltipOnHover && tooltipOnFocus,
     `idle=${opacityIdle}, row-hover=${opacityRowHover}, tooltip-hover=${tooltipOnHover}, tooltip-focus=${tooltipOnFocus}`);
 
   // 환경설정: 단축키 문구 없음, 기본 사전 비제거 pill, 사용자 항목만 X
@@ -2855,7 +2861,13 @@ try {
     await trg.click();
     await page.getByRole('option').first().waitFor({ timeout: 5000 });
     const motion = await page.evaluate(async () => {
-      const pop = document.querySelector('[role="listbox"]');
+      // 전이가 걸리는 것은 **Popup**이지 그 안의 목록이 아니다. shadcn 구조에서
+      // `role="listbox"`를 갖는 것은 Popup이 아니라 자식 List라, 예전처럼 listbox를 재면
+      // 항상 opacity 1만 읽혀 전이가 없는 것처럼 보인다(실제로 겪었다 — 팝업은 정상적으로
+      // 페이드하는데 단언만 실패했다). Popup을 우선 잡고, 없으면 예전 구조로 물러난다.
+      const pop =
+        document.querySelector('[data-slot="select-content"]') ??
+        document.querySelector('[role="listbox"]');
       const opacity = [];
       const ys = [];
       const t0 = performance.now();
