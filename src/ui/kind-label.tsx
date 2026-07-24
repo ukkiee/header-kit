@@ -2,7 +2,7 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import type { HTMLAttributes } from 'react';
 import { microCaption } from './tokens';
 
-/** 수정/필터 종류 라벨 — 고정폭 대문자 캡션(CSP, Cookie, Redirect, 필터 KIND). */
+/** 수정/필터 종류 라벨 — 고정폭 대문자 캡션(Cookie, Redirect, 필터 KIND). */
 const kindLabel = cva(`shrink-0 whitespace-nowrap ${microCaption}`, {
   variants: {
     offset: { none: '', filter: 'mt-1' },

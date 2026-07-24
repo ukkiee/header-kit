@@ -76,43 +76,6 @@ describe('compile — Set-Cookie', () => {
   });
 });
 
-describe('compile — CSP', () => {
-  it('디렉티브를 합성해 Content-Security-Policy 응답 헤더로 set 한다', () => {
-    const { rules } = compile(
-      [
-        profile([
-          {
-            kind: 'csp',
-            id: 'm1',
-            directives: [
-              { name: 'default-src', value: "'self'" },
-              { name: 'img-src', value: '*' },
-            ],
-            comment: '',
-            enabled: true,
-          },
-        ]),
-      ],
-      env,
-    );
-
-    expect(rules[0]?.action.responseHeaders?.[0]).toEqual({
-      header: 'Content-Security-Policy',
-      operation: 'set',
-      value: "default-src 'self'; img-src *",
-    });
-  });
-
-  it('빈 디렉티브는 규칙을 만들지 않는다', () => {
-    const { rules } = compile(
-      [profile([{ kind: 'csp', id: 'm1', directives: [], comment: '', enabled: true }])],
-      env,
-    );
-
-    expect(rules).toEqual([]);
-  });
-});
-
 describe('compile — Redirect', () => {
   it('regex + 캡처 그룹 치환을 redirect 액션으로 컴파일한다', () => {
     const { rules } = compile(

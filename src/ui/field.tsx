@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 /** 필드 캡션 스타일 — Field.Label과, Field를 못 쓰는 다중 컨트롤 행의 span 캡션이 공유한다. */
 export const fieldCaption = 'text-xs font-medium text-zinc-600 dark:text-zinc-300';
 
-/** 인라인 오류 스타일 — Field.Error와, Field 밖(CSP 디렉티브 목록 등)의 오류 문구가 공유한다. */
+/** 인라인 오류 스타일 — Field.Error와, Field 밖(다중 컨트롤 행 등)의 오류 문구가 공유한다. */
 export const fieldErrorClass = 'text-xs text-red-600 dark:text-red-400';
 
 /** Field 컨텍스트를 못 쓰는 자리(다중 컨트롤 그룹)의 인라인 오류 문구. */

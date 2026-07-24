@@ -1,5 +1,6 @@
 import {
   backfillModification,
+  dropRetiredKinds,
   isFilter,
   isModification,
   isRecord,
@@ -149,13 +150,22 @@ export function parseImport(
     };
   }
 
-  const errors = raw.profiles.flatMap((p, i) => validateProfileEntry(p, i));
+  // 퇴역 종류(csp — ADR 0013)는 **검증 전에** 걷어낸다. validateProfileEntry가
+  // 먼저 보면 무효 수정으로 판정해 파일 전체가 거부된다. 정규화 단계에서 거르면
+  // 이미 늦다. 로드 경로와 마찬가지로 조용히 버리고 알림은 남기지 않는다.
+  const entries = raw.profiles.map((p) =>
+    isRecord(p) && Array.isArray(p.modifications)
+      ? { ...p, modifications: dropRetiredKinds(p.modifications) }
+      : p,
+  );
+
+  const errors = entries.flatMap((p, i) => validateProfileEntry(p, i));
   if (errors.length > 0) {
     return { ok: false, errors };
   }
 
   // 검증 통과분을 backfill해 신규 필드를 채운 뒤 정규화한다.
-  const backfilled = (raw.profiles as Profile[]).map((p) => ({
+  const backfilled = (entries as Profile[]).map((p) => ({
     ...p,
     modifications: p.modifications.map(
       (m) => backfillModification(m) as Profile['modifications'][number],

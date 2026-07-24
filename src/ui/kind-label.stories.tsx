@@ -9,5 +9,5 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Csp: Story = { args: { children: 'CSP' } };
+export const Cookie: Story = { args: { children: 'COOKIE' } };
 export const Redirect: Story = { args: { children: 'Redirect' } };

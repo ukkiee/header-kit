@@ -199,6 +199,30 @@ describe('parseImport', () => {
     expect(result.errors.join('\n')).toMatch(/profiles\[1\].*filters: expected array/);
   });
 
+  it('제거된 csp 규칙은 검증 전에 빠진다 — 파일 전체 거부 없이 나머지만 수용, 알림도 없다 (ADR 0013)', () => {
+    // Profile 타입에는 더 이상 csp가 없다 — 예전 export 파일의 원시 형태 그대로 넣는다.
+    const legacyCsp = {
+      ...profile(),
+      modifications: [
+        { kind: 'csp', id: 'c1', directives: [{ name: 'default-src', value: "'self'" }], comment: '', enabled: true },
+        mod('m1', 'kept'),
+      ],
+    };
+
+    const result = parseImport(importText([legacyCsp]));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // 파일이 통째로 거부되지 않는다 — 프로필 메타는 그대로다.
+    expect(result.profiles).toHaveLength(1);
+    expect(result.profiles[0]).toMatchObject({ name: 'Alpha', shortLabel: 'A', color: '#2563eb' });
+    // csp만 빠지고 나머지 수정은 보존된다.
+    expect(result.profiles[0]?.modifications.map((m) => m.kind)).toEqual(['request-header']);
+    expect(result.profiles[0]?.modifications[0]).toMatchObject({ name: 'X-m1', value: 'kept' });
+    // 레거시 필터 소실과 달리 csp 드롭은 조용하다 (로드 경로와 일치).
+    expect(result.notices).toEqual([]);
+  });
+
   it('깨진 JSON은 거부된다', () => {
     const result = parseImport('{not json');
 

@@ -1,12 +1,10 @@
 import { useRef, useState, type RefObject } from 'react';
-import { Plus } from 'lucide-react';
 import type { MessageKey } from '@/core/i18n';
 import { missingRequiredFields, type RequiredField } from '@/core/rule-validation';
 import { isRequestAppendAllowed } from '@/core/rules';
 import {
   createModification,
   normalizeConditions,
-  type CspModification,
   type Modification,
   type ModificationKind,
   type UrlMatchType,
@@ -18,7 +16,7 @@ import { Button } from '@/ui/button';
 import { Input } from '@/ui/input';
 import { LargeEditor } from '@/ui/large-editor';
 import { NoteText } from '@/ui/note-text';
-import { Field, FieldError, fieldCaption } from '@/ui/field';
+import { Field, fieldCaption } from '@/ui/field';
 import { AnimatePresence, MotionRow } from '@/ui/motion-row';
 import { Select } from '@/ui/select';
 import { useT } from '@/ui/i18n-context';
@@ -38,7 +36,6 @@ const RULE_KINDS: ModificationKind[] = [
   'response-header',
   'cookie',
   'set-cookie',
-  'csp',
   'redirect',
 ];
 
@@ -74,26 +71,19 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
   const nameRef = useRef<HTMLInputElement>(null);
   const patternRef = useRef<HTMLInputElement>(null);
   const substitutionRef = useRef<HTMLInputElement>(null);
-  const cspDirectiveNameRef = useRef<HTMLInputElement>(null);
   const requiredFieldRefs: Record<RequiredField, RefObject<HTMLInputElement | null>> = {
     name: nameRef,
     pattern: patternRef,
     substitution: substitutionRef,
-    // CSP는 "이름 있는 디렉티브가 하나도 없음"이 누락이므로 첫 디렉티브 이름으로 간다.
-    directives: cspDirectiveNameRef,
   };
   const requiredError = (field: RequiredField) =>
     fieldErrors.includes(field) ? t('requiredField') : undefined;
-  // CSP 디렉티브 필수 검증 — 이름 있는 디렉티브가 없으면 활성 (release r1 R-2).
-  const cspError = fieldErrors.includes('directives');
-  const CSP_ERROR_ID = 'csp-directives-error';
 
   const KIND_LABELS: Record<ModificationKind, MessageKey> = {
     'request-header': 'kindRequestHeader',
     'response-header': 'kindResponseHeader',
     cookie: 'modCookie',
     'set-cookie': 'modSetCookie',
-    csp: 'modCsp',
     redirect: 'modRedirect',
   };
 
@@ -122,15 +112,6 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
     // 돌려주므로(rule-validation의 push 순서) 자연스러운 입력 순서를 따른다.
     const firstMissing = missing[0];
     if (firstMissing) {
-      // CSP는 디렉티브 배열이 비어 있을 수 있다(`createModification('csp')`가 `[]`를
-      // 준다). 그러면 포커스를 옮길 입력이 **아직 존재하지 않는다** — 빈 행을 하나
-      // 만들어 준다. 새 행의 이름 입력은 `autoFocus={i === 0}`로 마운트하며 포커스를
-      // 가져가므로, story 16("첫 디렉티브 이름으로")과 story 13("바로 타이핑")이
-      // 함께 성립한다. 버튼으로 보내면 포커스는 가지만 타이핑은 못 한다.
-      if (firstMissing === 'directives' && draft.kind === 'csp' && draft.directives.length === 0) {
-        setCspDirectives([{ name: '', value: '' }]);
-        return;
-      }
       requiredFieldRefs[firstMissing].current?.focus();
       return;
     }
@@ -180,9 +161,6 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
     draft.kind === 'set-cookie' ||
     draft.kind === 'response-header' ||
     (draft.kind === 'request-header' && isRequestAppendAllowed(draft.name));
-
-  const setCspDirectives = (directives: CspModification['directives']) =>
-    setDraft({ ...(draft as CspModification), directives });
 
   const currentMatchType: UrlMatchType =
     ('urlMatchType' in draft ? draft.urlMatchType : undefined) ?? defaultMatchType;
@@ -343,63 +321,6 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
           {draft.kind === 'response-header' && <NoteText>{t('responsePanelNote')}</NoteText>}
           {hasPlaceholders(draft.value) && <NoteText>{t('placeholderNote')}</NoteText>}
         </>
-      )}
-
-      {draft.kind === 'csp' && (
-        <div className="flex flex-col gap-1.5">
-          {draft.directives.map((directive, i) => (
-            <div key={i} className="flex items-center gap-1">
-              <Input
-                ref={i === 0 ? cspDirectiveNameRef : undefined}
-                autoFocus={i === 0}
-                size="sm"
-                value={directive.name}
-                onChange={(e) =>
-                  setCspDirectives(
-                    draft.directives.map((d, j) => (j === i ? { ...d, name: e.target.value } : d)),
-                  )
-                }
-                placeholder="default-src"
-                aria-label={t('ariaCspDirectiveName')}
-                // 디렉티브 필수(이름 있는 항목 ≥1) 검증 실패 시, 이름이 빈 입력을 invalid로 표시.
-                aria-invalid={cspError && directive.name.trim() === '' ? true : undefined}
-                aria-describedby={cspError ? CSP_ERROR_ID : undefined}
-                className="w-32"
-              />
-              <Input
-                size="sm"
-                font="mono"
-                value={directive.value}
-                onChange={(e) =>
-                  setCspDirectives(
-                    draft.directives.map((d, j) => (j === i ? { ...d, value: e.target.value } : d)),
-                  )
-                }
-                placeholder="'self'"
-                aria-label={t('ariaCspDirectiveValue')}
-                className="min-w-0 flex-1"
-              />
-              <Button
-                variant="danger"
-                size="sm"
-                aria-label={t('ariaRemoveDirective')}
-                onClick={() => setCspDirectives(draft.directives.filter((_, j) => j !== i))}
-              >
-                {t('remove')}
-              </Button>
-            </div>
-          ))}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="self-start"
-            onClick={() => setCspDirectives([...draft.directives, { name: '', value: '' }])}
-          >
-            <Plus size={14} strokeWidth={1.75} className="mr-1" />
-            {t('addDirective')}
-          </Button>
-          {cspError && <FieldError id={CSP_ERROR_ID}>{t('requiredField')}</FieldError>}
-        </div>
       )}
 
       {draft.kind === 'redirect' && (

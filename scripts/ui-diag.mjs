@@ -156,7 +156,7 @@ const richState = {
         { kind: 'response-header', id: 'm2', name: 'X-Frame-Options', value: 'DENY', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
           conditions: { excludedDomains: ['cdn.example.com'] } },
         { kind: 'cookie', id: 'm3', name: 'session', value: 'abc', enabled: true, mode: 'append', emptyMeans: 'remove', comment: '' },
-        { kind: 'csp', id: 'm4', directives: [{ name: 'default-src', value: "'self'" }], comment: '', enabled: true },
+        { kind: 'set-cookie', id: 'm4', value: 'sid=abc; Path=/', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
         { kind: 'redirect', id: 'm5', pattern: '^https://prod\\.example\\.com/(.*)', substitution: 'http://localhost:3000/\\1', comment: '', enabled: true },
       ],
     },

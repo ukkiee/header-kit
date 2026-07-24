@@ -64,13 +64,6 @@ export function isModification(value: unknown): value is Modification {
       return typeof value.name === 'string' && isHeaderish(value);
     case 'set-cookie':
       return isHeaderish(value);
-    case 'csp':
-      return (
-        Array.isArray(value.directives) &&
-        value.directives.every(
-          (d) => isRecord(d) && typeof d.name === 'string' && typeof d.value === 'string',
-        )
-      );
     case 'redirect':
       return typeof value.pattern === 'string' && typeof value.substitution === 'string';
     default:
@@ -130,15 +123,12 @@ function isProfile(value: unknown): value is Profile {
 /** Modification에 이후 슬라이스에서 추가된 필드를 기본값으로 채운다 (SSOT 보호). */
 export function backfillModification(value: unknown): unknown {
   if (!isRecord(value)) return value;
-  // csp/redirect는 mode/emptyMeans가 없다 — 헤더 계열(및 cookie/set-cookie)만 채운다.
+  // redirect는 mode/emptyMeans가 없다 — 헤더 계열(및 cookie/set-cookie)만 채운다.
   if (value.kind === 'redirect') {
     // redirect의 urlFilter(ADR 0007 비대상)는 치유로 제거 — 검증 거부가 전체
     // 상태를 기본값으로 리셋하는 것보다 필드 하나를 벗기는 쪽이 안전하다.
     const { urlFilter: _stripped, ...rest } = value;
     return { comment: '', ...rest };
-  }
-  if (value.kind === 'csp') {
-    return { comment: '', ...value };
   }
   // 무효 urlMatchType은 치유로 벗긴다(부재 = regex 하위 호환) — 전량 거부 방지.
   const healed: Record<string, unknown> = { mode: 'override', emptyMeans: 'remove', comment: '', ...value };
@@ -152,6 +142,17 @@ export function backfillModification(value: unknown): unknown {
 }
 
 /**
+ * 퇴역한 **종류**의 수정을 걷어낸다 (csp — ADR 0013). 사용자가 지운 항목이나
+ * enabled:false와 무관하다. 로드·import 두 진입점 모두 **검증보다 먼저** 불러야
+ * 한다 — 검증이 먼저 보면 csp는 무효 수정이라, 로드는 상태 전체를 기본값으로
+ * 리셋하고 import는 파일을 통째로 거부한다. 버리되 같은 프로필의 나머지 수정·
+ * 메타는 그대로 둔다.
+ */
+export function dropRetiredKinds(modifications: unknown[]): unknown[] {
+  return modifications.filter((m) => !(isRecord(m) && m.kind === 'csp'));
+}
+
+/**
  * v1 내부 반복 중 추가된 선택 필드를 기본값으로 채운다.
  * 필드 추가가 기존 저장 상태를 전량 거부로 파괴하면 안 된다 (SSOT 보호).
  */
@@ -161,8 +162,9 @@ function backfillProfile(value: unknown): unknown {
     shortLabel: typeof value.name === 'string' ? value.name.charAt(0).toUpperCase() : '',
     color: PROFILE_COLORS[0],
     ...value,
+    // 퇴역 종류는 isProfile 검증에 닿기 전에 버린다 — 닿으면 전체 리셋이다.
     modifications: Array.isArray(value.modifications)
-      ? value.modifications.map(backfillModification)
+      ? dropRetiredKinds(value.modifications).map(backfillModification)
       : value.modifications,
   };
   return migrateProfileFilters(base);

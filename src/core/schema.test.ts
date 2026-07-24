@@ -95,6 +95,35 @@ describe('parseStoredState', () => {
     expect('urlFilter' in (healed.profiles[0]?.modifications[0] ?? {})).toBe(false);
   });
 
+  it('제거된 csp 규칙은 검증 전에 조용히 빠지고 나머지는 온전하다 (ADR 0013)', () => {
+    const parsed = parseStoredState({
+      schemaVersion: SCHEMA_VERSION,
+      paused: false,
+      profiles: [
+        {
+          id: 'p1', name: 'Kept', active: true, shortLabel: 'K', color: '#2563eb',
+          modifications: [
+            { kind: 'csp', id: 'c1', directives: [{ name: 'default-src', value: "'self'" }], comment: '', enabled: true },
+            { kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+            { kind: 'redirect', id: 'r1', pattern: '^https://a/(.*)', substitution: 'https://b/\\1', comment: '', enabled: true },
+          ],
+        },
+        { id: 'p2', name: 'Other', active: false, shortLabel: 'O', color: '#16a34a', modifications: [] },
+      ],
+      materialized: { m1: 'trace-abc' },
+      customHeaderNames: ['X-Custom'],
+    });
+
+    // 기본값 리셋이 아니다 — 프로필과 상태 메타가 그대로 남는다.
+    expect(parsed.profiles.map((p) => p.id)).toEqual(['p1', 'p2']);
+    expect(parsed.profiles[0]).toMatchObject({ name: 'Kept', active: true, shortLabel: 'K', color: '#2563eb' });
+    expect(parsed.materialized).toEqual({ m1: 'trace-abc' });
+    expect(parsed.customHeaderNames).toEqual(['X-Custom']);
+    // csp만 빠지고 같은 프로필의 다른 수정은 순서까지 보존된다.
+    expect(parsed.profiles[0]?.modifications.map((m) => m.kind)).toEqual(['request-header', 'redirect']);
+    expect(parsed.profiles[0]?.modifications.map((m) => m.id)).toEqual(['m1', 'r1']);
+  });
+
   it('유효한 상태는 그대로 통과한다', () => {
     const state = {
       schemaVersion: SCHEMA_VERSION,

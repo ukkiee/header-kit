@@ -988,7 +988,7 @@ try {
     .catch(() => false);
   record('L3: 시크릿 미허용 안내가 노출된다', incognitoNote, `visible=${incognitoNote}`);
 
-  // ---------- M. 이슈 03: Cookie/Set-Cookie/CSP/Redirect ----------
+  // ---------- M. 이슈 03: Cookie/Set-Cookie/Redirect ----------
   const modBase = (kind, extra) => ({ kind, id: `m-${kind}`, comment: '', enabled: true, ...extra });
 
   // M1: Request Cookie append → Cookie 헤더에 name=value 누적
@@ -1090,33 +1090,6 @@ try {
   record('M2e: Set-Cookie block이 서버 Set-Cookie를 차단', !/server_cookie=base/.test(afterScBlock),
     `document.cookie=${afterScBlock}`);
   await clearCookies();
-
-  // M3: CSP 응답 헤더 합성
-  await seedProfiles([
-    baseProfile('p-csp', 'Cs',
-      [modBase('csp', { directives: [{ name: 'default-src', value: "'none'" }] })]),
-  ]);
-  await pollSessionRuleCount(sw, 1);
-  const cspHeader = await pageB.evaluate(async () => {
-    const res = await fetch('/headers', { cache: 'no-store' });
-    return res.headers.get('content-security-policy');
-  });
-  record('M3: CSP 디렉티브 합성 → 응답 헤더', cspHeader === "default-src 'none'", `csp=${cspHeader}`);
-
-  // M3b: 새 UI 경로(확장 편집)로 CSP 디렉티브 값 변경 → 실제 응답 헤더 반영 (슬라이스 05)
-  await popup.reload();
-  await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
-  await popup.getByLabel('CSP directive value').fill("'self'");
-  await popup.getByRole('button', { name: 'Save', exact: true }).click();
-  const cspEdited = await pollUntil(
-    () => pageB.evaluate(async () => {
-      const res = await fetch('/headers', { cache: 'no-store' });
-      return res.headers.get('content-security-policy');
-    }),
-    (v) => v === "default-src 'self'",
-  );
-  record('M3b: UI 확장 편집으로 CSP 값 변경 → 실응답 반영', cspEdited === "default-src 'self'",
-    `csp=${cspEdited}`);
 
   // M4: Redirect regex + 캡처 그룹 치환
   await seedProfiles([
@@ -1784,6 +1757,31 @@ try {
     autofocused && inlineError && ariaInvalid === 'true' && modsAfterBlockedSave === 1,
     `autofocus=${autofocused}, error=${inlineError}, aria-invalid=${ariaInvalid}, mods=${modsAfterBlockedSave}`);
 
+  // N18f: Type 셀렉트가 더는 CSP를 제공하지 않는다 (ADR 0013). "CSP 없음"만 단언하면
+  // 셀렉트가 통째로 깨져도 통과하므로, 남아야 할 종류가 빠짐없이 그대로인지 함께 본다.
+  // (퇴역한 N18e[빈 CSP 디렉티브 Save 차단]와 혼동하지 않도록 새 번호를 쓴다.)
+  // 여기 끼는 이유: 뒤의 b~d는 종류를 갈아 끼우며 폼 상태를 굴리므로, 옵션 목록은
+  // 아직 아무 종류도 바꾸지 않은 갓 열린 폼에서 읽어야 한다. N18a의 autofocus 단언
+  // 뒤여야 셀렉트로 옮겨 간 포커스가 그 단언을 오염시키지 않는다.
+  // 팝업은 pickOption과 같은 대기 규율로 열고, 닫을 때는 Esc 대신 현재 종류를 다시
+  // 고른다 — 팝업이 안 열린 채 누른 Esc는 폼까지 닫아 뒤 케이스를 무너뜨린다.
+  await popup.getByRole('combobox', { name: 'Type', exact: true }).click();
+  const typeOpened = await popup
+    .getByRole('option', { name: 'Redirect', exact: true })
+    .waitFor({ timeout: 5000 })
+    .then(() => true, () => false);
+  await settledListboxes(popup, 1);
+  const kindOptions = (await popup.getByRole('option').allTextContents()).map((n) => n.trim());
+  if (typeOpened) {
+    await popup.getByRole('option', { name: 'Request header', exact: true }).click();
+    await settledListboxes(popup, 0);
+  }
+  const keptKinds = ['Request header', 'Response header', 'Request cookie', 'Response cookie', 'Redirect'];
+  record('N18f: Type 셀렉트 옵션 — CSP 없음, 헤더 계열·쿠키·Redirect 유지',
+    typeOpened && !kindOptions.some((o) => /csp/i.test(o)) &&
+      keptKinds.every((k) => kindOptions.includes(k)) && kindOptions.length === keptKinds.length,
+    `열림=${typeOpened}, options=[${kindOptions.join(' | ')}]`);
+
   // b: 종류 전환은 이전 종류의 검증 오류를 지운다 — 차단 Save 직후(N18a에서 name 오류
   //    상태) Request cookie로 바꾸면 아직 Save한 적 없으므로 오류가 없어야 한다.
   await pickOption(popup, 'Type', 'Request cookie');
@@ -1798,24 +1796,6 @@ try {
   record('N18b: 종류 전환 시 스테일 오류 없음 + 응답 쿠키·쿠키 이름 라벨 + Redirect 2필드 오류',
     cookieLabelShown && noStaleError && redirectErrors === 2 && /Response cookie/.test(setCookieSelected ?? ''),
     `cookie-label=${cookieLabelShown}, no-stale=${noStaleError}, redirect-errors=${redirectErrors}, kind="${(setCookieSelected ?? '').trim()}"`);
-
-  // N18e: CSP 디렉티브 이름이 비면 Save 차단 — 인라인 오류 + 이름 입력에 aria-invalid + 저장 안 됨 (release r1 R-2)
-  await pickOption(popup, 'Type', 'CSP');
-  await popup.getByRole('button', { name: 'directive' }).click(); // 빈 디렉티브 1개 추가
-  const cspNameInput = popup.getByLabel('CSP directive name').first();
-  await cspNameInput.waitFor({ timeout: 5000 });
-  await popup.getByRole('button', { name: 'Save', exact: true }).click();
-  const cspInlineError = await popup.getByText('Required.', { exact: true }).first()
-    .waitFor({ timeout: 5000 }).then(() => true, () => false);
-  const cspAriaInvalid = await cspNameInput.getAttribute('aria-invalid');
-  const modsAfterCspBlock = await sw.evaluate(async () => {
-    const { state } = await chrome.storage.local.get('state');
-    return state.profiles[0].modifications.length;
-  });
-  record('N18e: CSP 빈 디렉티브 이름 Save 차단 — 인라인 오류·aria-invalid·스토리지 불변',
-    cspInlineError && cspAriaInvalid === 'true' && modsAfterCspBlock === 1,
-    `error=${cspInlineError}, aria-invalid=${cspAriaInvalid}, mods=${modsAfterCspBlock}`);
-  // 폼은 열어둔 채 다음 케이스(N18c)로 — 종류 전환이 스테일 오류를 지운다.
 
   // c: 모드 숨김 — 비허용 요청 헤더 이름이면 Mode 미노출, 허용(Accept)이면 노출
   await pickOption(popup, 'Type', 'Request header');
@@ -2651,19 +2631,6 @@ try {
       kind: 'Redirect',
       setup: () => popup.getByLabel('Redirect pattern', { exact: true }).first().fill('^https://a/(.*)'),
       expected: (page) => page.getByLabel('Redirect substitution', { exact: true }),
-    }),
-    // 디렉티브가 0개면 고칠 입력이 아직 없다 — 빈 행을 만들어 그 이름 입력으로 보낸다.
-    'CSP(행 없음)': await focusAfterBlockedSave(popup, {
-      kind: 'CSP',
-      expected: (page) => page.getByLabel('CSP directive name', { exact: true }),
-    }),
-    'CSP(행 있음)': await focusAfterBlockedSave(popup, {
-      kind: 'CSP',
-      setup: async () => {
-        await popup.getByRole('button', { name: 'directive', exact: true }).click();
-        await popup.waitForTimeout(150);
-      },
-      expected: (page) => page.getByLabel('CSP directive name', { exact: true }),
     }),
   };
   const allOnTarget = Object.values(focusCases).every((r) => r.onTarget);

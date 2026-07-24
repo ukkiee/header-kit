@@ -149,21 +149,6 @@ describe('compile', () => {
     expect(free?.condition.regexFilter).toBeUndefined();
   });
 
-  it('CSP 규칙도 자체 urlFilter를 쓴다', () => {
-    const { rules } = compile(
-      [
-        profile({
-          modifications: [
-            { kind: 'csp', id: 'c1', directives: [{ name: 'default-src', value: "'self'" }], enabled: true, comment: '', urlFilter: 'csp\\.only' },
-          ],
-        }),
-      ],
-      { paused: false, tabs: [], now: 0, materialized: {} },
-    );
-    expect(rules).toHaveLength(1);
-    expect(rules[0]?.condition.regexFilter).toBe('csp\\.only');
-  });
-
   it('자체 urlFilter가 한도를 넘으면 규칙을 방출하지 않고 경고한다 (스코프 확대 금지)', () => {
     const { rules, warnings } = compile(
       [

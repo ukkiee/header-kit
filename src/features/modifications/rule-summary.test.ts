@@ -54,23 +54,6 @@ describe('ruleView', () => {
     expect(ruleView(header({ value: '', emptyMeans: 'send-empty' }), ko).summary).toBe('X-Test: (빈 값 전송)');
   });
 
-  it('CSP: 디렉티브 나열 요약', () => {
-    const view = ruleView(
-      {
-        kind: 'csp',
-        id: 'p',
-        directives: [
-          { name: 'default-src', value: "'self'" },
-          { name: 'img-src', value: 'data:' },
-        ],
-        enabled: true,
-        comment: '',
-      },
-      t,
-    );
-    expect(view).toEqual({ title: 'CSP', badge: 'CSP', summary: "default-src 'self' · img-src data:", conditionBadges: [] });
-  });
-
   it('리다이렉트: 패턴 → 치환 요약, 메모가 제목', () => {
     const view = ruleView(
       {

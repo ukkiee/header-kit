@@ -4,13 +4,13 @@ import { formatExpiryBadge } from './expiry-format';
 
 /**
  * 규칙의 읽기 요약 (ADR 0006) — 목록은 이걸로만 그린다. 배지는 프로토콜 성격의
- * 기술 토큰(REQ/RES/CSP…)이라 지역화하지 않고, 모드·빈 값 같은 의미 표기는
+ * 기술 토큰(REQ/RES/COOKIE…)이라 지역화하지 않고, 모드·빈 값 같은 의미 표기는
  * 카탈로그를 거친다.
  */
 export interface RuleView {
   /** 표시 제목 — 메모 우선, 없으면 대표 필드(헤더/쿠키 이름), 그것도 없으면 배지. */
   title: string;
-  badge: 'REQ' | 'RES' | 'COOKIE' | 'SET-COOKIE' | 'CSP' | 'REDIRECT';
+  badge: 'REQ' | 'RES' | 'COOKIE' | 'SET-COOKIE' | 'REDIRECT';
   /** 한 줄 효과 요약 (mono 렌더 가정). */
   summary: string;
   /** 조건 배지 줄 (ADR 0010, ui-refine 05) — 없으면 빈 배열이라 행 높이가 불변. */
@@ -29,7 +29,6 @@ const BADGES = {
   'response-header': 'RES',
   cookie: 'COOKIE',
   'set-cookie': 'SET-COOKIE',
-  csp: 'CSP',
   redirect: 'REDIRECT',
 } as const;
 
@@ -72,14 +71,6 @@ type BareView = Omit<RuleView, 'conditionBadges'>;
 
 function bareView(m: Modification, t: Translator): BareView {
   const badge = BADGES[m.kind];
-
-  if (m.kind === 'csp') {
-    const summary = m.directives
-      .map((d) => `${d.name} ${d.value}`.trim())
-      .filter(Boolean)
-      .join(' · ');
-    return { title: m.comment || 'CSP', badge, summary: summary || t('emptyMarker') };
-  }
 
   if (m.kind === 'redirect') {
     const summary =

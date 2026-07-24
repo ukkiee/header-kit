@@ -9,7 +9,7 @@ Modification의 이름 있는 묶음. 여러 Profile이 동시에 활성일 수 
 _Avoid_: preset, workspace, 설정 세트
 
 **Modification**:
-Profile에 속한 개별 수정 항목. 종류는 Request Header, Response Header, Request Cookie, Response Cookie, CSP, Redirect 여섯 가지. 자신의 URL 스코프(매치 방식 포함)와 Condition을 직접 들고 다닌다 (ADR 0010).
+Profile에 속한 개별 수정 항목. 종류는 Request Header, Response Header, Request Cookie, Response Cookie, Redirect 다섯 가지. 자신의 URL 스코프(매치 방식 포함)와 Condition을 직접 들고 다닌다 (ADR 0010). CSP 종류는 ADR 0013에서 퇴역했다 — 저장·import된 CSP 수정은 검증 전에 조용히 버려진다.
 _Avoid_: rule (브라우저의 net rule과 혼동), row, entry
 
 **Response Cookie**:

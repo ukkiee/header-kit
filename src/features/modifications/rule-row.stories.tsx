@@ -45,17 +45,6 @@ export const Redirect: Story = {
   },
 };
 
-export const Csp: Story = {
-  args: {
-    modification: {
-      kind: 'csp',
-      id: 'c1',
-      directives: [
-        { name: 'default-src', value: "'self'" },
-        { name: 'img-src', value: 'data:' },
-      ],
-      enabled: false,
-      comment: '',
-    },
-  },
+export const Disabled: Story = {
+  args: { modification: { ...header, comment: '', enabled: false } },
 };

@@ -14,7 +14,7 @@ export interface LargeEditorProps {
   triggerLabel?: ReactNode;
 }
 
-/** 긴 regex·CSP·헤더 값을 넓은 다이얼로그에서 편집한다 (탭 앱·팝업 공용). */
+/** 긴 regex·헤더 값을 넓은 다이얼로그에서 편집한다 (탭 앱·팝업 공용). */
 export function LargeEditor({ title, value, onCommit, triggerLabel = <Maximize2 size={14} strokeWidth={1.75} /> }: LargeEditorProps) {
   const t = useT();
   const [open, setOpen] = useState(false);

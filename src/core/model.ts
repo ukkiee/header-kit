@@ -114,26 +114,6 @@ export interface SetCookieModification {
   conditions?: RuleConditions;
 }
 
-export interface CspDirective {
-  name: string;
-  value: string;
-}
-
-/** CSP — 디렉티브를 합성해 Content-Security-Policy 응답 헤더로 set 한다. */
-export interface CspModification {
-  kind: 'csp';
-  id: string;
-  directives: CspDirective[];
-  comment: string;
-  enabled: boolean;
-  /** 이 규칙만의 URL 필터 — 있으면 프로필 URL 필터를 대체한다 (ADR 0007). */
-  urlFilter?: string;
-  /** urlFilter의 매치 방식 (ADR 0008) — 부재 = regex. */
-  urlMatchType?: UrlMatchType;
-  /** 적용 조건 (ADR 0010) — 없으면 무조건 적용. */
-  conditions?: RuleConditions;
-}
-
 /** Redirect — regex 매칭 + 캡처 그룹 치환으로 URL을 재작성한다. */
 export interface RedirectModification {
   kind: 'redirect';
@@ -153,13 +133,12 @@ export type Modification =
   | ResponseHeaderModification
   | CookieModification
   | SetCookieModification
-  | CspModification
   | RedirectModification;
 
 /**
  * Placeholder 실체화 대상이 되는 값 문자열 (없으면 null).
  * 값이 있는 종류(header/cookie/set-cookie)만 Placeholder를 지원한다 —
- * csp/redirect는 지원하지 않는다.
+ * redirect는 지원하지 않는다.
  */
 export function placeholderTemplate(modification: Modification): string | null {
   switch (modification.kind) {
@@ -266,8 +245,6 @@ export function createModification(kind: ModificationKind, id: string = crypto.r
       return { kind, ...common, name: '', value: '', mode: 'append', emptyMeans: 'remove' };
     case 'set-cookie':
       return { kind, ...common, value: '', mode: 'append', emptyMeans: 'remove' };
-    case 'csp':
-      return { kind, ...common, directives: [] };
     case 'redirect':
       return { kind, ...common, pattern: '', substitution: '' };
     default:

@@ -257,9 +257,6 @@ function emitModification(
     case 'set-cookie':
       emitHeaderRule(modification, priority, profileId, tabIds, emitter);
       return;
-    case 'csp':
-      emitCspRule(modification, priority, profileId, tabIds, emitter);
-      return;
     case 'redirect':
       emitRedirectRule(modification, priority, profileId, tabIds, emitter);
       return;
@@ -331,35 +328,6 @@ function resolveHeaderInfo(
   }
 
   return { header: plan.header, operation: 'set', value: plan.composedValue };
-}
-
-function emitCspRule(
-  modification: Extract<Modification, { kind: 'csp' }>,
-  priority: number,
-  profileId: string,
-  tabIds: number[] | undefined,
-  emitter: Emitter,
-): void {
-  const value = modification.directives
-    .map((d) => `${d.name.trim()} ${d.value.trim()}`.trim())
-    .filter((d) => d !== '')
-    .join('; ');
-  if (value === '') return; // 빈 CSP는 규칙을 만들지 않는다
-
-  const own = ownScope(modification, profileId, emitter);
-  if (own === null) return;
-  emitRule(
-    emitter,
-    {
-      priority,
-      action: {
-        type: 'modifyHeaders',
-        responseHeaders: [{ header: 'Content-Security-Policy', operation: 'set', value }],
-      },
-      condition: conditionFor(modification.conditions, own ?? {}, tabIds),
-    },
-    { profileId, modificationId: modification.id },
-  );
 }
 
 function emitRedirectRule(
