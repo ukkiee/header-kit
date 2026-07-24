@@ -10,22 +10,35 @@
 //
 // 한도 이력: 60KB(ui-refine 08 초기 추정) → 120KB(ui-refine 08 재트리아지, plan r1 R-3)
 // → 135KB(ui-polish 02 재트리아지) → 계량 기준을 즉시 집합 전체로 넓히며 같은 여유를
-// 유지하도록 재표현(ui-polish structure r1 S-1). **마지막 변경은 완화가 아니다** —
-// 재던 것보다 더 많이 재면서 남는 여유는 그대로 두었으므로 게이트는 오히려 더 촘촘해졌다.
+// 유지하도록 재표현(ui-polish structure r1 S-1) → 175 → 190KB(ui-stack-migration 02·03).
+// **네 번째까지의 변경은 완화가 아니다** — 재던 것보다 더 많이 재면서 남는 여유는 그대로
+// 두었으므로 게이트는 오히려 더 촘촘해졌다. **마지막 둘(175·190KB)은 완화가 맞다** —
+// shadcn/ui 소스와 그것이 전제하는 tailwind-merge를 받아들이며 사다리를 밟고 승인받았다.
 //
-// 측정치와 경위의 정본은 .scratch/ui-polish/issues/02-scroll-area.md 하나다 —
-// 숫자를 여기 옮겨 적지 않는다(여러 곳에 베껴 두면 곧 서로 어긋난다).
+// 측정치와 경위의 정본은 두 파일이다 — 숫자를 여기 옮겨 적지 않는다(여러 곳에 베껴 두면
+// 곧 서로 어긋난다):
+//   - .scratch/ui-polish/issues/02-scroll-area.md (135KB까지의 경위)
+//   - .scratch/ui-stack-migration/issues/02-shadcn-infra.md (175KB 재트리아지)
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 const BASELINE_KB = 386.0; // 기준선(ui-refine 이전 공용 청크, min·비압축)
 /**
- * 허용 증가량. 계량 기준을 넓히며 **남는 여유를 기준으로** 재계산했다:
- * 예전(global만) 515.5KB에 한도 386+135=521.0KB → 여유 5.5KB.
- * 지금(즉시 합계) 523.8KB에 한도 386+143=529.0KB → 여유 5.2KB.
- * 즉 앞으로 쓸 수 있는 여유는 오히려 0.3KB 줄었다. 계량 범위만 넓어졌다.
+ * 허용 증가량. 143KB까지는 계량 기준을 넓히며 **남는 여유를 기준으로** 재계산한 값이었다
+ * (즉시 합계 523.8KB에 한도 529.0KB → 여유 5.2KB).
+ *
+ * 190KB는 성격이 다르다 — shadcn/ui 채택이 끌고 온 몫이다. 가장 큰 항목은 tailwind-merge
+ * 하나로 **+26.6KB**(추정 6~7KB의 4배: v4 클래스 그룹 테이블을 통째로 담는다), 나머지는
+ * shadcn 컴포넌트 소스다. 사다리를 밟았고(지연 로드 불가 — 거의 모든 프리미티브가 첫
+ * 페인트에 cn을 쓴다 / 대안 clsx-only는 제시 후 기각) 사용자 승인으로 올렸다. 근거는
+ * ui-polish 02와 같되 이번에도 **실측**이다 — 시작 지표가 회귀하지 않았다.
+ *
+ * 이 값은 마이그레이션 도중 175 → 190으로 한 번 더 올렸다. 175는 인프라 단계 실측
+ * (166.1KB)에 여유를 얹은 값이었는데, 조합 파일들이 shadcn 컴포넌트를 실제 import 체인에
+ * 들이면서 180.5KB가 됐다. 지금 여유는 9.5KB로 마이그레이션 전(9.9KB)과 같은 수준이다.
+ * 경위·수치는 위 주석이 가리키는 이슈 파일이 정본이다.
  */
-const MAX_INCREASE_KB = 143;
+const MAX_INCREASE_KB = 190;
 const OUT_DIR = '.output/chrome-mv3';
 const CHUNKS_DIR = join(OUT_DIR, 'chunks');
 const ENTRY_HTML = join(OUT_DIR, 'popup.html');
