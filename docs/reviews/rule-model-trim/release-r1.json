@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "release",
+  "verdict": "approve",
+  "summary": "Ship: the final diff matches the spec, filters retired CSP rules before validation on both load and import paths, preserves unrelated data and csp_report, and removes CSP across the model, compiler, validation, UI, summaries, labels, and i18n. The committed verification evidence covers the required entry-point migrations and UI seams; no substantive release-blocking finding is supported.",
+  "planFile": "docs/reviews/rule-model-trim/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 34,
+  "target": "branch diff against main",
+  "reviewedSha": "83f8621918eeac41f7bf461caf6ab72ceadf58b9",
+  "reviewedTree": "cd59a7b2261a0382118d6fad4f780daf66350663",
+  "reviewedPlanSha256": "067e08f2d9429893c8bbdac05453006c70367905d165ebdd6db77ae758b9832f",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 0,
+  "planFindingCount": 0,
+  "triage": "Clean verdict: note it in your report and COMMIT this artifact with the next bookkeeping commit.",
+  "findings": [],
+  "next_steps": []
+}
