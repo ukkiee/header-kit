@@ -38,3 +38,11 @@
 
 - 발견 0건 — verdict **approve**. R-1이 accept한 범위 안에서 resolved로 재검증됐고(실패 경로는 L2g가 저장까지 동작·같은 문서 재요청 없음·새 문서 회복을 고정, 지연 교체는 L2e/L2f가 양방향), 수정이 새로 들인 critical·high 이슈 없음. 트리아지할 행 없음.
 - 범위 밖으로 남긴 둘(현재 마운트 재시도 루프, 폴백의 네이티브 datalist 제거)은 r2가 다시 올리지 않았다.
+
+### release r3
+
+- R-2 accept (범위 좁힘) — Reduced-motion leaves newly added CSS animations enabled. 반영 커밋 `7839dd2`.
+  - **경계 명문화** — 스펙 story 23의 "새 애니메이션"이 무엇을 포함하는지가 암묵이라 발견이 나왔다. ADR 0012에 못박았다: transform·opacity·크기·레이아웃 전이는 계약 **안**(전정기관을 자극하는 움직임), `transition-colors`는 **밖**(색만 바뀌고 화면은 안 움직인다). 판정 기준 = "이동·변형·페이드인아웃인가, 색만 바뀌는가."
+  - **그 경계 안에 실제로 들어온 것 하나** — 스크롤바 `transition-opacity`. `motion-reduce:transition-none`으로 전이만 끄고 opacity 값(60→100)은 남겨 어포던스 유지. smoke **N33**(감도 대조 포함, 토큰 제거 시 reduced에서도 opacity 전이가 남아 FAIL 확인).
+- **범위 밖으로 둔 것 — `transition-colors`(fieldFocus·프로필 이름 입력·아코디언 헤더).** 색 전이는 위 경계의 밖이고, 없애면 접근성 이득 없이 reduced-motion 사용자만 투박한 UI를 쓴다.
+  - **리뷰어 주장의 사실 정정:** (1) 리뷰어는 이 색 전이들을 "post-gate 묶음이 들였다"고 했으나, `main`의 `button.tsx`에 이미 조건 없는 `transition`이 있었다(브랜치 이전 규약 — 일관 적용하면 main도 위반). (2) 스크롤바 opacity 토큰을 "new"라 했는데 이는 티켓 02(ScrollArea)의 것으로 structure r1·r2·release r1·r2를 **네 번 통과**한 코드다. 둘 다 이번 다듬기 묶음과 무관하다. **r2(다음 라운드)는 새 증거 없이 색 전이를 다시 올리지 않는다.**

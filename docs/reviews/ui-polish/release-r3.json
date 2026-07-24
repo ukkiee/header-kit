@@ -1,0 +1,39 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "release",
+  "verdict": "needs-attention",
+  "summary": "Do not ship: the post-gate CSS refinements violate the explicit reduced-motion acceptance criterion, and the refreshed evidence does not test them.",
+  "planFile": "docs/reviews/ui-polish/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 57,
+  "target": "branch diff against main",
+  "reviewedSha": "5e3b38acffd70d9f768e28fc9c2a99673975d38a",
+  "reviewedTree": "ea5f33202a73128db2ea8fd17deeaef67df2bbd7",
+  "reviewedPlanSha256": "9973af1ae044f8c3ec6d6a7a8f87bea306bbcc46332b8c2acba625b2db2f7b38",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 1,
+  "planFindingCount": 0,
+  "triage": "review-gate SKILL.md rules govern: render EVERY finding as a full table row, the human decides each row (accept/reject/defer/question — free text), echo back before applying, max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "Reduced-motion leaves newly added CSS animations enabled",
+      "body": "Story 23 requires every new animation to be disabled under reduced motion, but `fieldFocus` now unconditionally adds `transition-colors`, and the new ScrollArea token unconditionally animates scrollbar opacity. The same post-gate batch also adds unconditional color transitions to the profile-name input and collapsible header. Existing reduced-motion checks cover Motion props plus panel/select transitions, so the committed green suite can pass while these new CSS animations remain active. Motion-sensitive users therefore still receive animations despite the release requirement.",
+      "file": "src/ui/tokens.ts",
+      "line_start": 14,
+      "line_end": 67,
+      "confidence": 0.98,
+      "recommendation": "Condition every CSS transition introduced by this branch on motion preference, for example with `motion-reduce:transition-none`, including `fieldFocus`, `scrollbarTrack`, the profile-name input, and collapsible-header color feedback. Add a Playwright reduced-motion assertion that compares computed transition duration/property for these CSS-driven surfaces, with a normal-motion sensitivity control.",
+      "isPlanFinding": false
+    }
+  ],
+  "next_steps": [
+    "Disable the uncovered CSS transitions under `prefers-reduced-motion: reduce`.",
+    "Extend smoke coverage to include CSS-driven focus, header-color, and scrollbar transitions.",
+    "Refresh the pinned full-suite verification evidence after the fix."
+  ]
+}
