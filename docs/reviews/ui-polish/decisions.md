@@ -51,3 +51,15 @@
 
 - 발견 0건 — verdict **approve**. R-2가 accept한 범위 안에서 resolved로 재검증됐다(스크롤바 페이드에 motion-reduce:transition-none, smoke N33이 reduced에서 transition-property=none을 감도 대조와 함께 단언). 수정이 새로 들인 critical·high 없음.
 - 경계 밖으로 둔 색 전이(transition-colors)는 r4가 다시 올리지 않았다.
+
+### landing waiver
+
+- **릴리스 approve 이월 (재게이트 없음)** — r4 approve(reviewedSha `4f6dc66`) 이후 브랜치에 세 커밋이
+  더 붙었다: `657d41c`(r4 부기), `12b7cbe`(스모크 흔들림 F1·N23a·I1 안정화), `b5a5319`(후속 이슈 발행).
+  이 중 코드 변경은 `12b7cbe` 하나이고 **`scripts/smoke.mjs`만** 건드린다 — 제품 코드 0, 단언의
+  의도 불변(관측 시점을 폴링/프레임 수집으로 바꿔 하니스 레이스만 없앰). 릴리스 렌즈의 관심사
+  중 유일하게 닿는 test-honesty는 **강화**됐지(더 견고한 관측) 약화되지 않았다.
+- **WAIVED by user:** 착지를 위해 스모크를 안정화하는 과정에서 발생한 테스트 전용 변경이므로,
+  릴리스 게이트를 한 번 더 돌리지 않고 approve를 이월한다(사용자의 "A로 진행 → 착지" 결정).
+  b5a5319에서 전 스위트 재실행 green(smoke 106/106)이 그 트리의 증거다.
+- 남은 산발 흔들림(#8 openRuleFormAt 등)은 `.scratch/smoke-flake-sweep/`로 분리 — ui-polish 밖.
