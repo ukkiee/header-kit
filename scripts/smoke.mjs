@@ -446,10 +446,20 @@ try {
         conditions: { tabDomains: ['127.0.0.1'] } }]),
   ]);
   await pollSessionRuleCount(sw, 1);
-  const onDomain = await fetchEchoHeaders(pageB, '/headers');
+  // 세션 규칙이 등록됐다(count=1)고 곧바로 요청에 적용된 건 아니다 — updateSessionRules
+  // 해소와 실제 네트워크 반영 사이에 지연이 있고, 탭 도메인 규칙은 탭 추적까지 얽혀 더 크다.
+  // 룰 카운트만 보고 한 번 fetch하면 그 지연에 걸려 헤더가 아직 안 붙는다(F1 흔들림).
+  // 효과 자체(헤더 유무)를 폴링해 적용을 관측한다 — 매 시도가 no-store 새 요청이다.
+  const onDomain = await pollUntil(
+    () => fetchEchoHeaders(pageB, '/headers'),
+    (h) => h['x-tab-domain'] === 'on',
+  );
   await pageB.goto(`http://localhost:${port}/`);
   await pollSessionRuleCount(sw, 0); // 도메인 이탈 → 매칭 탭 없음 → 그 규칙만 미방출
-  const offDomain = await fetchEchoHeaders(pageB, '/headers');
+  const offDomain = await pollUntil(
+    () => fetchEchoHeaders(pageB, '/headers'),
+    (h) => h['x-tab-domain'] === undefined,
+  );
   record('F1: 탭 도메인 조건 — 도메인 안 적용, 이탈 시 자동 해제',
     onDomain['x-tab-domain'] === 'on' && offDomain['x-tab-domain'] === undefined,
     `on=${onDomain['x-tab-domain']}, off=${offDomain['x-tab-domain']}`);
@@ -609,14 +619,17 @@ try {
   await popup.getByRole('switch', { name: 'Toggle Backupable' }).click();
   await pollSessionRuleCount(sw, 1);
 
-  // 자동 백업은 최소 간격(30s) 스로틀이 있으므로 그보다 넉넉히 기다린다.
+  // 자동 백업은 최소 간격(30s) 스로틀이 있다. 예전엔 35s만 기다려 여유가 5s뿐이라
+  // 기기가 조금만 바빠도 스로틀 해제 직후를 놓쳐 snapshots=0으로 간헐 실패했다(I1 흔들림).
+  // 스로틀(30s) 위로 넉넉히(25s) 여유를 준다 — 백업이 뜨면 pollUntil이 즉시 반환하므로
+  // 정상 경로의 소요는 그대로다(상한만 올라간다).
   const backupCount = await pollUntil(
     () => sw.evaluate(async () => {
       const kv = await chrome.storage.sync.get('bk:manifest');
       return kv['bk:manifest']?.snapshots?.length ?? 0;
     }),
     (count) => count >= 1,
-    35_000,
+    55_000,
     500,
   );
   record('I1: Profile 변경 후 자동 Backup 생성 (manifest-last 커밋)', backupCount >= 1,
@@ -2115,27 +2128,47 @@ try {
   // 관측 창이 한 프레임이라 Playwright 왕복으로는 못 잡는다 — 페이지 안에 관측자를
   // 심어 두고, 대상이 나타난 **다음 애니메이션 프레임**의 계산 opacity를 찍는다.
   // 대기 시간은 motion-tokens의 상수에서 온다(테스트가 자기 숫자를 들지 않는다).
-  const firstFrameMenuOpacities = async (page, openMenu) => {
+  /**
+   * 메뉴가 삽입된 직후부터 리드 항목이 정착(≈1)할 때까지 **매 프레임** 항목 opacity를 모은다.
+   *
+   * 예전엔 삽입 감지 후 rAF **한 번**만 표본했는데, 그 첫 프레임엔 motion의 애니메이션이
+   * 아직 안 붙어 전부 초기값 0으로 읽혔다([0,0]). 그러면 "앞 항목이 뒤보다 진행돼 있다"는
+   * 순차 단언이 0 > 0 = false로 헛돌아 간헐 실패했다(N23a 흔들림). 프레임을 모으면 스태거가
+   * 실제로 보이는 중간 프레임을 골라낼 수 있어 한 프레임의 타이밍에 기대지 않는다.
+   */
+  const menuStaggerFrames = async (page, openMenu) => {
     await page.evaluate(() => {
-      window.__menuProbe = null;
+      window.__menuFrames = null;
       const observer = new MutationObserver(() => {
         const menu = document.querySelector('[role="menu"]');
         if (!menu) return;
         observer.disconnect();
-        requestAnimationFrame(() => {
-          window.__menuProbe = [...menu.querySelectorAll('[role="menuitem"]')].map((el) =>
-            Number(getComputedStyle(el).opacity),
-          );
-        });
+        const frames = [];
+        const read = () =>
+          [...menu.querySelectorAll('[role="menuitem"]')].map((el) => Number(getComputedStyle(el).opacity));
+        let n = 0;
+        const tick = () => {
+          const frame = read();
+          frames.push(frame);
+          n += 1;
+          // 리드 항목이 정착했거나 40프레임(≈0.66s)이면 멈춘다 — reduced-motion은 처음부터
+          // [1,…]이라 첫 프레임에 바로 멈춘다.
+          if ((frame[0] ?? 1) >= 0.99 || n >= 40) {
+            window.__menuFrames = frames;
+            return;
+          }
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
       });
       observer.observe(document.body, { childList: true, subtree: true });
       setTimeout(() => observer.disconnect(), 5000);
     });
     await openMenu();
     const observed = await page
-      .waitForFunction(() => window.__menuProbe !== null, null, { timeout: 5000 })
+      .waitForFunction(() => window.__menuFrames !== null, null, { timeout: 5000 })
       .then(() => true, () => false);
-    return observed ? page.evaluate(() => window.__menuProbe) : null;
+    return observed ? page.evaluate(() => window.__menuFrames) : null;
   };
 
   const firstFrameLabelOpacity = async (page, labelText, act) => {
@@ -2173,7 +2206,7 @@ try {
   await popup.reload();
   await popup.getByRole('button', { name: 'Profile menu', exact: true }).waitFor({ timeout: 5000 });
   await popup.waitForTimeout(700);
-  const staggerLively = await firstFrameMenuOpacities(popup, openProfileMenu(popup));
+  const staggerFrames = await menuStaggerFrames(popup, openProfileMenu(popup));
   const menuItemCount = await popup.getByRole('menuitem').count();
   const settleMs = menuStaggerTotalMs(menuItemCount) + 200;
   await popup.waitForTimeout(settleMs);
@@ -2186,18 +2219,23 @@ try {
   await popup.reload();
   await popup.getByRole('button', { name: 'Profile menu', exact: true }).waitFor({ timeout: 5000 });
   await popup.waitForTimeout(700);
-  const staggerStill = await firstFrameMenuOpacities(popup, openProfileMenu(popup));
-  // "앞 항목이 뒤 항목보다 더 진행돼 있다"까지 봐야 **순차**를 단언한 것이다.
-  // 단순히 "1 미만인 항목이 있다"로는 stagger를 0으로 만들어 전부 동시에 fade해도 통과한다.
+  const stillFrames = await menuStaggerFrames(popup, openProfileMenu(popup));
+  // "앞 항목이 뒤 항목보다 더 진행돼 있다"까지 봐야 **순차**를 단언한 것이다. 단순히 "1 미만인
+  // 항목이 있다"로는 stagger를 0으로 만들어 전부 동시에 fade해도 통과한다. 모은 프레임 중
+  // **하나라도** 엄격 내림차순이면 스태거가 관측된 것이다 — 한 프레임의 타이밍에 안 기댄다.
   const isSequential =
-    Array.isArray(staggerLively) &&
-    staggerLively.length > 1 &&
-    staggerLively.every((o, i) => i === 0 || staggerLively[i - 1] > o);
+    Array.isArray(staggerFrames) &&
+    staggerFrames.some((f) => f.length > 1 && f.every((o, i) => i === 0 || f[i - 1] > o));
+  // reduced-motion: 어느 프레임에서도 부분값이 없다(처음부터 전부 완성).
+  const reducedComplete =
+    Array.isArray(stillFrames) &&
+    stillFrames.length > 0 &&
+    stillFrames.every((f) => f.length > 0 && f.every((o) => o === 1));
   record('N23a: 메뉴 순차 등장 — 앞 항목이 뒤보다 앞서고, reduced-motion은 즉시 완성',
     isSequential &&
       staggerSettled.length > 0 && staggerSettled.every((o) => o === 1) &&
-      Array.isArray(staggerStill) && staggerStill.length > 0 && staggerStill.every((o) => o === 1),
-    `lively=${JSON.stringify(staggerLively)}, sequential=${isSequential}, settled=${JSON.stringify(staggerSettled)}, reduced=${JSON.stringify(staggerStill)} (항목 ${menuItemCount}, 창 ${settleMs}ms)`);
+      reducedComplete,
+    `sequential=${isSequential}(${staggerFrames?.length}프레임), settled=${JSON.stringify(staggerSettled)}, reduced-complete=${reducedComplete} (항목 ${menuItemCount}, 창 ${settleMs}ms)`);
 
   // N23b: 삭제 2단 확인 라벨 — 첫 클릭은 메뉴를 열어 둔 채 라벨만 바꾼다.
   const reducedLabel = await firstFrameLabelOpacity(popup, 'Delete?', () =>
