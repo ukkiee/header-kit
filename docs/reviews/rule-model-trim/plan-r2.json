@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "plan",
+  "verdict": "approve",
+  "summary": "Ship gate passes. R-1 is resolved: lines 46-49 unambiguously require CSP filtering before `isProfile` on load and before `validateProfileEntry` on import; lines 57-58 mandate end-to-end tests through `parseStoredState` and `parseImport`, including no reset/rejection, preservation of supported modifications and profile metadata, and no CSP import notice. The Round 2 scan found no new critical or high issues introduced by these updates.",
+  "planFile": "docs/reviews/rule-model-trim/spec.md",
+  "planInDiff": true,
+  "reviewedFileCount": 2,
+  "target": "working tree diff",
+  "reviewedSha": "828a4841cdbcd5e8854cccc2bb9f3c4fffe77f10",
+  "reviewedTree": "0d05224eafe515f26c0c99fef9d802bddc9b4d95",
+  "reviewedPlanSha256": "067e08f2d9429893c8bbdac05453006c70367905d165ebdd6db77ae758b9832f",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 0,
+  "planFindingCount": 0,
+  "triage": "Clean verdict: note it in your report and COMMIT this artifact with the next bookkeeping commit.",
+  "findings": [],
+  "next_steps": []
+}
