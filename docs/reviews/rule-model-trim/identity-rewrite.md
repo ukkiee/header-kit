@@ -5,12 +5,24 @@
 
 ## 왜
 
-`.git/config`에 로컬 `user.*` 설정이 없어 글로벌 설정(회사 계정)이 그대로 적용됐고, 그 결과
 **첫 커밋부터 213개 전부**가 회사 신원으로 기록돼 있었다. 이 저장소는 개인 계정
 (`github.com/ukkiee/header-kit`)의 것이므로 회사 계정이 contributor로 남으면 안 된다.
 
+원인은 설정 부재가 **아니었다.** 개발 환경에는 이미 계정 분리가 구성돼 있다 —
+`~/.gitconfig`의 `[includeIf "gitdir:~/personal/"]`가 `~/personal/` 하위 저장소에
+`ukkiee <ukkiee90@gmail.com>`을 자동 적용하고, `[url "git@github-personal:"] insteadOf`가
+SSH remote를 개인 키 alias로 치환한다. 그런데 이 저장소가 **`~/workspace/header-kit`에
+있어 `gitdir:~/personal/` 패턴에 걸리지 않았고**, 그래서 글로벌(회사) 설정이 그대로 먹었다.
+HTTPS remote도 한몫했다 — `insteadOf` 치환을 우회해 gh credential helper에 의존하게 되고,
+그 활성 계정이 회사 계정으로 되돌아가 푸시 403이 반복됐다.
+
 author 정보는 커밋 객체 안에 들어 있어서 새 저장소로 옮겨도 따라간다 — contributor에서
 없애는 방법은 전 커밋의 author·committer 재작성뿐이다.
+
+**재발 방지는 신원을 손으로 고정하는 게 아니라 위치와 프로토콜을 맞추는 것이다:** 개인
+저장소는 `~/personal/` 아래에 두고 remote는 `git@github.com:...`(SSH)로 쓴다. 그러면
+includeIf와 insteadOf가 신원·인증을 모두 자동 처리한다. `git config --local user.*`를
+직접 넣으면 오히려 그 기전을 덮어써 가려 버린다.
 
 ## 무엇을
 
