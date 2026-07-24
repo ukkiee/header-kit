@@ -1,0 +1,75 @@
+# 커밋 신원 재작성 기록 (2026-07-24)
+
+`rule-model-trim` 착지 직전에 저장소 **전 이력의 커밋 신원**을 재작성했다. 이 문서는 그
+경위와, 그로 인해 끊긴 SHA 참조를 잇는 매핑을 남긴다.
+
+## 왜
+
+`.git/config`에 로컬 `user.*` 설정이 없어 글로벌 설정(회사 계정)이 그대로 적용됐고, 그 결과
+**첫 커밋부터 213개 전부**가 회사 신원으로 기록돼 있었다. 이 저장소는 개인 계정
+(`github.com/ukkiee/header-kit`)의 것이므로 회사 계정이 contributor로 남으면 안 된다.
+
+author 정보는 커밋 객체 안에 들어 있어서 새 저장소로 옮겨도 따라간다 — contributor에서
+없애는 방법은 전 커밋의 author·committer 재작성뿐이다.
+
+## 무엇을
+
+```
+전:  이상욱 <sanguk.lee@imweb.me>   × 213 (author·committer)
+후:  ukkiee <ukkiee90@gmail.com>    × 213 (author·committer)
+```
+
+- 재작성 도구: `git filter-branch --env-filter`, 대상 `-- --branches`
+- **작성 시각(author/committer date)은 보존**했다 — 신원만 바꿨다.
+- 재발 방지로 `.git/config`에 로컬 `user.name`/`user.email`을 고정했다.
+
+## 내용이 안 바뀌었다는 증거
+
+신원 재작성은 커밋 메타데이터만 건드리므로 트리(내용)는 그대로여야 한다. 실제로 그렇다:
+
+| | 값 |
+|---|---|
+| 재작성 **전** `main^{tree}` | `f2f8c0dbdcb8bdb73b1b4e0dfd9ef3d0ee525310` |
+| 재작성 **후** `main^{tree}` | `f2f8c0dbdcb8bdb73b1b4e0dfd9ef3d0ee525310` |
+| 커밋 수 | 213 → 213 |
+
+재작성 후 새 HEAD에서 전 스위트를 다시 돌렸고 7단계 전부 exit 0이다 —
+`bun run check`(에러 0) · `test`(200/200) · `build` · `bundle-gate`(519.1KB PASS) ·
+`smoke`(**105/105**, FAIL 0줄) · `storybook:build` · `ui-diag`(시작 지표 2항목 PASS).
+
+## SHA 매핑 — 문서가 참조하는 지점
+
+213개 SHA가 전부 바뀌었다. 이 피처의 문서·게이트 아티팩트가 이름으로 부르는 지점만 옮긴다:
+
+| 문맥 | 재작성 전 | 재작성 후 |
+|---|---|---|
+| 브랜치 base (`main`) | `9d19d7a` | `cc2ea2c` |
+| 티켓 01 시작점 (code-review 고정점) | `1768beb` | `b58b1b4` |
+| 티켓 01 구현 커밋 | `bbd3d4b` | `adfc9f1` |
+| structure 게이트 `reviewedSha` | `35db355` | `2879310` |
+| 티켓 02 시작점 (code-review 고정점) | `ba60c6c` | `0ebd251` |
+| 티켓 02 구현 커밋 | `61b3619` | `264c490` |
+| `verification.md`의 Verified SHA | `f02164e` | `bb8176f` |
+| release 게이트 `reviewedSha` | `83f8621` | `37f12c6` |
+| 착지 시점 `main` | `3a4027e` | `25469be` |
+
+### 게이트 아티팩트는 고치지 않았다
+
+`structure-r1.json`·`release-r1.json`의 `reviewedSha`/`reviewedTree`는 **Codex가 그 실행에서
+남긴 기록**이다. 손으로 고치면 그 실행이 실제로 무엇을 봤는지에 대한 증거가 아니게 되므로
+원문 그대로 둔다 — 위 표가 그 값을 현재 이력으로 잇는다.
+
+`reviewedTree` 값은 재작성 후에도 **그대로 유효하다**. 트리는 내용 주소이고 신원 재작성이
+내용을 바꾸지 않았기 때문이다. 즉 게이트가 무엇을 리뷰했는지는 `reviewedTree`로 지금도
+정확히 확인할 수 있다.
+
+`verification.md`의 `Verified tree`(`6ec17f30…`)도 같은 이유로 유효하다 — 끊긴 것은 그
+문서의 `Verified SHA` 한 줄뿐이고, 위 표가 잇는다.
+
+## 되돌리기
+
+재작성 직전 상태를 번들로 떠 뒀다(세션 스크래치패드의 `pre-rewrite-backup.bundle`, 1.0MB,
+전 ref 포함). 로컬에는 `refs/original/refs/heads/*`가 재작성 전 ref를 들고 있다.
+
+원격은 이 재작성 이력으로 force-push 했고, 이미 병합돼 고유 커밋이 0개였던
+`origin/feature/ui-polish`(stale)는 회사 신원이 남지 않도록 삭제했다.
