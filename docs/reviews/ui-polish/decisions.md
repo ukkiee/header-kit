@@ -46,3 +46,8 @@
   - **그 경계 안에 실제로 들어온 것 하나** — 스크롤바 `transition-opacity`. `motion-reduce:transition-none`으로 전이만 끄고 opacity 값(60→100)은 남겨 어포던스 유지. smoke **N33**(감도 대조 포함, 토큰 제거 시 reduced에서도 opacity 전이가 남아 FAIL 확인).
 - **범위 밖으로 둔 것 — `transition-colors`(fieldFocus·프로필 이름 입력·아코디언 헤더).** 색 전이는 위 경계의 밖이고, 없애면 접근성 이득 없이 reduced-motion 사용자만 투박한 UI를 쓴다.
   - **리뷰어 주장의 사실 정정:** (1) 리뷰어는 이 색 전이들을 "post-gate 묶음이 들였다"고 했으나, `main`의 `button.tsx`에 이미 조건 없는 `transition`이 있었다(브랜치 이전 규약 — 일관 적용하면 main도 위반). (2) 스크롤바 opacity 토큰을 "new"라 했는데 이는 티켓 02(ScrollArea)의 것으로 structure r1·r2·release r1·r2를 **네 번 통과**한 코드다. 둘 다 이번 다듬기 묶음과 무관하다. **r2(다음 라운드)는 새 증거 없이 색 전이를 다시 올리지 않는다.**
+
+### release r4
+
+- 발견 0건 — verdict **approve**. R-2가 accept한 범위 안에서 resolved로 재검증됐다(스크롤바 페이드에 motion-reduce:transition-none, smoke N33이 reduced에서 transition-property=none을 감도 대조와 함께 단언). 수정이 새로 들인 critical·high 없음.
+- 경계 밖으로 둔 색 전이(transition-colors)는 r4가 다시 올리지 않았다.

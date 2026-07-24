@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "release",
+  "verdict": "approve",
+  "summary": "R-2 is resolved. `src/ui/tokens.ts:70-71` applies `motion-reduce:transition-none` to the scrollbar opacity transition. Smoke N33 (`scripts/smoke.mjs:2920-2956`) verifies `transition-property: none` under reduced motion and includes a normal-motion control requiring an opacity transition. The committed full suite is pinned to SHA `3b9e5f6`, which contains the fix, and records N33 passing. The fix introduces no new critical or high-severity issue.",
+  "planFile": "docs/reviews/ui-polish/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 58,
+  "target": "branch diff against main",
+  "reviewedSha": "4f6dc6623ef54f9b194538410d6375bc075863ae",
+  "reviewedTree": "cae54af640576102e74d7c7b9c85da215f6d49fe",
+  "reviewedPlanSha256": "9973af1ae044f8c3ec6d6a7a8f87bea306bbcc46332b8c2acba625b2db2f7b38",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 0,
+  "planFindingCount": 0,
+  "triage": "Clean verdict: note it in your report and COMMIT this artifact with the next bookkeeping commit.",
+  "findings": [],
+  "next_steps": []
+}
