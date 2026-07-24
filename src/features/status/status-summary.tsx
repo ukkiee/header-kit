@@ -1,5 +1,5 @@
 import type { StatusSummary as StatusSummaryData } from '@/core/summary';
-import { Alert } from '@/ui/alert';
+import { AlertBanner } from '@/ui/alert-banner';
 import { useT } from '@/ui/i18n-context';
 import { warningText } from './warning-text';
 
@@ -48,9 +48,9 @@ export function StatusSummary({ summary }: StatusSummaryProps) {
       </div>
 
       {summary.applyError && (
-        <Alert as="p" severity="danger" role="alert">
+        <AlertBanner as="p" severity="danger" role="alert">
           {t('rulesCouldNotApply')} {summary.applyError}
-        </Alert>
+        </AlertBanner>
       )}
 
       {summary.warnings.length > 0 && (
@@ -58,7 +58,7 @@ export function StatusSummary({ summary }: StatusSummaryProps) {
           {summary.warnings.map((warning, i) => {
             const text = warningText(warning, t);
             return (
-              <Alert
+              <AlertBanner
                 as="li"
                 key={`${warning.code}-${i}`}
                 severity="warn"
@@ -68,7 +68,7 @@ export function StatusSummary({ summary }: StatusSummaryProps) {
                   {text.label}
                 </span>
                 <span className="text-amber-600 dark:text-amber-400">{text.detail}</span>
-              </Alert>
+              </AlertBanner>
             );
           })}
         </ul>

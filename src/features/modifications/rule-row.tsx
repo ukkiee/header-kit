@@ -63,7 +63,8 @@ export function ItemRow({
   return (
     <div className="group flex items-start gap-2.5 py-2">
       <Checkbox
-        offset="row"
+        // 상단정렬 행에서 제목 baseline에 맞추는 보정 — 원래 Checkbox의 offset="row" 축이었다.
+        className="mt-1.5"
         checked={enabled}
         onCheckedChange={onToggleEnabled}
         aria-label={toggleAria}
@@ -78,7 +79,15 @@ export function ItemRow({
         <div className="truncate font-mono text-xs text-zinc-500 dark:text-zinc-400">{summary}</div>
         <ConditionBadges badges={conditionBadges} />
       </div>
-      <div className="flex shrink-0 items-center gap-1 self-center opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+      {/*
+        편집·삭제는 **평소에도 보인다**(ui-review UI-03). 예전에는 opacity-0이라 호버 전에는
+        존재 자체가 드러나지 않았고, 규칙 편집이 이 앱의 핵심 동작인데 그 경로를 우연히
+        발견해야 했다 — 터치·펜에는 호버가 아예 없다.
+
+        그렇다고 완전히 또렷하게 두면 읽기 모드의 소음이 된다(ADR 0006의 "읽기 요약 행"
+        의도). 그래서 기본은 60%로 낮춰 존재만 알리고, 호버·포커스에서 100%가 된다.
+      */}
+      <div className="flex shrink-0 items-center gap-1 self-center opacity-60 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
         <IconButton label={t('edit')} icon={Pencil} onClick={onEdit} />
         <IconButton label={t('menuDelete')} icon={Trash2} tone="danger" onClick={onRemove} />
       </div>

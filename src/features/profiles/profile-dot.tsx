@@ -17,12 +17,28 @@ export function profileSelectLabel(
   });
 }
 
-/** 프로필 on/off 도트 — 사이드바(양 표면)의 시각 언어. */
+/**
+ * 프로필 on/off 도트 — 사이드바(양 표면)의 시각 언어.
+ *
+ * 활성은 **채운 원**, 비활성은 **테두리만 남은 원**이다(ui-review UI-07·UI-09). 예전에는
+ * 둘 다 채운 원이고 색만 달라서 두 가지 문제가 있었다.
+ * - 비활성 색 zinc-300(#d2d2d7)은 흰 배경 대비 **1.51:1**로, 상태를 나르는 비텍스트
+ *   요소의 하한 3:1에 한참 못 미쳤다. zinc-400(#86868b, 3.62:1)으로 올린다.
+ * - 상태가 색·명도로만 구분돼, 그레이스케일에서 활성 프로필을 찾을 수 없었다. 채움 대
+ *   테두리는 색을 지워도 남는 차이다.
+ *
+ * 크기를 size-2로 키운 것도 같은 이유다 — 6px 원에 1px 테두리는 형태 차이가 뭉갠다.
+ *
+ * 상태 문자열 자체는 `profileSelectLabel`이 aria-label로 이미 전달한다. 여기 고친 것은
+ * 시각 채널이다.
+ */
 export function ProfileDot({ profile }: { profile: Pick<Profile, 'active' | 'color'> }) {
   return (
     <span
       aria-hidden
-      className={`size-1.5 shrink-0 rounded-full ${profile.active ? '' : 'bg-zinc-300 dark:bg-zinc-600'}`}
+      className={`size-2 shrink-0 rounded-full ${
+        profile.active ? '' : 'border border-zinc-400 dark:border-zinc-500'
+      }`}
       style={profile.active ? { backgroundColor: profile.color } : undefined}
     />
   );

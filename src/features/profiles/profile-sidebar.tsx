@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react';
 import type { Profile } from '@/core/schema';
-import { Input } from '@/ui/input';
+import { Input } from '@/ui/text-field';
 import { useT } from '@/ui/i18n-context';
 import {
   ProfileGrip,

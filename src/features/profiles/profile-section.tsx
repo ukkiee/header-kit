@@ -3,9 +3,9 @@ import { Ellipsis, Plus } from 'lucide-react';
 import type { Command } from '@/core/commands';
 import type { Modification, Profile } from '@/core/schema';
 import { format, type MessageKey } from '@/core/i18n';
-import { Button } from '@/ui/button';
+import { Button } from '@/ui/press-button';
 import { Card } from '@/ui/card';
-import { Input } from '@/ui/input';
+import { Input } from '@/ui/text-field';
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from '@/ui/menu';
 import { MotionSwap } from '@/ui/motion-swap';
 import { AnimatePresence, MotionRow } from '@/ui/motion-row';
@@ -62,7 +62,7 @@ export function ProfileSection({
     onCommand({ type: 'update-profile-meta', profileId: profile.id, meta: { ...meta, ...patch } });
 
   return (
-    <Card as="section">
+    <Card>
       <div className="flex items-center gap-2">
         <input
           type="color"

@@ -1,6 +1,6 @@
 import { useId, useRef, useState, useSyncExternalStore, type ComponentType, type Ref } from 'react';
 import { suggestHeaderNames } from '@/core/autocomplete';
-import { Input, type InputProps } from '@/ui/input';
+import { Input, type InputProps } from '@/ui/text-field';
 import { useT } from '@/ui/i18n-context';
 import type { HeaderNameAutocompleteProps } from './header-name-autocomplete';
 

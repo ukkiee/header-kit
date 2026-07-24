@@ -10,8 +10,8 @@ import { ProfileSidebar } from '@/features/profiles/profile-sidebar';
 import { reconcileSelection } from '@/features/profiles/selection';
 import { StatusSummary } from '@/features/status/status-summary';
 import { TransferPanel } from '@/features/transfer/transfer-panel';
-import { Alert } from '@/ui/alert';
-import { Button } from '@/ui/button';
+import { AlertBanner } from '@/ui/alert-banner';
+import { Button } from '@/ui/press-button';
 import { LocaleProvider } from '@/ui/i18n-context';
 import { ScrollArea } from '@/ui/scroll-area';
 import type { Command } from '@/core/commands';
@@ -153,7 +153,7 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
 
   const pauseButton = (
     <Button
-      variant={state.paused ? 'primary' : 'ghost'}
+      variant={state.paused ? 'default' : 'ghost'}
       size="sm"
       aria-label={state.paused ? t(locale, 'resume') : t(locale, 'pause')}
       onClick={() => dispatch({ type: 'set-paused', paused: !state.paused })}
@@ -165,12 +165,14 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
 
   const alerts = (
     <>
-      {incognitoAllowed === false && <Alert severity="info">{t(locale, 'incognitoBlocked')}</Alert>}
-      {state.paused && <Alert severity="warn">{t(locale, 'pausedNote')}</Alert>}
+      {incognitoAllowed === false && (
+        <AlertBanner severity="info">{t(locale, 'incognitoBlocked')}</AlertBanner>
+      )}
+      {state.paused && <AlertBanner severity="warn">{t(locale, 'pausedNote')}</AlertBanner>}
       {commandError && (
-        <Alert severity="danger" role="alert">
+        <AlertBanner severity="danger" role="alert">
           {commandError}
-        </Alert>
+        </AlertBanner>
       )}
     </>
   );
@@ -221,12 +223,16 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
         </nav>
 
         {/* 랜드마크(aside/main)가 곧 스크롤 컨테이너다 — render 합성이라 껍데기 div가
-            한 겹 더 끼지 않고, 높이는 그리드 칸에서 확정된다. */}
+            한 겹 더 끼지 않고, 높이는 그리드 칸에서 확정된다.
+
+            shadcn ScrollArea는 Viewport 클래스를 소스에 고정해 두어 viewportClassName을
+            받지 않는다 — 그래서 레이아웃(gap·padding)은 안쪽 div가 맡는다. 소스를 고치지
+            않는 대가로 여기서만 한 겹이 늘어난다(ADR 0014). */}
         <ScrollArea
           render={<aside />}
-          className="border-r border-zinc-200 dark:border-zinc-800"
-          viewportClassName="flex flex-col gap-2 p-3"
+          className="min-h-0 border-r border-zinc-200 dark:border-zinc-800"
         >
+          <div className="flex flex-col gap-2 p-3">
           <ProfileSidebar
             profiles={state.profiles}
             selectedId={effectiveSelectedId}
@@ -236,9 +242,17 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
               dispatch({ type: 'move-profile', profileId, toIndex })
             }
           />
+          </div>
         </ScrollArea>
 
-        <ScrollArea render={<main />} className="min-w-0" viewportClassName="flex flex-col gap-3 p-4">
+        {/*
+          `min-h-0`이 없으면 스크롤이 조용히 죽는다 — 그리드 자식의 기본 min-height는 auto라
+          칸보다 작아지지 않고, 그러면 뷰포트가 넘칠 일이 없어 콘텐츠가 팝업 셸 자체를
+          밀어낸다(760×580 고정이 깨진다, ADR 0005). 원래 ScrollArea는 이 클래스를 자기
+          Root에 넣어 뒀는데 shadcn 소스에는 `relative`뿐이라 호출부가 준다.
+        */}
+        <ScrollArea render={<main />} className="min-h-0 min-w-0">
+          <div className="flex flex-col gap-3 p-4">
           <div className="flex items-center justify-between">
             <h1 className="text-base font-semibold">{t(locale, 'appName')}</h1>
             <div className="flex items-center gap-1">
@@ -272,6 +286,7 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
               />
             )}
           </MotionView>
+          </div>
         </ScrollArea>
       </div>
       </IconTooltipProvider>

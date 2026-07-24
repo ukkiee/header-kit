@@ -1,8 +1,8 @@
 import { ALL_RESOURCE_TYPES, REQUEST_METHODS } from '@/core/rules';
 import type { RuleConditions } from '@/core/schema';
 import { ChipGroup } from '@/ui/chip-group';
-import { Field, fieldCaption } from '@/ui/field';
-import { Input } from '@/ui/input';
+import { FieldLabeled, fieldCaption } from '@/ui/field-labeled';
+import { Input } from '@/ui/text-field';
 import { NoteText } from '@/ui/note-text';
 import { useT } from '@/ui/i18n-context';
 import { epochToLocalInput, localInputToEpoch } from './expiry-format';
@@ -29,7 +29,7 @@ export function RuleConditionsFields({ conditions, onChange }: RuleConditionsFie
     field: 'excludedDomains' | 'initiatorDomains' | 'tabDomains',
     note?: string,
   ) => (
-    <Field label={t(labelKey)}>
+    <FieldLabeled label={t(labelKey)}>
       <Input
         size="sm"
         defaultValue={(conditions[field] ?? []).join(', ')}
@@ -37,7 +37,7 @@ export function RuleConditionsFields({ conditions, onChange }: RuleConditionsFie
         placeholder="a.example.com, b.example.com"
       />
       {note && <NoteText as="span">{note}</NoteText>}
-    </Field>
+    </FieldLabeled>
   );
 
   // 칩 그룹 캡션은 span — ToggleGroup은 aria-label로 이름을 갖는다 (ADR 0011).
@@ -70,7 +70,7 @@ export function RuleConditionsFields({ conditions, onChange }: RuleConditionsFie
       )}
       {csvField('condInitiator', 'initiatorDomains', t('condInitiatorNote'))}
       {csvField('condTabDomains', 'tabDomains', t('condTabDomainNote'))}
-      <Field label={t('condExpires')}>
+      <FieldLabeled label={t('condExpires')}>
         <Input
           type="datetime-local"
           size="sm"
@@ -79,7 +79,7 @@ export function RuleConditionsFields({ conditions, onChange }: RuleConditionsFie
           aria-label={t('ariaExpiresAt')}
         />
         <NoteText as="span">{t('condExpiresNote')}</NoteText>
-      </Field>
+      </FieldLabeled>
     </div>
   );
 }

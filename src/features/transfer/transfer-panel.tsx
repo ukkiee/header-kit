@@ -2,10 +2,10 @@ import { useState } from 'react';
 import type { Command } from '@/core/commands';
 import type { Profile, StoredState } from '@/core/schema';
 import { exportProfiles, parseImport, serializeExport } from '@/core/transfer';
-import { Alert } from '@/ui/alert';
-import { Button } from '@/ui/button';
+import { AlertBanner } from '@/ui/alert-banner';
+import { Button } from '@/ui/press-button';
 import { Checkbox } from '@/ui/checkbox';
-import { TextArea } from '@/ui/input';
+import { TextArea } from '@/ui/text-field';
 import { PanelSection } from '@/ui/panel-section';
 import { useT } from '@/ui/i18n-context';
 
@@ -88,11 +88,11 @@ export function TransferPanel({ state, onCommand, download = browserDownload }: 
       }
     >
       {notices.length > 0 && (
-        <Alert as="ul" severity="info" size="xs">
+        <AlertBanner as="ul" severity="info" size="xs">
           {notices.map((notice) => (
             <li key={notice}>{notice}</li>
           ))}
-        </Alert>
+        </AlertBanner>
       )}
 
       {mode === 'export' && (
@@ -139,11 +139,11 @@ export function TransferPanel({ state, onCommand, download = browserDownload }: 
             }}
           />
           {errors.length > 0 && (
-            <Alert as="ul" severity="danger" size="xs" role="alert">
+            <AlertBanner as="ul" severity="danger" size="xs" role="alert">
               {errors.map((error) => (
                 <li key={error}>{error}</li>
               ))}
-            </Alert>
+            </AlertBanner>
           )}
           <div className="flex gap-1">
             <Button

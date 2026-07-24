@@ -1,6 +1,6 @@
-import { Autocomplete } from '@base-ui-components/react/autocomplete';
+import { Autocomplete } from '@base-ui/react/autocomplete';
 import { useState, type Ref } from 'react';
-import { Input, type InputProps } from '@/ui/input';
+import { Input, type InputProps } from '@/ui/text-field';
 import { popupAnchored, popupItemText, popupPositioner } from '@/ui/tokens';
 
 export interface HeaderNameAutocompleteProps

@@ -11,14 +11,14 @@ import {
 } from '@/core/schema';
 import { RuleConditionsFields } from './rule-conditions-fields';
 import { hasPlaceholders } from '@/core/placeholder';
-import { Alert } from '@/ui/alert';
-import { Button } from '@/ui/button';
-import { Input } from '@/ui/input';
+import { AlertBanner } from '@/ui/alert-banner';
+import { Button } from '@/ui/press-button';
+import { Input } from '@/ui/text-field';
 import { LargeEditor } from '@/ui/large-editor';
 import { NoteText } from '@/ui/note-text';
-import { Field, fieldCaption } from '@/ui/field';
+import { FieldLabeled, fieldCaption } from '@/ui/field-labeled';
 import { AnimatePresence, MotionRow } from '@/ui/motion-row';
-import { Select } from '@/ui/select';
+import { SelectOptions } from '@/ui/select-options';
 import { useT } from '@/ui/i18n-context';
 import { HeaderNameInput } from './header-name-input';
 
@@ -188,16 +188,14 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
 
   return (
     <div className="flex flex-col gap-3 rounded-lg bg-zinc-50 p-3 dark:bg-zinc-900" onKeyDown={onKeyDown}>
-      <Field label={t('ruleKind')}>
-        <Select
-          variant="bordered"
-          size="md"
+      <FieldLabeled label={t('ruleKind')}>
+        <SelectOptions
           value={draft.kind}
           aria-label={t('ruleKind')}
           onValueChange={switchKind}
           options={RULE_KINDS.map((kind) => ({ value: kind, label: t(KIND_LABELS[kind]) }))}
         />
-      </Field>
+      </FieldLabeled>
 
       {/* 한 캡션 아래 두 컨트롤(매치 방식+패턴) — Field 라벨 자동 연결이 두 컨트롤에
           같은 이름을 주므로, 캡션은 span으로 두고 각 컨트롤이 자기 aria-label을 가진다. */}
@@ -205,9 +203,7 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
         <div className="flex flex-col gap-1">
           <span className={fieldCaption}>{t('urlFilterScope')}</span>
           <div className="flex items-center gap-1.5">
-            <Select
-              variant="bordered"
-              size="md"
+            <SelectOptions
               aria-label={t('ariaUrlMatchType')}
               // 옆의 패턴 입력과 같은 행이라, 폭이 값에 따라 변하면 입력이 밀린다.
               // width가 폭을 고정하고, 아래 shrink-0은 좁은 자리에서 눌리지 않게 지킨다.
@@ -225,7 +221,6 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
               ]}
             />
             <Input
-              font="mono"
               value={'urlFilter' in draft ? (draft.urlFilter ?? '') : ''}
               onChange={(e) =>
                 setDraft({
@@ -235,7 +230,7 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
               }
               placeholder={scopePlaceholder[currentMatchType]}
               aria-label={t('urlFilterScope')}
-              className="min-w-0 flex-1"
+              className="min-w-0 flex-1 font-mono"
             />
           </div>
         </div>
@@ -245,7 +240,7 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
         <>
           <div className="grid grid-cols-2 gap-2">
             {'name' in draft ? (
-              <Field
+              <FieldLabeled
                 label={draft.kind === 'cookie' ? t('cookieName') : t('headerName')}
                 error={requiredError('name')}
               >
@@ -267,11 +262,11 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
                     userHeaders={userHeaders}
                   />
                 )}
-              </Field>
+              </FieldLabeled>
             ) : (
               <span />
             )}
-            <Field label={t('value')}>
+            <FieldLabeled label={t('value')}>
               <div className="flex items-center gap-1">
                 <Input
                   autoFocus={draft.kind === 'set-cookie'}
@@ -285,15 +280,13 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
                   onCommit={(value) => setDraft({ ...draft, value } as Modification)}
                 />
               </div>
-            </Field>
+            </FieldLabeled>
           </div>
           <div className="grid grid-cols-2 gap-2">
             {/* append 불가면 모드는 선택지가 하나 — 컨트롤을 아예 숨긴다 (ui-refine #6). */}
             {appendAllowed && (
-              <Field label={t('mode')}>
-                <Select
-                  variant="bordered"
-                  size="md"
+              <FieldLabeled label={t('mode')}>
+                <SelectOptions
                   value={draft.mode}
                   onValueChange={(value) => setDraft({ ...draft, mode: value } as Modification)}
                   options={[
@@ -301,12 +294,10 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
                     { value: 'append', label: t('append') },
                   ]}
                 />
-              </Field>
+              </FieldLabeled>
             )}
-            <Field label={t('emptyValueMeans')}>
-              <Select
-                variant="bordered"
-                size="md"
+            <FieldLabeled label={t('emptyValueMeans')}>
+              <SelectOptions
                 value={draft.emptyMeans}
                 onValueChange={(value) =>
                   setDraft({ ...draft, emptyMeans: value } as Modification)
@@ -316,7 +307,7 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
                   { value: 'send-empty', label: t('sendEmpty') },
                 ]}
               />
-            </Field>
+            </FieldLabeled>
           </div>
           {draft.kind === 'response-header' && <NoteText>{t('responsePanelNote')}</NoteText>}
           {hasPlaceholders(draft.value) && <NoteText>{t('placeholderNote')}</NoteText>}
@@ -326,25 +317,25 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
       {draft.kind === 'redirect' && (
         <>
           <div className="grid grid-cols-2 gap-2">
-            <Field label={t('ariaRedirectPattern')} error={requiredError('pattern')}>
+            <FieldLabeled label={t('ariaRedirectPattern')} error={requiredError('pattern')}>
               <Input
                 ref={patternRef}
                 autoFocus
-                font="mono"
+                className="font-mono"
                 value={draft.pattern}
                 onChange={(e) => setDraft({ ...draft, pattern: e.target.value })}
                 placeholder="^https://prod\\.example\\.com/(.*)"
               />
-            </Field>
-            <Field label={t('ariaRedirectSubstitution')} error={requiredError('substitution')}>
+            </FieldLabeled>
+            <FieldLabeled label={t('ariaRedirectSubstitution')} error={requiredError('substitution')}>
               <Input
                 ref={substitutionRef}
-                font="mono"
+                className="font-mono"
                 value={draft.substitution}
                 onChange={(e) => setDraft({ ...draft, substitution: e.target.value })}
                 placeholder="http://localhost:3000/\\1"
               />
-            </Field>
+            </FieldLabeled>
           </div>
           <NoteText>{t('redirectCaptureNote')}</NoteText>
         </>
@@ -376,26 +367,29 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
         </AnimatePresence>
       </div>
 
-      <Field label={t('comment')}>
+      <FieldLabeled label={t('comment')}>
         <Input
           value={draft.comment}
           onChange={(e) => setDraft({ ...draft, comment: e.target.value } as Modification)}
         />
-      </Field>
+      </FieldLabeled>
 
       {saveError && (
-        <Alert severity="danger" role="alert">
+        <AlertBanner severity="danger" role="alert">
           {saveError}
-        </Alert>
+        </AlertBanner>
       )}
 
-      {/* 폼 액션 쌍 — 좌우 여백을 넓히고(pad) 두 버튼의 모서리를 8px로 맞춘다(radius).
-          기본값은 primary가 pill, ghost가 6px이라 나란히 두면 서로 다른 모양이었다. */}
+      {/* 폼 액션 쌍 — 좌우 여백을 넓혀(px-4) 두 버튼이 같은 무게로 서게 한다. 모서리는
+          shadcn size="sm"이 이미 8px로 맞춰 준다(`rounded-[min(var(--radius-md),12px)]`,
+          이 저장소의 --radius-md가 8px이라 min이 8px). 예전에는 primary만 pill이라
+          나란히 두면 모양이 갈렸는데, shadcn 기본은 둘 다 같은 모서리다.
+          여백은 스모크 N31이 16px로 못박는다. */}
       <div className="flex items-center justify-end gap-2">
-        <Button variant="ghost" size="sm" pad="wide" radius="lg" onClick={onCancel} disabled={saving}>
+        <Button variant="ghost" size="sm" className="px-4" onClick={onCancel} disabled={saving}>
           {t('cancel')}
         </Button>
-        <Button size="sm" pad="wide" radius="lg" onClick={() => void save()} disabled={saving}>
+        <Button size="sm" className="px-4" onClick={() => void save()} disabled={saving}>
           {saving ? t('saving') : t('save')}
         </Button>
       </div>

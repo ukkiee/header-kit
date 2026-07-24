@@ -4,8 +4,8 @@ import type { Command } from '@/core/commands';
 import { parseImport } from '@/core/transfer';
 import { listBackupSnapshots, readSyncKV } from '@/platform/backupStore';
 import { RotateCcw } from 'lucide-react';
-import { Alert } from '@/ui/alert';
-import { Button } from '@/ui/button';
+import { AlertBanner } from '@/ui/alert-banner';
+import { Button } from '@/ui/press-button';
 import { CollapsiblePanel } from '@/ui/collapsible-panel';
 import { IconButton } from '@/ui/icon-button';
 import { Pill } from '@/ui/pill';
@@ -70,9 +70,9 @@ export function BackupPanel({
       toggleAriaLabel={t('ariaToggleBackups')}
       banner={
         error && (
-          <Alert as="p" severity="danger" size="xs" role="alert">
+          <AlertBanner as="p" severity="danger" size="xs" role="alert">
             {error}
-          </Alert>
+          </AlertBanner>
         )
       }
     >
@@ -93,7 +93,7 @@ export function BackupPanel({
                 ) : confirmingId === snapshot.id ? (
                   // 파괴적 확인 단계는 문구가 명시적인 텍스트 버튼을 유지한다
                   <Button
-                    variant="danger"
+                    variant="destructive"
                     size="sm"
                     aria-label={t('ariaConfirmRestore')}
                     onClick={() => void restore(snapshot)}
