@@ -5,3 +5,5 @@
 - stage2 spec: done — 스펙 게시(.scratch/rule-model-trim/spec.md = docs/reviews 사본 동일). 시임 사용자 합의: vitest core 주 시임 + smoke CSP 케이스 제거 + tsc 그물 + storybook, 신규 0.
 - stage2 plan gate r1: done — needs-attention 1건 R-1(high, 검증 전 필터 순서). accept + 로드 경로 확장. 스펙에 검증 전 필터·진입점 관통 테스트 명문화. 아티팩트·decisions 828a484
 - stage2 plan gate r2: done — ok:true, verdict approve, 발견 0건 (R-1 양 경로 resolved 재검증, 신규 이슈 없음). 플랜 게이트 통과 — 다음은 /to-tickets
+- stage3 slice: done — 티켓 2개 발행(issues/01 CSP 제거·워킹 스켈레톤·structure 게이트 대상, 02 Initiator 라벨·독립). 둘 다 blocker 없음. 사용자 승인. CSP는 tsc가 강제하는 단일 slice(쪼개면 게이트 사이 tsc 빨강), Initiator는 카피만.
+- ticket 01 start: 1768beb
