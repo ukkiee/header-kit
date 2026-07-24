@@ -1,0 +1,38 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "plan",
+  "verdict": "needs-attention",
+  "summary": "Do not ship the plan yet: its import migration seam permits an implementation that still rejects every legacy file containing CSP.",
+  "planFile": "docs/reviews/rule-model-trim/spec.md",
+  "planInDiff": true,
+  "reviewedFileCount": 1,
+  "target": "working tree diff",
+  "reviewedSha": "54f9521448da54ced42ac7d991145a46e20f8146",
+  "reviewedTree": "bbc27c563322df65e9554cfbef2fed78d665ba45",
+  "reviewedPlanSha256": "6653a982be9162c22364ca1e616645435aedd7b1a7bc2991b70c2f254f073089",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 1,
+  "planFindingCount": 1,
+  "triage": "review-gate SKILL.md rules govern: render EVERY finding as a full table row, the human decides each row (accept/reject/defer/question — free text), echo back before applying, max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "Open question: CSP filtering must precede import validation",
+      "body": "The test may target either `parseImport` or `normalizeImportedProfiles`, but the current import pipeline validates every modification before normalization. Once `isModification` stops accepting `csp`, filtering only in normalization—or testing normalization alone—causes `parseImport` to reject the entire file instead of preserving its non-CSP contents. This directly violates user story 9. The required ordering is not optional and must be settled in the plan.",
+      "file": "docs/reviews/rule-model-trim/spec.md",
+      "line_start": 55,
+      "line_end": 55,
+      "confidence": 0.99,
+      "recommendation": "Require raw CSP modifications to be removed before `validateProfileEntry` runs, then test through `parseImport` itself with a profile containing both CSP and supported modifications. Assert success, preservation of profile metadata and supported modifications, and no CSP notice.",
+      "isPlanFinding": true
+    }
+  ],
+  "next_steps": [
+    "Specify the pre-validation filtering order for the import path.",
+    "Make the end-to-end `parseImport` compatibility test mandatory rather than allowing a normalization-only test."
+  ]
+}
