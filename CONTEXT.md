@@ -18,7 +18,8 @@ _Avoid_: set-cookie (라벨 층위에서 — 뱃지·스키마 kind 값에서는
 
 **Condition**:
 Modification 하나가 적용될 요청 범위를 좁히는 규칙 단위 조건 — 제외 도메인, Resource Type, Request Method, Initiator Domain, Tab Domain, 자동 해제 시각(expiresAt). 프로필 수준 Filter는 ADR 0010에서 퇴역했고, 그 이름은 레거시 데이터 마이그레이션에서만 쓰인다.
-_Avoid_: filter (레거시 개념과 혼동), matcher
+Initiator Domain의 ko 사용자 대면 라벨은 '요청 출처 도메인' — 요청을 실제로 보낸 쪽을 가리켜 '보고 있는 탭'인 Tab Domain과 대비된다. en 라벨 `Initiator domains`와 스키마 필드 `initiatorDomains`는 Chrome Network 패널 용어와 맞춰 그대로 둔다.
+_Avoid_: filter (레거시 개념과 혼동), matcher, Initiator 도메인 (ko 라벨 층위에서 — en 라벨·스키마 필드에서는 유효)
 
 **Override / Append**:
 Modification의 두 가지 적용 방식 — 기존 헤더 값을 통째로 대체(Override, 기본)하거나 기존 값 뒤에 덧붙임(Append).

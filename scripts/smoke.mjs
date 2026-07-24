@@ -1569,6 +1569,34 @@ try {
     koToggle && koMenu && koSidebarItem && koRowToggle && koDeleteIcon,
     `toggle=${koToggle}, menu=${koMenu}, sidebar=${koSidebarItem}, row=${koRowToggle}, delete-icon=${koDeleteIcon}`);
 
+  // N14b: 조건 편집의 ko 라벨 — Initiator 조건이 '요청 출처 도메인'으로 뜬다 (rule-model-trim 02).
+  // 이 변경의 목적은 "요청 보낸 쪽 vs 보고 있는 탭"의 **구별**이라, 새 라벨 존재만으로는
+  // 목적 달성을 못 본다 — 대조 대상인 '탭 도메인'이 그대로인지, 옛 라벨이 필드 라벨
+  // 자리로 남지 않았는지 함께 건다.
+  const condKo = await context.newPage();
+  await condKo.goto(`chrome-extension://${extensionId}/popup.html?locale=ko`);
+  const condKoEdit = condKo.getByRole('button', { name: '편집' }).first();
+  await condKoEdit.waitFor({ timeout: 5000 });
+  await condKoEdit.click();
+  // 토글을 그냥 누르면 "기본은 닫힘"에 기대게 된다 — 조건이 붙은 규칙의 폼은 열린 채
+  // 시작하므로(N6), 같은 클릭이 패널을 닫아 아래 단언이 통째로 무너진다.
+  await ensurePanelOpen(condKo, '조건');
+  const initiatorKo = await condKo
+    .getByLabel('요청 출처 도메인', { exact: true })
+    .waitFor({ timeout: 5000 })
+    .then(() => true, () => false);
+  // 옛 라벨은 필드 라벨 자리로만 되살아날 수 있다 — 페이지 전역 문자열 검색은 스키마
+  // 용어 initiatorDomains가 어디든 렌더되면 오탐이라, 라벨 스코프로 좁혀 정확히 건다.
+  const oldInitiatorGone = (await condKo.getByLabel('Initiator 도메인', { exact: true }).count()) === 0;
+  const tabDomainKept = await condKo
+    .getByLabel('탭 도메인', { exact: true })
+    .waitFor({ timeout: 5000 })
+    .then(() => true, () => false);
+  await condKo.close();
+  record('N14b: ko 조건 라벨 — 요청 출처 도메인(옛 라벨 부재) + 탭 도메인 유지',
+    initiatorKo && oldInitiatorGone && tabDomainKept,
+    `initiator=${initiatorKo}, old-gone=${oldInitiatorGone}, tab=${tabDomainKept}`);
+
   // N15: 규칙 단위 URL 필터 (ADR 0007/0008) — contains(비정규식)와 regex 두 방식 모두
   // 매칭 URL에만 적용되고, 무스코프 규칙은 전역이며, 프로필 필터는 건드리지 않는다.
   // 상태: Renamed(k-a, 켬, X-K:1) + KeyB. 팝업은 Renamed 선택.
