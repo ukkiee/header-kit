@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ChevronDown } from 'lucide-react';
-import { Button } from './button';
+import { Button } from './press-button';
 import { PanelSection } from './panel-section';
 
 const meta = {

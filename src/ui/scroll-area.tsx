@@ -1,44 +1,55 @@
-import { ScrollArea as BaseScrollArea } from '@base-ui-components/react/scroll-area';
-import type { ReactNode } from 'react';
-import { scrollbarThumb, scrollbarTrack } from './tokens';
+"use client"
 
-/**
- * 스크롤 영역 — Base UI ScrollArea 기반 (ADR 0011). OS 기본 스크롤바 대신 앱 토큰으로
- * 그린 오버레이 스크롤바를 쓴다(다크 모드 포함). 스크롤바가 떠 있으므로 콘텐츠 폭을
- * 잠식하지 않는다 — 팝업이 760×580 고정(ADR 0005)이라 이 성질이 중요하다.
- *
- * **`ScrollArea.Content`는 의도적으로 쓰지 않는다.** 그 파트는 `min-width: fit-content`를
- * 걸어 내용이 넓으면 가로로 늘리는데, 이 앱의 계약은 정반대다 — 긴 프로필 이름은 잘리고
- * 레이아웃은 유지된다. children을 Viewport에 직접 둬 그 성질을 들이지 않는다.
- *
- * 가로 스크롤바도 두지 않는다. 이 앱에 의도된 가로 스크롤 표면은 없고, 생기면 그것은
- * 레이아웃 결함이므로 숨은 스크롤로 흡수하지 않고 진단(ui-diag)이 실패로 잡는다.
- */
-export interface ScrollAreaProps {
-  /**
-   * 바깥 컨테이너 — 보더 등 장식. **높이는 여기서 확정돼야 한다**(그리드 칸, `flex-1`,
-   * 고정 높이 중 무엇이든). 높이가 auto면 뷰포트가 넘칠 일이 없어 스크롤이 조용히 죽는다.
-   */
-  className?: string;
-  /** 스크롤 박스 — 패딩과 내부 레이아웃은 여기에 준다. */
-  viewportClassName?: string;
-  /**
-   * 바깥 컨테이너로 쓸 엘리먼트 — Base UI render 합성(IconButton과 같은 방식). 랜드마크
-   * (`<aside>`/`<main>`)를 껍데기 div 안에 한 겹 더 넣지 않고 그 자리를 그대로 차지한다.
-   */
-  render?: BaseScrollArea.Root.Props['render'];
-  children: ReactNode;
-}
+import * as React from "react"
+import { ScrollArea as ScrollAreaPrimitive } from "@base-ui/react/scroll-area"
 
-export function ScrollArea({ className, viewportClassName, render, children }: ScrollAreaProps) {
+import { cn } from "@/ui/cn"
+
+function ScrollArea({
+  className,
+  children,
+  ...props
+}: ScrollAreaPrimitive.Root.Props) {
   return (
-    <BaseScrollArea.Root render={render} className={`min-h-0 ${className ?? ''}`}>
-      <BaseScrollArea.Viewport className={`size-full ${viewportClassName ?? ''}`}>
+    <ScrollAreaPrimitive.Root
+      data-slot="scroll-area"
+      className={cn("relative", className)}
+      {...props}
+    >
+      <ScrollAreaPrimitive.Viewport
+        data-slot="scroll-area-viewport"
+        className="size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1"
+      >
         {children}
-      </BaseScrollArea.Viewport>
-      <BaseScrollArea.Scrollbar orientation="vertical" className={scrollbarTrack}>
-        <BaseScrollArea.Thumb className={scrollbarThumb} />
-      </BaseScrollArea.Scrollbar>
-    </BaseScrollArea.Root>
-  );
+      </ScrollAreaPrimitive.Viewport>
+      <ScrollBar />
+      <ScrollAreaPrimitive.Corner />
+    </ScrollAreaPrimitive.Root>
+  )
 }
+
+function ScrollBar({
+  className,
+  orientation = "vertical",
+  ...props
+}: ScrollAreaPrimitive.Scrollbar.Props) {
+  return (
+    <ScrollAreaPrimitive.Scrollbar
+      data-slot="scroll-area-scrollbar"
+      data-orientation={orientation}
+      orientation={orientation}
+      className={cn(
+        "flex touch-none p-px transition-colors select-none data-horizontal:h-2.5 data-horizontal:flex-col data-horizontal:border-t data-horizontal:border-t-transparent data-vertical:h-full data-vertical:w-2.5 data-vertical:border-l data-vertical:border-l-transparent",
+        className
+      )}
+      {...props}
+    >
+      <ScrollAreaPrimitive.Thumb
+        data-slot="scroll-area-thumb"
+        className="relative flex-1 rounded-full bg-border"
+      />
+    </ScrollAreaPrimitive.Scrollbar>
+  )
+}
+
+export { ScrollArea, ScrollBar }

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Ellipsis } from 'lucide-react';
-import { Button } from './button';
+import { Button } from './press-button';
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from './menu';
 
 const meta = {

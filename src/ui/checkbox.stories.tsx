@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import { Checkbox, type CheckboxProps } from './checkbox';
+import { Checkbox } from './checkbox';
+import type { Checkbox as CheckboxPrimitive } from '@base-ui/react/checkbox';
 
 const meta = {
   title: 'UI/Checkbox',
@@ -10,7 +11,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-function Interactive(args: CheckboxProps) {
+function Interactive(args: CheckboxPrimitive.Root.Props) {
   const [checked, setChecked] = useState(args.checked);
   return <Checkbox {...args} checked={checked} onCheckedChange={setChecked} />;
 }

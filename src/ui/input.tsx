@@ -1,60 +1,20 @@
-import { Input as BaseInput } from '@base-ui-components/react/input';
-import { cva, type VariantProps } from 'class-variance-authority';
-import { forwardRef, type InputHTMLAttributes, type TextareaHTMLAttributes } from 'react';
-import { fieldFocus, fieldSolid } from './tokens';
+import * as React from "react"
+import { Input as InputPrimitive } from "@base-ui/react/input"
 
-/**
- * 텍스트 필드 recipe — 앱 전반의 solid 필드 문자열을 흡수한다.
- * Base UI Input 기반 (ADR 0011): 네이티브 input을 렌더하면서 Field 컨텍스트에
- * 자동 등록되어 라벨 연결·검증 시맨틱을 얻는다. datalist 등 네이티브 속성은 그대로 통과한다.
- * 호출자는 레이아웃 유틸(flex-1/w-32 등)만 className으로 append 한다(override 아님).
- */
-const field = cva('rounded-md', {
-  variants: {
-    variant: {
-      solid: `${fieldSolid} ${fieldFocus}`,
-      ghost: 'border border-transparent bg-transparent outline-none focus:border-zinc-300 dark:focus:border-zinc-700',
-    },
-    size: {
-      xs: 'h-6 px-1 text-[11px]',
-      sm: 'h-7 px-2 text-xs',
-      md: 'h-8 px-2 text-sm',
-    },
-    font: { sans: '', mono: 'font-mono' },
-    align: { start: '', center: 'text-center' },
-  },
-  defaultVariants: { variant: 'solid', size: 'md', font: 'sans', align: 'start' },
-});
+import { cn } from "@/ui/cn"
 
-export interface InputProps
-  extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size'>,
-    VariantProps<typeof field> {}
-
-export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
-  { variant, size, font, align, className, type = 'text', ...props },
-  ref,
-) {
+function Input({ className, type, ...props }: React.ComponentProps<"input">) {
   return (
-    <BaseInput ref={ref} type={type} className={field({ variant, size, font, align, className })} {...props} />
-  );
-});
+    <InputPrimitive
+      type={type}
+      data-slot="input"
+      className={cn(
+        "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 md:text-sm dark:bg-input/30 dark:disabled:bg-input/80 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40",
+        className
+      )}
+      {...props}
+    />
+  )
+}
 
-/** 여러 줄 필드 — 높이 대신 p-2 패딩을 쓰므로 별도 recipe(같은 표면 토큰 공유). */
-const area = cva(`rounded-md p-2 ${fieldSolid} ${fieldFocus}`, {
-  variants: {
-    font: { sans: '', mono: 'font-mono' },
-    size: { sm: 'text-xs', md: 'text-sm' },
-  },
-  defaultVariants: { font: 'sans', size: 'md' },
-});
-
-export interface TextAreaProps
-  extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'size'>,
-    VariantProps<typeof area> {}
-
-export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(function TextArea(
-  { font, size, className, ...props },
-  ref,
-) {
-  return <textarea ref={ref} className={area({ font, size, className })} {...props} />;
-});
+export { Input }

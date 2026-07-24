@@ -9,7 +9,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const ButtonPrimary: Story = { args: { children: 'Primary', variant: 'primary' } };
+export const ButtonPrimary: Story = { args: { children: 'Primary', variant: 'default' } };
 export const ButtonGhost: Story = { args: { children: 'Ghost', variant: 'ghost' } };
-export const ButtonDanger: Story = { args: { children: 'Danger', variant: 'danger' } };
+export const ButtonDanger: Story = { args: { children: 'Danger', variant: 'destructive' } };
 export const ButtonSmall: Story = { args: { children: 'Small', size: 'sm' } };

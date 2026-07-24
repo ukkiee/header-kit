@@ -1,4 +1,4 @@
-import { Menu as BaseMenu } from '@base-ui-components/react/menu';
+import { Menu as BaseMenu } from '@base-ui/react/menu';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { m } from 'motion/react';
 import type { ComponentProps } from 'react';

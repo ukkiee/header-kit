@@ -1,11 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import { Select, type SelectProps } from './select';
+import { SelectOptions, type SelectOptionsProps } from './select-options';
 
 const meta = {
-  title: 'UI/Select',
-  component: Select,
-} satisfies Meta<typeof Select>;
+  title: 'UI/SelectOptions',
+  component: SelectOptions,
+} satisfies Meta<typeof SelectOptions>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -15,17 +15,13 @@ const options = [
   { value: 'response-header', label: 'Response header' },
 ];
 
-function Interactive(args: SelectProps<string>) {
+function Interactive(args: SelectOptionsProps<string>) {
   const [value, setValue] = useState(args.value);
-  return <Select {...args} value={value} onValueChange={setValue} />;
+  return <SelectOptions {...args} value={value} onValueChange={setValue} />;
 }
 
-export const Bordered: Story = {
-  args: { variant: 'bordered', size: 'md', value: 'request-header', onValueChange: () => {}, options, 'aria-label': 'Kind' },
-  render: (args) => <Interactive {...args} />,
-};
-export const Ghost: Story = {
-  args: { variant: 'ghost', size: 'sm', value: 'response-header', onValueChange: () => {}, options, 'aria-label': 'Kind' },
+export const Default: Story = {
+  args: { value: 'request-header', onValueChange: () => {}, options, 'aria-label': 'Kind' },
   render: (args) => <Interactive {...args} />,
 };
 
@@ -44,7 +40,6 @@ const matchTypeOptions = [
 export const FixedWidth: Story = {
   args: {
     width: 'fixed',
-    size: 'md',
     value: 'regex',
     onValueChange: () => {},
     options: matchTypeOptions,
@@ -68,7 +63,6 @@ export const FixedWidth: Story = {
 export const FixedWidthKo: Story = {
   args: {
     width: 'fixed',
-    size: 'md',
     value: 'regex',
     onValueChange: () => {},
     options: [

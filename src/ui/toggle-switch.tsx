@@ -1,4 +1,4 @@
-import { Switch } from '@base-ui-components/react/switch';
+import { Switch } from '@base-ui/react/switch';
 import type { ComponentProps } from 'react';
 
 export type ToggleSwitchProps = ComponentProps<typeof Switch.Root>;

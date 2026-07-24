@@ -1,8 +1,8 @@
-import { Dialog } from '@base-ui-components/react/dialog';
+import { Dialog } from '@base-ui/react/dialog';
 import { Maximize2 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
-import { Button } from '@/ui/button';
-import { TextArea } from '@/ui/input';
+import { Button } from '@/ui/press-button';
+import { TextArea } from '@/ui/text-field';
 import { format } from '@/core/i18n';
 import { useT } from './i18n-context';
 

@@ -49,8 +49,6 @@ export const tooltipPopup =
 /** 앱 캔버스(본문 배경+글자색) — App main / Storybook 프리뷰 래퍼가 공유한다. */
 export const canvas = 'bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100';
 
-/** 마이크로 캡션(종류 라벨 등) — KindLabel이 쓴다. */
-export const microCaption = 'text-[10px] font-medium uppercase tracking-wide text-zinc-400';
 
 /** 작은 배지 알약 — 규칙 종류 배지·조건 배지가 색만 달리해 공유한다. */
 export const badgePill = 'rounded px-1 py-px text-[10px] font-medium';
@@ -75,12 +73,16 @@ export const scrollbarThumb = 'w-full rounded-full bg-zinc-300 dark:bg-zinc-600'
 
 /**
  * 고정 폭 셀렉트 트리거 — 선택한 값에 따라 폭이 변하지 않아야 하는 자리에 쓴다.
- * 값이 34(8.5rem = 136px)인 근거: 가장 긴 라벨은 매치 방식의 en `Regex (advanced)`로
- * 라벨 102px + 아이콘 12px + 간격 4px + 좌우 패딩 12px = 130px, 여기에 좌우 보더 2px을
- * 더해 실측 자연 폭이 132px이다. 여유 4px을 얹었다. 라벨이 길어지면 폭보다 en/ko
- * 미절단 스모크 단언(N25)이 먼저 깨져 알려 준다.
+ *
+ * 값이 38(9.5rem = 152px)인 근거: 가장 긴 라벨은 매치 방식의 en `Regex (advanced)`로
+ * 라벨 102px에 트리거의 여백이 붙는다. shadcn SelectTrigger는 좌우 패딩 18px
+ * (`pl-2.5 pr-2`) + 아이콘 16px(`size-4`) + 간격 6px(`gap-1.5`) + 보더 2px = 42px를
+ * 쓴다 — 예전 자체 트리거(패딩 12px + 아이콘 12px + 간격 4px)보다 12px 넓다. 그래서
+ * 136px에서는 en 라벨이 잘렸고(N25가 잡았다) 152px로 올렸다.
+ *
+ * 라벨이 더 길어지면 폭보다 en/ko 미절단 스모크 단언(N25)이 먼저 깨져 알려 준다.
  */
-export const selectFixedWidth = 'w-34';
+export const selectFixedWidth = 'w-38';
 
 /** 키보드 포커스 링 — Button·IconButton·SwitcherChip·아코디언 헤더·사이드바 그립이 공유한다(offset 일관). */
 export const focusRing =
