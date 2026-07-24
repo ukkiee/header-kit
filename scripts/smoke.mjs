@@ -2917,6 +2917,44 @@ try {
     `환경설정 화면 pressed=${JSON.stringify(onPrefs)} → 선택 후 pressed=${JSON.stringify(afterSelect.rail)}, ` +
     `편집기=${afterSelect.hasEditor}, 편집중="${afterSelect.editing}"`);
 
+  // N33: 스크롤바 트랙의 opacity 전이가 reduced-motion에서 **꺼진다** (릴리스 게이트 R-2).
+  //
+  // 스펙 story 23의 계약 경계는 ADR 0012에 명문화했다 — 색 전이는 밖, **움직임·opacity는 안.**
+  // 스크롤바 페이드는 opacity 전이라 안쪽이고, reduced-motion에서 `transition-property`가
+  // `none`이어야 한다. **감도 대조를 함께 건다**: 기본 모션에서 같은 요소가 `opacity` 전이를
+  // 실제로 가짐을 먼저 보여, 부재 단언이 "토큰을 지워도 통과"로 퇴화하지 않게 한다.
+  //
+  // opacity 값(0.6)은 양쪽 다 남는다 — 전이(페이드)만 끄고 어포던스는 유지한다. 그래서
+  // `transition-property`를 보지 `opacity`를 보지 않는다.
+  await seedProfiles(
+    Array.from({ length: 18 }, (_, i) =>
+      ({ ...baseProfile(`sb-${i}`, `Scroll ${i}`, []), active: i === 0 })),
+  );
+  const scrollbarTransition = async (reduced) => {
+    const page = await context.newPage();
+    await page.emulateMedia({ reducedMotion: reduced ? 'reduce' : null });
+    await page.setViewportSize({ width: 760, height: 580 });
+    await page.goto(`chrome-extension://${extensionId}/popup.html?locale=en`);
+    await page.getByRole('button', { name: 'Add rule' }).waitFor({ timeout: 5000 });
+    await page.waitForTimeout(300);
+    // 트랙은 넘치는 사이드바에만 뜬다(Base UI keepMounted 기본 false). 18 프로필로 넘치게 했다.
+    const state = await page.evaluate(() => {
+      const track = document.querySelector('[data-orientation="vertical"]');
+      if (!track) return { present: false };
+      const cs = getComputedStyle(track);
+      return { present: true, prop: cs.transitionProperty, opacity: cs.opacity };
+    });
+    await page.close();
+    return state;
+  };
+  const sbLively = await scrollbarTransition(false);
+  const sbReduced = await scrollbarTransition(true);
+  record('N33: 스크롤바 페이드 — 기본은 opacity 전이, reduced-motion에서는 부재(값은 유지)',
+    sbLively.present && sbReduced.present &&
+      sbLively.prop.includes('opacity') && sbReduced.prop === 'none' &&
+      sbLively.opacity === sbReduced.opacity,
+    `기본 prop=${sbLively.prop} opacity=${sbLively.opacity}, reduced prop=${sbReduced.prop} opacity=${sbReduced.opacity}`);
+
   // N28: 레일 아이콘 툴팁 (ui-polish 10, stories 28~30).
   // 레일만 툴팁 없는 맨 버튼이었다 — 다른 아이콘 버튼과 같은 셸로 옮긴다. 셸을 바꾸면
   // 크기가 24×24로 줄어들 수 있어(기존 IconButton 기본값) 클릭 대상 크기도 함께 본다.
