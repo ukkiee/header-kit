@@ -1,0 +1,72 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "plan",
+  "verdict": "needs-attention",
+  "summary": "Do not slice yet. Re-verification: R-1 still-open (lines 99-100); R-2 still-open (82-87, 130); R-3 still-open (108-111); R-4 resolved (72-77, 127, 133); R-5 resolved (81, 129). The R-1 fix also introduces a new high-risk race with automatic backup.",
+  "planFile": "docs/reviews/wide-ui-redesign/spec.md",
+  "planInDiff": true,
+  "reviewedFileCount": 2,
+  "target": "working tree diff",
+  "reviewedSha": "6d63a1029a4d16453670ef595b21c65ab6d30603",
+  "reviewedTree": "aca8b9802391c3dc004b111f258670d5c3f0c9a0",
+  "reviewedPlanSha256": "f4d7292aa6c10e2d37920ab3779d2ecabf66eed59cfea342e6a9b672ea7b9111",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 4,
+  "planFindingCount": 4,
+  "triage": "review-gate SKILL.md rules govern: render EVERY finding as a full table row, the human decides each row (accept/reject/defer/question — free text), echo back before applying, max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "Open question: What happens when sync deletion fails after the preference is committed?",
+      "body": "The transition commits the new preference before deleting the old store and explicitly makes that deletion best-effort, while the next line promises that disabling sync actually removes cloud data. If deletion fails, the UI can claim “this browser only” while sensitive backups remain synchronized. The tests inject copy/verification failures but not this post-commit cleanup failure.",
+      "file": "docs/reviews/wide-ui-redesign/spec.md",
+      "line_start": 99,
+      "line_end": 100,
+      "confidence": 0.99,
+      "recommendation": "Do not finalize or display sync=OFF until sync deletion is verified, or persist an explicit cleanup-pending/error state with durable retry. Test deletion failure, restart recovery, and the resulting user-visible status.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "high",
+      "title": "Open question: How is v1 StoredState upgraded to v2?",
+      "body": "The plan notes that persist currently requires an exact schema-version match and then directs an upgrade to v2, but it defines only future-format rejection and import/load handling for the new kinds. The test decision mentions loading an old v1 file, not migrating the authoritative v1 state in storage.local. Following the plan can therefore make the new v2 reader reject existing v1 state and fall back to a default profile. This is the forward upgrade path, not the deferred downgrade guarantee.",
+      "file": "docs/reviews/wide-ui-redesign/spec.md",
+      "line_start": 82,
+      "line_end": 87,
+      "confidence": 0.98,
+      "recommendation": "Specify a named v1 StoredState-to-v2 migration that preserves every profile and rule, persists v2 only after successful validation, and never replaces failed migrations with defaults. Test stateStore loading from an actual v1 storage fixture separately from v1 export import and backup restore.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "high",
+      "title": "Reset's abort path is already destructive",
+      "body": "The reset deletes local and sync backup data before committing the default state, then claims that a failure in either deletion prevents a partial reset. If the first store is cleared and the second deletion fails, aborting the state commit cannot restore the already-deleted history. The user retains profiles but loses one backup store, directly contradicting the partial-failure contract.",
+      "file": "docs/reviews/wide-ui-redesign/spec.md",
+      "line_start": 108,
+      "line_end": 111,
+      "confidence": 0.99,
+      "recommendation": "Define a recoverable transaction: either retain restorable copies and roll back completed deletions, or persist a reset journal and complete an idempotent forward recovery across restarts. Inject failures after each successful destructive operation and verify both stores' recoverability.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "high",
+      "title": "Open question: How is storage switching serialized with automatic backup?",
+      "body": "The copy/verify/commit/delete protocol does not suspend or drain backup writes, although the reset section explicitly acknowledges that automatic backup competes with destructive storage operations. A queued backup can write a new snapshot to the source after it was copied and verified; the switch can then commit and delete that source, silently losing the newest snapshot. Concurrent or repeated toggles are likewise unspecified.",
+      "file": "docs/reviews/wide-ui-redesign/spec.md",
+      "line_start": 99,
+      "line_end": 110,
+      "confidence": 0.96,
+      "recommendation": "Run migration and backup under one serialized writer protocol: stop scheduling, drain any in-flight backup, migrate a revisioned snapshot, recheck the source revision, commit, clean up, then resume. Test in-flight backups and repeated toggles at every transition boundary.",
+      "isPlanFinding": true
+    }
+  ],
+  "next_steps": [
+    "Resolve the R-1 storage-transition failure and concurrency contracts.",
+    "Add an explicit v1 authoritative-state migration for R-2.",
+    "Make R-3 reset recoverable after failures that occur following a successful deletion."
+  ]
+}
