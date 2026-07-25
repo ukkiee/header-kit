@@ -6,7 +6,7 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] Geist·Geist Mono가 로컬 번들(@fontsource-variable/geist, woff2)로 적용되고 원격 폰트 요청이 0이다. `--font-sans`/`--font-mono`가 Geist를 가리킨다
 - [ ] 다크 모드 시맨틱 토큰 값이 디자인 near-black 팔레트로 재매핑된다(배경/카드/보더/입력 표면 + accent #1d4ed8). 라이트 값은 불변

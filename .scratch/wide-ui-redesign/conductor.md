@@ -5,3 +5,4 @@ stage 1 align: done — 그릴링 8개 갈림길 확정(표면/테마/규칙종�
 stage 2 spec+plan-gate: done — 스펙 발행(docs/reviews + 트래커). 플랜 게이트 r1(5 findings 전부 accept, R-4 축소) → 스펙 반영 → r2 콜드 재검토(R-4·R-5 resolved, R-1/R-2/R-3 still-open + 신규 R2-4) → 단순화+마이그레이션 반영 후 사용자가 라운드3 waive(옵션 A). 게이트 PASS(waiver). decisions.md에 r1·r2·waiver 기록.
 stage 3 slice: done — 티켓 9개 발행(01~09), 블로킹 엣지 설정. 사용자 승인.
 ticket 01 start: 1e2156e91e3cb01b9e71486c3febcd74b40604c6
+ticket 01 done: 82a63f4(구현)+7ca3819(리뷰반영). 다크 토큰+Geist, 전 게이트 그린. code-review 2축 완료(Standards·Spec), fill 충돌은 티켓10 이월. → 구조 게이트.
