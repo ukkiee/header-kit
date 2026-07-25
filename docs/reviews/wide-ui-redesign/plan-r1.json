@@ -1,0 +1,83 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "plan",
+  "verdict": "needs-attention",
+  "summary": "Do not slice this plan yet. Storage transitions, schema compatibility, destructive reset semantics, and Block safeguards remain unsafe or undefined; the badge contract also contradicts existing behavior.",
+  "planFile": "docs/reviews/wide-ui-redesign/spec.md",
+  "planInDiff": true,
+  "reviewedFileCount": 4,
+  "target": "working tree diff",
+  "reviewedSha": "87e2792de8a0240119f896c7354533ff03790f15",
+  "reviewedTree": "27f3e25178e221cd5a931a57bc0713bec62985a4",
+  "reviewedPlanSha256": "adb00e36302a010857fa29715162027297ebcdb391862b6cf9c3f31e76dfe444",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 5,
+  "planFindingCount": 5,
+  "triage": "review-gate SKILL.md rules govern: render EVERY finding as a full table row, the human decides each row (accept/reject/defer/question — free text), echo back before applying, max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "Open question: How are existing backups handled when the storage target changes?",
+      "body": "The plan only routes future operations to sync or local storage. It does not choose an upgrade default, copy existing history, resolve histories present in both stores, or purge sync data when synchronization is disabled. Consequently, backups can disappear from the UI after toggling, and previously synchronized profiles can remain in the cloud while the UI claims they are stored only in this browser.",
+      "file": "docs/reviews/wide-ui-redesign/spec.md",
+      "line_start": 85,
+      "line_end": 86,
+      "confidence": 0.99,
+      "recommendation": "Specify the default for existing installations and an atomic switch protocol: copy and verify the selected history, commit the preference, then optionally purge the old store. Define failure recovery, conflict behavior, privacy wording, and tests for sync→local, local→sync, partial failure, and data already present in both stores.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "high",
+      "title": "Open question: What is the compatibility contract for the new modification kinds?",
+      "body": "Three new discriminants are added without a state/export format-version decision, while unknown kinds are to be silently discarded. Current readers use schema/export version 1 and reject unknown modifications—stored-state rejection falls back to the default profile—so rollback to an older extension can make all profiles disappear. Generalizing the proposed silent-drop behavior would instead make import or restore succeed after deleting unsupported rules.",
+      "file": "docs/reviews/wide-ui-redesign/spec.md",
+      "line_start": 65,
+      "line_end": 75,
+      "confidence": 0.98,
+      "recommendation": "Define StoredState and export/backup versioning explicitly. Prefer rejecting unsupported future formats without mutation, preserve only specifically retired kinds through named migrations, and add N/N-1 import, restore, upgrade, and rollback tests containing every new kind.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "high",
+      "title": "Open question: What does full reset erase, and how is it coordinated with automatic backup?",
+      "body": "“Two-stage full reset” defines only the confirmation UI. It does not say whether profiles, preferences, local snapshots, synchronized snapshots, session summaries, or installed dNR rules are cleared. The existing runtime automatically schedules a backup after state changes, so an uncoordinated reset can recreate data immediately or leave a partial reset when one storage operation fails.",
+      "file": "docs/reviews/wide-ui-redesign/spec.md",
+      "line_start": 91,
+      "line_end": 91,
+      "confidence": 0.96,
+      "recommendation": "List the exact keys and runtime state reset affects, define ordering and partial-failure recovery, suspend or deliberately sequence automatic backup, and test reset with populated local and sync stores plus injected failures at each step.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "medium",
+      "title": "Open question: What guardrail makes a broad Block rule acceptable?",
+      "body": "The plan recognizes that an overbroad Block rule can break pages but postpones the actual safety decision to a release gate. Tickets sliced now would have no contract for scope visualization, warnings, confirmation, protected URLs, or recovery. Requiring a non-empty URL does not prevent a global wildcard or equivalent regex.",
+      "file": "docs/reviews/wide-ui-redesign/spec.md",
+      "line_start": 123,
+      "line_end": 123,
+      "confidence": 0.94,
+      "recommendation": "Choose the guardrail before slicing—such as an explicit broad-scope warning/confirmation and always-visible effective scope—and add acceptance tests for global wildcard/regex patterns, extension pages, pause/recovery, and invalid or unsupported patterns.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "medium",
+      "title": "Toolbar badge story conflicts with the cited existing badge path",
+      "body": "The story promises an applied-rule-count badge, but the implementation only connects a toggle to the existing badge logic. That logic currently displays a single active profile’s short label or the number of active profiles, not the reconciled applied-rule count. Following the plan literally therefore exposes a setting whose label and value disagree, especially after quota or compilation failures.",
+      "file": "docs/reviews/wide-ui-redesign/spec.md",
+      "line_start": 90,
+      "line_end": 90,
+      "confidence": 0.98,
+      "recommendation": "Decide whether the badge remains a profile indicator or becomes an applied-rule counter. If it becomes a counter, feed it from the reconciled compile summary and test zero, paused, partially skipped, quota-failed, and disabled-display states; otherwise revise the user story and label.",
+      "isPlanFinding": true
+    }
+  ],
+  "next_steps": [
+    "Resolve these contracts in the plan before creating implementation tickets.",
+    "Expand Testing Decisions with the specified migration, rollback, partial-failure, reset, and Block cases.",
+    "Rerun the plan gate in a writable environment; the existing plan-r1 artifact records a failed EPERM run and is not an approval."
+  ]
+}
