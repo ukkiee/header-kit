@@ -11,3 +11,4 @@ structure gate: PASS(waiver) — r1 S-1(다크 팔레트가 테마중립 램프�
 ticket 02 start: 0698df44a5528b97fe85db5c529c7d490762cfe3
 ticket 02 done: 77bce64(구현)+리뷰반영. 스키마 v2+마이그레이션, blocked는 state 미보유, persistState·백업 양쪽 가드. code-review 2축이 백업 경로 누락을 잡아 수정. vitest 216, smoke 107.
 ticket 03 start: b60dbff7f13efc42830a6a1417cb47ffa8898a07
+ticket 03 done: 7cd8056(구현)+리뷰반영. UA·Header Removal 종류. code-review가 header-overlap 누락(기능 갭)과 테스트 공백을 잡아 수정. vitest 231, smoke 108.

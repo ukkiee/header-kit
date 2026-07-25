@@ -4,7 +4,7 @@
 
 **Blocked by:** 01 (다크 셸·RuleForm), 02 (v2 스키마).
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] User-Agent 종류: 스키마 union·model 생성기 추가, compile이 `User-Agent` modifyHeaders를 냄, 값 필수 검증, 폼은 값만 노출, 요약 'UA …'·뱃지 UA
 - [ ] Header Removal 종류: compile이 한 dNR 규칙에 요청·응답 removeHeaders를 함께 냄, 이름 필수·값 금지 검증, 폼은 이름만 노출, 요약 '삭제 <name>'·뱃지 DEL
