@@ -2105,6 +2105,45 @@ try {
     thumbCount === 1 && opaque(thumbLight) && opaque(thumbDark) && thumbLight !== thumbDark,
     `thumbs=${thumbCount}, light=${thumbLight}, dark=${thumbDark}`);
 
+  /*
+   * N34: 팔레트 격리 — 다크는 리디자인 팔레트를 쓰고, **라이트는 그와 무관하게 원래 값**이다.
+   *
+   * 이 단언이 있는 이유(구조 게이트 S-1): 다크 리디자인을 테마 중립 램프(zinc/blue)에 설치하면
+   * 라이트가 함께 끌려가는데, 그때 아무 게이트도 그것을 잡지 못했다 — 기존 색 단언(N22a)은
+   * "라이트≠다크"라는 **상대** 비교뿐이라 두 테마가 나란히 바뀌어도 통과한다. 그래서 여기서는
+   * 양쪽의 **절대값**을 못박는다. 라이트 값을 디자인에 맞추는 것은 티켓 05의 일이고, 그 티켓이
+   * 라이트를 의도적으로 바꿀 때 이 단언이 함께 갱신되어야 한다 — 그 시점이 '의도한 변경'과
+   * '실수로 끌려감'을 가르는 지점이다.
+   */
+  const paletteProbe = async (scheme) => {
+    await popup.emulateMedia({ colorScheme: scheme });
+    await popup.waitForTimeout(150);
+    return popup.evaluate(() => {
+      const s = getComputedStyle(document.documentElement);
+      const v = (n) => s.getPropertyValue(n).trim();
+      return { bg: v('--background'), fg: v('--foreground'), primary: v('--primary'), border: v('--border') };
+    });
+  };
+  const palLight = await paletteProbe('light');
+  const palDark = await paletteProbe('dark');
+  await popup.emulateMedia({ colorScheme: 'light' });
+  // 브라우저는 커스텀 속성의 hex를 축약해 돌려준다(#ffffff→#fff, #0066cc→#06c) — 축약형을
+  // 6자리로 펴서 비교한다. 이걸 안 하면 값이 맞는데도 표기 차이로 실패한다(실제로 겪음).
+  const hex6 = (v) => (/^#[0-9a-f]{3}$/i.test(v) ? '#' + [...v.slice(1)].map((c) => c + c).join('') : v.toLowerCase());
+  const sameHex = (probe, expected) =>
+    Object.keys(expected).every((k) => hex6(probe[k]) === expected[k]);
+  // 라이트 = 원래 베이스 램프(zinc-900 잉크, blue-600 액션, zinc-200 헤어라인).
+  const lightIntact = sameHex(palLight, {
+    bg: '#ffffff', fg: '#1d1d1f', primary: '#0066cc', border: '#e0e0e0',
+  });
+  // 다크 = 디자인 near-black 팔레트(ADR 0015).
+  const darkRedesigned = sameHex(palDark, {
+    bg: '#0a0a0a', fg: '#ededed', primary: '#1d4ed8', border: '#262626',
+  });
+  record('N34: 팔레트 격리 — 다크는 리디자인 값, 라이트는 베이스 램프 그대로',
+    lightIntact && darkRedesigned,
+    `light=${JSON.stringify(palLight)}, dark=${JSON.stringify(palDark)}`);
+
   // 넘치지 않으면 스크롤바가 DOM에 아예 없어야 한다 — 트랙을 기본 노출(opacity-60)로 둔
   // 근거가 이것이다. 보이면 곧 "넘치는 내용이 있다"는 신호여야 어포던스가 성립한다.
   await seedProfiles([baseProfile('p-short', 'Short', manyRules.slice(0, 1))]);

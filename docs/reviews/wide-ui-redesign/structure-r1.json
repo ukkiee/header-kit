@@ -1,0 +1,40 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "structure",
+  "ack": "human-triage",
+  "triageMode": "human",
+  "verdict": "needs-attention",
+  "summary": "Do not ship ticket 01 yet: its token foundation does not isolate the new dark palette from light mode.",
+  "planFile": "docs/reviews/wide-ui-redesign/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 23,
+  "target": "branch diff against main",
+  "reviewedSha": "661436f5b167ff3ea81de4a2cbcc3921c30a021d",
+  "reviewedTree": "ac7d3243b096da4c488eec755a01eedac8f285de",
+  "reviewedPlanSha256": "93c6cf121729c76a8c3c440dc50817191cb919fea2597c1132a4cb25c6548e19",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 1,
+  "planFindingCount": 0,
+  "triage": "review-gate SKILL.md rules govern: render EVERY finding as a full table row, the human decides each row (accept/reject/defer/question — free text), echo back before applying, max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "medium",
+      "title": "Dark palette changes are installed in theme-independent ramps",
+      "body": "The branch replaces the shared blue ramp and zinc-700..950 globally. Light semantic bindings later consume those same variables, so light foregrounds, popovers, actions, focus rings, and raw-ramp consumers all change despite ticket 01 explicitly requiring light values to remain unchanged until ticket 05. Dark-only fills are also declared as literals at lines 173–177, splitting the palette between `@theme` and the semantic layer. Building tickets 05 and 10 on this seam would proliferate consumers before light and dark can be adjusted independently.",
+      "file": "src/app/styles/global.css",
+      "line_start": 52,
+      "line_end": 75,
+      "confidence": 0.99,
+      "recommendation": "Restore the existing light/base ramps. Define named dark palette and fill tokens under `@theme`, then reference them only from the `@variant dark` semantic mappings. Add a computed-style smoke assertion proving representative light values remain unchanged while dark values use the redesign palette.",
+      "isPlanFinding": false
+    }
+  ],
+  "next_steps": [
+    "Refactor the palette seam before tickets 05 and 10 add further consumers.",
+    "Pin representative light and dark semantic values at the existing browser-level test seam."
+  ]
+}
