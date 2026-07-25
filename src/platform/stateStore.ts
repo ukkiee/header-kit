@@ -1,5 +1,5 @@
 import type { Command } from '@/core/commands';
-import { parseStoredState, type StoredState } from '@/core/schema';
+import { isBlockedFromOverwrite, parseStoredState, type StoredState } from '@/core/schema';
 import type { StatusSummary } from '@/core/summary';
 
 const STATE_KEY = 'state';
@@ -10,8 +10,24 @@ export async function loadState(): Promise<StoredState> {
   return parseStoredState(result[STATE_KEY]);
 }
 
-/** background의 명령 실행자만 호출한다 — 다른 쓰기 경로는 없다. */
+/**
+ * background의 명령 실행자만 호출한다 — 다른 쓰기 경로는 없다.
+ *
+ * **쓰기 전에 저장된 값을 다시 읽어 덮어써도 되는지 확인한다** (티켓 02, ADR 0015).
+ * 이 가드가 없으면 데이터 손실 경로가 열린다: 이 버전이 이해 못 하는 상태(더 새 포맷,
+ * 또는 마이그레이션이 실패한 구 포맷)를 만나면 로드가 기본 상태로 접히고, 그 기본 상태가
+ * 다음 저장에서 원본을 통째로 덮는다. 읽기가 blocked라고 판정한 것 위에는 쓰지 않는다.
+ *
+ * 매 저장마다 읽기가 한 번 더 들지만, 저장은 사용자 조작에서만 일어나고 storage.local은
+ * 로컬이라 이 비용보다 프로필을 잃는 쪽이 훨씬 비싸다.
+ */
 export async function persistState(state: StoredState): Promise<void> {
+  const existing = await browser.storage.local.get(STATE_KEY);
+  if (isBlockedFromOverwrite(existing[STATE_KEY])) {
+    throw new Error(
+      'Refusing to overwrite stored state this version cannot read (newer or unmigratable format). Your data is left intact.',
+    );
+  }
   await browser.storage.local.set({ [STATE_KEY]: state });
 }
 

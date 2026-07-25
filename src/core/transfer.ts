@@ -14,8 +14,13 @@ import {
  * Export는 항상 템플릿만 담는다: Profile에는 실체화 구역이 없고,
  * envelope에도 materialized를 싣지 않는다.
  */
+import { EXPORT_FORMAT_VERSION, READABLE_FORMAT_VERSIONS } from './format-version';
+
+/** 내보내기 포맷 버전 — 정의는 의존성 없는 `format-version.ts`에 있다(스모크가 직접 읽는다). */
+export { EXPORT_FORMAT_VERSION } from './format-version';
+
 export interface ExportFile {
-  headerkit: 1;
+  headerkit: typeof EXPORT_FORMAT_VERSION;
   profiles: Profile[];
 }
 
@@ -26,7 +31,7 @@ export type ImportResult =
 export function exportProfiles(state: StoredState, profileIds: string[]): ExportFile {
   const wanted = new Set(profileIds);
   return {
-    headerkit: 1,
+    headerkit: EXPORT_FORMAT_VERSION,
     profiles: state.profiles.filter((p) => wanted.has(p.id)),
   };
 }
@@ -135,18 +140,25 @@ export function parseImport(
     return { ok: false, errors: ['Not valid JSON.'] };
   }
 
-  if (!isRecord(raw) || !Array.isArray(raw.profiles) || raw.headerkit !== 1) {
-    if (isRecord(raw) && typeof raw.headerkit === 'number' && raw.headerkit > 1) {
+  if (
+    !isRecord(raw) ||
+    !Array.isArray(raw.profiles) ||
+    typeof raw.headerkit !== 'number' ||
+    !READABLE_FORMAT_VERSIONS.includes(raw.headerkit)
+  ) {
+    if (isRecord(raw) && typeof raw.headerkit === 'number' && raw.headerkit > EXPORT_FORMAT_VERSION) {
       return {
         ok: false,
         errors: [
-          `This file was exported by a newer HeaderKit (format v${raw.headerkit}); this version reads v1 only.`,
+          `This file was exported by a newer HeaderKit (format v${raw.headerkit}); this version reads v${EXPORT_FORMAT_VERSION} and older.`,
         ],
       };
     }
     return {
       ok: false,
-      errors: ['Not a HeaderKit export file (expected { "headerkit": 1, "profiles": [...] }).'],
+      errors: [
+        `Not a HeaderKit export file (expected { "headerkit": ${EXPORT_FORMAT_VERSION}, "profiles": [...] }).`,
+      ],
     };
   }
 

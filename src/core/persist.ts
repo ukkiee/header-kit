@@ -243,25 +243,108 @@ function isMaterializedRecord(value: unknown): value is Record<string, string> {
 }
 
 /**
+ * 저장된 값을 읽은 결과. 상태를 돌려주는 분기와 **돌려주지 않는** 분기를 타입으로 가른다.
+ *
+ * `blocked`가 state를 들고 있지 않은 것이 이 타입의 요점이다(티켓 02, ADR 0015). 예전
+ * 리더는 버전이 어긋나면 무엇이든 기본 상태로 대체했고, 호출부는 그것을 정상 상태와
+ * 구분할 수 없어 다음 저장에서 원본을 덮어썼다 — 구버전으로 되돌아가면 프로필이 통째로
+ * 사라지는 경로다. 돌려줄 state가 아예 없으면 그 실수를 저지를 수 없다.
+ */
+export type StoredStateRead =
+  /** 현재 버전 — 그대로 쓴다. */
+  | { status: 'ok'; state: StoredState }
+  /** 구버전에서 올렸다 — 데이터는 보존됐고, 다음 저장 때 v2로 굳는다. */
+  | { status: 'migrated'; from: number; state: StoredState }
+  /** 읽을 수 없고 **덮어써서도 안 된다**. 사용자 데이터가 그대로 남아 복구 기회가 있다. */
+  | { status: 'blocked'; reason: 'newer' | 'migration-failed'; storedVersion: number }
+  /** 저장된 것이 없거나 우리 모양이 전혀 아니다 — 신규 설치처럼 시작한다. */
+  | { status: 'reset'; state: StoredState };
+
+/**
+ * v1 → v2 마이그레이션 (ADR 0015).
+ *
+ * v2가 더한 것은 Modification 종류 세 개(User-Agent·Block·Header Removal)뿐이고, 그것은
+ * union에 **더해질** 뿐 기존 항목의 형태를 바꾸지 않는다. 그래서 이 마이그레이션은 값을
+ * 손대지 않고 버전만 올린다 — 백필·검증은 아래 공통 경로가 그대로 맡는다.
+ *
+ * 이름을 붙여 둔 이유는 다음 버전 때문이다. v3가 형태를 실제로 바꾸면 그 변환은 여기
+ * 옆에 `migrateStoredStateV2ToV3`로 서고, 두 단계를 이어 붙이면 v1 사용자도 올라온다.
+ */
+function migrateStoredStateV1ToV2(value: Record<string, unknown>): Record<string, unknown> {
+  return { ...value, schemaVersion: SCHEMA_VERSION };
+}
+
+/** 검증을 통과한 StoredState거나, 통과하지 못하면 null. 분류와 검증을 나눠 둔다. */
+function validateStoredState(value: Record<string, unknown>): StoredState | null {
+  if (typeof value.paused !== 'boolean' || !Array.isArray(value.profiles)) return null;
+  const profiles = value.profiles.map(backfillProfile);
+  const materialized = value.materialized ?? {};
+  const customHeaderNames = Array.isArray(value.customHeaderNames)
+    ? value.customHeaderNames.filter((n): n is string => typeof n === 'string')
+    : [];
+  if (!profiles.every(isProfile) || !isMaterializedRecord(materialized)) return null;
+  return { ...value, profiles, materialized, customHeaderNames } as unknown as StoredState;
+}
+
+/**
+ * 저장된 값을 분류해 읽는다 — 버전 호환성의 단일 판단 지점.
+ *
+ * 순수 함수이고 부수 효과가 없다. 마이그레이션한 상태를 **저장하는** 것은 호출부의 몫이라,
+ * 검증에 실패하면 아무것도 쓰이지 않는다("검증 성공 후에만 v2로 persist").
+ */
+export function readStoredState(value: unknown): StoredStateRead {
+  if (!isRecord(value)) return { status: 'reset', state: createDefaultState() };
+
+  const storedVersion = value.schemaVersion;
+  if (typeof storedVersion !== 'number') {
+    // 버전이 없으면 우리가 쓴 상태가 아니다 — 덮어써도 잃을 것이 없다.
+    return { status: 'reset', state: createDefaultState() };
+  }
+
+  // 미래 포맷은 변형하지 않는다. 이 버전이 이해 못 하는 필드를 지우고 되쓰면
+  // 최신 버전으로 돌아갔을 때 그 필드가 사라져 있다.
+  if (storedVersion > SCHEMA_VERSION) {
+    return { status: 'blocked', reason: 'newer', storedVersion };
+  }
+
+  if (storedVersion === SCHEMA_VERSION) {
+    const state = validateStoredState(value);
+    // 현재 버전인데 형태가 깨졌다면 우리가 쓴 것이 손상된 것이다 — 기존 계약대로
+    // 기본 상태로 시작한다(반쯤 깨진 상태로 규칙을 컴파일하지 않는다).
+    return state ? { status: 'ok', state } : { status: 'reset', state: createDefaultState() };
+  }
+
+  if (storedVersion === 1) {
+    const state = validateStoredState(migrateStoredStateV1ToV2(value));
+    // 마이그레이션이 실패하면 **기본 상태로 갈아치우지 않는다** — 원본 v1을 그대로 두어
+    // 사용자가 되돌리거나 내보내 살릴 수 있게 한다.
+    return state
+      ? { status: 'migrated', from: 1, state }
+      : { status: 'blocked', reason: 'migration-failed', storedVersion };
+  }
+
+  // 알 수 없는 과거 버전(0·음수 등) — 마이그레이션 경로가 없으니 손대지 않는다.
+  return { status: 'blocked', reason: 'migration-failed', storedVersion };
+}
+
+/**
+ * 이 값 위에 새 상태를 써도 되는가. `false`면 써서는 안 된다.
+ *
+ * 쓰기 경로가 읽기 경로와 **따로** 판단하지 않도록 같은 분류를 재사용한다. 로드 때
+ * blocked였는데 저장 때 그 사실을 잊으면, 화면에 떠 있던 기본 상태가 원본을 덮는다.
+ */
+export function isBlockedFromOverwrite(existing: unknown): boolean {
+  return readStoredState(existing).status === 'blocked';
+}
+
+/**
  * 저장소에서 읽은 알 수 없는 값을 StoredState로 검증한다.
- * 스키마 위반은 전량 거부하고 기본 상태로 대체한다 — 반쯤 깨진 상태로
- * 규칙을 컴파일하지 않는다. 이후 슬라이스가 variant 검증을 여기에 확장한다.
+ *
+ * `readStoredState`의 얇은 래퍼 — 상태 하나만 필요한 호출부를 위한 것이다. **blocked도
+ * 기본 상태로 접히므로**, 그 상태를 저장할 수 있는 경로에서는 이것 대신 `readStoredState`를
+ * 쓰고 blocked를 직접 다뤄야 한다(그렇지 않으면 원본을 덮는다).
  */
 export function parseStoredState(value: unknown): StoredState {
-  if (
-    isRecord(value) &&
-    value.schemaVersion === SCHEMA_VERSION &&
-    typeof value.paused === 'boolean' &&
-    Array.isArray(value.profiles)
-  ) {
-    const profiles = value.profiles.map(backfillProfile);
-    const materialized = value.materialized ?? {};
-    const customHeaderNames = Array.isArray(value.customHeaderNames)
-      ? value.customHeaderNames.filter((n): n is string => typeof n === 'string')
-      : [];
-    if (profiles.every(isProfile) && isMaterializedRecord(materialized)) {
-      return { ...value, profiles, materialized, customHeaderNames } as unknown as StoredState;
-    }
-  }
-  return createDefaultState();
+  const read = readStoredState(value);
+  return read.status === 'blocked' ? createDefaultState() : read.state;
 }

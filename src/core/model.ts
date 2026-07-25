@@ -1,6 +1,13 @@
 import type { RequestMethod, ResourceType } from './rules';
 
-export const SCHEMA_VERSION = 1 as const;
+/**
+ * 포맷 버전은 의존성 없는 `format-version.ts`가 소유한다 — 스모크가 그 파일을 직접
+ * import하기 때문이다(사정은 그쪽 주석 참고). 여기서는 내부에서 쓰면서 기존 import
+ * 경로(`@/core/schema`)를 지키려고 다시 내보낸다.
+ */
+import { SCHEMA_VERSION } from './format-version';
+
+export { SCHEMA_VERSION };
 
 /**
  * Modification은 종류를 판별자(kind)로 갖는 discriminated union이다.

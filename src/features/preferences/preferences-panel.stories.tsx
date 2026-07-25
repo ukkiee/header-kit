@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { applyCommand, type Command } from '@/core/commands';
+import { SCHEMA_VERSION } from '@/core/schema';
 import { PreferencesPanel } from './preferences-panel';
 
 const meta = {
@@ -16,7 +17,7 @@ function Interactive({ incognitoAllowed }: { incognitoAllowed: boolean }) {
   const onCommand = (command: Command) => {
     const state = applyCommand(
       {
-        schemaVersion: 1,
+        schemaVersion: SCHEMA_VERSION,
         paused: false,
         profiles: [],
         materialized: {},

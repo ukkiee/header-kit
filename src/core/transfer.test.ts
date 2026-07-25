@@ -4,6 +4,7 @@ import type { MaterializeDeps } from './placeholder';
 import type { Filter, Profile, RequestHeaderModification, StoredState } from './schema';
 import { SCHEMA_VERSION } from './schema';
 import {
+  EXPORT_FORMAT_VERSION,
   exportProfiles,
   normalizeImportedProfiles,
   parseImport,
@@ -63,7 +64,7 @@ describe('exportProfiles', () => {
 
     const file = exportProfiles(s, ['c', 'a']);
     expect(file.profiles.map((p) => p.name)).toEqual(['A', 'C']);
-    expect(file.headerkit).toBe(1);
+    expect(file.headerkit).toBe(EXPORT_FORMAT_VERSION);
   });
 
   it('실체화 값은 Export에 절대 포함되지 않는다 (템플릿만)', () => {

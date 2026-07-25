@@ -12,6 +12,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { menuStaggerTotalMs, ROW_TRANSITION } from '../src/ui/motion-tokens.ts';
+import { EXPORT_FORMAT_VERSION } from '../src/core/format-version.ts';
 
 const EXT_PATH = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -1542,7 +1543,9 @@ try {
   const exportPayload = JSON.parse(readFileSync(await exportDownload.path(), 'utf8'));
   record('N13: Export 다운로드 → 페이로드 검증',
     exportDownload.suggestedFilename() === 'headerkit-profiles.json'
-      && exportPayload.headerkit === 1
+      // 포맷 버전은 상수를 따라간다 — 리터럴을 박으면 버전을 올릴 때마다 여기서 깨진다.
+      // 내보내기는 항상 **현재** 버전으로 쓴다(읽기는 예전 v1도 받는다, ADR 0015).
+      && exportPayload.headerkit === EXPORT_FORMAT_VERSION
       && exportPayload.profiles?.length === 2
       && exportPayload.profiles.some((p) => p.name === 'Renamed'),
     `file=${exportDownload.suggestedFilename()}, profiles=${exportPayload.profiles?.length}, names=[${exportPayload.profiles?.map((p) => p.name).join('|')}]`);
