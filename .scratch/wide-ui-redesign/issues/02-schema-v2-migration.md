@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] SCHEMA_VERSION과 export/backup 포맷 버전을 v1→v2로 올린다
 - [ ] 명명된 v1→v2 마이그레이션이 **모든 프로필·규칙을 보존**하고 검증 성공 후에만 v2로 persist한다
