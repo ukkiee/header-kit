@@ -1,5 +1,5 @@
 import type { Translator } from '@/core/i18n';
-import type { Modification, RuleConditions } from '@/core/schema';
+import type { Modification, ModificationKind, RuleConditions } from '@/core/schema';
 import { formatExpiryBadge } from './expiry-format';
 
 /**
@@ -24,7 +24,11 @@ export interface ConditionBadge {
   icon?: 'clock';
 }
 
-const BADGES = {
+/**
+ * 종류 → 행 뱃지. `Record<ModificationKind, ...>`로 못박아 **종류를 더하면 여기서
+ * 타입이 먼저 깨지게** 한다 — as const만 두면 키 누락이 런타임 undefined로 조용히 샌다.
+ */
+const BADGES: Record<ModificationKind, RuleView['badge']> = {
   'request-header': 'REQ',
   'response-header': 'RES',
   cookie: 'COOKIE',
@@ -32,7 +36,7 @@ const BADGES = {
   redirect: 'REDIRECT',
   'user-agent': 'UA',
   'header-removal': 'DEL',
-} as const;
+};
 
 /** 조건을 값 배지 목록으로 (ui-refine 05) — 차원이 구별되는 표기. */
 export function conditionBadges(conditions: RuleConditions | undefined): ConditionBadge[] {
@@ -80,14 +84,20 @@ function bareView(m: Modification, t: Translator): BareView {
     return { title: m.comment || badge, badge, summary };
   }
 
+  /*
+   * 다른 행과 같은 문법으로 읽힌다 — **제목은 대상, 요약은 효과**
+   * (예: `X-Frame-Options [RES] / X-Frame-Options: DENY`).
+   * 뱃지가 이미 종류를 말하므로 제목·요약에서 종류 이름을 되풀이하지 않는다.
+   */
   if (m.kind === 'user-agent') {
-    // 헤더 이름은 고정이라 값만 보여 준다 — 행에서 어떤 UA인지가 읽을 거리다.
-    return { title: m.comment || badge, badge, summary: m.value || t('emptyMarker') };
+    // 대상은 고정 헤더, 효과는 보낼 UA 문자열이다.
+    return { title: m.comment || t('kindUserAgent'), badge, summary: m.value || t('emptyMarker') };
   }
 
   if (m.kind === 'header-removal') {
-    // 값이 없다 — 무엇을 지우는지가 전부다.
-    return { title: m.comment || m.name || badge, badge, summary: m.name || t('emptyMarker') };
+    // 대상은 헤더 이름, 효과는 **양쪽에서** 지운다는 사실이다 — 그것이 이 종류의 특징이라
+    // 이름을 되풀이하는 것보다 방향을 말해 주는 편이 읽는 사람에게 쓸모 있다.
+    return { title: m.comment || m.name || badge, badge, summary: t('removeBothSides') };
   }
 
   // set-cookie는 이름 없이 원시 Set-Cookie 값 하나다.

@@ -158,6 +158,9 @@ const richState = {
         { kind: 'cookie', id: 'm3', name: 'session', value: 'abc', enabled: true, mode: 'append', emptyMeans: 'remove', comment: '' },
         { kind: 'set-cookie', id: 'm4', value: 'sid=abc; Path=/', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
         { kind: 'redirect', id: 'm5', pattern: '^https://prod\\.example\\.com/(.*)', substitution: 'http://localhost:3000/\\1', comment: '', enabled: true },
+        // 새 종류(ADR 0015)도 행을 그린다 — 픽스처에 없으면 UA/DEL 행이 진단에 한 번도 렌더되지 않는다.
+        { kind: 'user-agent', id: 'm6', value: 'Mozilla/5.0 (Macintosh) HeaderKit/diag', comment: '', enabled: true },
+        { kind: 'header-removal', id: 'm7', name: 'X-Powered-By', comment: '', enabled: true },
       ],
     },
     { id: 'p2', name: '두 번째 프로필', active: false, shortLabel: '2', color: '#2563eb', modifications: [] },

@@ -279,7 +279,7 @@ export type StoredStateRead =
 /**
  * v1 → v2 마이그레이션 (ADR 0015).
  *
- * v2가 더한 것은 Modification 종류 세 개(User-Agent·Block·Header Removal)뿐이고, 그것은
+ * v2가 더한 것은 Modification 종류(User-Agent·Header Removal — Block은 아직 미구현)뿐이고, 그것은
  * union에 **더해질** 뿐 기존 항목의 형태를 바꾸지 않는다. 그래서 이 마이그레이션은 값을
  * 손대지 않고 버전만 올린다 — 백필·검증은 아래 공통 경로가 그대로 맡는다.
  *

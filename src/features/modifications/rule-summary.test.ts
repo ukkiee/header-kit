@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { makeTranslator } from '@/core/i18n';
-import type { Modification } from '@/core/schema';
+import { createModification, type Modification } from '@/core/schema';
 import { ruleView } from './rule-summary';
 
 const t = makeTranslator('en');
@@ -123,5 +123,29 @@ describe('ruleView', () => {
     expect(
       ruleView({ kind: 'redirect', id: 'r', pattern: '', substitution: '', enabled: true, comment: '' }, t),
     ).toEqual({ title: 'REDIRECT', badge: 'REDIRECT', summary: '(empty)', conditionBadges: [] });
+  });
+});
+
+describe('새 종류 요약 (ADR 0015)', () => {
+  it('UA는 UA 접두 + 값으로 읽힌다', () => {
+    const view = ruleView(
+      { ...createModification('user-agent'), value: 'Mozilla/5.0' } as Modification,
+      t,
+    );
+    expect(view.badge).toBe('UA');
+    // 뱃지가 종류를 말하므로 요약은 값만 — 행에서 어떤 UA인지가 읽을 거리다.
+    expect(view.summary).toBe('Mozilla/5.0');
+    expect(view.title).toBe('User-Agent');
+  });
+
+  it('Header Removal은 삭제 접두 + 이름으로 읽히고, 제목이 요약과 겹치지 않는다', () => {
+    const view = ruleView(
+      { ...createModification('header-removal'), name: 'X-Frame-Options' } as Modification,
+      t,
+    );
+    expect(view.badge).toBe('DEL');
+    // 제목은 대상(헤더 이름), 요약은 효과 — 이름을 두 번 찍지 않는다.
+    expect(view.title).toBe('X-Frame-Options');
+    expect(view.summary).toMatch(/request and response/i);
   });
 });

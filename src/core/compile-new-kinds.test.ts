@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { compile } from './compile';
-import { createModification, createProfile, type Modification, type Profile } from './schema';
+import { missingRequiredFields } from './rule-validation';
+import {
+  createDefaultState,
+  createModification,
+  createProfile,
+  parseStoredState,
+  type Modification,
+  type Profile,
+} from './schema';
+import { exportProfiles, parseImport } from './transfer';
 
 /**
  * User-Agent·Header Removal 종류의 컴파일 계약 (티켓 03, ADR 0015).
@@ -72,5 +81,110 @@ describe('두 종류 모두 기존 조건 체계를 그대로 탄다', () => {
     expect(rules[0]?.condition.requestMethods).toEqual(['post']);
     // domain 매치는 DNR 비정규식 문법으로 떨어진다(regex 한도를 쓰지 않는다, ADR 0008).
     expect(rules[0]?.condition.urlFilter).toBe('||example.com');
+  });
+});
+
+describe('겹침 경고는 헤더를 만지는 모든 종류를 본다', () => {
+  const twoProfiles = (a: Modification, b: Modification) =>
+    compile(
+      [
+        { ...createProfile('A'), id: 'pa', active: true, modifications: [a] },
+        { ...createProfile('B'), id: 'pb', active: true, modifications: [b] },
+      ],
+      { paused: false, tabs: [], now: 0, materialized: {} },
+    );
+
+  it('두 프로필이 함께 UA를 바꾸면 겹침으로 알린다', () => {
+    const ua = () => ({ ...createModification('user-agent'), value: 'X' }) as Modification;
+    const { warnings } = twoProfiles(ua(), ua());
+    expect(warnings.some((w) => w.code === 'header-overlap')).toBe(true);
+  });
+
+  it('UA 종류와 이름이 User-Agent인 요청 헤더도 서로 겹친다 — 표현이 달라도 같은 헤더다', () => {
+    const ua = { ...createModification('user-agent'), value: 'X' } as Modification;
+    const raw = {
+      ...createModification('request-header'),
+      name: 'user-agent',
+      value: 'Y',
+    } as Modification;
+    const { warnings } = twoProfiles(ua, raw);
+    expect(warnings.some((w) => w.code === 'header-overlap')).toBe(true);
+  });
+
+  it('한쪽이 지우고 한쪽이 설정해도 겹침이다', () => {
+    const del = { ...createModification('header-removal'), name: 'X-Foo' } as Modification;
+    const set = {
+      ...createModification('response-header'),
+      name: 'X-Foo',
+      value: '1',
+    } as Modification;
+    const { warnings } = twoProfiles(del, set);
+    expect(warnings.some((w) => w.code === 'header-overlap')).toBe(true);
+  });
+
+  it('서로 다른 헤더는 겹치지 않는다', () => {
+    const a = { ...createModification('header-removal'), name: 'X-A' } as Modification;
+    const b = { ...createModification('header-removal'), name: 'X-B' } as Modification;
+    const { warnings } = twoProfiles(a, b);
+    expect(warnings.some((w) => w.code === 'header-overlap')).toBe(false);
+  });
+});
+
+describe('검증·영속 계약', () => {
+  it('UA는 값이 필수다 — 비면 UA를 빈 문자열로 보내는 사고가 된다', () => {
+    expect(missingRequiredFields({ ...createModification('user-agent'), value: '' } as Modification))
+      .toEqual(['value']);
+    expect(missingRequiredFields({ ...createModification('user-agent'), value: 'X' } as Modification))
+      .toEqual([]);
+  });
+
+  it('Header Removal은 이름이 필수다', () => {
+    expect(missingRequiredFields({ ...createModification('header-removal'), name: ' ' } as Modification))
+      .toEqual(['name']);
+    expect(missingRequiredFields({ ...createModification('header-removal'), name: 'X-Foo' } as Modification))
+      .toEqual([]);
+  });
+
+  it('두 종류가 저장→로드 왕복에서 살아남는다 — 검증 실패는 상태 전체를 기본값으로 리셋한다', () => {
+    const state = {
+      ...createDefaultState(),
+      profiles: [
+        {
+          ...createProfile('P'),
+          id: 'p1',
+          modifications: [
+            { ...createModification('user-agent', 'u1'), value: 'Mozilla/5.0' },
+            { ...createModification('header-removal', 'd1'), name: 'X-Frame-Options' },
+          ] as Modification[],
+        },
+      ],
+    };
+    const revived = parseStoredState(JSON.parse(JSON.stringify(state)));
+    expect(revived.profiles[0]?.modifications.map((m) => m.kind)).toEqual([
+      'user-agent',
+      'header-removal',
+    ]);
+    // 새 종류에는 뜻 없는 mode/emptyMeans가 붙지 않는다.
+    expect(revived.profiles[0]?.modifications[0]).not.toHaveProperty('mode');
+  });
+
+  it('두 종류가 내보내기→가져오기 왕복에서 살아남는다', () => {
+    const profile = {
+      ...createProfile('P'),
+      id: 'p1',
+      modifications: [
+        { ...createModification('user-agent', 'u1'), value: 'UA' },
+        { ...createModification('header-removal', 'd1'), name: 'X-Foo' },
+      ] as Modification[],
+    };
+    const file = exportProfiles({ ...createDefaultState(), profiles: [profile] }, ['p1']);
+    const result = parseImport(JSON.stringify(file));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.profiles[0]?.modifications.map((m) => m.kind)).toEqual([
+        'user-agent',
+        'header-removal',
+      ]);
+    }
   });
 });

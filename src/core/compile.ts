@@ -43,6 +43,39 @@ export const REGEX_JOIN_LIMIT = 1500;
 /** User-Agent 종류가 쓰는 고정 헤더 이름 — 사용자에게 묻지 않는다(오타 방지). */
 const USER_AGENT_HEADER = 'User-Agent';
 
+/**
+ * 이 Modification이 겹침 경고에서 차지하는 자리들 — `방향:헤더이름`(소문자).
+ *
+ * 종류가 아니라 **실제로 만지는 헤더**로 키를 잡는다. 그래야 표현이 달라도 같은 헤더를
+ * 건드리는 규칙끼리 충돌이 잡힌다: User-Agent 종류와 이름이 'User-Agent'인 요청 헤더
+ * 규칙은 같은 키를 쓰고, Header Removal은 요청·응답 양쪽을 지우므로 자리를 둘 차지한다.
+ *
+ * 이름이 비면 자리를 잡지 않는다 — 무엇을 만지는지 모르는 규칙은 겹침도 말할 수 없다.
+ */
+function overlapKeys(modification: Modification): string[] {
+  const key = (side: 'request-header' | 'response-header', name: string) =>
+    `${side}:${name.trim().toLowerCase()}`;
+  switch (modification.kind) {
+    case 'request-header':
+    case 'response-header':
+      return modification.name.trim() === '' ? [] : [key(modification.kind, modification.name)];
+    case 'user-agent':
+      return [key('request-header', USER_AGENT_HEADER)];
+    case 'header-removal':
+      return modification.name.trim() === ''
+        ? []
+        : [key('request-header', modification.name), key('response-header', modification.name)];
+    // cookie/set-cookie는 고정 헤더(Cookie/Set-Cookie)를 쓰지만 값 합성 규칙이 달라
+    // 서로 덮어쓴다고 단정할 수 없다. redirect는 헤더를 만지지 않는다.
+    case 'cookie':
+    case 'set-cookie':
+    case 'redirect':
+      return [];
+    default:
+      return modification satisfies never;
+  }
+}
+
 /** session rules 총량 한도 — 이슈 01 스모크에서 실측 확인(5,000에서 거부). */
 const TOTAL_RULE_LIMIT = 5000;
 /** regex 조건 규칙의 타입별 한도. */
@@ -509,15 +542,13 @@ export function compile(profiles: Profile[], env: CompileEnv): CompileResult {
 
     enabled.forEach((modification, index) => {
       emitModification(modification, base + enabled.length - 1 - index, profile.id, tabs, emitter);
-      // 겹침 경고는 헤더 이름 있는 종류(request/response-header)에만 의미가 있다.
-      if (modification.kind === 'request-header' || modification.kind === 'response-header') {
-        const name = modification.name.trim().toLowerCase();
-        if (name !== '') {
-          const headerKey = `${modification.kind}:${name}`;
-          const users = headerUse.get(headerKey) ?? [];
-          if (!users.includes(profile.id)) users.push(profile.id);
-          headerUse.set(headerKey, users);
-        }
+      // 겹침 경고 — **헤더를 건드리는 모든 종류**가 참여한다. 종류가 달라도 같은 헤더를
+      // 만지면 충돌이므로, 방향+이름으로 키를 맞춘다(예: User-Agent 종류와 이름이
+      // 'User-Agent'인 요청 헤더 규칙은 서로 겹친다).
+      for (const headerKey of overlapKeys(modification)) {
+        const users = headerUse.get(headerKey) ?? [];
+        if (!users.includes(profile.id)) users.push(profile.id);
+        headerUse.set(headerKey, users);
       }
     });
   }
