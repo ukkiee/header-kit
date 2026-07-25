@@ -46,8 +46,8 @@ export const popupItemText = `text-zinc-700 dark:text-zinc-200 ${popupItem}`;
 export const tooltipPopup =
   'rounded-md bg-zinc-900 px-2 py-1 text-[11px] text-white dark:bg-zinc-100 dark:text-zinc-900';
 
-/** 앱 캔버스(본문 배경+글자색) — App main / Storybook 프리뷰 래퍼가 공유한다. */
-export const canvas = 'bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100';
+/** 앱 캔버스(본문 배경+글자색) — App main / Storybook 프리뷰 래퍼가 공유한다. 시맨틱 토큰(ADR 0015). */
+export const canvas = 'bg-background text-foreground';
 
 
 /** 작은 배지 알약 — 규칙 종류 배지·조건 배지가 색만 달리해 공유한다. */
