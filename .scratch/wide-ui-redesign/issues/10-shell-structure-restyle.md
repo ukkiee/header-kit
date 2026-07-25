@@ -12,4 +12,5 @@
 - [ ] 팝업 760×580 고정, 탭 전폭·전고 (ADR 0005) — 두 표면 모두 새 구조로
 - [ ] 상태가 색만이 아니라 위치·형태로도 구분되고 포커스가 보인다
 - [ ] 구조 변경으로 바뀐 스모크 단언(레일 라벨·프로필 열·레이아웃 치수)을 갱신, ui-diag 가로 오버플로 0·팝업 크기 유지
+- [ ] **피처 컴포넌트의 raw-zinc → 시맨틱 토큰 전환** (티켓 01 code-review 이월): 칩·필·뱃지가 다크 fill로 `dark:bg-zinc-800`(#262626 = border 값)을 써서 시맨틱 fill `--secondary`(#1c1c1c)와 어긋난다 — 같은 칩이 두 회색으로, fill이 border 색과 충돌. chip-group·pill·rule-row 뱃지·rule-form·status-summary·menu 등의 raw-zinc 유틸을 시맨틱 토큰으로 옮겨 다크 fill을 #1c1c1c로 일원화한다
 - [ ] 전 게이트 그린

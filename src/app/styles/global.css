@@ -115,7 +115,7 @@
 
 /*
  * 시맨틱 토큰의 실제 값. shadcn 기본값(중립 primary, oklch 램프)을 쓰지 않고 이 앱의
- * 디자인 언어(단일 blue accent #0066cc, zinc 램프)에 매핑한다 — 그래서 shadcn 소스를
+ * 디자인 언어(단일 blue accent #1d4ed8, zinc 램프)에 매핑한다 — 그래서 shadcn 소스를
  * 그대로 붙여도 앱의 색이 나온다.
  *
  * dark는 shadcn의 `.dark` 클래스 방식이 아니라 이 저장소의 @variant dark(시스템
@@ -149,30 +149,33 @@
   /* 보더 두 종 — 팝업 경계(border)와 필드 실선(input)은 명도가 다르다(tokens.ts). */
   --border: var(--color-zinc-200);
   --input: var(--color-zinc-300);
-  /* 포커스 링 — focusRing과 같은 #0071e3. */
+  /* 포커스 링 — focusRing과 같은 blue-500 (#2563eb). */
   --ring: var(--color-blue-500);
 
   /*
-   * 다크 = 디자인 near-black 팔레트 (ADR 0015). 배경·카드·보더·입력은 위 램프의 어두운
-   * 끝(zinc-950/900/800/700 = #0a0a0a/#141414/#262626/#2e2e2e)이 이미 디자인 값이라 그대로
-   * 참조한다. **채움 표면**(secondary·muted 배지/칩 #1c1c1c, accent 호버 #1f1f1f, popover
-   * 셀렉트 #1c1c1c)만 램프의 한 슬롯으로 표현할 수 없어 디자인 hex를 직접 못박는다.
+   * 다크 = 디자인 near-black 팔레트 (ADR 0015). **거의 전부 램프의 어두운 끝을 참조한다** —
+   * 배경/카드/팝업(zinc-950/900 = #0a0a0a/#141414), 텍스트(zinc-100/400), 보더/입력
+   * (zinc-800/700 = #262626/#2e2e2e)이 이미 디자인 값이다. 램프의 한 슬롯으로 표현할 수 없는
+   * **채움 표면 세 개만** hex를 직접 못박는다: secondary·muted 배지/칩 #1c1c1c(zinc-900
+   * #141414과 zinc-800 #262626 사이), accent 호버 #1f1f1f. 나머지를 인라인하면 색의 단일
+   * 출처(ADR 0014)가 흩어진다.
    */
   @variant dark {
     --background: var(--color-zinc-950);
-    --foreground: #ededed;
+    --foreground: var(--color-zinc-100);
     --card: var(--color-zinc-900);
-    --card-foreground: #ededed;
-    --popover: #1c1c1c;
-    --popover-foreground: #ededed;
+    --card-foreground: var(--color-zinc-100);
+    /* popover = card와 같은 표면 — tokens.ts의 popupSurface(dark:bg-zinc-900)와 한 값으로 맞춘다. */
+    --popover: var(--color-zinc-900);
+    --popover-foreground: var(--color-zinc-100);
     --primary: var(--color-blue-600);
     --primary-foreground: var(--color-white);
     --secondary: #1c1c1c;
-    --secondary-foreground: #ededed;
+    --secondary-foreground: var(--color-zinc-100);
     --muted: #1c1c1c;
-    --muted-foreground: #8f8f8f;
+    --muted-foreground: var(--color-zinc-400);
     --accent: #1f1f1f;
-    --accent-foreground: #ededed;
+    --accent-foreground: var(--color-zinc-100);
     --border: var(--color-zinc-800);
     --input: var(--color-zinc-700);
   }
