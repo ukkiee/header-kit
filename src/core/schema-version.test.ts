@@ -83,7 +83,7 @@ describe('readStoredState — 버전 분류', () => {
     const read = readStoredState(brokenV1);
     expect(read.status).toBe('blocked');
     if (read.status !== 'blocked') return;
-    expect(read.reason).toBe('migration-failed');
+    expect(read.reason).toBe('unmigratable');
     expect(read.storedVersion).toBe(1);
   });
 

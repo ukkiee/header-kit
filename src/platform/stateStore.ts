@@ -1,5 +1,11 @@
 import type { Command } from '@/core/commands';
-import { isBlockedFromOverwrite, parseStoredState, type StoredState } from '@/core/schema';
+import {
+  isBlockedFromOverwrite,
+  parseStoredState,
+  readStoredState,
+  type StoredState,
+  type StoredStateRead,
+} from '@/core/schema';
 import type { StatusSummary } from '@/core/summary';
 
 const STATE_KEY = 'state';
@@ -8,6 +14,15 @@ const COMMAND_MESSAGE = 'headerkit:command';
 export async function loadState(): Promise<StoredState> {
   const result = await browser.storage.local.get(STATE_KEY);
   return parseStoredState(result[STATE_KEY]);
+}
+
+/**
+ * 저장된 값을 분류해서 읽는다 — "읽을 수 없음"을 기본 상태로 접지 않는 경로.
+ * 파생 데이터를 쓰는 쪽(백업)이 원본의 가독 여부를 알아야 하므로 필요하다.
+ */
+export async function readState(): Promise<StoredStateRead> {
+  const result = await browser.storage.local.get(STATE_KEY);
+  return readStoredState(result[STATE_KEY]);
 }
 
 /**

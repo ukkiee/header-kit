@@ -6,6 +6,7 @@ import type { StoredState } from '@/core/schema';
 import { performBackup } from '@/platform/backupStore';
 import {
   loadState,
+  readState,
   onCommand,
   onStateChanged,
   persistState,
@@ -92,6 +93,7 @@ async function scheduleExpiryAlarm(state: StoredState, now: number): Promise<voi
 export default defineBackground(() => {
   bootstrap({
     loadState,
+    readState,
     persistState,
     publishSummary,
     queryTabInfos,

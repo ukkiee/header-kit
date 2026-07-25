@@ -28,5 +28,16 @@ export const SCHEMA_VERSION = 2 as const;
  */
 export const EXPORT_FORMAT_VERSION = 2 as const;
 
-/** 이 버전이 읽을 수 있는 내보내기 포맷들 — 새 버전을 더할 때 여기에 이력이 남는다. */
-export const READABLE_FORMAT_VERSIONS: readonly number[] = [1, 2];
+/**
+ * 이 버전이 읽을 수 있는 내보내기 포맷들.
+ *
+ * **현재 버전은 목록에 적지 않고 파생한다.** 손으로 적으면 `EXPORT_FORMAT_VERSION`만 올렸을 때
+ * 우리 자신이 방금 쓴 파일을 "HeaderKit 파일이 아님"으로 거부한다 — `newer` 분기에도 걸리지
+ * 않아 오해를 주는 메시지가 나간다. 여기에는 **지난** 버전만 이력으로 남긴다.
+ */
+const OLDER_READABLE_FORMAT_VERSIONS: readonly number[] = [1];
+
+export const READABLE_FORMAT_VERSIONS: readonly number[] = [
+  ...OLDER_READABLE_FORMAT_VERSIONS,
+  EXPORT_FORMAT_VERSION,
+];

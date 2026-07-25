@@ -3,7 +3,7 @@ import type { Command } from '@/core/commands';
 import { compile, type TabInfo } from '@/core/compile';
 import { hasExpiredRules } from '@/core/expiry';
 import type { NetRule } from '@/core/rules';
-import type { StoredState } from '@/core/schema';
+import type { StoredState, StoredStateRead } from '@/core/schema';
 import { summarizeCompile, type StatusSummary } from '@/core/summary';
 import { createCommandExecutor } from './executor';
 import { createReconciler } from './reconciler';
@@ -21,6 +21,14 @@ interface Snapshot {
  */
 export interface BackgroundDeps {
   loadState(): Promise<StoredState>;
+  /**
+   * 저장된 값을 **분류해서** 읽는다 — `loadState`가 접어 버리는 "읽을 수 없음"을 구분한다.
+   *
+   * 파생 데이터를 쓰기 전에 원본이 읽히는지 확인하려면 이것이 필요하다. `loadState`는
+   * blocked를 기본 상태로 접으므로, 그것만 보면 "프로필 0개"와 "읽을 수 없어서 0개처럼
+   * 보임"을 구분할 수 없고 그 차이가 백업을 오염시킨다(티켓 02 코드리뷰).
+   */
+  readState(): Promise<StoredStateRead>;
   persistState(state: StoredState): Promise<void>;
   publishSummary(summary: StatusSummary): Promise<void>;
   queryTabInfos(): Promise<TabInfo[]>;
@@ -111,7 +119,26 @@ export function bootstrap(deps: BackgroundDeps): void {
     backupScheduled = false;
     lastBackupAt = deps.now();
     try {
-      const state = await deps.loadState();
+      /*
+       * 원본을 읽을 수 없으면 백업하지 않는다.
+       *
+       * 이 가드가 없으면 조용한 데이터 손실이 난다: 저장된 상태가 이 버전이 이해 못 하는
+       * 것(더 새 포맷이거나 올릴 수 없는 구 포맷)일 때 `loadState`는 **빈 기본 상태**로 접히고,
+       * 그것이 백업 링에 스냅샷으로 들어가 quota 회전으로 **진짜 스냅샷을 밀어낸다**.
+       * 로컬 원본은 `persistState` 가드가 지켜도, 백업이라는 다른 채널로 같은 손실이 난다.
+       * 백업은 SW가 깨어날 때마다 예약되므로 이 경로는 잠재적이 아니라 상시다.
+       */
+      const read = await deps.readState();
+      if (read.status === 'blocked') {
+        deps.logError(
+          'backup skipped',
+          new Error(
+            `stored state is unreadable (${read.reason}, v${read.storedVersion}); keeping existing backups intact`,
+          ),
+        );
+        return;
+      }
+      const state = read.state;
       await deps.performBackup(backupPayload(state), state.profiles.length);
     } catch (error) {
       deps.logError('backup failed', error);

@@ -256,7 +256,7 @@ export type StoredStateRead =
   /** 구버전에서 올렸다 — 데이터는 보존됐고, 다음 저장 때 v2로 굳는다. */
   | { status: 'migrated'; from: number; state: StoredState }
   /** 읽을 수 없고 **덮어써서도 안 된다**. 사용자 데이터가 그대로 남아 복구 기회가 있다. */
-  | { status: 'blocked'; reason: 'newer' | 'migration-failed'; storedVersion: number }
+  | { status: 'blocked'; reason: 'newer' | 'unmigratable'; storedVersion: number }
   /** 저장된 것이 없거나 우리 모양이 전혀 아니다 — 신규 설치처럼 시작한다. */
   | { status: 'reset'; state: StoredState };
 
@@ -320,11 +320,11 @@ export function readStoredState(value: unknown): StoredStateRead {
     // 사용자가 되돌리거나 내보내 살릴 수 있게 한다.
     return state
       ? { status: 'migrated', from: 1, state }
-      : { status: 'blocked', reason: 'migration-failed', storedVersion };
+      : { status: 'blocked', reason: 'unmigratable', storedVersion };
   }
 
   // 알 수 없는 과거 버전(0·음수 등) — 마이그레이션 경로가 없으니 손대지 않는다.
-  return { status: 'blocked', reason: 'migration-failed', storedVersion };
+  return { status: 'blocked', reason: 'unmigratable', storedVersion };
 }
 
 /**
