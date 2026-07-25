@@ -1,0 +1,40 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "structure",
+  "ack": "human-triage",
+  "triageMode": "human",
+  "verdict": "needs-attention",
+  "summary": "Do not ship yet. S-1 is resolved: the original blue/zinc ramps are restored, named dark tokens isolate the redesigned palette, the dark semantic mapping uses them, and N34 pins absolute light/dark values. However, the fix introduces a high-risk split accent contract that N34 does not detect.",
+  "planFile": "docs/reviews/wide-ui-redesign/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 25,
+  "target": "branch diff against main",
+  "reviewedSha": "b8c88495099ac3c1337f18c1a25595e377c59afc",
+  "reviewedTree": "a1d03c26f41c41a46202772f8a2ff155dfcf2f54",
+  "reviewedPlanSha256": "93c6cf121729c76a8c3c440dc50817191cb919fea2597c1132a4cb25c6548e19",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 1,
+  "planFindingCount": 0,
+  "triage": "review-gate SKILL.md rules govern: render EVERY finding as a full table row, the human decides each row (accept/reject/defer/question — free text), echo back before applying, max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "Raw-blue public primitives bypass the new dark palette seam",
+      "body": "The shared accent contract still exposes `bg-blue-600`, and the shared focus contract similarly uses `blue-500`. Restoring those base ramps changes dark switches, selected chips, and legacy focus rings back to #0066cc/#0071e3, while semantic Button/Checkbox consumers use the redesigned #1d4ed8/#2563eb. Ticket 05 and later settings work would copy this split interface, making independent theme changes require cross-component surgery. N34 only probes root semantic properties, so it passes while rendered primitives diverge. This is distinct from the explicitly deferred raw-zinc gap.",
+      "file": "src/ui/tokens.ts",
+      "line_start": 20,
+      "line_end": 26,
+      "confidence": 0.99,
+      "recommendation": "Move shared accent and focus fragments—and direct checked/pressed consumers such as ToggleSwitch and ChipGroup—to `primary`/`ring` semantic utilities. Extend the smoke assertion to inspect representative rendered checked, selected, and focused controls in both themes.",
+      "isPlanFinding": false
+    }
+  ],
+  "next_steps": [
+    "Unify raw-blue active and focus consumers behind the semantic palette seam.",
+    "Run N34 and the full smoke suite after adding rendered-control assertions."
+  ]
+}

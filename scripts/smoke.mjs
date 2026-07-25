@@ -2144,6 +2144,42 @@ try {
     lightIntact && darkRedesigned,
     `light=${JSON.stringify(palLight)}, dark=${JSON.stringify(palDark)}`);
 
+  /*
+   * N34b: **렌더된** 활성 컨트롤이 시맨틱 accent를 탄다 — 루트 변수만 보는 N34의 사각지대다.
+   *
+   * 왜 따로 필요한가(구조 게이트 S2-1): 활성 표면이 raw `bg-blue-600`을 쓰면 베이스 램프를
+   * 직접 참조하게 되어 다크 리디자인 팔레트를 따라가지 못한다. 그때 같은 화면에서 버튼은
+   * #1d4ed8, 스위치·선택된 칩은 #0066cc로 **파랑이 갈린다**. N34는 루트의 --primary만 읽어
+   * 통과하므로 이 분기를 놓쳤다. 여기서는 실제로 칠해진 픽셀 색을 비교한다.
+   */
+  const activeAccent = async (scheme) => {
+    await popup.emulateMedia({ colorScheme: scheme });
+    await popup.waitForTimeout(150);
+    const rootPrimary = await popup.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--primary').trim());
+    // 켜져 있는 프로필의 토글 스위치 — data-[checked]로 accent가 칠해지는 대표 컨트롤.
+    const sw = popup.locator('[data-checked]').first();
+    const shown = await sw.waitFor({ timeout: 5000 }).then(() => true, () => false);
+    const swBg = shown ? await sw.evaluate((el) => getComputedStyle(el).backgroundColor) : '';
+    return { rootPrimary, swBg, shown };
+  };
+  const accLight = await activeAccent('light');
+  const accDark = await activeAccent('dark');
+  await popup.emulateMedia({ colorScheme: 'light' });
+  const rgbOf = (hex) => {
+    const h = hex6(hex).slice(1);
+    return `rgb(${parseInt(h.slice(0, 2), 16)}, ${parseInt(h.slice(2, 4), 16)}, ${parseInt(h.slice(4, 6), 16)})`;
+  };
+  // 렌더된 스위치 배경 === 그 테마의 --primary. 두 테마 모두에서 성립해야 한다.
+  const accentUnified =
+    accLight.shown && accDark.shown &&
+    accLight.swBg === rgbOf(accLight.rootPrimary) &&
+    accDark.swBg === rgbOf(accDark.rootPrimary) &&
+    accLight.swBg !== accDark.swBg; // 두 테마가 실제로 다른 accent를 쓴다(다크만 리디자인)
+  record('N34b: 렌더된 활성 컨트롤이 시맨틱 accent를 탄다 (raw blue 우회 없음)',
+    accentUnified,
+    `light: switch=${accLight.swBg} primary=${accLight.rootPrimary}, dark: switch=${accDark.swBg} primary=${accDark.rootPrimary}`);
+
   // 넘치지 않으면 스크롤바가 DOM에 아예 없어야 한다 — 트랙을 기본 노출(opacity-60)로 둔
   // 근거가 이것이다. 보이면 곧 "넘치는 내용이 있다"는 신호여야 어포던스가 성립한다.
   await seedProfiles([baseProfile('p-short', 'Short', manyRules.slice(0, 1))]);

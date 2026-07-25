@@ -11,19 +11,23 @@ export const fieldSolid = 'border border-zinc-300 bg-white dark:border-zinc-700 
  * 보더 색이 툭 바뀌지 않도록 전이를 함께 둔다 — Button이 `transition-colors`로 하는 것과
  * 같은 규율이고, 길이도 같은 CSS 기본값이라 두 표면의 색 변화가 어긋나지 않는다.
  */
-export const fieldFocus = 'outline-none transition-colors focus:border-blue-500';
+export const fieldFocus = 'outline-none transition-colors focus:border-ring';
 
 /** ghost 상호작용 표면 — Button.ghost / Select.ghost 가 공유한다. */
 export const ghostInteractive =
   'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800';
 
 /**
- * accent 배경 조각 — Button.primary / Checkbox.Indicator 가 클래스 문자열로
- * 재사용한다. accent의 실제 단일 출처는 global css의 @theme(`--color-blue-600`)다 —
- * ToggleSwitch의 `data-[checked]:bg-blue-600`, ChipGroup의 `data-[pressed]:bg-blue-600`도
- * 그 토큰을 통해 테마된다 (data 수식어는 문자열 조각과 합성 불가라 인라인 표기).
+ * accent 배경 조각 — 활성·선택 표면이 공유한다.
+ *
+ * **시맨틱 `primary`를 쓴다** (raw `bg-blue-600`이 아니라). 베이스 blue 램프는 라이트가
+ * 소비하므로, 활성 표면이 그 램프를 직접 참조하면 다크 리디자인 팔레트를 따라가지 못해
+ * 같은 화면에서 버튼(#1d4ed8)과 스위치·칩(#0066cc)이 **다른 파랑**이 된다(구조 게이트 S2-1).
+ * `--primary`는 라이트에서 blue-600, 다크에서 `--color-dark-accent`라 두 테마를 모두 맞춘다.
+ * ToggleSwitch의 `data-[checked]:bg-primary`, ChipGroup의 `data-[pressed]:bg-primary`도
+ * 같은 토큰을 탄다 (data 수식어는 문자열 조각과 합성 불가라 인라인 표기).
  */
-export const accentBg = 'bg-blue-600';
+export const accentBg = 'bg-primary';
 
 /** 떠 있는 팝업 표면 — Menu / Select / Autocomplete 팝업이 공유한다 (보더+명도, 무그림자). */
 export const popupSurface =
@@ -84,6 +88,9 @@ export const scrollbarThumb = 'w-full rounded-full bg-zinc-300 dark:bg-zinc-600'
  */
 export const selectFixedWidth = 'w-38';
 
-/** 키보드 포커스 링 — Button·IconButton·SwitcherChip·아코디언 헤더·사이드바 그립이 공유한다(offset 일관). */
+/**
+ * 키보드 포커스 링 — Button·IconButton·SwitcherChip·아코디언 헤더·사이드바 그립이 공유한다(offset 일관).
+ * 색은 시맨틱 `ring` — accentBg와 같은 이유로 raw blue 램프를 쓰지 않는다(S2-1).
+ */
 export const focusRing =
-  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500';
+  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';

@@ -8,7 +8,7 @@ import { ToggleGroup } from '@base-ui/react/toggle-group';
  * 라벨 호버가 첫 칩에 전파되던 버그 구조가 없다.
  */
 const chipClass =
-  'cursor-pointer whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] transition-colors bg-zinc-100 text-zinc-500 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700 data-[pressed]:bg-blue-600 data-[pressed]:text-white data-[pressed]:hover:bg-blue-600 dark:data-[pressed]:hover:bg-blue-600';
+  'cursor-pointer whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] transition-colors bg-zinc-100 text-zinc-500 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700 data-[pressed]:bg-primary data-[pressed]:text-primary-foreground data-[pressed]:hover:bg-primary dark:data-[pressed]:hover:bg-primary';
 
 export interface ChipOption<T extends string> {
   value: T;
