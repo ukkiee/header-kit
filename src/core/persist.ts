@@ -66,6 +66,12 @@ export function isModification(value: unknown): value is Modification {
       return isHeaderish(value);
     case 'redirect':
       return typeof value.pattern === 'string' && typeof value.substitution === 'string';
+    case 'user-agent':
+      // 값만 갖는다 — 헤더 이름은 고정이라 저장하지 않는다.
+      return typeof value.value === 'string';
+    case 'header-removal':
+      // 이름만 갖는다 — 값·mode가 없다.
+      return typeof value.name === 'string';
     default:
       return false;
   }
@@ -130,8 +136,18 @@ export function backfillModification(value: unknown): unknown {
     const { urlFilter: _stripped, ...rest } = value;
     return { comment: '', ...rest };
   }
+  /*
+   * mode·emptyMeans는 **값을 가진 헤더 계열에만** 의미가 있다. user-agent(값만)·
+   * header-removal(이름만)에 붙이면 저장소에 뜻 없는 필드가 쌓이고, 나중에 그 필드를
+   * 읽는 코드가 생기면 조용히 잘못된 분기를 탄다.
+   */
+  const headerish = value.kind !== 'user-agent' && value.kind !== 'header-removal';
   // 무효 urlMatchType은 치유로 벗긴다(부재 = regex 하위 호환) — 전량 거부 방지.
-  const healed: Record<string, unknown> = { mode: 'override', emptyMeans: 'remove', comment: '', ...value };
+  const healed: Record<string, unknown> = {
+    ...(headerish ? { mode: 'override', emptyMeans: 'remove' } : {}),
+    comment: '',
+    ...value,
+  };
   if (
     healed.urlMatchType !== undefined &&
     !['domain', 'contains', 'prefix', 'regex'].includes(healed.urlMatchType as string)

@@ -135,12 +135,59 @@ export interface RedirectModification {
   enabled: boolean;
 }
 
+/**
+ * User-Agent — `User-Agent` 요청 헤더를 바꾼다 (ADR 0015).
+ *
+ * Request Header의 특수 케이스지만 별도 종류로 둔다: 헤더 이름이 고정이라 폼이 값 하나만
+ * 받으면 되고, 행 요약·뱃지도 "UA"로 다르게 읽힌다. 이름을 사용자에게 물으면 오타로
+ * 조용히 동작하지 않는 규칙이 생긴다.
+ */
+export interface UserAgentModification {
+  kind: 'user-agent';
+  id: string;
+  /** 보낼 User-Agent 문자열. */
+  value: string;
+  comment: string;
+  enabled: boolean;
+  /** 이 규칙만의 URL 필터 (ADR 0007). */
+  urlFilter?: string;
+  /** urlFilter의 매치 방식 (ADR 0008) — 부재 = regex. */
+  urlMatchType?: UrlMatchType;
+  /** 적용 조건 (ADR 0010) — 없으면 무조건 적용. */
+  conditions?: RuleConditions;
+}
+
+/**
+ * Header Removal — 이름이 같은 헤더를 **요청·응답 양쪽에서** 제거한다 (ADR 0015).
+ *
+ * 디자인이 req/res를 구분하지 않는 한 종류로 두었으므로, 규칙 하나가 removeHeaders를
+ * 양쪽에 낸다. 사용자는 "이 헤더를 없앤다"만 말하면 되고 어느 방향인지 몰라도 된다.
+ * (요청 헤더만 지우려면 Request Header 종류에 빈 값 + emptyMeans:'remove'를 쓴다 —
+ * 그 경로는 그대로 유효한 별도 어포던스다.)
+ */
+export interface HeaderRemovalModification {
+  kind: 'header-removal';
+  id: string;
+  /** 제거할 헤더 이름. */
+  name: string;
+  comment: string;
+  enabled: boolean;
+  /** 이 규칙만의 URL 필터 (ADR 0007). */
+  urlFilter?: string;
+  /** urlFilter의 매치 방식 (ADR 0008) — 부재 = regex. */
+  urlMatchType?: UrlMatchType;
+  /** 적용 조건 (ADR 0010) — 없으면 무조건 적용. */
+  conditions?: RuleConditions;
+}
+
 export type Modification =
   | RequestHeaderModification
   | ResponseHeaderModification
   | CookieModification
   | SetCookieModification
-  | RedirectModification;
+  | RedirectModification
+  | UserAgentModification
+  | HeaderRemovalModification;
 
 /**
  * Placeholder 실체화 대상이 되는 값 문자열 (없으면 null).
@@ -153,8 +200,11 @@ export function placeholderTemplate(modification: Modification): string | null {
     case 'response-header':
     case 'cookie':
     case 'set-cookie':
+    // User-Agent도 값을 가진 종류다 — {{uuid}} 같은 토큰을 UA 문자열에 넣을 수 있다.
+    case 'user-agent':
       return modification.value;
     default:
+      // header-removal은 값이 없고, redirect는 지원하지 않는다.
       return null;
   }
 }
@@ -254,6 +304,12 @@ export function createModification(kind: ModificationKind, id: string = crypto.r
       return { kind, ...common, value: '', mode: 'append', emptyMeans: 'remove' };
     case 'redirect':
       return { kind, ...common, pattern: '', substitution: '' };
+    case 'user-agent':
+      // 헤더 이름은 고정이라 값만 받는다.
+      return { kind, ...common, value: '' };
+    case 'header-removal':
+      // 지울 이름만 받는다 — 값·mode가 없다(양쪽에서 제거하는 것이 전부).
+      return { kind, ...common, name: '' };
     default:
       return kind satisfies never;
   }

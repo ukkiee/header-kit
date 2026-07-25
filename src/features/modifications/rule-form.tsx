@@ -37,6 +37,8 @@ const RULE_KINDS: ModificationKind[] = [
   'cookie',
   'set-cookie',
   'redirect',
+  'user-agent',
+  'header-removal',
 ];
 
 /**
@@ -71,10 +73,12 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
   const nameRef = useRef<HTMLInputElement>(null);
   const patternRef = useRef<HTMLInputElement>(null);
   const substitutionRef = useRef<HTMLInputElement>(null);
+  const valueRef = useRef<HTMLInputElement>(null);
   const requiredFieldRefs: Record<RequiredField, RefObject<HTMLInputElement | null>> = {
     name: nameRef,
     pattern: patternRef,
     substitution: substitutionRef,
+    value: valueRef,
   };
   const requiredError = (field: RequiredField) =>
     fieldErrors.includes(field) ? t('requiredField') : undefined;
@@ -85,6 +89,8 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
     cookie: 'modCookie',
     'set-cookie': 'modSetCookie',
     redirect: 'modRedirect',
+    'user-agent': 'kindUserAgent',
+    'header-removal': 'kindHeaderRemoval',
   };
 
   const switchKind = (kind: ModificationKind) => {
@@ -234,6 +240,39 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
             />
           </div>
         </div>
+      )}
+
+      {/*
+        User-Agent — 값 하나만 받는다. 헤더 이름은 `User-Agent`로 고정이라 묻지 않는다
+        (물으면 오타로 조용히 동작하지 않는 규칙이 생긴다, ADR 0015).
+      */}
+      {draft.kind === 'user-agent' && (
+        <FieldLabeled label={t('kindUserAgent')} error={requiredError('value')}>
+          <Input
+            ref={valueRef}
+            autoFocus
+            className="font-mono"
+            value={draft.value}
+            onChange={(e) => setDraft({ ...draft, value: e.target.value })}
+            placeholder="Mozilla/5.0 …"
+          />
+        </FieldLabeled>
+      )}
+
+      {/*
+        Header Removal — 지울 이름만 받는다. 값·모드가 없다(요청·응답 양쪽에서 지우는
+        것이 이 종류의 전부다).
+      */}
+      {draft.kind === 'header-removal' && (
+        <FieldLabeled label={t('headerName')} error={requiredError('name')}>
+          <HeaderNameInput
+            ref={nameRef}
+            autoFocus
+            value={draft.name}
+            onChange={(name) => setDraft({ ...draft, name })}
+            userHeaders={userHeaders}
+          />
+        </FieldLabeled>
       )}
 
       {isValueKind && (

@@ -40,6 +40,9 @@ export interface CompileResult {
  */
 export const REGEX_JOIN_LIMIT = 1500;
 
+/** User-Agent 종류가 쓰는 고정 헤더 이름 — 사용자에게 묻지 않는다(오타 방지). */
+const USER_AGENT_HEADER = 'User-Agent';
+
 /** session rules 총량 한도 — 이슈 01 스모크에서 실측 확인(5,000에서 거부). */
 const TOTAL_RULE_LIMIT = 5000;
 /** regex 조건 규칙의 타입별 한도. */
@@ -260,6 +263,12 @@ function emitModification(
     case 'redirect':
       emitRedirectRule(modification, priority, profileId, tabIds, emitter);
       return;
+    case 'user-agent':
+      emitUserAgentRule(modification, priority, profileId, tabIds, emitter);
+      return;
+    case 'header-removal':
+      emitHeaderRemovalRule(modification, priority, profileId, tabIds, emitter);
+      return;
     default:
       modification satisfies never;
   }
@@ -350,6 +359,76 @@ function emitRedirectRule(
         redirect: { regexSubstitution: modification.substitution },
       },
       condition: conditionFor(modification.conditions, { regexFilter: pattern }, tabIds),
+    },
+    { profileId, modificationId: modification.id },
+  );
+}
+
+/**
+ * User-Agent — `User-Agent` 요청 헤더를 값으로 덮어쓴다 (ADR 0015).
+ *
+ * 헤더 이름이 고정이라 이름 누락 경고가 필요 없다. 값은 다른 값 종류와 같은 경로로
+ * 실체화한다({{uuid}} 등이 UA 문자열에도 쓰인다).
+ */
+function emitUserAgentRule(
+  modification: Extract<Modification, { kind: 'user-agent' }>,
+  priority: number,
+  profileId: string,
+  tabIds: number[] | undefined,
+  emitter: Emitter,
+): void {
+  const own = ownScope(modification, profileId, emitter);
+  if (own === null) return;
+  const value = consumeValue(modification.value, modification.id, emitter);
+  emitRule(
+    emitter,
+    {
+      priority,
+      action: {
+        type: 'modifyHeaders',
+        requestHeaders: [{ header: USER_AGENT_HEADER, operation: 'set', value }],
+      },
+      condition: conditionFor(modification.conditions, own ?? {}, tabIds),
+    },
+    { profileId, modificationId: modification.id },
+  );
+}
+
+/**
+ * Header Removal — 이름이 같은 헤더를 **요청·응답 양쪽에서** 지운다 (ADR 0015).
+ *
+ * 규칙 하나가 두 방향을 함께 낸다. 사용자가 방향을 고르지 않아도 되게 한 결정이라,
+ * 여기서 나누면 그 결정이 무의미해진다.
+ */
+function emitHeaderRemovalRule(
+  modification: Extract<Modification, { kind: 'header-removal' }>,
+  priority: number,
+  profileId: string,
+  tabIds: number[] | undefined,
+  emitter: Emitter,
+): void {
+  const header = modification.name.trim();
+  if (header === '') {
+    // 이름 없는 제거는 "무엇을 지울지 모른다"는 뜻이다 — 방출하지 않고 알린다.
+    emitter.warnings.push({
+      code: 'empty-header-name',
+      profileId,
+      modificationId: modification.id,
+    });
+    return;
+  }
+  const own = ownScope(modification, profileId, emitter);
+  if (own === null) return;
+  emitRule(
+    emitter,
+    {
+      priority,
+      action: {
+        type: 'modifyHeaders',
+        requestHeaders: [{ header, operation: 'remove' }],
+        responseHeaders: [{ header, operation: 'remove' }],
+      },
+      condition: conditionFor(modification.conditions, own ?? {}, tabIds),
     },
     { profileId, modificationId: modification.id },
   );

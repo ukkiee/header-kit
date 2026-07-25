@@ -6,7 +6,7 @@ import type { Modification } from './schema';
  * 응답 쿠키(set-cookie)는 빈 값이 유효한 사용례(서버 Set-Cookie 차단)라 필수가 없다.
  * Compile의 빈 이름 경고는 import·레거시 데이터 방어선으로 별도 유지된다.
  */
-export type RequiredField = 'name' | 'pattern' | 'substitution';
+export type RequiredField = 'name' | 'pattern' | 'substitution' | 'value';
 
 export function missingRequiredFields(modification: Modification): RequiredField[] {
   switch (modification.kind) {
@@ -16,6 +16,12 @@ export function missingRequiredFields(modification: Modification): RequiredField
       return modification.name.trim() === '' ? ['name'] : [];
     case 'set-cookie':
       return [];
+    case 'user-agent':
+      // 값이 이 규칙의 전부다 — 비면 UA를 빈 문자열로 보내는 사고가 된다.
+      return modification.value.trim() === '' ? ['value'] : [];
+    case 'header-removal':
+      // 이름이 없으면 무엇을 지울지 모른다.
+      return modification.name.trim() === '' ? ['name'] : [];
     case 'redirect': {
       const missing: RequiredField[] = [];
       if (modification.pattern.trim() === '') missing.push('pattern');

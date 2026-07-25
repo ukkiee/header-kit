@@ -1813,8 +1813,19 @@ try {
     await popup.getByRole('option', { name: 'Request header', exact: true }).click();
     await settledListboxes(popup, 0);
   }
-  const keptKinds = ['Request header', 'Response header', 'Request cookie', 'Response cookie', 'Redirect'];
-  record('N18f: Type 셀렉트 옵션 — CSP 없음, 헤더 계열·쿠키·Redirect 유지',
+  // 퇴역 CSP(ADR 0013)는 없고, 살아 있는 종류는 **정확히** 이 목록이다. 길이까지 보는 이유는
+  // 종류가 조용히 늘거나 줄면 폼·컴파일·요약이 함께 갱신됐는지 확인할 지점이 필요해서다.
+  // User-Agent·Remove header는 ADR 0015에서 더해졌다.
+  const keptKinds = [
+    'Request header',
+    'Response header',
+    'Request cookie',
+    'Response cookie',
+    'Redirect',
+    'User-Agent',
+    'Remove header',
+  ];
+  record('N18f: Type 셀렉트 옵션 — CSP 없음, 살아 있는 7종 정확히 유지',
     typeOpened && !kindOptions.some((o) => /csp/i.test(o)) &&
       keptKinds.every((k) => kindOptions.includes(k)) && kindOptions.length === keptKinds.length,
     `열림=${typeOpened}, options=[${kindOptions.join(' | ')}]`);
@@ -1833,6 +1844,31 @@ try {
   record('N18b: 종류 전환 시 스테일 오류 없음 + 응답 쿠키·쿠키 이름 라벨 + Redirect 2필드 오류',
     cookieLabelShown && noStaleError && redirectErrors === 2 && /Response cookie/.test(setCookieSelected ?? ''),
     `cookie-label=${cookieLabelShown}, no-stale=${noStaleError}, redirect-errors=${redirectErrors}, kind="${(setCookieSelected ?? '').trim()}"`);
+
+  /*
+   * N18g: 새 종류(ADR 0015)의 폼은 자기에게 맞는 필드만 보인다.
+   *
+   * 각 종류가 무엇을 묻지 **않는지**가 설계의 핵심이라 그것을 단언한다 — User-Agent는
+   * 헤더 이름을 묻지 않고(고정이라 오타 위험을 없앤다), Remove header는 값을 묻지 않는다
+   * (양쪽에서 지우는 것이 전부라 값이 뜻을 갖지 않는다). 필드가 새어 나오면 사용자는
+   * 아무 효과 없는 입력을 채우게 된다.
+   */
+  await pickOption(popup, 'Type', 'User-Agent');
+  const uaValueShown = await popup
+    .getByLabel('User-Agent', { exact: true })
+    .isVisible()
+    .catch(() => false);
+  const uaHidesHeaderName = (await popup.getByLabel('Header name', { exact: true }).count()) === 0;
+
+  await pickOption(popup, 'Type', 'Remove header');
+  const delNameShown = await popup
+    .getByLabel('Header name', { exact: true })
+    .isVisible()
+    .catch(() => false);
+  const delHidesValue = (await popup.getByLabel('Value', { exact: true }).count()) === 0;
+  record('N18g: 새 종류 폼 — UA는 값만, Remove header는 이름만',
+    uaValueShown && uaHidesHeaderName && delNameShown && delHidesValue,
+    `ua: value=${uaValueShown} no-name=${uaHidesHeaderName}, del: name=${delNameShown} no-value=${delHidesValue}`);
 
   // c: 모드 숨김 — 비허용 요청 헤더 이름이면 Mode 미노출, 허용(Accept)이면 노출
   await pickOption(popup, 'Type', 'Request header');

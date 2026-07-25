@@ -10,7 +10,7 @@ import { formatExpiryBadge } from './expiry-format';
 export interface RuleView {
   /** 표시 제목 — 메모 우선, 없으면 대표 필드(헤더/쿠키 이름), 그것도 없으면 배지. */
   title: string;
-  badge: 'REQ' | 'RES' | 'COOKIE' | 'SET-COOKIE' | 'REDIRECT';
+  badge: 'REQ' | 'RES' | 'COOKIE' | 'SET-COOKIE' | 'REDIRECT' | 'UA' | 'DEL';
   /** 한 줄 효과 요약 (mono 렌더 가정). */
   summary: string;
   /** 조건 배지 줄 (ADR 0010, ui-refine 05) — 없으면 빈 배열이라 행 높이가 불변. */
@@ -30,6 +30,8 @@ const BADGES = {
   cookie: 'COOKIE',
   'set-cookie': 'SET-COOKIE',
   redirect: 'REDIRECT',
+  'user-agent': 'UA',
+  'header-removal': 'DEL',
 } as const;
 
 /** 조건을 값 배지 목록으로 (ui-refine 05) — 차원이 구별되는 표기. */
@@ -76,6 +78,16 @@ function bareView(m: Modification, t: Translator): BareView {
     const summary =
       m.pattern || m.substitution ? `${m.pattern || '^…'} → ${m.substitution || '…'}` : t('emptyMarker');
     return { title: m.comment || badge, badge, summary };
+  }
+
+  if (m.kind === 'user-agent') {
+    // 헤더 이름은 고정이라 값만 보여 준다 — 행에서 어떤 UA인지가 읽을 거리다.
+    return { title: m.comment || badge, badge, summary: m.value || t('emptyMarker') };
+  }
+
+  if (m.kind === 'header-removal') {
+    // 값이 없다 — 무엇을 지우는지가 전부다.
+    return { title: m.comment || m.name || badge, badge, summary: m.name || t('emptyMarker') };
   }
 
   // set-cookie는 이름 없이 원시 Set-Cookie 값 하나다.
