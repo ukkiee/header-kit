@@ -9,8 +9,20 @@ Modification의 이름 있는 묶음. 여러 Profile이 동시에 활성일 수 
 _Avoid_: preset, workspace, 설정 세트
 
 **Modification**:
-Profile에 속한 개별 수정 항목. 종류는 Request Header, Response Header, Request Cookie, Response Cookie, Redirect 다섯 가지. 자신의 URL 스코프(매치 방식 포함)와 Condition을 직접 들고 다닌다 (ADR 0010). CSP 종류는 ADR 0013에서 퇴역했다 — 저장·import된 CSP 수정은 검증 전에 조용히 버려진다.
+Profile에 속한 개별 수정 항목. 종류는 Request Header, Response Header, Request Cookie, Response Cookie, Redirect, User-Agent, Block, Header Removal 여덟 가지 (뒤 셋은 ADR 0015에서 추가). 자신의 URL 스코프(매치 방식 포함)와 Condition을 직접 들고 다닌다 (ADR 0010). CSP 종류는 ADR 0013에서 퇴역했다 — 저장·import된 CSP 수정은 검증 전에 조용히 버려진다.
 _Avoid_: rule (브라우저의 net rule과 혼동), row, entry
+
+**User-Agent**:
+요청의 `User-Agent` 헤더를 바꾸는 Modification 종류. 값 하나만 받고 헤더 이름은 `User-Agent`로 고정된다 — Request Header의 특수 케이스지만 별도 종류로 둔다(ADR 0015). 사용자 대면 라벨은 'User-Agent 변경'.
+_Avoid_: UA (라벨 층위에서 — 행 뱃지 UA는 유효)
+
+**Block**:
+매칭된 요청을 아예 차단하는 Modification 종류. declarativeNetRequest의 `block` 액션으로 컴파일되며 이름·값이 없다 — URL 스코프와 Condition만 갖는다(ADR 0015). 헤더를 고치는 다른 종류와 달리 요청 자체를 막으므로 스코프가 넓으면 페이지가 깨질 수 있다.
+_Avoid_: cancel, deny
+
+**Header Removal**:
+이름이 같은 헤더를 요청·응답 **양쪽에서** 제거하는 Modification 종류. dNR 규칙 하나가 removeHeaders(request)+removeHeaders(response)를 함께 낸다 — 사용자가 요청/응답을 구분하지 않아도 되게 한 결정이다(ADR 0015). 값이 없고 헤더 이름만 받는다. 사용자 대면 라벨은 '헤더 삭제'.
+_Avoid_: delete (스키마 kind 값·행 뱃지 DEL에서는 유효), del (라벨 층위에서)
 
 **Response Cookie**:
 Set-Cookie 응답 헤더를 수정하는 Modification 종류. 사용자 대면 라벨은 '응답 쿠키'로 Request Cookie와 대칭이고, 행 뱃지는 실제 헤더 이름인 SET-COOKIE(프로토콜 토큰)를 유지한다.
@@ -38,5 +50,9 @@ _Avoid_: dynamic value, variable
 _Avoid_: disable, stop
 
 **Backup**:
-브라우저 계정 동기화 저장소에 보관되는 Profile 전체의 스냅샷. 외부 서버가 아니라 브라우저 벤더의 동기화 채널만 사용한다.
-_Avoid_: cloud sync (외부 서버 동기화로 오해될 수 있음)
+Profile 전체의 스냅샷. **Sync 저장 스위치**(ADR 0015)에 따라 브라우저 계정 동기화 저장소(storage.sync, 기기 간 동기화)나 이 브라우저에만 남는 로컬 저장소(storage.local) 중 하나에 보관된다. 어느 쪽이든 외부 서버가 아니라 브라우저 벤더의 저장 채널만 쓴다.
+_Avoid_: cloud sync (도메인·내부 층위에서 — 외부 서버 동기화로 오해될 수 있음. 단 **사용자 대면 라벨은 '클라우드 동기화'**로 두어 켜짐/꺼짐의 의미를 직관적으로 전한다, ADR 0015)
+
+**Theme**:
+팝업·탭 앱의 명암 모드 — 다크 / 라이트 / 시스템 세 값. 사용자가 고르고 storage에 영속된다(ADR 0015가 ADR 0004의 '스위치 없음, 시스템 연동만' 결정을 개정). '시스템'은 `prefers-color-scheme`를 따른다. 다크가 기준 디자인이고 라이트는 그에 맞춰 파생된다.
+_Avoid_: dark mode (세 값 중 하나를 가리킬 때만)
