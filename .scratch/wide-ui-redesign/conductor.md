@@ -7,3 +7,4 @@ stage 3 slice: done — 티켓 9개 발행(01~09), 블로킹 엣지 설정. 사�
 ticket 01 start: 1e2156e91e3cb01b9e71486c3febcd74b40604c6
 ticket 01 done: 82a63f4(구현)+7ca3819(리뷰반영). 다크 토큰+Geist, 전 게이트 그린. code-review 2축 완료(Standards·Spec), fill 충돌은 티켓10 이월. → 구조 게이트.
 structure gate OWED: Codex auth 실패 2회(access token could not be refreshed / signed in to another account). codex login status는 'Logged in'이나 실제 run이 토큰 갱신 실패 — 지속성. 재로그인 필요(codex login). 티켓 01 코드는 done·전 게이트 그린, 구조 게이트만 미실행. 재개: 재로그인 후 structure 게이트 재실행.
+structure gate: PASS(waiver) — r1 S-1(다크 팔레트가 테마중립 램프에 설치) accept→b8c8849, r2에서 S-1 resolved 확인 + 신규 S2-1(raw-blue 활성표면 분기, high) accept→eea1652. 사용자가 라운드3 waive. 방어망 2개 신설: N34(팔레트 격리 절대값)·N34b(렌더된 활성 컨트롤). smoke 105→107.
