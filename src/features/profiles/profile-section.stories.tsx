@@ -29,6 +29,7 @@ function InteractiveProfileSection({ initial }: { initial: Profile }) {
   const [state, setState] = useState<StoredState>({
     schemaVersion: SCHEMA_VERSION,
     paused: false,
+    theme: 'system',
     profiles: [initial],
     materialized: {},
     customHeaderNames: [],

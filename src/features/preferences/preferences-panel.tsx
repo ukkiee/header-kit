@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { X } from 'lucide-react';
 import { STANDARD_HEADERS } from '@/core/autocomplete';
 import type { Command } from '@/core/commands';
+import type { MessageKey } from '@/core/i18n';
+import { THEME_PREFERENCES, type ThemePreference } from '@/core/theme';
+import { ChoiceChips } from '@/ui/chip-group';
 import { Button } from '@/ui/press-button';
 import { Input } from '@/ui/text-field';
 import { CollapsiblePanel } from '@/ui/collapsible-panel';
@@ -9,8 +12,17 @@ import { Pill } from '@/ui/pill';
 import { format } from '@/core/i18n';
 import { useT } from '@/ui/i18n-context';
 
+/** 선호값 → 라벨 키. Record로 못박아 값이 늘면 여기서 타입이 먼저 깨지게 한다. */
+const THEME_LABELS: Record<ThemePreference, MessageKey> = {
+  system: 'themeSystem',
+  dark: 'themeDark',
+  light: 'themeLight',
+};
+
 export interface PreferencesPanelProps {
   customHeaderNames: readonly string[];
+  /** 현재 명암 선호 — 해석은 셸이 하고, 이 패널은 고르는 자리만 제공한다. */
+  theme: ThemePreference;
   onCommand: (command: Command) => void;
   /** null = 아직 조회 중. App이 시크릿 미허용 배너를 소유하므로 여기선 허용 시에만 확인 문구. */
   incognitoAllowed: boolean | null;
@@ -19,6 +31,7 @@ export interface PreferencesPanelProps {
 /** 보조 설정 — autocomplete 사전(기본+사용자 항목), 시크릿 안내. */
 export function PreferencesPanel({
   customHeaderNames,
+  theme,
   onCommand,
   incognitoAllowed,
 }: PreferencesPanelProps) {
@@ -42,6 +55,21 @@ export function PreferencesPanel({
       toggleAriaLabel={t('ariaTogglePreferences')}
     >
       <div className="flex flex-col gap-2 text-xs">
+          {/* 테마 (ADR 0015) — '시스템'을 맨 앞에 둔다. 기본값이고, 대부분의 사용자가
+              머무는 자리라 목록의 첫 칸이 맞다. */}
+          <div className="flex flex-col gap-1">
+            <span className="font-medium">{t('theme')}</span>
+            <ChoiceChips
+              value={theme}
+              aria-label={t('theme')}
+              onValueChange={(next) => onCommand({ type: 'set-theme', theme: next })}
+              options={THEME_PREFERENCES.map((value) => ({
+                value,
+                label: t(THEME_LABELS[value]),
+              }))}
+            />
+          </div>
+
           <div className="flex flex-col gap-1">
             <span className="font-medium">{t('autocompleteHeaders')}</span>
             <div className="flex gap-1">

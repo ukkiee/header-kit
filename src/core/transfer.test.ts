@@ -51,7 +51,7 @@ function importText(profiles: unknown[]): string {
 }
 
 function state(profiles: Profile[], materialized: Record<string, string> = {}): StoredState {
-  return { schemaVersion: SCHEMA_VERSION, paused: false, profiles, materialized, customHeaderNames: [] };
+  return { schemaVersion: SCHEMA_VERSION, paused: false, theme: 'system', profiles, materialized, customHeaderNames: [] };
 }
 
 describe('exportProfiles', () => {

@@ -2206,14 +2206,15 @@ try {
     `thumbs=${thumbCount}, light=${thumbLight}, dark=${thumbDark}`);
 
   /*
-   * N34: 팔레트 격리 — 다크는 리디자인 팔레트를 쓰고, **라이트는 그와 무관하게 원래 값**이다.
+   * N34: 팔레트 격리 — 두 테마가 **각자의 팔레트**를 쓰고 서로를 끌고 가지 않는다.
    *
    * 이 단언이 있는 이유(구조 게이트 S-1): 다크 리디자인을 테마 중립 램프(zinc/blue)에 설치하면
    * 라이트가 함께 끌려가는데, 그때 아무 게이트도 그것을 잡지 못했다 — 기존 색 단언(N22a)은
    * "라이트≠다크"라는 **상대** 비교뿐이라 두 테마가 나란히 바뀌어도 통과한다. 그래서 여기서는
-   * 양쪽의 **절대값**을 못박는다. 라이트 값을 디자인에 맞추는 것은 티켓 05의 일이고, 그 티켓이
-   * 라이트를 의도적으로 바꿀 때 이 단언이 함께 갱신되어야 한다 — 그 시점이 '의도한 변경'과
-   * '실수로 끌려감'을 가르는 지점이다.
+   * 양쪽의 **절대값**을 못박는다.
+   *
+   * 티켓 05가 라이트에 자기 팔레트(--color-light-*)를 주면서 이 기대값이 한 번 갱신됐다 —
+   * 의도한 변경이라 단언도 함께 옮긴 것이고, 그 갱신 없이 값이 흔들리면 '실수로 끌려감'이다.
    */
   const paletteProbe = async (scheme) => {
     await popup.emulateMedia({ colorScheme: scheme });
@@ -2232,13 +2233,14 @@ try {
   const hex6 = (v) => (/^#[0-9a-f]{3}$/i.test(v) ? '#' + [...v.slice(1)].map((c) => c + c).join('') : v.toLowerCase());
   const sameHex = (probe, expected) =>
     Object.keys(expected).every((k) => hex6(probe[k]) === expected[k]);
-  // 라이트 = 원래 베이스 램프(zinc-900 잉크, blue-600 액션, zinc-200 헤어라인).
+  // 라이트 = **자기 팔레트**(--color-light-*). 티켓 05가 디자인 다크의 짝으로 파생했다.
   const lightIntact = sameHex(palLight, {
-    bg: '#ffffff', fg: '#1d1d1f', primary: '#0066cc', border: '#e0e0e0',
+    bg: '#ffffff', fg: '#18181b', primary: '#1d4ed8', border: '#e2e2e6',
   });
-  // 다크 = 디자인 near-black 팔레트(ADR 0015).
+  // 다크 = 디자인 near-black 팔레트(ADR 0015). primary는 티켓 05가 대비 3:1을 위해
+  // 디자인의 짝 중 밝은 쪽(#2563eb)으로 올렸다 — #1d4ed8은 near-black에서 2.95:1이었다.
   const darkRedesigned = sameHex(palDark, {
-    bg: '#0a0a0a', fg: '#ededed', primary: '#1d4ed8', border: '#262626',
+    bg: '#0a0a0a', fg: '#ededed', primary: '#2563eb', border: '#262626',
   });
   record('N34: 팔레트 격리 — 다크는 리디자인 값, 라이트는 베이스 램프 그대로',
     lightIntact && darkRedesigned,
@@ -2275,10 +2277,155 @@ try {
     accLight.shown && accDark.shown &&
     accLight.swBg === rgbOf(accLight.rootPrimary) &&
     accDark.swBg === rgbOf(accDark.rootPrimary) &&
-    accLight.swBg !== accDark.swBg; // 두 테마가 실제로 다른 accent를 쓴다(다크만 리디자인)
+    // 두 테마가 실제로 다른 accent 값을 쓴다 — 같은 디자인 파랑의 두 단계로, 다크는
+    // near-black 위에서 3:1을 넘기려고 밝은 쪽(#2563eb)을 쓴다(티켓 05).
+    accLight.swBg !== accDark.swBg;
   record('N34b: 렌더된 활성 컨트롤이 시맨틱 accent를 탄다 (raw blue 우회 없음)',
     accentUnified,
     `light: switch=${accLight.swBg} primary=${accLight.rootPrimary}, dark: switch=${accDark.swBg} primary=${accDark.rootPrimary}`);
+
+  /*
+   * N35: 테마 스위치 (티켓 05, ADR 0015가 ADR 0004의 '스위치 없음'을 개정).
+   *
+   * 세 가지를 본다 — (a) 명시 선택이 **시스템을 이긴다**, (b) 그 선택이 실제로 **칠해진
+   * 색을 바꾼다**, (c) 팝업을 다시 열어도 **유지된다**. 셋 중 하나라도 빠지면 스위치가
+   * 있는 것처럼 보이면서 아무 일도 안 하거나, 껐다 켜면 잊어버린다.
+   *
+   * 시스템을 다크로 에뮬레이션해 둔 채 '라이트'를 고르는 것이 핵심이다 — 시스템과 같은
+   * 값을 고르면 스위치가 죽어 있어도 통과한다.
+   */
+  await popup.emulateMedia({ colorScheme: 'dark' });
+  await popup.getByRole('button', { name: 'Show preferences' }).click();
+  await ensurePanelOpen(popup, 'Toggle preferences');
+  const canvasBg = () =>
+    popup.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--background').trim());
+  const rootTheme = () => popup.evaluate(() => document.documentElement.dataset.theme ?? '');
+  // 시스템=다크 + 선호=system → 다크로 해석된다.
+  const systemResolvedDark = (await rootTheme()) === 'dark';
+  const bgWhenSystemDark = await canvasBg();
+  await popup.getByRole('button', { name: 'Light', exact: true }).click();
+  const switchedToLight = await pollUntil(rootTheme, (v) => v === 'light', 3000, 100);
+  const bgWhenLight = await canvasBg();
+  // 저장까지 갔는지는 storage가 권위다 — DOM만 보면 새로고침에서 되돌아가는 것을 못 잡는다.
+  const storedTheme = await pollUntil(
+    () => sw.evaluate(async () => (await chrome.storage.local.get('state')).state?.theme),
+    (v) => v === 'light',
+  );
+  // 다시 열어도 유지 — 시스템은 여전히 다크인데 라이트로 떠야 한다.
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Show preferences' }).waitFor({ timeout: 5000 });
+  const keptAfterReopen = await pollUntil(rootTheme, (v) => v === 'light', 5000, 100);
+  await popup.emulateMedia({ colorScheme: 'light' });
+  record('N35: 테마 스위치 — 시스템을 이기고, 색을 바꾸고, 다시 열어도 유지된다',
+    systemResolvedDark && switchedToLight === 'light' && storedTheme === 'light' &&
+      keptAfterReopen === 'light' && bgWhenSystemDark !== bgWhenLight,
+    `system-dark→${systemResolvedDark}, switched=${switchedToLight}, stored=${storedTheme}, ` +
+      `reopen=${keptAfterReopen}, bg ${bgWhenSystemDark}→${bgWhenLight}`);
+
+  /*
+   * N35b: '시스템'으로 되돌리면 다시 OS를 따른다 — 되돌릴 수 없는 스위치는 함정이다.
+   */
+  // 위에서 새로고침했으므로 화면은 프로필로 돌아가 있다 — 칩을 다시 꺼내 온다.
+  await popup.getByRole('button', { name: 'Show preferences' }).click();
+  await ensurePanelOpen(popup, 'Toggle preferences');
+  await popup.getByRole('button', { name: 'System', exact: true }).click();
+  await popup.emulateMedia({ colorScheme: 'dark' });
+  const followsSystemDark = await pollUntil(rootTheme, (v) => v === 'dark', 3000, 100);
+  await popup.emulateMedia({ colorScheme: 'light' });
+  const followsSystemLight = await pollUntil(rootTheme, (v) => v === 'light', 3000, 100);
+  record('N35b: 시스템으로 되돌리면 OS 변화를 다시 따른다',
+    followsSystemDark === 'dark' && followsSystemLight === 'light',
+    `os-dark→${followsSystemDark}, os-light→${followsSystemLight}`);
+
+  /*
+   * N36: 두 테마가 대비 기준을 지킨다 — 본문 4.5:1, 비텍스트(필드 경계·accent 표면) 3:1.
+   *
+   * 팔레트 값을 눈으로 고르면 한 토큰만 손대도 조용히 기준을 깬다. 여기서는 **실제로
+   * 브라우저가 계산한 변수 값**을 읽어 대비비를 계산하므로, CSS 어디를 어떻게 고쳐도
+   * 결과가 기준을 넘는지로만 판정한다 — 값 목록을 따로 관리할 필요가 없다.
+   * border(장식 구분선)는 대상이 아니다: WCAG 1.4.11은 컴포넌트를 **식별하는 데 필요한**
+   * 시각 정보를 요구하고, 카드 외곽선은 거기 해당하지 않는다.
+   */
+  const contrastProbe = async (scheme) => {
+    await popup.emulateMedia({ colorScheme: scheme });
+    await popup.waitForTimeout(150);
+    return popup.evaluate(() => {
+      const s = getComputedStyle(document.documentElement);
+      const v = (n) => s.getPropertyValue(n).trim();
+      const lum = (hex) => {
+        const h = hex.replace('#', '');
+        const n6 = h.length === 3 ? [...h].map((c) => c + c).join('') : h;
+        const ch = [0, 2, 4].map((i) => parseInt(n6.slice(i, i + 2), 16) / 255);
+        const lin = ch.map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+        return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+      };
+      const ratio = (a, b) => {
+        const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+        return (hi + 0.05) / (lo + 0.05);
+      };
+      const bg = v('--background'), surface = v('--card'), fill = v('--muted');
+      return {
+        // 본문 — 주 글자와 보조 글자가 놓이는 모든 면 위에서.
+        text: [
+          ratio(v('--foreground'), bg), ratio(v('--foreground'), surface), ratio(v('--foreground'), fill),
+          ratio(v('--muted-foreground'), bg), ratio(v('--muted-foreground'), surface),
+          ratio(v('--muted-foreground'), fill),
+          ratio(v('--primary-foreground'), v('--primary')),
+        ],
+        // 비텍스트 — 필드 경계와 accent 표면, 포커스 링.
+        nonText: [
+          ratio(v('--input'), bg), ratio(v('--input'), surface), ratio(v('--input'), fill),
+          ratio(v('--primary'), bg), ratio(v('--ring'), bg),
+        ],
+      };
+    });
+  };
+  const cLight = await contrastProbe('light');
+  const cDark = await contrastProbe('dark');
+  await popup.emulateMedia({ colorScheme: 'light' });
+  const worst = (xs) => Math.min(...xs);
+  const meets = (c) => worst(c.text) >= 4.5 && worst(c.nonText) >= 3;
+  record('N36: 두 테마 대비 기준 — 본문 4.5:1 · 비텍스트 3:1',
+    meets(cLight) && meets(cDark),
+    `light: 본문 최저 ${worst(cLight.text).toFixed(2)} 비텍스트 최저 ${worst(cLight.nonText).toFixed(2)}, ` +
+      `dark: 본문 최저 ${worst(cDark.text).toFixed(2)} 비텍스트 최저 ${worst(cDark.nonText).toFixed(2)}`);
+
+  /*
+   * N36b: **렌더된** 필드의 placeholder가 실제로 칠해진 면 위에서 4.5:1을 넘는다 —
+   * 토큰만 보는 N36의 사각지대다.
+   *
+   * 왜 따로 필요한가: shadcn은 `--input`을 경계선과 채움 양쪽에 쓴다(`dark:bg-input/30`).
+   * 경계를 3:1로 올리면 **채움도 함께 밝아져** 그 위의 placeholder가 4.5:1 아래로 내려간다
+   * (측정: 5.27 → 4.20). 한 토큰으로 둘을 동시에 만족시키는 값은 존재하지 않아 채움을 뺐고,
+   * 여기서는 그 결과를 화면에서 확인한다 — 토큰 값만 보면 이 분기를 영영 놓친다.
+   */
+  const fieldContrast = async (scheme) => {
+    await popup.emulateMedia({ colorScheme: scheme });
+    await popup.waitForTimeout(150);
+    return popup.getByPlaceholder('Search profiles…').evaluate((el) => {
+      const parseRgb = (s) => (s.match(/\d+(\.\d+)?/g) ?? []).map(Number);
+      // 투명한 면은 조상에서 실제 칠해진 색을 찾아 올라간다 — 합성 결과가 곧 배경이다.
+      let node = el, bg = [255, 255, 255];
+      while (node) {
+        const c = parseRgb(getComputedStyle(node).backgroundColor);
+        if (c.length >= 3 && (c[3] === undefined || c[3] > 0)) { bg = c.slice(0, 3); break; }
+        node = node.parentElement;
+      }
+      const ph = parseRgb(getComputedStyle(el, '::placeholder').color).slice(0, 3);
+      const lum = (rgb) => {
+        const lin = rgb.map((v) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
+        return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+      };
+      const [hi, lo] = [lum(ph), lum(bg)].sort((a, b) => b - a);
+      return { ratio: (hi + 0.05) / (lo + 0.05), bg, ph };
+    });
+  };
+  const fLight = await fieldContrast('light');
+  const fDark = await fieldContrast('dark');
+  await popup.emulateMedia({ colorScheme: 'light' });
+  record('N36b: 렌더된 필드의 placeholder가 실제 칠해진 면 위에서 4.5:1을 넘는다',
+    fLight.ratio >= 4.5 && fDark.ratio >= 4.5,
+    `light ${fLight.ratio.toFixed(2)}:1 (면 ${fLight.bg}), dark ${fDark.ratio.toFixed(2)}:1 (면 ${fDark.bg})`);
 
   // 넘치지 않으면 스크롤바가 DOM에 아예 없어야 한다 — 트랙을 기본 노출(opacity-60)로 둔
   // 근거가 이것이다. 보이면 곧 "넘치는 내용이 있다"는 신호여야 어포던스가 성립한다.

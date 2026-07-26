@@ -128,6 +128,7 @@ describe('parseStoredState', () => {
     const state = {
       schemaVersion: SCHEMA_VERSION,
       paused: false,
+      theme: 'system',
       profiles: [
         {
           id: 'p1',

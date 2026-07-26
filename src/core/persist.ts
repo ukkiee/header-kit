@@ -1,4 +1,5 @@
 import { ALL_RESOURCE_TYPES, REQUEST_METHODS, type RequestMethod, type ResourceType } from './rules';
+import { DEFAULT_THEME, isThemePreference } from './theme';
 import {
   createDefaultState,
   PROFILE_COLORS,
@@ -302,8 +303,14 @@ function validateStoredState(value: Record<string, unknown>): StoredState | null
   const customHeaderNames = Array.isArray(value.customHeaderNames)
     ? value.customHeaderNames.filter((n): n is string => typeof n === 'string')
     : [];
+  /*
+   * 테마는 백필·치유 대상이다 (ADR 0015). 필드가 없는 예전 상태나 알 수 없는 값 때문에
+   * 검증을 실패시키면 상태 **전체**가 기본값으로 리셋되어 프로필이 사라진다 — 명암 하나가
+   * 프로필을 날릴 이유가 없다. 그릴 수 없는 값은 여기서 기본값으로 접어 화면까지 가지 않게 한다.
+   */
+  const theme = isThemePreference(value.theme) ? value.theme : DEFAULT_THEME;
   if (!profiles.every(isProfile) || !isMaterializedRecord(materialized)) return null;
-  return { ...value, profiles, materialized, customHeaderNames } as unknown as StoredState;
+  return { ...value, theme, profiles, materialized, customHeaderNames } as unknown as StoredState;
 }
 
 /**

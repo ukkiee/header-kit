@@ -8,6 +8,7 @@ import {
   type MaterializeDeps,
 } from './placeholder';
 import { normalizeConditions, placeholderTemplate, type Modification, type Profile, type StoredState } from './schema';
+import type { ThemePreference } from './theme';
 
 /** Modification이 Placeholder를 담은 값을 가지면 그 템플릿, 아니면 null. */
 function templateWithPlaceholders(modification: Modification): string | null {
@@ -277,6 +278,11 @@ export function togglePause(state: StoredState): StoredState {
   return { ...state, paused: !state.paused };
 }
 
+/** 명암 선호를 바꾼다 (ADR 0015) — 해석은 UI가 하고, 여기 남는 것은 선호값뿐이다. */
+export function setTheme(state: StoredState, theme: ThemePreference): StoredState {
+  return { ...state, theme };
+}
+
 export function addCustomHeaderName(state: StoredState, name: string): StoredState {
   const trimmed = name.trim();
   const lower = trimmed.toLowerCase();
@@ -338,6 +344,7 @@ export type Command =
   | { type: 'update-profile-meta'; profileId: string; meta: ProfileMeta }
   | { type: 'set-paused'; paused: boolean }
   | { type: 'toggle-pause' }
+  | { type: 'set-theme'; theme: ThemePreference }
   | { type: 'expire-rules'; now: number }
   | { type: 'add-custom-header-name'; name: string }
   | { type: 'remove-custom-header-name'; name: string }
@@ -405,6 +412,8 @@ export function applyCommand(
       return setPaused(state, command.paused);
     case 'toggle-pause':
       return togglePause(state);
+    case 'set-theme':
+      return setTheme(state, command.theme);
     case 'expire-rules':
       return expireRules(state, command.now);
     case 'add-custom-header-name':

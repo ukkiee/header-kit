@@ -16,6 +16,7 @@ type Story = StoryObj<typeof meta>;
 const sampleState: StoredState = {
   schemaVersion: SCHEMA_VERSION,
   paused: false,
+  theme: 'system',
   profiles: [
     {
       id: 'p1',

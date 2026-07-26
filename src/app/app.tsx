@@ -17,6 +17,8 @@ import { ScrollArea } from '@/ui/scroll-area';
 import type { Command } from '@/core/commands';
 import { resolveLocale, t, type Locale, type MessageKey } from '@/core/i18n';
 import { createProfile, PROFILE_COLORS, type StoredState } from '@/core/schema';
+import { DEFAULT_THEME } from '@/core/theme';
+import { useAppliedTheme } from '@/ui/use-theme';
 import type { StatusSummary as StatusSummaryData } from '@/core/summary';
 import { canvas } from '@/ui/tokens';
 import { ExternalLink, History, Layers, Pause, Play, Settings } from 'lucide-react';
@@ -49,6 +51,12 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
   const [summary, setSummary] = useState<StatusSummaryData | null>(null);
   const [locale, setLocale] = useState<Locale>('en');
   const [incognitoAllowed, setIncognitoAllowed] = useState<boolean | null>(null);
+  /*
+   * 명암 적용 (ADR 0015). 상태가 아직 없는 동안(로드 전)은 'system'으로 둔다 — 그 순간의
+   * 화면은 어차피 비어 있고, 저장된 선호를 모르는 채 특정 테마를 고르면 로드 후 반대로
+   * 뒤집히는 깜빡임이 생긴다.
+   */
+  useAppliedTheme(state?.theme ?? DEFAULT_THEME);
 
   useEffect(() => {
     // 요약은 background가 적용한 결과를 발행한 것을 읽기만 한다 (독립 재컴파일 없음).
@@ -278,6 +286,7 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
             {railView === 'preferences' && (
               <PreferencesPanel
                 customHeaderNames={state.customHeaderNames}
+                theme={state.theme}
                 onCommand={dispatch}
                 incognitoAllowed={incognitoAllowed}
               />

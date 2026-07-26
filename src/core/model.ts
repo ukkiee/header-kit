@@ -1,4 +1,5 @@
 import type { RequestMethod, ResourceType } from './rules';
+import { DEFAULT_THEME, type ThemePreference } from './theme';
 
 /**
  * 포맷 버전은 의존성 없는 `format-version.ts`가 소유한다 — 스모크가 그 파일을 직접
@@ -265,6 +266,11 @@ export interface Profile {
 export interface StoredState {
   schemaVersion: typeof SCHEMA_VERSION;
   paused: boolean;
+  /**
+   * 명암 선호 (ADR 0015). 포맷 버전을 올리지 않는 이유: 새 필드는 union을 넓히지 않고
+   * **더해질** 뿐이라 예전 상태도 백필로 그대로 읽힌다(customHeaderNames와 같은 계열).
+   */
+  theme: ThemePreference;
   profiles: Profile[];
   /**
    * Placeholder 실체화 값의 활성 상태 구역 — Modification id 키.
@@ -351,6 +357,7 @@ export function createDefaultState(): StoredState {
   return {
     schemaVersion: SCHEMA_VERSION,
     paused: false,
+    theme: DEFAULT_THEME,
     profiles: [{ ...createProfile('Default Profile'), active: true }],
     materialized: {},
     customHeaderNames: [],

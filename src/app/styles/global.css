@@ -49,10 +49,12 @@
   --font-mono: 'Geist Mono Variable', ui-monospace, 'SF Mono', 'Menlo', monospace;
 
   /*
-   * **베이스 램프 — 테마 중립.** 라이트가 이 값을 직접 소비하므로 여기를 건드리면 라이트가
-   * 함께 바뀐다. 다크 리디자인은 아래 별도 팔레트가 나르고, 이 램프는 손대지 않는다
-   * (구조 게이트 S-1: 다크 변경이 테마 중립 램프에 설치되면 라이트·다크를 독립적으로
-   * 조정할 수 없다). 라이트 팔레트를 디자인에 맞추는 일은 티켓 05가 한다.
+   * **베이스 램프 — 테마 중립.** 아직 시맨틱 토큰으로 옮기지 못한 raw 유틸
+   * (`bg-zinc-100`·`bg-white`·`dark:bg-zinc-800` 등)이 이 값을 직접 쓴다. 두 테마의
+   * 시맨틱 팔레트는 아래 `--color-light-*` / `--color-dark-*`가 따로 나르므로 이 램프는
+   * 어느 테마에도 매여 있지 않다 (구조 게이트 S-1). raw 유틸을 시맨틱으로 옮기는 일은
+   * 티켓 10이고, 그 전까지 이 램프와 아래 라이트 팔레트는 **서로 가까이** 유지해야
+   * 같은 화면에서 두 회색이 갈리지 않는다.
    */
 
   /* Accent — 단일 blue 액션색(#0066cc), focus #0071e3. 두 번째 accent 없음. */
@@ -79,20 +81,55 @@
   /*
    * **다크 리디자인 팔레트 (ADR 0015)** — 디자인의 near-black 개발자도구 톤. 오직 아래
    * `@variant dark` 시맨틱 매핑만 이 토큰들을 참조한다. 별도 이름을 준 이유는 두 가지다:
-   * (1) 라이트가 소비하는 베이스 램프와 섞이지 않아 두 테마를 독립적으로 조정할 수 있고,
+   * (1) 베이스 램프와 섞이지 않아 두 테마를 독립적으로 조정할 수 있고,
    * (2) 팔레트가 `@theme` 한 곳에 모여 시맨틱 계층에 hex 리터럴이 흩어지지 않는다.
    * fill과 border를 따로 둔 것은 램프의 한 슬롯으로 그 차이를 표현할 수 없기 때문이다.
+   *
+   * input·accent 두 값은 티켓 05에서 **대비 기준을 맞추려고** 올렸다(측정값은 아래
+   * 라이트 팔레트 주석 참고). 디자인이 정한 파랑 두 개(#1d4ed8/#2563eb) 안에서 밝은 쪽을
+   * primary로 승격했을 뿐, 새 색을 들여오지 않았다.
    */
   --color-dark-bg: #0a0a0a;
   --color-dark-surface: #141414;
   --color-dark-fill: #1c1c1c;
   --color-dark-fill-hover: #1f1f1f;
   --color-dark-border: #262626;
-  --color-dark-input: #2e2e2e;
+  /* 필드 경계 — 3:1(비텍스트)을 bg·surface·fill 어느 면 위에서도 넘긴다(최저 3.20:1). */
+  --color-dark-input: #6b6b6b;
   --color-dark-fg: #ededed;
   --color-dark-fg-muted: #8f8f8f;
-  --color-dark-accent: #1d4ed8;
-  --color-dark-accent-hover: #2563eb;
+  /* #1d4ed8은 near-black bg에서 2.95:1로 3:1에 미달했다 — 디자인의 짝 중 밝은 쪽으로. */
+  --color-dark-accent: #2563eb;
+  --color-dark-accent-hover: #3b82f6;
+
+  /*
+   * **라이트 팔레트 (티켓 05)** — 디자인 다크의 짝. 다크와 **같은 구조**로 이름을 주어,
+   * 두 테마가 각자의 블록을 갖고 서로를 끌고 가지 않게 한다(구조 게이트 S-1의 대칭).
+   *
+   * 캔버스를 순백으로 둔 것은 의도한 절충이다. 팝업·툴팁 표면이 아직 raw `bg-white`를
+   * 쓰고 있어(tokens.ts의 popupSurface 등, 5곳) 캔버스만 off-white로 내리면 같은 화면에서
+   * 흰색이 두 개로 갈린다 — 그 raw 유틸을 시맨틱으로 옮기는 것이 티켓 10이고, 캔버스와
+   * surface의 명도 단계를 다크처럼 벌리는 것은 그 뒤라야 안전하다. 그래서 지금은 두 값을
+   * 같은 흰색에 두고, 대신 **대비 기준 미달만 확실히 닫는다**.
+   *
+   * 측정된 대비 (WCAG 상대휘도, 본문 4.5:1 · 비텍스트 3:1):
+   *   fg/bg 17.72 · fgMuted/bg 5.69 · fgMuted/fill 5.18 · fgMuted/fillHover 4.79
+   *   흰 글자/accent 6.70 · input/bg 3.43 · input/fill 3.12 · accent/bg 6.70 · ring/bg 5.17
+   * border는 장식 구분선이라 3:1 대상이 아니다(WCAG 1.4.11은 컴포넌트 식별에 필요한
+   * 시각 정보를 요구한다) — 헤어라인다움을 지킨다.
+   */
+  --color-light-bg: #ffffff;
+  --color-light-surface: #ffffff;
+  --color-light-fill: #f4f4f5;
+  --color-light-fill-hover: #ebebef;
+  --color-light-border: #e2e2e6;
+  /* 필드 경계 — 3:1을 넘기려면 헤어라인으로는 부족하다(예전 #d2d2d7은 1.51:1). */
+  --color-light-input: #8a8a91;
+  --color-light-fg: #18181b;
+  --color-light-fg-muted: #66666e;
+  /* accent는 다크와 **같은 디자인 파랑**이다 — 테마마다 파랑이 다르면 다른 브랜드로 읽힌다. */
+  --color-light-accent: #1d4ed8;
+  --color-light-accent-hover: #2563eb;
 
   /* Radius — 유틸 8px, 카드 12px. pill(rounded-full)은 주 액션·칩 문법으로 예약. */
   --radius-md: 0.5rem;
@@ -147,30 +184,30 @@
  */
 :root,
 [data-theme] {
-  --background: var(--color-white);
-  --foreground: var(--color-zinc-900);
-  --card: var(--color-white);
-  --card-foreground: var(--color-zinc-900);
+  --background: var(--color-light-bg);
+  --foreground: var(--color-light-fg);
+  --card: var(--color-light-surface);
+  --card-foreground: var(--color-light-fg);
   /* 팝업 표면 — tokens.ts의 popupSurface / popupItemText와 같은 값이다. */
-  --popover: var(--color-white);
-  --popover-foreground: var(--color-zinc-700);
+  --popover: var(--color-light-surface);
+  --popover-foreground: var(--color-light-fg);
   /* accent — tokens.ts의 accentBg. 두 번째 브랜드 색은 없다. */
-  --primary: var(--color-blue-600);
+  --primary: var(--color-light-accent);
   --primary-foreground: var(--color-white);
-  --secondary: var(--color-zinc-100);
-  --secondary-foreground: var(--color-zinc-900);
+  --secondary: var(--color-light-fill);
+  --secondary-foreground: var(--color-light-fg);
   /* ghost 상호작용 표면 — tokens.ts의 ghostInteractive가 쓰는 hover 명도. */
-  --muted: var(--color-zinc-100);
-  --muted-foreground: var(--color-zinc-500);
-  --accent: var(--color-zinc-100);
-  --accent-foreground: var(--color-zinc-900);
+  --muted: var(--color-light-fill);
+  --muted-foreground: var(--color-light-fg-muted);
+  --accent: var(--color-light-fill-hover);
+  --accent-foreground: var(--color-light-fg);
   --destructive: var(--color-red-600);
   --destructive-foreground: var(--color-white);
-  /* 보더 두 종 — 팝업 경계(border)와 필드 실선(input)은 명도가 다르다(tokens.ts). */
-  --border: var(--color-zinc-200);
-  --input: var(--color-zinc-300);
-  /* 포커스 링 — focusRing과 같은 blue-500 (#0071e3). 다크는 아래에서 따로 준다. */
-  --ring: var(--color-blue-500);
+  /* 보더 두 종 — 장식 구분선(border)과 필드 경계(input)는 요구 대비가 다르다. */
+  --border: var(--color-light-border);
+  --input: var(--color-light-input);
+  /* 포커스 링 — 라이트도 디자인 파랑을 탄다(다크는 아래에서 따로 준다). */
+  --ring: var(--color-light-accent-hover);
 
   /*
    * 다크 = 디자인 near-black 팔레트 (ADR 0015). **위 `--color-dark-*` 토큰만 참조한다** —
@@ -216,6 +253,30 @@ body {
   color-scheme: light;
   @variant dark {
     color-scheme: dark;
+  }
+}
+
+/*
+ * 다크 입력 필드의 채움 제거 (티켓 05) — shadcn 소스는 손대지 않는다(ADR 0014).
+ *
+ * shadcn은 `--input`을 **경계선과 채움 양쪽에** 쓴다(`border-input` + `dark:bg-input/30`).
+ * 그런데 이 둘이 요구하는 방향이 반대다: 경계는 비텍스트 3:1을 넘기려면 밝아져야 하고,
+ * 채움은 그 위의 placeholder(`--muted-foreground`)가 본문 4:5.1을 지키려면 어두워야 한다.
+ * 한 토큰으로는 **동시에 만족하는 값이 없다** — 전 구간을 훑어 확인했다:
+ *   #626262: 경계 3.02 OK / placeholder 4.36 FAIL  ·  #585858: 경계 2.59 FAIL / placeholder 4.56 OK
+ *
+ * 그래서 채움을 뺀다. 라이트 필드는 원래 `bg-transparent`라 두 테마의 필드 구조가 같아지고,
+ * placeholder는 카드 면 위에서 5.70:1로 여유를 되찾는다. 경계선이 필드를 식별시키는 유일한
+ * 시각 정보가 되므로 3:1 요구(WCAG 1.4.11)도 경계 하나로 깔끔히 진다.
+ *
+ * 텍스트를 입력하는 세 슬롯에만 건다 — 버튼 outline 변형도 같은 유틸을 쓰지만 그쪽 라벨은
+ * `--foreground`라 대비가 11:1이고, 채움이 그 변형의 생김새 자체다.
+ */
+[data-slot='input'],
+[data-slot='textarea'],
+[data-slot='select-trigger'] {
+  @variant dark {
+    background-color: transparent;
   }
 }
 
@@ -282,10 +343,13 @@ body {
   }
 }
 
-/* body 배경을 main과 같은 토큰으로 — 탭 앱에서 본문 밖 여백이 어긋나지 않게. */
+/*
+ * body 배경을 main과 같은 토큰으로 — 탭 앱에서 본문 밖 여백이 어긋나지 않게.
+ *
+ * 예전에는 베이스 램프를 직접 참조해(`--color-zinc-950`) 다크에서 body가 #161618,
+ * 본문이 #0a0a0a로 **갈라져 있었다**. 시맨틱 `--background` 하나를 보게 하면 테마가
+ * 늘어도 이 자리가 다시 어긋나지 않는다.
+ */
 body {
-  background-color: var(--color-white);
-  @variant dark {
-    background-color: var(--color-zinc-950);
-  }
+  background-color: var(--background);
 }

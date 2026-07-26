@@ -45,3 +45,46 @@ export function ChipGroup<T extends string>({
     </ToggleGroup>
   );
 }
+
+export interface ChoiceChipsProps<T extends string> {
+  /** 선택된 값 하나 — 비어 있는 상태가 없다. */
+  value: T;
+  options: readonly ChipOption<T>[];
+  onValueChange: (value: T) => void;
+  'aria-label'?: string;
+}
+
+/**
+ * 택1 칩 그룹 — 같은 칩 문법이지만 **항상 정확히 하나**가 선택된다 (티켓 05의 테마 선택).
+ *
+ * ChipGroup(다중)과 나눠 둔 이유: 조건 필터는 "아무것도 안 고름"이 뜻을 갖지만, 테마 같은
+ * 택1 설정에는 그런 상태가 없다. 다중 그룹으로 흉내 내면 스크린리더가 여러 개를 켤 수 있는
+ * 것처럼 읽고, 마지막 칩을 다시 눌러 **선택이 비는** 경로가 생긴다 — 그때 무엇을 그릴지
+ * 정해진 답이 없다. 그래서 빈 선택을 아예 만들 수 없게 여기서 막는다.
+ */
+export function ChoiceChips<T extends string>({
+  value,
+  options,
+  onValueChange,
+  'aria-label': ariaLabel,
+}: ChoiceChipsProps<T>) {
+  return (
+    <ToggleGroup
+      value={[value]}
+      onValueChange={(next) => {
+        // 켜져 있는 칩을 다시 누르면 Base UI가 빈 배열을 준다 — 그건 선택 해제가 아니라
+        // "같은 것을 다시 골랐다"이므로 현재 값을 지킨다.
+        const picked = (next as T[])[0];
+        if (picked !== undefined && picked !== value) onValueChange(picked);
+      }}
+      aria-label={ariaLabel}
+      className="flex flex-wrap gap-1"
+    >
+      {options.map((option) => (
+        <Toggle key={option.value} value={option.value} className={chipClass}>
+          {option.label}
+        </Toggle>
+      ))}
+    </ToggleGroup>
+  );
+}
