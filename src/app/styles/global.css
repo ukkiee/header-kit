@@ -21,9 +21,13 @@
 @import '@fontsource-variable/geist-mono';
 
 /*
- * dark 변형 — 시스템(prefers-color-scheme) 연동이 기본. 앱은 테마 스위치를 두지
- * 않는다(ADR 0004 스펙 결정). data-theme은 Storybook·진단 도구가 양 테마를 강제
- * 렌더할 때만 쓰는 개발용 오버라이드다.
+ * dark 변형 — 두 갈래를 함께 받는다. `prefers-color-scheme`는 사용자가 '시스템'을
+ * 골랐을 때의 갈래이고, `[data-theme]`는 앱 셸이 **해석 결과를 적는 자리**다
+ * (ADR 0015가 ADR 0004의 "스위치 없음"을 개정했다 — 원래 Storybook·진단 도구용
+ * 오버라이드였던 훅을 영속 스위치로 승격한 것이다).
+ *
+ * 셸이 늘 data-theme을 적으므로 실사용 경로는 아래 `[data-theme='dark']` 가지 하나로
+ * 수렴한다. media 가지는 셸이 아직 상태를 못 읽은 첫 프레임과 Storybook·진단이 쓴다.
  */
 @custom-variant dark {
   @media (prefers-color-scheme: dark) {
@@ -100,31 +104,39 @@
   --color-dark-fg-muted: #8f8f8f;
   /* #1d4ed8은 near-black bg에서 2.95:1로 3:1에 미달했다 — 디자인의 짝 중 밝은 쪽으로. */
   --color-dark-accent: #2563eb;
-  --color-dark-accent-hover: #3b82f6;
+  /*
+   * 링도 같은 값이다. 한 칸 더 밝히면(#3b82f6) ADR 0015가 정한 파랑 두 개 밖으로 나가는데,
+   * #2563eb는 이미 bg 대비 3.83:1이라 그럴 이유가 없다. 포커스 링은 `focusRing`이
+   * `outline-offset-2`로 그리므로 버튼 면이 아니라 **배경 위에** 놓여 구분된다.
+   */
+  --color-dark-accent-hover: #2563eb;
 
   /*
    * **라이트 팔레트 (티켓 05)** — 디자인 다크의 짝. 다크와 **같은 구조**로 이름을 주어,
    * 두 테마가 각자의 블록을 갖고 서로를 끌고 가지 않게 한다(구조 게이트 S-1의 대칭).
    *
-   * 캔버스를 순백으로 둔 것은 의도한 절충이다. 팝업·툴팁 표면이 아직 raw `bg-white`를
-   * 쓰고 있어(tokens.ts의 popupSurface 등, 5곳) 캔버스만 off-white로 내리면 같은 화면에서
-   * 흰색이 두 개로 갈린다 — 그 raw 유틸을 시맨틱으로 옮기는 것이 티켓 10이고, 캔버스와
-   * surface의 명도 단계를 다크처럼 벌리는 것은 그 뒤라야 안전하다. 그래서 지금은 두 값을
-   * 같은 흰색에 두고, 대신 **대비 기준 미달만 확실히 닫는다**.
+   * **캔버스가 surface보다 어둡다**(#f7f7f8 < #ffffff) — 다크에서 bg #0a0a0a가 surface
+   * #141414보다 어두운 것과 같은 관계다(단차 1.07:1 대 1.075:1). 떠 있는 것이 밝다는
+   * 규칙 하나를 두 테마가 공유한다.
+   *
+   * 아직 raw `bg-white`를 쓰는 자리가 남아 있지만(다이얼로그·팝업 표면·스위치 손잡이)
+   * 그것들은 **전부 떠 있는 면**이라 순백으로 남는 surface와 같은 값이다 — 캔버스만
+   * 내리면 흰색이 갈리지 않는다. 이 raw 유틸을 시맨틱으로 옮기는 것은 티켓 10이다.
    *
    * 측정된 대비 (WCAG 상대휘도, 본문 4.5:1 · 비텍스트 3:1):
-   *   fg/bg 17.72 · fgMuted/bg 5.69 · fgMuted/fill 5.18 · fgMuted/fillHover 4.79
-   *   흰 글자/accent 6.70 · input/bg 3.43 · input/fill 3.12 · accent/bg 6.70 · ring/bg 5.17
+   *   fg/bg 16.55 · fgMuted/bg 5.31 · fgMuted/fill 5.00 · fgMuted/fillHover 4.66
+   *   흰 글자/accent 6.70 · input/bg 3.38 · input/surface 3.62 · input/fill 3.18
+   *   accent/bg 6.26 · ring/bg 4.83
    * border는 장식 구분선이라 3:1 대상이 아니다(WCAG 1.4.11은 컴포넌트 식별에 필요한
    * 시각 정보를 요구한다) — 헤어라인다움을 지킨다.
    */
-  --color-light-bg: #ffffff;
+  --color-light-bg: #f7f7f8;
   --color-light-surface: #ffffff;
-  --color-light-fill: #f4f4f5;
-  --color-light-fill-hover: #ebebef;
+  --color-light-fill: #f0f0f2;
+  --color-light-fill-hover: #e8e8ec;
   --color-light-border: #e2e2e6;
   /* 필드 경계 — 3:1을 넘기려면 헤어라인으로는 부족하다(예전 #d2d2d7은 1.51:1). */
-  --color-light-input: #8a8a91;
+  --color-light-input: #86868d;
   --color-light-fg: #18181b;
   --color-light-fg-muted: #66666e;
   /* accent는 다크와 **같은 디자인 파랑**이다 — 테마마다 파랑이 다르면 다른 브랜드로 읽힌다. */
@@ -176,11 +188,11 @@
  * 그대로 붙여도 앱의 색이 나온다.
  *
  * dark는 shadcn의 `.dark` 클래스 방식이 아니라 이 저장소의 @variant dark(시스템
- * prefers-color-scheme + data-theme 개발용 오버라이드)를 쓴다 — 앱이 테마 스위치를
- * 두지 않는다는 ADR 0004 결정을 shadcn 도입이 뒤집지 않는다.
+ * prefers-color-scheme + 앱 셸이 적는 data-theme)를 쓴다 — 테마 스위치가 생겨도
+ * (ADR 0015) 명암을 켜는 조건은 여전히 이 한 곳이다.
  *
- * [data-theme]를 함께 셀렉터로 둔 이유는 위 color-scheme 블록과 같다 — Storybook·진단
- * 도구가 씌우는 래퍼 안에서도 변수가 재정의되어야 강제 테마 렌더가 성립한다.
+ * [data-theme]를 함께 셀렉터로 둔 이유: 셸이 루트에 적을 때도, Storybook·진단 도구가
+ * 래퍼에 씌울 때도 그 안에서 변수가 재정의되어야 강제 테마 렌더가 성립한다.
  */
 :root,
 [data-theme] {
@@ -211,9 +223,8 @@
 
   /*
    * 다크 = 디자인 near-black 팔레트 (ADR 0015). **위 `--color-dark-*` 토큰만 참조한다** —
-   * 베이스 램프(zinc/blue)를 여기서 쓰지 않는 것이 요점이다. 그 램프는 라이트가 소비하므로,
-   * 다크 값을 램프에 설치하면 라이트가 함께 끌려간다(구조 게이트 S-1). 두 팔레트를 갈라
-   * 두었기에 티켓 05(테마 스위치)가 라이트를 독립적으로 디자인에 맞출 수 있다.
+   * 라이트가 `--color-light-*`만 보는 것과 대칭이다. 두 테마가 각자의 블록을 가져야 한쪽을
+   * 고칠 때 다른 쪽이 끌려가지 않는다(구조 게이트 S-1).
    */
   @variant dark {
     --background: var(--color-dark-bg);
@@ -269,14 +280,25 @@ body {
  * placeholder는 카드 면 위에서 5.70:1로 여유를 되찾는다. 경계선이 필드를 식별시키는 유일한
  * 시각 정보가 되므로 3:1 요구(WCAG 1.4.11)도 경계 하나로 깔끔히 진다.
  *
- * 텍스트를 입력하는 세 슬롯에만 건다 — 버튼 outline 변형도 같은 유틸을 쓰지만 그쪽 라벨은
- * `--foreground`라 대비가 11:1이고, 채움이 그 변형의 생김새 자체다.
+ * 텍스트를 입력하는 세 슬롯에만 건다. 체크박스와 버튼 outline 변형도 같은 유틸을 쓰지만
+ * 그 두 면 위에는 글자가 놓이지 않아(체크 표시는 `--primary-foreground`, 버튼 라벨은
+ * `--foreground`로 11:1) 대비가 걸리지 않는다 — 오히려 경계가 밝아진 만큼 면도 함께
+ * 올라가 미체크 체크박스가 예전보다 눈에 띈다.
+ *
+ * **비활성 채움은 따로 준다.** shadcn은 그것도 `--input`으로 칠하므로(`disabled:bg-input/50`,
+ * `dark:disabled:bg-input/80`) 위 규칙이 다크의 비활성 표시를 통째로 지우고, 라이트에서는
+ * 경계가 진해진 만큼 채움도 무거워진다(#e9e9eb → #c5c5c8). `--muted`로 옮기면 두 테마
+ * 모두 "꺼진 면"이라는 뜻은 유지하면서 경계 값과 무관해진다.
  */
 [data-slot='input'],
 [data-slot='textarea'],
 [data-slot='select-trigger'] {
   @variant dark {
     background-color: transparent;
+  }
+
+  &:disabled {
+    background-color: var(--muted);
   }
 }
 

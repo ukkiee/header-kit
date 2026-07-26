@@ -2235,14 +2235,15 @@ try {
     Object.keys(expected).every((k) => hex6(probe[k]) === expected[k]);
   // 라이트 = **자기 팔레트**(--color-light-*). 티켓 05가 디자인 다크의 짝으로 파생했다.
   const lightIntact = sameHex(palLight, {
-    bg: '#ffffff', fg: '#18181b', primary: '#1d4ed8', border: '#e2e2e6',
+    // 캔버스는 순백이 아니다 — 떠 있는 면(카드·팝업)이 #ffffff로 그 위에 선다.
+    bg: '#f7f7f8', fg: '#18181b', primary: '#1d4ed8', border: '#e2e2e6',
   });
   // 다크 = 디자인 near-black 팔레트(ADR 0015). primary는 티켓 05가 대비 3:1을 위해
   // 디자인의 짝 중 밝은 쪽(#2563eb)으로 올렸다 — #1d4ed8은 near-black에서 2.95:1이었다.
   const darkRedesigned = sameHex(palDark, {
     bg: '#0a0a0a', fg: '#ededed', primary: '#2563eb', border: '#262626',
   });
-  record('N34: 팔레트 격리 — 다크는 리디자인 값, 라이트는 베이스 램프 그대로',
+  record('N34: 팔레트 격리 — 두 테마가 각자의 팔레트를 쓴다',
     lightIntact && darkRedesigned,
     `light=${JSON.stringify(palLight)}, dark=${JSON.stringify(palDark)}`);
 

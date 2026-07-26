@@ -18,7 +18,7 @@ export const THEME_PREFERENCES: readonly ThemePreference[] = ['system', 'dark', 
 export const DEFAULT_THEME: ThemePreference = 'system';
 
 export function isThemePreference(value: unknown): value is ThemePreference {
-  return value === 'dark' || value === 'light' || value === 'system';
+  return THEME_PREFERENCES.includes(value as ThemePreference);
 }
 
 /**

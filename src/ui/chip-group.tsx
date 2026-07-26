@@ -35,15 +35,22 @@ export function ChipGroup<T extends string>({
       value={values}
       onValueChange={(next) => onValuesChange(next as T[])}
       aria-label={ariaLabel}
-      className="flex flex-wrap gap-1"
+      className={groupClass}
     >
-      {options.map((option) => (
-        <Toggle key={option.value} value={option.value} className={chipClass}>
-          {option.label}
-        </Toggle>
-      ))}
+      <Chips options={options} />
     </ToggleGroup>
   );
+}
+
+const groupClass = 'flex flex-wrap gap-1';
+
+/** 두 그룹이 공유하는 칩 목록 — 선택 규칙만 다르고 칩 자체는 같은 것이어야 한다. */
+function Chips<T extends string>({ options }: { options: readonly ChipOption<T>[] }) {
+  return options.map((option) => (
+    <Toggle key={option.value} value={option.value} className={chipClass}>
+      {option.label}
+    </Toggle>
+  ));
 }
 
 export interface ChoiceChipsProps<T extends string> {
@@ -57,10 +64,12 @@ export interface ChoiceChipsProps<T extends string> {
 /**
  * 택1 칩 그룹 — 같은 칩 문법이지만 **항상 정확히 하나**가 선택된다 (티켓 05의 테마 선택).
  *
- * ChipGroup(다중)과 나눠 둔 이유: 조건 필터는 "아무것도 안 고름"이 뜻을 갖지만, 테마 같은
- * 택1 설정에는 그런 상태가 없다. 다중 그룹으로 흉내 내면 스크린리더가 여러 개를 켤 수 있는
- * 것처럼 읽고, 마지막 칩을 다시 눌러 **선택이 비는** 경로가 생긴다 — 그때 무엇을 그릴지
- * 정해진 답이 없다. 그래서 빈 선택을 아예 만들 수 없게 여기서 막는다.
+ * ChipGroup(다중)과 나눠 둔 이유는 **빈 선택** 하나다. 조건 필터는 "아무것도 안 고름"이
+ * 뜻을 갖지만 테마 같은 택1 설정에는 그런 상태가 없는데, 다중 그룹으로 흉내 내면 켜져 있는
+ * 칩을 다시 눌러 선택이 비는 경로가 생긴다 — 그때 무엇을 그릴지 정해진 답이 없다.
+ *
+ * (접근성 노출은 두 그룹이 같다 — Base UI는 어느 쪽이든 `aria-pressed` 버튼을 낸다.
+ * radio 시맨틱이 필요해지면 그건 이 칩 문법이 아니라 RadioGroup으로 갈 일이다.)
  */
 export function ChoiceChips<T extends string>({
   value,
@@ -78,13 +87,9 @@ export function ChoiceChips<T extends string>({
         if (picked !== undefined && picked !== value) onValueChange(picked);
       }}
       aria-label={ariaLabel}
-      className="flex flex-wrap gap-1"
+      className={groupClass}
     >
-      {options.map((option) => (
-        <Toggle key={option.value} value={option.value} className={chipClass}>
-          {option.label}
-        </Toggle>
-      ))}
+      <Chips options={options} />
     </ToggleGroup>
   );
 }
