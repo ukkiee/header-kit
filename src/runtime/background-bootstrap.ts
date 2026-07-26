@@ -186,11 +186,13 @@ export function bootstrap(deps: BackgroundDeps): void {
       suspendAutoBackup: () => {
         backupSuspended = true;
       },
-      resumeAutoBackup: () => {
+      resumeAutoBackup: ({ snapshot }) => {
         backupSuspended = false;
-        // 재개는 곧바로 다시 예약한다 — 중단 창에서 눌러 버린 예약이 그대로 사라지면
-        // 다음 상태 변경까지 백업이 조용히 멈춘다. 깨끗한 default가 스냅샷된다.
-        scheduleBackup();
+        // 끝까지 간 초기화만 곧바로 다시 예약한다 — 중단 창에서 눌러 버린 예약이 사라진
+        // 자리를 메우고, 그때 스냅샷되는 것은 깨끗한 default다. 실패했다면 상태가 아직
+        // 옛 프로필이라 지금 예약하면 방금 지운 백업이 되살아난다. 그 경우는 예약 없이
+        // 플래그만 풀고, 다음 상태 변경이 정상적으로 다시 예약하게 둔다.
+        if (snapshot) scheduleBackup();
       },
       readBackupKV: deps.readBackupKV,
       removeBackupKeys: deps.removeBackupKeys,

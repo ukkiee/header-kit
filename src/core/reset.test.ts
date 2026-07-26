@@ -102,9 +102,11 @@ function effectsFor(world: World, options: FakeOptions = {}): ResetEffects {
       world.suspended = true;
       step('suspend');
     },
-    resumeAutoBackup: () => {
+    resumeAutoBackup: ({ snapshot }) => {
       world.suspended = false;
-      step('resume');
+      world.steps.push('resume');
+      // 런타임은 `snapshot`이 참일 때만 곧바로 스냅샷을 예약한다 — 그 틱만 모델한다.
+      if (options.interleaveAutoBackup && snapshot) autoBackupTick(world);
     },
     readBackupKV: async (target) => ({ ...world.areas[target] }),
     removeBackupKeys: async (target, keys) => {
@@ -207,6 +209,22 @@ describe('전체 초기화 (R-3, 멱등)', () => {
     expect(bkKeys(world.areas.sync).length).toBeGreaterThan(0);
     // 남은 단계는 실행되지 않았고, 자동 백업은 영구히 멈추지 않는다.
     expect(world.state.profiles).toHaveLength(2);
+    expect(world.suspended).toBe(false);
+  });
+
+  it('실패 후 재개는 옛 데이터로 새 스냅샷을 쓰지 않는다', async () => {
+    const world = populatedWorld();
+    const syncBefore = { ...world.areas.sync };
+
+    const result = await performFullReset(
+      effectsFor(world, { failRemoveOn: 'sync', interleaveAutoBackup: true }),
+    );
+
+    expect(result.ok).toBe(false);
+    // 상태가 아직 옛 프로필인 채로 재개 틱이 돌면 방금 지운 백업이 되살아난다 —
+    // 실패 경로의 재개는 스냅샷을 예약하지 않으므로 저장소는 실패 시점 그대로다.
+    expect(world.areas.sync).toEqual(syncBefore);
+    expect(bkKeys(world.areas.local)).toEqual([]);
     expect(world.suspended).toBe(false);
   });
 

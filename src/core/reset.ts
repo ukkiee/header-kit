@@ -29,8 +29,12 @@ export interface ResetEffects {
    * 다시 써 넣는다.
    */
   suspendAutoBackup(): void | Promise<void>;
-  /** 다시 켠다. 그때 깨끗한 default가 스냅샷되는 것은 의도된 동작이다. */
-  resumeAutoBackup(): void | Promise<void>;
+  /**
+   * 다시 켠다. `snapshot`이 참일 때만 **곧바로 새 스냅샷을 예약**한다 — 초기화가 끝까지
+   * 갔을 때의 깨끗한 default 스냅샷이 그것이고, 그것만이 의도된 동작이다. 실패 경로의
+   * 상태는 아직 옛 프로필이라, 거기서 예약하면 방금 지운 백업이 옛 데이터로 되살아난다.
+   */
+  resumeAutoBackup(options: { snapshot: boolean }): void | Promise<void>;
   readBackupKV(target: BackupTarget): Promise<SyncKV>;
   removeBackupKeys(target: BackupTarget, keys: string[]): Promise<void>;
   /** 권위 상태를 기본값으로 되돌린다 (단일 writer 경로를 그대로 탄다). */
@@ -73,6 +77,7 @@ async function clearBackups(
  */
 export async function performFullReset(effects: ResetEffects): Promise<ResetResult> {
   await effects.suspendAutoBackup();
+  let completed = false;
   try {
     for (const { target, step } of CLEARED_TARGETS) {
       const failure = await clearBackups(effects, target, step);
@@ -88,10 +93,13 @@ export async function performFullReset(effects: ResetEffects): Promise<ResetResu
     } catch (error) {
       return { ok: false, step: 'clear-summary', reason: reason(error) };
     }
+    completed = true;
     return { ok: true };
   } finally {
     // 실패해도 재개한다. 중단된 채로 남기면 초기화 실패가 "백업이 조용히 멈춘 확장"이
-    // 되어, 사용자가 알 수 없는 두 번째 고장을 얹는다.
-    await effects.resumeAutoBackup();
+    // 되어, 사용자가 알 수 없는 두 번째 고장을 얹는다. 다만 **새 스냅샷 예약은 끝까지
+    // 갔을 때만** — 실패 경로의 상태는 아직 옛 프로필이라, 거기서 예약하면 방금 지운
+    // 백업이 옛 데이터로 되살아난다(다음 상태 변경이 정상적으로 다시 예약한다).
+    await effects.resumeAutoBackup({ snapshot: completed });
   }
 }
