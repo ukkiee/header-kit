@@ -16,11 +16,16 @@ export type ResetStep =
   | 'reset-state'
   | 'clear-summary';
 
-/** 백업 스냅샷은 두 저장소 어디에나 있을 수 있다 — 활성 대상만 지우면 잔재가 남는다. */
-const CLEARED_TARGETS: readonly { target: BackupTarget; step: ResetStep }[] = [
-  { target: 'local', step: 'clear-local-backups' },
-  { target: 'sync', step: 'clear-sync-backups' },
-];
+/**
+ * 백업 스냅샷은 두 저장소 어디에나 있을 수 있다 — 활성 대상만 지우면 잔재가 남는다.
+ *
+ * `Record<BackupTarget, …>`로 못박아 대상이 하나 늘면 **컴파일이 막는다**. 배열이었다면
+ * 새 저장소가 조용히 안 지워졌을 것이고, 파괴적 동작에서 그것이 가장 나쁜 실패다.
+ */
+const CLEARED_TARGETS: Record<BackupTarget, ResetStep> = {
+  local: 'clear-local-backups',
+  sync: 'clear-sync-backups',
+};
 
 export interface ResetEffects {
   /**
@@ -79,7 +84,7 @@ export async function performFullReset(effects: ResetEffects): Promise<ResetResu
   await effects.suspendAutoBackup();
   let completed = false;
   try {
-    for (const { target, step } of CLEARED_TARGETS) {
+    for (const [target, step] of Object.entries(CLEARED_TARGETS) as [BackupTarget, ResetStep][]) {
       const failure = await clearBackups(effects, target, step);
       if (failure) return failure;
     }
