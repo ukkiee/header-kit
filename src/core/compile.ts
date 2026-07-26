@@ -66,10 +66,12 @@ function overlapKeys(modification: Modification): string[] {
         ? []
         : [key('request-header', modification.name), key('response-header', modification.name)];
     // cookie/set-cookie는 고정 헤더(Cookie/Set-Cookie)를 쓰지만 값 합성 규칙이 달라
-    // 서로 덮어쓴다고 단정할 수 없다. redirect는 헤더를 만지지 않는다.
+    // 서로 덮어쓴다고 단정할 수 없다. redirect·block은 헤더를 만지지 않는다 —
+    // block은 요청을 통째로 없애므로 "같은 헤더를 두고 다툰다"는 관계 자체가 성립하지 않는다.
     case 'cookie':
     case 'set-cookie':
     case 'redirect':
+    case 'block':
       return [];
     default:
       return modification satisfies never;
@@ -302,6 +304,9 @@ function emitModification(
     case 'header-removal':
       emitHeaderRemovalRule(modification, priority, profileId, tabIds, emitter);
       return;
+    case 'block':
+      emitBlockRule(modification, priority, profileId, tabIds, emitter);
+      return;
     default:
       modification satisfies never;
   }
@@ -461,6 +466,42 @@ function emitHeaderRemovalRule(
         requestHeaders: [{ header, operation: 'remove' }],
         responseHeaders: [{ header, operation: 'remove' }],
       },
+      condition: conditionFor(modification.conditions, own ?? {}, tabIds),
+    },
+    { profileId, modificationId: modification.id },
+  );
+}
+
+/**
+ * Block — 매칭된 요청을 차단한다 (ADR 0015).
+ *
+ * 액션은 조건이 없는 상수(`{ type: 'block' }`)이고, 무엇을 막을지는 전적으로 조건 조립기가
+ * 정한다 — Block 전용 조건 경로를 따로 두지 않는 것이 이 종류의 요점이다.
+ */
+function emitBlockRule(
+  modification: Extract<Modification, { kind: 'block' }>,
+  priority: number,
+  profileId: string,
+  tabIds: number[] | undefined,
+  emitter: Emitter,
+): void {
+  if ((modification.urlFilter?.trim() ?? '') === '') {
+    // 스코프 없는 Block은 "모든 요청 차단"이다 — 사용자가 의도할 수 있는 값이 아니라
+    // 실수의 모양이라, 방출하지 않고 알린다. 폼 검증과 같은 판단의 두 번째 방어선이다.
+    emitter.warnings.push({
+      code: 'block-without-scope',
+      profileId,
+      modificationId: modification.id,
+    });
+    return;
+  }
+  const own = ownScope(modification, profileId, emitter);
+  if (own === null) return;
+  emitRule(
+    emitter,
+    {
+      priority,
+      action: { type: 'block' },
       condition: conditionFor(modification.conditions, own ?? {}, tabIds),
     },
     { profileId, modificationId: modification.id },

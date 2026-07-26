@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { compile } from './compile';
-import { missingRequiredFields } from './rule-validation';
+import { fieldIssues } from './rule-validation';
 import {
   createDefaultState,
   createModification,
@@ -132,16 +132,16 @@ describe('겹침 경고는 헤더를 만지는 모든 종류를 본다', () => {
 
 describe('검증·영속 계약', () => {
   it('UA는 값이 필수다 — 비면 UA를 빈 문자열로 보내는 사고가 된다', () => {
-    expect(missingRequiredFields({ ...createModification('user-agent'), value: '' } as Modification))
-      .toEqual(['value']);
-    expect(missingRequiredFields({ ...createModification('user-agent'), value: 'X' } as Modification))
+    expect(fieldIssues({ ...createModification('user-agent'), value: '' } as Modification))
+      .toEqual([{ field: 'value', reason: 'required' }]);
+    expect(fieldIssues({ ...createModification('user-agent'), value: 'X' } as Modification))
       .toEqual([]);
   });
 
   it('Header Removal은 이름이 필수다', () => {
-    expect(missingRequiredFields({ ...createModification('header-removal'), name: ' ' } as Modification))
-      .toEqual(['name']);
-    expect(missingRequiredFields({ ...createModification('header-removal'), name: 'X-Foo' } as Modification))
+    expect(fieldIssues({ ...createModification('header-removal'), name: ' ' } as Modification))
+      .toEqual([{ field: 'name', reason: 'required' }]);
+    expect(fieldIssues({ ...createModification('header-removal'), name: 'X-Foo' } as Modification))
       .toEqual([]);
   });
 

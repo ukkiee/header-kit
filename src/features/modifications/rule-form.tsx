@@ -1,6 +1,7 @@
 import { useRef, useState, type RefObject } from 'react';
 import type { MessageKey } from '@/core/i18n';
-import { missingRequiredFields, type RequiredField } from '@/core/rule-validation';
+import { fieldIssues, type FieldIssue, type RequiredField } from '@/core/rule-validation';
+import { urlScopeBreadth } from '@/core/url-scope';
 import { isRequestAppendAllowed } from '@/core/rules';
 import {
   createModification,
@@ -39,6 +40,7 @@ const RULE_KINDS: ModificationKind[] = [
   'redirect',
   'user-agent',
   'header-removal',
+  'block',
 ];
 
 /**
@@ -60,7 +62,13 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
   // 조건 disclosure 열림 — 기존 조건이 있으면 펼쳐서 시작.
   const [condOpen, setCondOpen] = useState(draft.conditions !== undefined);
   // 저장 차단 검증 (ui-refine 04) — Save 시점에 계산, 다음 Save까지 유지.
-  const [fieldErrors, setFieldErrors] = useState<readonly RequiredField[]>([]);
+  const [fieldErrors, setFieldErrors] = useState<readonly FieldIssue[]>([]);
+  /**
+   * 넓은 스코프 Block의 확인 대기 (티켓 04). Save를 눌렀는데 스코프가 어느 도메인에도
+   * 묶여 있지 않으면 여기 불이 켜지고, 사용자가 한 번 더 명시적으로 눌러야 저장된다 —
+   * 요청을 통째로 없애는 종류라 "실수로 눌렀다"와 "정말 원한다"를 구별해야 한다.
+   */
+  const [wideScopePending, setWideScopePending] = useState(false);
 
   /**
    * 필수 필드 → 그 값을 입력하는 요소. 저장이 검증으로 막히면 첫 누락 필드로 포커스를
@@ -74,14 +82,20 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
   const patternRef = useRef<HTMLInputElement>(null);
   const substitutionRef = useRef<HTMLInputElement>(null);
   const valueRef = useRef<HTMLInputElement>(null);
+  const urlFilterRef = useRef<HTMLInputElement>(null);
   const requiredFieldRefs: Record<RequiredField, RefObject<HTMLInputElement | null>> = {
     name: nameRef,
     pattern: patternRef,
     substitution: substitutionRef,
     value: valueRef,
+    urlFilter: urlFilterRef,
   };
-  const requiredError = (field: RequiredField) =>
-    fieldErrors.includes(field) ? t('requiredField') : undefined;
+  /** 막힌 이유마다 다른 문구 — "필수"와 "이 패턴은 못 쓴다"는 사용자가 할 일이 다르다. */
+  const fieldError = (field: RequiredField) => {
+    const issue = fieldErrors.find((e) => e.field === field);
+    if (!issue) return undefined;
+    return issue.reason === 'required' ? t('requiredField') : t('unsupportedPattern');
+  };
 
   const KIND_LABELS: Record<ModificationKind, MessageKey> = {
     'request-header': 'kindRequestHeader',
@@ -91,6 +105,7 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
     redirect: 'modRedirect',
     'user-agent': 'kindUserAgent',
     'header-removal': 'kindHeaderRemoval',
+    block: 'kindBlock',
   };
 
   const switchKind = (kind: ModificationKind) => {
@@ -105,20 +120,36 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
     } as Modification);
     // 이전 종류의 검증 오류는 새 초안과 무관하다 — 아직 Save한 적 없는데 표시되면 안 된다.
     setFieldErrors([]);
+    // 확인 대기도 이전 종류의 것이다 — Block에서 벗어나면 경고가 남아 있을 이유가 없다.
+    setWideScopePending(false);
   };
 
-  const save = async () => {
+  /**
+   * 스코프가 어느 도메인에도 묶이지 않은 Block인가 — 확인을 받아야 하는 경우다.
+   * Block이 아닌 종류는 넓어도 헤더를 고칠 뿐이라 여기 오지 않는다.
+   */
+  const needsWideScopeConfirm =
+    draft.kind === 'block' &&
+    urlScopeBreadth(draft.urlFilter, draft.urlMatchType ?? defaultMatchType) === 'wide';
+
+  const save = async (confirmedWideScope = false) => {
     // 이미 보낸 저장이 응답을 기다리는 중이면 아무것도 하지 않는다. 버튼의 disabled는
     // 포인터 경로만 막고, Cmd/Ctrl+Enter는 여기를 직접 부른다.
     if (inFlight.current) return;
     // 빈 필수 필드는 저장을 통과하지 못한다 — 인라인 오류로 그 자리에서 알린다.
-    const missing = missingRequiredFields(draft);
-    setFieldErrors(missing);
+    const issues = fieldIssues(draft);
+    setFieldErrors(issues);
     // 첫 누락 항목으로 — Redirect에서 패턴·치환이 둘 다 비면 검증이 패턴을 먼저
     // 돌려주므로(rule-validation의 push 순서) 자연스러운 입력 순서를 따른다.
-    const firstMissing = missing[0];
-    if (firstMissing) {
-      requiredFieldRefs[firstMissing].current?.focus();
+    const firstIssue = issues[0];
+    if (firstIssue) {
+      requiredFieldRefs[firstIssue.field].current?.focus();
+      return;
+    }
+    // 넓은 스코프 Block은 한 번 더 물어본다 — 검증과 달리 저장을 금지하는 게 아니라,
+    // 무엇이 일어날지 보여 주고 사용자가 다시 누르게 한다.
+    if (needsWideScopeConfirm && !confirmedWideScope) {
+      setWideScopePending(true);
       return;
     }
     inFlight.current = true;
@@ -215,9 +246,11 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
               // width가 폭을 고정하고, 아래 shrink-0은 좁은 자리에서 눌리지 않게 지킨다.
               width="fixed"
               value={('urlMatchType' in draft ? draft.urlMatchType : undefined) ?? defaultMatchType}
-              onValueChange={(value) =>
-                setDraft({ ...draft, urlMatchType: value } as Modification)
-              }
+              onValueChange={(value) => {
+                setDraft({ ...draft, urlMatchType: value } as Modification);
+                // 같은 문자열도 매치 방식이 달라지면 폭이 달라진다 — 확인을 다시 받는다.
+                setWideScopePending(false);
+              }}
               className="shrink-0"
               options={[
                 { value: 'contains', label: t('matchContains') },
@@ -227,27 +260,42 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
               ]}
             />
             <Input
+              ref={urlFilterRef}
+              // Block에서는 이 입력이 규칙의 전부라, 폼을 열면 여기부터 채우게 한다.
+              autoFocus={draft.kind === 'block'}
               value={'urlFilter' in draft ? (draft.urlFilter ?? '') : ''}
-              onChange={(e) =>
+              onChange={(e) => {
                 setDraft({
                   ...draft,
                   urlFilter: e.target.value === '' ? undefined : e.target.value,
-                } as Modification)
-              }
+                } as Modification);
+                // 스코프를 고치는 중이면 경고를 내린다 — 좁히려는 사람에게 낡은 경고를
+                // 계속 보여 주면 확인 버튼을 누르는 쪽으로 떠민다.
+                setWideScopePending(false);
+              }}
               placeholder={scopePlaceholder[currentMatchType]}
               aria-label={t('urlFilterScope')}
               className="min-w-0 flex-1 font-mono"
             />
           </div>
+          {fieldError('urlFilter') && (
+            <span className="text-[11px] text-red-600 dark:text-red-400">{fieldError('urlFilter')}</span>
+          )}
         </div>
       )}
+
+      {/*
+        Block — 이름도 값도 묻지 않는다. 무엇을 막을지는 위의 URL 스코프가 전부 정하므로
+        이 종류의 폼은 스코프 + 조건 + 메모뿐이다 (ADR 0015).
+      */}
+      {draft.kind === 'block' && <NoteText>{t('blockNote')}</NoteText>}
 
       {/*
         User-Agent — 값 하나만 받는다. 헤더 이름은 `User-Agent`로 고정이라 묻지 않는다
         (물으면 오타로 조용히 동작하지 않는 규칙이 생긴다, ADR 0015).
       */}
       {draft.kind === 'user-agent' && (
-        <FieldLabeled label={t('kindUserAgent')} error={requiredError('value')}>
+        <FieldLabeled label={t('kindUserAgent')} error={fieldError('value')}>
           <Input
             ref={valueRef}
             autoFocus
@@ -264,7 +312,7 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
         것이 이 종류의 전부다).
       */}
       {draft.kind === 'header-removal' && (
-        <FieldLabeled label={t('headerName')} error={requiredError('name')}>
+        <FieldLabeled label={t('headerName')} error={fieldError('name')}>
           <HeaderNameInput
             ref={nameRef}
             autoFocus
@@ -281,7 +329,7 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
             {'name' in draft ? (
               <FieldLabeled
                 label={draft.kind === 'cookie' ? t('cookieName') : t('headerName')}
-                error={requiredError('name')}
+                error={fieldError('name')}
               >
                 {draft.kind === 'cookie' ? (
                   // 쿠키 이름은 헤더 사전 자동완성 대상이 아니다 — 평문 입력.
@@ -356,7 +404,7 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
       {draft.kind === 'redirect' && (
         <>
           <div className="grid grid-cols-2 gap-2">
-            <FieldLabeled label={t('ariaRedirectPattern')} error={requiredError('pattern')}>
+            <FieldLabeled label={t('ariaRedirectPattern')} error={fieldError('pattern')}>
               <Input
                 ref={patternRef}
                 autoFocus
@@ -366,7 +414,7 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
                 placeholder="^https://prod\\.example\\.com/(.*)"
               />
             </FieldLabeled>
-            <FieldLabeled label={t('ariaRedirectSubstitution')} error={requiredError('substitution')}>
+            <FieldLabeled label={t('ariaRedirectSubstitution')} error={fieldError('substitution')}>
               <Input
                 ref={substitutionRef}
                 className="font-mono"
@@ -416,6 +464,29 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
       {saveError && (
         <AlertBanner severity="danger" role="alert">
           {saveError}
+        </AlertBanner>
+      )}
+
+      {/*
+        넓은 스코프 Block의 확인 (티켓 04) — 저장을 막는 것이 아니라 **한 번 더 묻는** 자리다.
+        검증 오류(danger)와 톤을 갈라 warn을 쓰는 이유가 여기 있다: 이건 틀린 입력이 아니라
+        되돌리기 비싼 입력이다. 확인 버튼을 Save와 따로 두어, 같은 자리를 두 번 누르다
+        지나치는 일이 없게 한다.
+      */}
+      {wideScopePending && (
+        <AlertBanner severity="warn" role="alert" as="div">
+          <p>{t('wideScopeWarning')}</p>
+          <div className="mt-1.5 flex justify-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="px-4"
+              onClick={() => void save(true)}
+              disabled={saving}
+            >
+              {t('confirmWideScope')}
+            </Button>
+          </div>
         </AlertBanner>
       )}
 

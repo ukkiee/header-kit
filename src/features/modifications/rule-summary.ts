@@ -10,7 +10,7 @@ import { formatExpiryBadge } from './expiry-format';
 export interface RuleView {
   /** 표시 제목 — 메모 우선, 없으면 대표 필드(헤더/쿠키 이름), 그것도 없으면 배지. */
   title: string;
-  badge: 'REQ' | 'RES' | 'COOKIE' | 'SET-COOKIE' | 'REDIRECT' | 'UA' | 'DEL';
+  badge: 'REQ' | 'RES' | 'COOKIE' | 'SET-COOKIE' | 'REDIRECT' | 'UA' | 'DEL' | 'BLOCK';
   /** 한 줄 효과 요약 (mono 렌더 가정). */
   summary: string;
   /** 조건 배지 줄 (ADR 0010, ui-refine 05) — 없으면 빈 배열이라 행 높이가 불변. */
@@ -36,6 +36,7 @@ const BADGES: Record<ModificationKind, RuleView['badge']> = {
   redirect: 'REDIRECT',
   'user-agent': 'UA',
   'header-removal': 'DEL',
+  block: 'BLOCK',
 };
 
 /** 조건을 값 배지 목록으로 (ui-refine 05) — 차원이 구별되는 표기. */
@@ -66,10 +67,22 @@ export function conditionBadges(conditions: RuleConditions | undefined): Conditi
 
 export function ruleView(m: Modification, t: Translator): RuleView {
   const view = bareView(m, t);
-  // 규칙 자신의 URL 필터(ADR 0007)는 효과 앞에 붙는다 — `imtest.me/ → x-test: aaa`.
-  const scope = 'urlFilter' in m ? m.urlFilter?.trim() : undefined;
-  const summary = scope ? `${scope} → ${view.summary}` : view.summary;
-  return { ...view, summary, conditionBadges: conditionBadges(m.conditions) };
+  return { ...view, summary: scopedSummary(m, view.summary, t), conditionBadges: conditionBadges(m.conditions) };
+}
+
+/**
+ * 규칙의 **실효** URL 스코프를 효과 앞에 붙인다 — `imtest.me/ → x-test: aaa` (ADR 0007).
+ *
+ * 필터가 비었을 때 아무것도 그리지 않던 것을 "모든 URL"로 바꾼 것이 티켓 04의 요점이다.
+ * 빈칸은 "스코프가 없다"와 "아직 안 봤다"를 구별해 주지 않는데, 요청을 통째로 없애는
+ * Block에서는 그 차이가 페이지가 깨지는지 아닌지를 가른다.
+ */
+function scopedSummary(m: Modification, effect: string, t: Translator): string {
+  // Redirect는 자기 pattern이 곧 스코프다 — 앞에 또 붙이면 스코프를 두 번 말한다.
+  if (m.kind === 'redirect') return effect;
+  const scope = ('urlFilter' in m ? m.urlFilter?.trim() : '') || t('scopeAllUrls');
+  // Block은 효과가 뱃지에 이미 다 담겨 있어(BLOCK), 요약 한 줄을 스코프에 온전히 내준다.
+  return m.kind === 'block' ? scope : `${scope} → ${effect}`;
 }
 
 /** 조건·스코프를 뺀 기본 뷰 — ruleView가 스코프·조건 배지를 얹는다. */
@@ -92,6 +105,11 @@ function bareView(m: Modification, t: Translator): BareView {
   if (m.kind === 'user-agent') {
     // 대상은 고정 헤더, 효과는 보낼 UA 문자열이다.
     return { title: m.comment || t('kindUserAgent'), badge, summary: m.value || t('emptyMarker') };
+  }
+
+  if (m.kind === 'block') {
+    // 효과는 뱃지와 제목이 말한다 — 요약 자리는 scopedSummary가 스코프로 채운다.
+    return { title: m.comment || t('kindBlock'), badge, summary: '' };
   }
 
   if (m.kind === 'header-removal') {

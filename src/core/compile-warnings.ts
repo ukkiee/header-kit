@@ -43,6 +43,16 @@ export type CompileWarning =
       modificationId: string;
     }
   | {
+      /**
+       * URL 스코프 없는 Block — 방출하지 않았다. 스코프 없는 Block은 "모든 요청 차단"이라
+       * 사용자가 의도할 수 있는 값이 아니다. 폼 검증이 이미 막지만 import·레거시 데이터는
+       * 그 문을 거치지 않으므로 compile에도 방어선을 둔다.
+       */
+      code: 'block-without-scope';
+      profileId: string;
+      modificationId: string;
+    }
+  | {
       /** 허용 목록 밖 요청 헤더에 append를 요청 — set으로 폴백했다. */
       code: 'append-not-allowed';
       profileId: string;

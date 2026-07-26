@@ -15,6 +15,7 @@ const WARN_LABEL: Record<WarningView['code'], MessageKey> = {
   'quota-exceeded': 'warnQuotaExceeded',
   'missing-materialization': 'warnMissingMaterialization',
   'append-not-allowed': 'warnAppendNotAllowed',
+  'block-without-scope': 'warnBlockWithoutScope',
 };
 
 /** 경고 상세 MessageKey — quota는 total/regex를 params로 분기. */
@@ -34,6 +35,8 @@ function detailKey(warning: WarningView): MessageKey {
       return 'warnMissingMaterializationDetail';
     case 'append-not-allowed':
       return 'warnAppendNotAllowedDetail';
+    case 'block-without-scope':
+      return 'warnBlockWithoutScopeDetail';
   }
 }
 

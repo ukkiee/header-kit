@@ -180,6 +180,27 @@ export interface HeaderRemovalModification {
   conditions?: RuleConditions;
 }
 
+/**
+ * Block — 매칭된 요청을 아예 차단한다 (ADR 0015).
+ *
+ * 이름도 값도 없다. 무엇을 막을지는 **오직 URL 스코프와 Condition**이 정하므로, 이 종류에서
+ * 스코프는 선택 필드가 아니라 규칙의 전부다 — 스코프가 없으면 "모든 요청을 막는다"가 되고,
+ * 그건 사용자가 의도할 수 있는 값이 아니라 실수의 모양이다. 검증이 스코프를 필수로 요구하고
+ * compile이 스코프 없는 Block을 방출하지 않는 것은 같은 이유의 두 방어선이다.
+ */
+export interface BlockModification {
+  kind: 'block';
+  id: string;
+  comment: string;
+  enabled: boolean;
+  /** 차단 대상 URL (ADR 0007) — 이 종류에서는 사실상 필수다. */
+  urlFilter?: string;
+  /** urlFilter의 매치 방식 (ADR 0008) — 부재 = regex. */
+  urlMatchType?: UrlMatchType;
+  /** 적용 조건 (ADR 0010) — 없으면 스코프에 걸리는 모든 요청. */
+  conditions?: RuleConditions;
+}
+
 export type Modification =
   | RequestHeaderModification
   | ResponseHeaderModification
@@ -187,7 +208,8 @@ export type Modification =
   | SetCookieModification
   | RedirectModification
   | UserAgentModification
-  | HeaderRemovalModification;
+  | HeaderRemovalModification
+  | BlockModification;
 
 /**
  * Placeholder 실체화 대상이 되는 값 문자열 (없으면 null).
@@ -310,6 +332,9 @@ export function createModification(kind: ModificationKind, id: string = crypto.r
     case 'header-removal':
       // 지울 이름만 받는다 — 값·mode가 없다(양쪽에서 제거하는 것이 전부).
       return { kind, ...common, name: '' };
+    case 'block':
+      // 이름도 값도 없다 — 무엇을 막을지는 URL 스코프와 Condition만이 정한다.
+      return { kind, ...common };
     default:
       return kind satisfies never;
   }

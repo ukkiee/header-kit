@@ -1815,7 +1815,7 @@ try {
   }
   // 퇴역 CSP(ADR 0013)는 없고, 살아 있는 종류는 **정확히** 이 목록이다. 길이까지 보는 이유는
   // 종류가 조용히 늘거나 줄면 폼·컴파일·요약이 함께 갱신됐는지 확인할 지점이 필요해서다.
-  // User-Agent·Remove header는 ADR 0015에서 더해졌다.
+  // User-Agent·Remove header·Block request는 ADR 0015에서 더해졌다.
   const keptKinds = [
     'Request header',
     'Response header',
@@ -1824,8 +1824,9 @@ try {
     'Redirect',
     'User-Agent',
     'Remove header',
+    'Block request',
   ];
-  record('N18f: Type 셀렉트 옵션 — CSP 없음, 살아 있는 7종 정확히 유지',
+  record('N18f: Type 셀렉트 옵션 — CSP 없음, 살아 있는 8종 정확히 유지',
     typeOpened && !kindOptions.some((o) => /csp/i.test(o)) &&
       keptKinds.every((k) => kindOptions.includes(k)) && kindOptions.length === keptKinds.length,
     `열림=${typeOpened}, options=[${kindOptions.join(' | ')}]`);
@@ -1866,9 +1867,69 @@ try {
     .isVisible()
     .catch(() => false);
   const delHidesValue = (await popup.getByLabel('Value', { exact: true }).count()) === 0;
-  record('N18g: 새 종류 폼 — UA는 값만, Remove header는 이름만',
-    uaValueShown && uaHidesHeaderName && delNameShown && delHidesValue,
-    `ua: value=${uaValueShown} no-name=${uaHidesHeaderName}, del: name=${delNameShown} no-value=${delHidesValue}`);
+  await pickOption(popup, 'Type', 'Block request');
+  const blockHidesName = (await popup.getByLabel('Header name', { exact: true }).count()) === 0;
+  const blockHidesValue = (await popup.getByLabel('Value', { exact: true }).count()) === 0;
+  const blockScopeShown = await popup
+    .getByLabel('URL filter (this rule only)', { exact: true })
+    .isVisible()
+    .catch(() => false);
+  record('N18g: 새 종류 폼 — UA는 값만, Remove header는 이름만, Block은 스코프만',
+    uaValueShown && uaHidesHeaderName && delNameShown && delHidesValue &&
+      blockHidesName && blockHidesValue && blockScopeShown,
+    `ua: value=${uaValueShown} no-name=${uaHidesHeaderName}, del: name=${delNameShown} no-value=${delHidesValue}, ` +
+      `block: no-name=${blockHidesName} no-value=${blockHidesValue} scope=${blockScopeShown}`);
+
+  /*
+   * N18h: 넓은 스코프 Block은 확인 없이 저장되지 않는다 (티켓 04).
+   *
+   * Block은 요청을 통째로 없애는 유일한 종류라, 도메인에 묶이지 않은 스코프는 사용자가
+   * 예상한 것보다 훨씬 넓게 걸린다. 여기서 보는 것은 경고 문구가 떴는지가 아니라
+   * **첫 Save에서 저장이 실제로 일어나지 않았는지**다 — 배너만 띄우고 저장은 그대로
+   * 진행되면 경고는 장식이 된다. 확인을 누른 뒤에야 저장소에 규칙이 생긴다.
+   */
+  const blockRuleCount = () =>
+    sw.evaluate(async () => {
+      const { state } = await chrome.storage.local.get('state');
+      return state.profiles.flatMap((p) => p.modifications).filter((m) => m.kind === 'block').length;
+    });
+  await popup.getByLabel('URL filter').fill('*://*/*');
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  const wideWarned = await popup
+    .getByRole('button', { name: 'Block anyway', exact: true })
+    .waitFor({ timeout: 5000 })
+    .then(() => true, () => false);
+  const notSavedYet = (await blockRuleCount()) === 0;
+  await popup.getByRole('button', { name: 'Block anyway', exact: true }).click();
+  const savedAfterConfirm = await pollUntil(blockRuleCount, (n) => n === 1);
+  await waitFormClosed();
+  record('N18h: 넓은 스코프 Block — 첫 Save는 저장하지 않고 확인을 요구, 확인 후 저장',
+    wideWarned && notSavedYet && savedAfterConfirm === 1,
+    `warned=${wideWarned}, not-saved-before-confirm=${notSavedYet}, saved-after-confirm=${savedAfterConfirm}`);
+
+  /*
+   * N18i: 좁은 스코프 Block은 확인을 요구하지 않는다 — 경고가 모든 Block에 뜨면
+   * 사용자는 곧 읽지 않고 누르게 되고, 넓은 스코프 경고의 값이 사라진다.
+   */
+  await popup.getByRole('button', { name: 'Add rule' }).click();
+  await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
+  await pickOption(popup, 'Type', 'Block request');
+  await popup.getByLabel('URL filter').fill('ads.example.com');
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  const narrowSaved = await pollUntil(blockRuleCount, (n) => n === 2);
+  await waitFormClosed();
+  // 목록은 실효 스코프를 항상 보여 준다 — 넓은 Block이 여기서 드러난다.
+  const wideScopeVisibleInList = await popup
+    .getByText('*://*/*', { exact: true })
+    .isVisible()
+    .catch(() => false);
+  record('N18i: 좁은 스코프 Block은 바로 저장 + 목록이 실효 스코프를 보여 준다',
+    narrowSaved === 2 && wideScopeVisibleInList,
+    `narrow-saved=${narrowSaved}, wide-scope-in-list=${wideScopeVisibleInList}`);
+
+  // 아래 c~e는 열린 폼을 이어서 굴린다 — Block 저장으로 닫혔으니 다시 연다.
+  await popup.getByRole('button', { name: 'Add rule' }).click();
+  await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
 
   // c: 모드 숨김 — 비허용 요청 헤더 이름이면 Mode 미노출, 허용(Accept)이면 노출
   await pickOption(popup, 'Type', 'Request header');

@@ -161,6 +161,7 @@ const richState = {
         // 새 종류(ADR 0015)도 행을 그린다 — 픽스처에 없으면 UA/DEL 행이 진단에 한 번도 렌더되지 않는다.
         { kind: 'user-agent', id: 'm6', value: 'Mozilla/5.0 (Macintosh) HeaderKit/diag', comment: '', enabled: true },
         { kind: 'header-removal', id: 'm7', name: 'X-Powered-By', comment: '', enabled: true },
+        { kind: 'block', id: 'm8', urlFilter: 'ads.example.com', urlMatchType: 'domain', comment: '', enabled: true },
       ],
     },
     { id: 'p2', name: '두 번째 프로필', active: false, shortLabel: '2', color: '#2563eb', modifications: [] },

@@ -72,6 +72,9 @@ export function isModification(value: unknown): value is Modification {
     case 'header-removal':
       // 이름만 갖는다 — 값·mode가 없다.
       return typeof value.name === 'string';
+    case 'block':
+      // 고유 필드가 없다 — URL 스코프·조건은 위 공통 검증이 이미 봤다.
+      return true;
     default:
       return false;
   }
@@ -138,10 +141,11 @@ export function backfillModification(value: unknown): unknown {
   }
   /*
    * mode·emptyMeans는 **값을 가진 헤더 계열에만** 의미가 있다. user-agent(값만)·
-   * header-removal(이름만)에 붙이면 저장소에 뜻 없는 필드가 쌓이고, 나중에 그 필드를
-   * 읽는 코드가 생기면 조용히 잘못된 분기를 탄다.
+   * header-removal(이름만)·block(둘 다 없음)에 붙이면 저장소에 뜻 없는 필드가 쌓이고,
+   * 나중에 그 필드를 읽는 코드가 생기면 조용히 잘못된 분기를 탄다.
    */
-  const headerish = value.kind !== 'user-agent' && value.kind !== 'header-removal';
+  const headerish =
+    value.kind !== 'user-agent' && value.kind !== 'header-removal' && value.kind !== 'block';
   // 무효 urlMatchType은 치유로 벗긴다(부재 = regex 하위 호환) — 전량 거부 방지.
   const healed: Record<string, unknown> = {
     ...(headerish ? { mode: 'override', emptyMeans: 'remove' } : {}),
