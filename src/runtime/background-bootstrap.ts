@@ -132,13 +132,18 @@ export function bootstrap(deps: BackgroundDeps): void {
   let lastBackupAt = 0;
   /** 전체 초기화가 저장소를 비우는 동안 켜진다 (R-3) — 그 창에서는 스냅샷을 쓰지 않는다. */
   let backupSuspended = false;
+  /** 진행 중인 백업 — 중단은 이것을 기다려야 가드를 이미 지난 스냅샷이 뒤늦게 착지하지 않는다. */
+  let inFlightBackup: Promise<void> = Promise.resolve();
   const runBackup = async () => {
     backupScheduled = false;
     /*
-     * 중단 중이면 아무것도 쓰지 않는다. 이 한 줄이 초기화의 유일한 경합을 없앤다 —
-     * 없으면 디바운스 중이던 스냅샷이 방금 비운 저장소에 옛 프로필을 다시 써 넣어,
-     * 사용자 눈에는 "초기화했는데 백업이 되살아난" 것으로 보인다. 재개가 직접 다시
-     * 예약하므로 여기서 예약을 되살릴 필요는 없다.
+     * 중단 중이면 아무것도 쓰지 않는다. 없으면 디바운스 중이던 스냅샷이 방금 비운
+     * 저장소에 옛 프로필을 다시 써 넣어, 사용자 눈에는 "초기화했는데 백업이 되살아난"
+     * 것으로 보인다. 재개가 직접 다시 예약하므로 여기서 예약을 되살릴 필요는 없다.
+     *
+     * 이 한 번의 검사만으로는 부족하다 — 아래 두 await 사이에 초기화가 시작되면 이미
+     * 가드를 지난 이 실행은 막히지 않는다. 그래서 performBackup 직전에 다시 보고,
+     * 중단하는 쪽은 진행 중인 이 promise를 기다린다.
      */
     if (backupSuspended) return;
     lastBackupAt = deps.now();
@@ -162,6 +167,9 @@ export function bootstrap(deps: BackgroundDeps): void {
         );
         return;
       }
+      // 재검사: 여기 도달하기까지 지나온 await 동안 초기화가 시작됐을 수 있다. 이 스냅샷은
+      // 옛 payload를 들고 있어, 삭제·검증이 끝난 뒤에 착지하면 그대로 남는다.
+      if (backupSuspended) return;
       const state = read.state;
       await deps.performBackup(backupPayload(state), state.profiles.length, backupTarget(state));
     } catch (error) {
@@ -172,7 +180,9 @@ export function bootstrap(deps: BackgroundDeps): void {
     if (backupScheduled) return; // 이미 예약됨 — 가장 이른 실행 유지
     backupScheduled = true;
     const delay = Math.max(3_000, lastBackupAt + 30_000 - deps.now());
-    deps.setTimer(() => void runBackup(), delay);
+    deps.setTimer(() => {
+      inFlightBackup = runBackup();
+    }, delay);
   };
 
   /**
@@ -183,8 +193,11 @@ export function bootstrap(deps: BackgroundDeps): void {
   const fullReset = async (): Promise<StoredState> => {
     const applied: { state?: StoredState } = {};
     const result = await performFullReset({
-      suspendAutoBackup: () => {
+      suspendAutoBackup: async () => {
         backupSuspended = true;
+        // 플래그만으로는 이미 가드를 지나 진행 중인 백업을 막을 수 없다 — 그것이 끝나기를
+        // 기다린 뒤에 삭제를 시작한다(그 실행은 performBackup 직전 재검사에서 멈춘다).
+        await inFlightBackup;
       },
       resumeAutoBackup: ({ snapshot }) => {
         backupSuspended = false;

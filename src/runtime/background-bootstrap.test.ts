@@ -277,6 +277,59 @@ describe('background bootstrap', () => {
     expect(backups).toBeGreaterThan(0);
   });
 
+  /*
+   * 중단은 **이미 가드를 지난** in-flight 백업까지 막아야 한다. 위 테스트는 중단 이후에
+   * 발화하는 타이머만 모델해 이 창이 비어 있었다.
+   */
+  it('중단은 가드를 이미 지난 in-flight 백업도 착지시키지 않는다', async () => {
+    const areas: Record<string, Record<string, unknown>> = {
+      local: {},
+      sync: { 'bk:manifest': { snapshots: [] }, 'bk:s1:0': 'chunk' },
+    };
+    const timers: (() => void)[] = [];
+    let handler: ((command: Command) => Promise<StoredState>) | undefined;
+    let releaseRead = () => {};
+    const readGate = new Promise<void>((resolve) => void (releaseRead = resolve));
+    let reads = 0;
+    const backedUp: string[] = [];
+
+    bootstrap(
+      fakeDeps({
+        readState: async () => {
+          reads += 1;
+          if (reads === 1) await readGate; // 첫 백업은 가드를 지난 채 여기서 멈춰 있다
+          return { status: 'ok', state: createDefaultState() };
+        },
+        performBackup: async (payload) => {
+          backedUp.push(payload);
+          areas.sync!['bk:late:0'] = payload;
+        },
+        readBackupKV: async (target) => ({ ...areas[target] }),
+        removeBackupKeys: async (target, keys) => {
+          for (const key of keys) delete areas[target]![key];
+        },
+        onCommand: (h) => {
+          handler = h;
+        },
+        setTimer: (cb) => {
+          timers.push(cb);
+        },
+      }),
+    );
+    await flush();
+    for (const fire of timers.splice(0)) fire(); // 백업 시작 — readState에서 멈춘다
+    await flush();
+    expect(backedUp).toEqual([]); // 아직 가드를 지나 진행 중
+
+    const reset = handler!({ type: 'full-reset' });
+    releaseRead(); // in-flight 백업이 이제 performBackup 앞까지 간다
+    await reset;
+    await flush();
+
+    expect(backedUp).toEqual([]); // 재검사에서 멈췄다 — 옛 payload는 착지하지 않았다
+    expect(Object.keys(areas.sync!)).toEqual([]);
+  });
+
   it('onExpiryAlarm이 실행자를 지나 만료 전이를 태운다 (persist)', async () => {
     let expiryAlarm = () => {};
     let persistCalls = 0;
