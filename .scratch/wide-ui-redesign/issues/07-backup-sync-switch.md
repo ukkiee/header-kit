@@ -4,7 +4,7 @@
 
 **Blocked by:** 01 (백업 화면 셸).
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] sync 저장 여부 플래그를 더하고, backup.ts의 **앞으로의** 저장 대상이 이 플래그에 따라 storage.sync ↔ storage.local로 갈린다(매니페스트·복원·quota는 대상에 맞춤)
 - [ ] 기존 설치 기본값은 sync ON (기존 히스토리가 그대로 보임)

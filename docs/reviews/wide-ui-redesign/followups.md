@@ -66,3 +66,14 @@
 ## T07-R-12 — `cloudSyncKeepsHistory` 세 번째 안내 문단
 티켓의 상태 문구 계약은 "켜짐/꺼짐 + 클라우드 잔존 여부" 둘이다. 무해하지만 추가분이라
 카피 리뷰 대상.
+
+## T07-R-6 — 내부 식별자·i18n 키의 `cloud` (accept 되었으나 미적용)
+`CONTEXT.md` Backup의 `_Avoid_: cloud sync`는 도메인·내부 층위를 덮고, 예외는 **사용자 대면
+라벨 값**뿐이다. 그런데 `hasCloudBackups()`/`clearCloudBackups()`, props
+`loadCloudPresence`/`clearCloud`, state `cloudPresent`/`cloudRevision`, i18n 키
+`cloudSync`·`cloudBackupsPresent/None`·`deleteCloudBackups`·`cloudDeleteFailed` 등 10개에
+박혀 있다. `hasSyncBackups`/`clearSyncBackups`, 키는 `syncBackup*`으로. ko/en 값은
+'클라우드 동기화' 그대로 둔다. **CR-1 r1에서 accept 되었지만 최소 리네임이 5파일
+(backupStore.ts · backup-panel.tsx · i18n.ts · backup-panel.stories.tsx · backupStore.test.ts)로
+커밋당 3파일 한도를 넘어 `guard:blast-radius`에 걸렸다** — fix가 아니라 별도 변경으로 다뤄야
+한다는 신호다.
