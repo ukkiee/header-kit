@@ -15,3 +15,4 @@ ticket 03 done: 7cd8056(구현)+리뷰반영. UA·Header Removal 종류. code-re
 ticket 04 start: 8e9714741d52ed9be9c815333a5d8d980431cd25
 ticket 04 done: a8158f0(구현)+5caebe8(리뷰반영). Block 종류 + 안전 계약(넓은 스코프 확인·못 쓰는 패턴 차단·실효 스코프 상시 표시·Pause 탈출구). code-review 두 축이 판정기 우회 8종(대안·선택그룹·경로조각·bare TLD)과 검증-화면 매치방식 불일치를 잡아 수정 — 정규식은 무관 호스트 탐침(.invalid)으로 실제 실행해 판정. vitest 289, smoke 110.
   판단 유보: 행의 '모든 URL' 접두를 전 종류에 적용(티켓 문구·user story 6의 문자적 해석). 스펙 리뷰어는 Block 한정이 최소 충실이라는 반대 의견 — 사용자에게 알렸고 되돌리려면 rule-summary.ts의 scopedSummary 한 곳.
+ticket 05 start: 33a0119f662454034ad917b68bca1a582bf586d1
