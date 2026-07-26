@@ -3513,6 +3513,90 @@ try {
       `cloud ${cloudBefore.length}→${cloudAfter.length} keys (intact=${cloudIntact}), ` +
       `rows sync ${rowsWhileOn}/${syncSnapshots} → local ${rowsWhileOff}/${localSnapshots} → back ${rowsBackOn}`);
 
+  /*
+   * N39: 2단계 전체 초기화 (티켓 08, R-3).
+   *
+   * 초기화는 되돌릴 수 없으므로 **한 번 더 눌러 확인**하기 전에는 아무것도 지워지면 안 된다.
+   * 그래서 둘을 함께 본다 — (a) 첫 클릭 뒤에도 프로필·백업 키가 그대로이고, (b) 확인 클릭
+   * 뒤에야 상태가 default로 돌아가며 **두 저장소**의 옛 스냅샷이 사라진다. (a)가 빠지면
+   * 오클릭 하나가 전부를 지우고, (b)가 빠지면 지웠다는 표시만 남는다.
+   *
+   * 마지막 시나리오다 — 이 뒤에 남는 상태는 없다.
+   */
+  const RESET_MARKER = 'ResetMarker';
+  // 지워질 것이 분명한 표식을 심는다: 상태의 프로필 + 두 저장소의 백업 키.
+  await sw.evaluate(async (marker) => {
+    const { state } = await chrome.storage.local.get('state');
+    state.profiles = [
+      ...state.profiles,
+      { id: 'reset-marker', name: marker, active: true, shortLabel: 'R', color: '#dc2626', modifications: [] },
+    ];
+    state.theme = 'dark';
+    state.badgeVisible = false;
+    await chrome.storage.local.set({ state });
+    for (const area of ['local', 'sync']) {
+      await chrome.storage[area].set({ [`bk:${marker}:0`]: `payload ${marker}` });
+    }
+  }, RESET_MARKER);
+
+  const bkDump = () =>
+    sw.evaluate(async () => {
+      const out = [];
+      for (const area of ['local', 'sync']) {
+        const kv = await chrome.storage[area].get(null);
+        for (const [key, value] of Object.entries(kv)) {
+          if (key.startsWith('bk:')) out.push(`${key}=${JSON.stringify(value)}`);
+        }
+      }
+      return out.join('|');
+    });
+  const readState = () => sw.evaluate(async () => (await chrome.storage.local.get('state')).state);
+
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Show backups' }).click();
+  await ensurePanelOpen(popup, 'Toggle backups');
+
+  // 1단계: 첫 클릭은 확인만 켠다 — 아직 아무것도 지워지지 않는다.
+  await popup.getByRole('button', { name: 'Reset everything' }).click();
+  await popup.waitForTimeout(1000);
+  const confirmVisible = await popup.getByRole('button', { name: 'Erase everything?' }).isVisible();
+  const stateAfterFirst = await readState();
+  const dumpAfterFirst = await bkDump();
+  const survivedFirstClick =
+    stateAfterFirst.profiles.some((p) => p.name === RESET_MARKER) &&
+    dumpAfterFirst.includes(RESET_MARKER);
+
+  // 2단계: 확인 클릭에서만 실행된다.
+  await popup.getByRole('button', { name: 'Erase everything?' }).click();
+  const stateAfterConfirm = await pollUntil(readState, (s) => s?.profiles?.length === 1, 15000, 200);
+  const dumpAfterConfirm = await pollUntil(
+    bkDump,
+    (dump) => !dump.includes(RESET_MARKER),
+    15000,
+    200,
+  );
+  const rulesAfter = await pollUntil(
+    () => sw.evaluate(async () => (await chrome.declarativeNetRequest.getSessionRules()).length),
+    (n) => n === 0,
+    15000,
+    200,
+  );
+  const defaults =
+    stateAfterConfirm.profiles.length === 1 &&
+    stateAfterConfirm.profiles[0].name === 'Default Profile' &&
+    stateAfterConfirm.theme === 'system' &&
+    stateAfterConfirm.badgeVisible === true &&
+    stateAfterConfirm.syncBackup === true &&
+    Object.keys(stateAfterConfirm.materialized ?? {}).length === 0;
+
+  record('N39: 2단계 전체 초기화 — 확인 전에는 무사, 확인 후 상태·두 저장소의 백업이 비워진다',
+    confirmVisible && survivedFirstClick && defaults &&
+      !dumpAfterConfirm.includes(RESET_MARKER) && rulesAfter === 0,
+    `1클릭: 확인버튼=${confirmVisible}, 표식 생존=${survivedFirstClick} · ` +
+      `2클릭: 프로필 ${stateAfterConfirm.profiles.length}개(${stateAfterConfirm.profiles[0]?.name}), ` +
+      `theme=${stateAfterConfirm.theme}, badge=${stateAfterConfirm.badgeVisible}, sync=${stateAfterConfirm.syncBackup}, ` +
+      `표식 잔재=${dumpAfterConfirm.includes(RESET_MARKER)}, 세션 규칙=${rulesAfter}`);
+
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
   process.exitCode = failed.length === 0 ? 0 : 1;

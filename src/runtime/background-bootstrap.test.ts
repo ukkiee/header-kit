@@ -12,6 +12,9 @@ function fakeDeps(overrides: Partial<BackgroundDeps> = {}): BackgroundDeps {
     publishSummary: async () => {},
     queryTabInfos: async () => [],
     performBackup: async () => undefined,
+    readBackupKV: async () => ({}),
+    removeBackupKeys: async () => {},
+    clearSummary: async () => {},
     replaceSessionRules: async () => {},
     applyBadge: async () => {},
     scheduleExpiryAlarm: async () => {},
@@ -198,6 +201,80 @@ describe('background bootstrap', () => {
     togglePause();
     await flush();
     expect(persisted?.paused).toBe(true);
+  });
+
+  /*
+   * 전체 초기화 (티켓 08, R-3) — core/reset이 정한 순서를 **실제 스케줄러**가 지키는지.
+   *
+   * core 테스트는 "중단 중에는 쓰지 않는다"는 계약만 알 뿐, 디바운스 타이머가 그 계약을
+   * 존중하는지는 모른다. 여기서 삭제 도중에 예약된 백업을 일부러 터뜨려, 방금 비운
+   * 저장소에 옛 데이터가 다시 써지지 않는지를 못 박는다.
+   */
+  it('전체 초기화는 자동 백업을 멈춘 채 두 저장소를 비우고, 끝난 뒤 다시 켠다', async () => {
+    const areas: Record<string, Record<string, unknown>> = {
+      local: { 'bk:manifest': { snapshots: [] }, 'bk:s1:0': 'chunk', state: { keep: true } },
+      sync: { 'bk:manifest': { snapshots: [] }, 'bk:s2:0': 'chunk' },
+    };
+    const populated: StoredState = {
+      ...createDefaultState(),
+      theme: 'dark',
+      profiles: [
+        { id: 'p1', name: 'One', active: true, shortLabel: '1', color: '#2563eb', modifications: [] },
+        { id: 'p2', name: 'Two', active: false, shortLabel: '2', color: '#16a34a', modifications: [] },
+      ],
+    };
+    const timers: (() => void)[] = [];
+    let handler: ((command: Command) => Promise<StoredState>) | undefined;
+    let backups = 0;
+    let backupsWhileResetting = 0;
+    let resetting = false;
+    let summaryCleared = false;
+
+    bootstrap(
+      fakeDeps({
+        loadState: async () => populated,
+        readState: async () => ({ status: 'ok', state: populated }),
+        onCommand: (h) => {
+          handler = h;
+        },
+        readBackupKV: async (target) => ({ ...areas[target] }),
+        removeBackupKeys: async (target, keys) => {
+          // 디바운스된 자동 백업이 하필 삭제 도중에 내려앉는다 — 중단이 없으면 여기서 되살아난다.
+          for (const fire of timers.splice(0)) fire();
+          await flush();
+          for (const key of keys) delete areas[target]![key];
+        },
+        clearSummary: async () => {
+          summaryCleared = true;
+        },
+        performBackup: async () => {
+          backups += 1;
+          if (resetting) backupsWhileResetting += 1;
+          return undefined;
+        },
+        setTimer: (cb) => {
+          timers.push(cb);
+        },
+      }),
+    );
+    await flush();
+    expect(timers.length).toBeGreaterThan(0); // 초기 예약 — 초기화 중에 터질 후보
+
+    resetting = true;
+    const state = await handler!({ type: 'full-reset' });
+    resetting = false;
+
+    expect(backupsWhileResetting).toBe(0);
+    expect(Object.keys(areas.local!)).toEqual(['state']); // 권위 상태는 남는다
+    expect(Object.keys(areas.sync!)).toEqual([]);
+    expect(state.profiles).toHaveLength(1);
+    expect(summaryCleared).toBe(true);
+
+    // 재개 — 다시 예약된 타이머가 이제는 실제로 백업한다 (깨끗한 default 스냅샷).
+    expect(timers.length).toBeGreaterThan(0);
+    for (const fire of timers.splice(0)) fire();
+    await flush();
+    expect(backups).toBeGreaterThan(0);
   });
 
   it('onExpiryAlarm이 실행자를 지나 만료 전이를 태운다 (persist)', async () => {

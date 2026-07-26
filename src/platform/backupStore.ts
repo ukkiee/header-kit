@@ -38,6 +38,15 @@ export async function readSyncKV(): Promise<SyncKV> {
   return readBackupKV('sync');
 }
 
+/**
+ * 지정한 키만 지운다 — 구역을 비우지 않는다. 무엇을 지울지는 호출부가 `backupKeys`로
+ * 정하므로, local 구역의 권위 상태(`state`)가 삭제에 휩쓸릴 자리가 없다 (전체 초기화 R-3).
+ */
+export async function removeBackupKeys(target: BackupTarget, keys: string[]): Promise<void> {
+  if (keys.length === 0) return;
+  await area(target).remove(keys);
+}
+
 export async function applyBackupPlan(plan: BackupPlan, target: BackupTarget): Promise<void> {
   if (plan.kind !== 'write') return;
 

@@ -7,7 +7,14 @@ import {
   materializeValue,
   type MaterializeDeps,
 } from './placeholder';
-import { normalizeConditions, placeholderTemplate, type Modification, type Profile, type StoredState } from './schema';
+import {
+  createDefaultState,
+  normalizeConditions,
+  placeholderTemplate,
+  type Modification,
+  type Profile,
+  type StoredState,
+} from './schema';
 import type { ThemePreference } from './theme';
 
 /** Modification이 Placeholder를 담은 값을 가지면 그 템플릿, 아니면 null. */
@@ -304,6 +311,17 @@ export function setSyncBackup(state: StoredState, enabled: boolean): StoredState
   return { ...state, syncBackup: enabled };
 }
 
+/**
+ * 공장 초기화의 상태 부분 (티켓 08, R-3) — 이전 상태를 **보지 않는다**.
+ *
+ * 프로필·선호값·실체화 값·사용자 헤더 이름이 전부 기본값으로 돌아간다. 남길 것을 고르는
+ * 순간 "무엇이 남았는지"를 화면과 저장소가 서로 다르게 알게 되고, 그것이 초기화가 없애려던
+ * 상태다. 저장소(백업 스냅샷·세션 요약) 삭제는 순수 전이가 아니라 core/reset이 조율한다.
+ */
+export function resetToDefaults(): StoredState {
+  return createDefaultState();
+}
+
 export function addCustomHeaderName(state: StoredState, name: string): StoredState {
   const trimmed = name.trim();
   const lower = trimmed.toLowerCase();
@@ -368,6 +386,8 @@ export type Command =
   | { type: 'set-theme'; theme: ThemePreference }
   | { type: 'set-badge-visible'; visible: boolean }
   | { type: 'set-sync-backup'; enabled: boolean }
+  /** 공장 초기화의 상태 부분 — 저장소 삭제·자동 백업 중단은 런타임이 이 명령 주변에서 조율한다. */
+  | { type: 'full-reset' }
   | { type: 'expire-rules'; now: number }
   | { type: 'add-custom-header-name'; name: string }
   | { type: 'remove-custom-header-name'; name: string }
@@ -441,6 +461,8 @@ export function applyCommand(
       return setBadgeVisible(state, command.visible);
     case 'set-sync-backup':
       return setSyncBackup(state, command.enabled);
+    case 'full-reset':
+      return resetToDefaults();
     case 'expire-rules':
       return expireRules(state, command.now);
     case 'add-custom-header-name':

@@ -73,6 +73,8 @@ export function BackupPanel({
   const [cloudPresence, setCloudPresence] = useState<CloudPresence>('unknown');
   const [confirmingClear, setConfirmingClear] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  /** 전체 초기화의 2단계 확인 (R-3) — 파괴적이므로 한 번 더 눌러야 실행된다. */
+  const [confirmingReset, setConfirmingReset] = useState(false);
   /** 삭제 후 잔존 여부를 다시 읽게 하는 카운터 — 화면이 지운 사실을 스스로 확인한다. */
   const [cloudRevision, setCloudRevision] = useState(0);
 
@@ -111,6 +113,26 @@ export function BackupPanel({
     setNotice(result.ok ? t('cloudBackupsDeleted') : null);
     setCloudRevision((n) => n + 1);
     if (target === 'sync') void loadSnapshots(target).then(setSnapshots);
+  };
+
+  /**
+   * 공장 초기화 (R-3) — 첫 클릭은 확인을 켜기만 하고, **두 번째 클릭에서만** 실행된다.
+   * 실패는 어느 단계에서 멈췄는지와 함께 배너로 남는다: 다시 누르면 남은 단계만 남으므로
+   * 사용자가 할 일은 "다시 누르기" 하나다(되돌리기가 아니다).
+   */
+  const resetEverything = async () => {
+    if (!confirmingReset) {
+      setConfirmingReset(true);
+      return;
+    }
+    setConfirmingReset(false);
+    setNotice(null);
+
+    const result = await onCommand({ type: 'full-reset' });
+    setError(result.ok ? null : `${t('resetFailed')}: ${result.error ?? ''}`);
+    setNotice(result.ok ? t('resetDone') : null);
+    setCloudRevision((n) => n + 1);
+    void loadSnapshots(target).then(setSnapshots, (reason) => setError(reasonText(reason)));
   };
 
   const restore = async (entry: SnapshotStatus) => {
@@ -187,6 +209,24 @@ export function BackupPanel({
           </Button>
         </div>
         {notice && <p className="text-zinc-500 dark:text-zinc-400">{notice}</p>}
+
+        {/* 전체 초기화 (R-3) — 되돌릴 수 없으므로 2단계 확인을 거친다. 무엇이 지워지는지와
+            "실패해도 되돌아오지 않는다"를 누르기 전에 말한다. */}
+        <div className="mt-2 flex flex-col gap-1 border-t border-zinc-200 pt-2 dark:border-zinc-800">
+          <span className="font-medium">{t('resetEverything')}</span>
+          <p className="text-zinc-500 dark:text-zinc-400">{t('resetEverythingNote')}</p>
+          <p className="text-zinc-500 dark:text-zinc-400">{t('resetRetryNote')}</p>
+          <div className="flex justify-end">
+            <Button
+              variant={confirmingReset ? 'destructive' : 'ghost'}
+              size="sm"
+              aria-label={confirmingReset ? t('confirmResetEverything') : t('resetEverything')}
+              onClick={() => void resetEverything()}
+            >
+              {confirmingReset ? t('confirmResetEverything') : t('resetEverything')}
+            </Button>
+          </div>
+        </div>
       </div>
 
       {snapshots.length === 0 ? (

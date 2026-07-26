@@ -1,6 +1,7 @@
 import { computeBadge, drawsBadge, type BadgeSpec } from '@/core/badge';
-import { backupPayload, backupTarget, type BackupTarget } from '@/core/backup';
+import { backupPayload, backupTarget, type BackupTarget, type SyncKV } from '@/core/backup';
 import type { Command } from '@/core/commands';
+import { performFullReset } from '@/core/reset';
 import { compile, type TabInfo } from '@/core/compile';
 import { hasExpiredRules } from '@/core/expiry';
 import type { NetRule } from '@/core/rules';
@@ -35,6 +36,11 @@ export interface BackgroundDeps {
   queryTabInfos(): Promise<TabInfo[]>;
   /** 대상 저장소는 상태의 sync 스위치가 정한다 — 어댑터는 받은 곳에 쓴다 (티켓 07). */
   performBackup(payload: string, profileCount: number, target: BackupTarget): Promise<unknown>;
+  /** 백업 네임스페이스(`bk:`)만 읽는다 — 전체 초기화가 같은 구역의 권위 상태를 넘보지 않게. */
+  readBackupKV(target: BackupTarget): Promise<SyncKV>;
+  removeBackupKeys(target: BackupTarget, keys: string[]): Promise<void>;
+  /** 세션 요약을 지운다 (전체 초기화) — 다음 재조정이 새 요약을 발행한다. */
+  clearSummary(): Promise<void>;
   replaceSessionRules(rules: NetRule[]): Promise<void>;
   /**
    * 계산된 배지를 툴바에 반영한다 — 어댑터는 그대로 그리기만 한다.
@@ -118,16 +124,23 @@ export function bootstrap(deps: BackgroundDeps): void {
     onError: (error) => deps.logError('reconcile failed', error),
   });
 
-  deps.onCommand((command) => executor.execute(command));
-
   const converge = () => void reconciler.requestReconcile();
 
   // 자동 Backup — 재조정과 별도 채널: 탭 이벤트발 재컴파일마다 sync 쓰기를 태우지
   // 않기 위한 의도적 예외. 타이머 코얼레싱 + 최소 30초 간격으로 sync quota 안쪽 유지.
   let backupScheduled = false;
   let lastBackupAt = 0;
+  /** 전체 초기화가 저장소를 비우는 동안 켜진다 (R-3) — 그 창에서는 스냅샷을 쓰지 않는다. */
+  let backupSuspended = false;
   const runBackup = async () => {
     backupScheduled = false;
+    /*
+     * 중단 중이면 아무것도 쓰지 않는다. 이 한 줄이 초기화의 유일한 경합을 없앤다 —
+     * 없으면 디바운스 중이던 스냅샷이 방금 비운 저장소에 옛 프로필을 다시 써 넣어,
+     * 사용자 눈에는 "초기화했는데 백업이 되살아난" 것으로 보인다. 재개가 직접 다시
+     * 예약하므로 여기서 예약을 되살릴 필요는 없다.
+     */
+    if (backupSuspended) return;
     lastBackupAt = deps.now();
     try {
       /*
@@ -161,6 +174,41 @@ export function bootstrap(deps: BackgroundDeps): void {
     const delay = Math.max(3_000, lastBackupAt + 30_000 - deps.now());
     deps.setTimer(() => void runBackup(), delay);
   };
+
+  /**
+   * 공장 초기화 (R-3) — 순서·검증은 core/reset이 정하고, 여기서는 그 효과를 채운다.
+   * 상태 리셋만은 다른 전이와 같은 단일 writer 큐를 지나, 초기화 도중 도착한 명령과
+   * 마지막 쓰기를 다투지 않는다.
+   */
+  const fullReset = async (): Promise<StoredState> => {
+    const applied: { state?: StoredState } = {};
+    const result = await performFullReset({
+      suspendAutoBackup: () => {
+        backupSuspended = true;
+      },
+      resumeAutoBackup: () => {
+        backupSuspended = false;
+        // 재개는 곧바로 다시 예약한다 — 중단 창에서 눌러 버린 예약이 그대로 사라지면
+        // 다음 상태 변경까지 백업이 조용히 멈춘다. 깨끗한 default가 스냅샷된다.
+        scheduleBackup();
+      },
+      readBackupKV: deps.readBackupKV,
+      removeBackupKeys: deps.removeBackupKeys,
+      resetState: async () => {
+        applied.state = await executor.execute({ type: 'full-reset' });
+      },
+      clearSummary: deps.clearSummary,
+    });
+    // 실패는 삼키지 않는다 — 어디서 멈췄는지 그대로 올려 보내 사용자가 다시 누를 수 있게 한다.
+    if (!result.ok) {
+      throw new Error(`Full reset stopped at ${result.step}: ${result.reason}`);
+    }
+    return applied.state ?? (await deps.loadState());
+  };
+
+  deps.onCommand((command) =>
+    command.type === 'full-reset' ? fullReset() : executor.execute(command),
+  );
 
   deps.onStateChanged(() => {
     converge();

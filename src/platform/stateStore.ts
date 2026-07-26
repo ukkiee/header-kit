@@ -62,6 +62,14 @@ export async function publishSummary(summary: StatusSummary): Promise<void> {
   await browser.storage.session.set({ [SUMMARY_KEY]: summary });
 }
 
+/**
+ * 세션 요약을 지운다 (전체 초기화 R-3). 요약은 파생 데이터라 다음 재조정이 새로 발행하지만,
+ * 지우지 않으면 초기화 직후 한 프레임 동안 없어진 프로필의 규칙 수가 화면에 남는다.
+ */
+export async function clearSummary(): Promise<void> {
+  await browser.storage.session.remove(SUMMARY_KEY);
+}
+
 export async function getSummary(): Promise<StatusSummary | null> {
   const result = await browser.storage.session.get(SUMMARY_KEY);
   return (result[SUMMARY_KEY] as StatusSummary | undefined) ?? null;
