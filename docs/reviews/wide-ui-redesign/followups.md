@@ -25,3 +25,16 @@
 ## T06-R-8 — `badgeCountNote` 보조 문구
 설정의 배지 토글 아래 보조 설명은 티켓 06 스펙에 없는 추가다. "표시 여부만 제어"를
 오해하지 않게 하는 최소 문구라 남기되, 문구 자체는 카피 리뷰 대상이다.
+
+## T06-R-1 — 배지 보조 문구가 raw 램프 색이라 대비 미달 (accept 되었으나 미적용)
+`src/features/preferences/preferences-panel.tsx:82`의 `text-zinc-500`은 시맨틱 토큰 규율을
+벗어나고 다크에서 대비 약 3.8:1로 4.5:1 기준에 미달한다(`dark:` 변형도 없다). 같은 커밋의
+스모크 N36이 `--muted-foreground` 토큰만 재기 때문에 raw zinc는 그 게이트를 통째로 빠져나간다.
+고칠 값은 `text-muted-foreground`. **CR-1 r1에서 accept 되었지만 적용되지 못했다** — R-3의
+최소 수정이 fix 커밋의 3파일 한도를 다 써서 `guard:blast-radius`에 걸렸다. 접근성 위반이므로
+릴리스 게이트 전에 처리하는 것이 맞다.
+
+## T06-R-2r — `badgeVisible` 주석의 ADR 오인용 잔여분 (accept 되었으나 미적용)
+`715a93b`가 `badge.ts`·`badge.test.ts`의 인용은 스펙 R-5로 정정했지만, `src/core/model.ts`의
+같은 주석은 같은 `guard:blast-radius` 때문에 남았다. ADR 0015에는 배지 카운터도 표시 토글도
+없다 — 인용을 스펙으로 바꾸거나 ADR에 항을 더한다.
