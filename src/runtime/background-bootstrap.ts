@@ -1,7 +1,8 @@
 import { computeBadge, drawsBadge, type BadgeSpec } from '@/core/badge';
 import { backupPayload, backupTarget, type BackupTarget, type SyncKV } from '@/core/backup';
 import type { Command } from '@/core/commands';
-import { performFullReset } from '@/core/reset';
+import type { MessageKey } from '@/core/i18n';
+import { performFullReset, type ResetStep } from '@/core/reset';
 import { compile, type TabInfo } from '@/core/compile';
 import { hasExpiredRules } from '@/core/expiry';
 import type { NetRule } from '@/core/rules';
@@ -9,6 +10,17 @@ import type { StoredState, StoredStateRead } from '@/core/schema';
 import { summarizeCompile, type StatusSummary } from '@/core/summary';
 import { createCommandExecutor } from './executor';
 import { createReconciler } from './reconciler';
+
+/**
+ * 멈춘 단계는 **카탈로그 키**로 올려 보낸다 — 내부 식별자(`clear-sync-backups`)가 영어
+ * 그대로 배너에 앉지 않게. 화면이 이 키를 로케일 문구로 푼다.
+ */
+const RESET_STOP_MESSAGE: Record<ResetStep, MessageKey> = {
+  'clear-local-backups': 'resetStoppedAtLocalBackups',
+  'clear-sync-backups': 'resetStoppedAtSyncBackups',
+  'reset-state': 'resetStoppedAtState',
+  'clear-summary': 'resetStoppedAtSummary',
+};
 
 interface Snapshot {
   state: StoredState;
@@ -216,7 +228,9 @@ export function bootstrap(deps: BackgroundDeps): void {
     });
     // 실패는 삼키지 않는다 — 어디서 멈췄는지 그대로 올려 보내 사용자가 다시 누를 수 있게 한다.
     if (!result.ok) {
-      throw new Error(`Full reset stopped at ${result.step}: ${result.reason}`);
+      // 원인 문자열(브라우저 오류)은 로그로 남기고, 화면에는 카탈로그 키만 올려 보낸다.
+      deps.logError('full reset failed', new Error(`${result.step}: ${result.reason}`));
+      throw new Error(RESET_STOP_MESSAGE[result.step]);
     }
     return applied.state ?? (await deps.loadState());
   };

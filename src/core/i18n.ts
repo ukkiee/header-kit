@@ -116,6 +116,10 @@ const en = {
   resetRetryNote: 'If a step fails, what is already erased stays erased — press again to finish the rest.',
   resetDone: 'Everything was reset to defaults.',
   resetFailed: 'Could not finish the reset',
+  resetStoppedAtLocalBackups: 'stopped while erasing backups in this browser',
+  resetStoppedAtSyncBackups: 'stopped while erasing backups in the cloud',
+  resetStoppedAtState: 'stopped while restoring profiles and preferences',
+  resetStoppedAtSummary: 'stopped while clearing the session summary',
   incognitoAllowed: 'Incognito access is enabled.',
   incognitoBlocked:
     'Not enabled in incognito windows. Turn on “Allow in Incognito” on the extension details page to modify incognito traffic.',
@@ -290,6 +294,10 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     resetRetryNote: '한 단계가 실패해도 이미 지운 것은 되돌아오지 않습니다 — 다시 눌러 남은 단계를 마치세요.',
     resetDone: '모두 기본값으로 초기화했습니다.',
     resetFailed: '초기화를 끝내지 못했습니다',
+    resetStoppedAtLocalBackups: '이 브라우저의 백업을 지우는 단계에서 멈췄습니다',
+    resetStoppedAtSyncBackups: '클라우드 백업을 지우는 단계에서 멈췄습니다',
+    resetStoppedAtState: '프로필·선호값을 기본값으로 되돌리는 단계에서 멈췄습니다',
+    resetStoppedAtSummary: '세션 요약을 지우는 단계에서 멈췄습니다',
     incognitoAllowed: '시크릿 창 접근이 허용되었습니다.',
     incognitoBlocked:
       '시크릿 창에서 활성화되지 않았습니다. 시크릿 트래픽을 수정하려면 확장 상세 페이지에서 “시크릿 모드에서 허용”을 켜세요.',

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { backupTarget, decodeSnapshotText, type BackupTarget, type SnapshotStatus } from '@/core/backup';
 import type { Command } from '@/core/commands';
 import { parseImport } from '@/core/transfer';
-import { format, type Translator } from '@/core/i18n';
+import { format, MESSAGES, type MessageKey, type Translator } from '@/core/i18n';
 import {
   clearCloudBackups,
   hasCloudBackups,
@@ -47,6 +47,11 @@ function clearFailureDetail(result: Extract<ClearCloudResult, { ok: false }>, t:
   return 'remaining' in result
     ? format(t('cloudDeleteRemaining'), { count: result.remaining })
     : result.error;
+}
+
+/** 초기화가 멈춘 단계도 카탈로그를 거친다 — background는 메시지 키로 말한다(위와 같은 결). */
+function resetFailureDetail(error: string | undefined, t: Translator): string {
+  return error && error in MESSAGES.en ? t(error as MessageKey) : (error ?? '');
 }
 
 /**
@@ -129,7 +134,7 @@ export function BackupPanel({
     setNotice(null);
 
     const result = await onCommand({ type: 'full-reset' });
-    setError(result.ok ? null : `${t('resetFailed')}: ${result.error ?? ''}`);
+    setError(result.ok ? null : `${t('resetFailed')}: ${resetFailureDetail(result.error, t)}`);
     setNotice(result.ok ? t('resetDone') : null);
     setCloudRevision((n) => n + 1);
     void loadSnapshots(target).then(setSnapshots, (reason) => setError(reasonText(reason)));
