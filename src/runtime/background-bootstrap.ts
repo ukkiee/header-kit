@@ -198,7 +198,7 @@ export function bootstrap(deps: BackgroundDeps): void {
   };
 
   /**
-   * 공장 초기화 (R-3) — 순서·검증은 core/reset이 정하고, 여기서는 그 효과를 채운다.
+   * 전체 초기화 (R-3) — 순서·검증은 core/reset이 정하고, 여기서는 그 효과를 채운다.
    * 상태 리셋만은 다른 전이와 같은 단일 writer 큐를 지나, 초기화 도중 도착한 명령과
    * 마지막 쓰기를 다투지 않는다.
    */

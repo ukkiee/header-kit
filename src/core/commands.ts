@@ -312,7 +312,7 @@ export function setSyncBackup(state: StoredState, enabled: boolean): StoredState
 }
 
 /**
- * 공장 초기화의 상태 부분 (티켓 08, R-3) — 이전 상태를 **보지 않는다**.
+ * 전체 초기화의 상태 부분 (티켓 08, R-3) — 이전 상태를 **보지 않는다**.
  *
  * 프로필·선호값·실체화 값·사용자 헤더 이름이 전부 기본값으로 돌아간다. 남길 것을 고르는
  * 순간 "무엇이 남았는지"를 화면과 저장소가 서로 다르게 알게 되고, 그것이 초기화가 없애려던
@@ -386,7 +386,7 @@ export type Command =
   | { type: 'set-theme'; theme: ThemePreference }
   | { type: 'set-badge-visible'; visible: boolean }
   | { type: 'set-sync-backup'; enabled: boolean }
-  /** 공장 초기화의 상태 부분 — 저장소 삭제·자동 백업 중단은 런타임이 이 명령 주변에서 조율한다. */
+  /** 전체 초기화의 상태 부분 — 저장소 삭제·자동 백업 중단은 런타임이 이 명령 주변에서 조율한다. */
   | { type: 'full-reset' }
   | { type: 'expire-rules'; now: number }
   | { type: 'add-custom-header-name'; name: string }
