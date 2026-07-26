@@ -106,3 +106,17 @@ R-9 [AUTO CR-1 cr:smell] defer — Standards: `'bk:'` 리터럴이 backup.ts 안
 R-10 [AUTO CR-1 cr:smell] defer — Standards: 성공 안내 문구가 라이브 리전이 아니라 스크린리더에 알려지지 않는다(실패만 role=alert); -/-; src/features/backup/backup-panel.tsx:-; res:none; follow-up docs/reviews/wide-ui-redesign/followups.md#T07-R-10
 R-11 [AUTO CR-1 cr:smell] defer — Spec: 삭제 버튼의 `disabled={!cloudPresent}`는 티켓이 요구하지 않은 추가이고, R-1의 거짓 false와 겹치면 잔재를 지울 수단까지 잠근다; -/-; src/features/backup/backup-panel.tsx:150; res:none; follow-up docs/reviews/wide-ui-redesign/followups.md#T07-R-11
 R-12 [AUTO CR-1 cr:smell] defer — Spec: 세 번째 안내 문단(`cloudSyncKeepsHistory`)은 티켓의 상태 문구 계약(켜짐/꺼짐 + 잔존 여부) 밖의 추가다; -/-; src/features/backup/backup-panel.tsx:-; res:none; follow-up docs/reviews/wide-ui-redesign/followups.md#T07-R-12
+
+### ticket 08 code-review r1 — auto-triage
+_policy CR-1 · feature-loop/policies/ticket-review-cr1.md · sha256 27ad2f0313d78a9b · decided 2026-07-26T08:55:36Z · fixed point 223b231d3826928105e50436d0d0f7c7800214c1 · ticket .scratch/wide-ui-redesign/issues/08-full-reset.md_
+
+R-1 [AUTO CR-1 cr:defect] accept — Spec: 부분 실패 후 finally의 resumeAutoBackup이 곧바로 scheduleBackup을 걸고, 실패 경로에선 resetState가 아직 안 돌아 상태가 옛 프로필 그대로라 약 3초 뒤 옛 데이터 스냅샷이 새로 써진다 — 방금 지운 백업이 되살아나고 재개 스냅샷이 스펙의 "깨끗한 default"가 아니다; -/-; src/core/reset.ts:-; res:none; 
+R-2 [AUTO CR-1 cr:defect] accept — Spec: runBackup이 진입 시 한 번만 backupSuspended를 보고 두 await를 지나므로, 가드를 이미 통과한 in-flight 백업은 중단되지 않고 옛 payload 스냅샷이 삭제·검증 이후 착지할 수 있다 — "이 한 줄이 초기화의 유일한 경합을 없앤다"는 주석이 사실이 아니다; -/-; src/runtime/background-bootstrap.ts:135; res:none; 
+R-3 [AUTO CR-1 cr:standard] accept — Standards: `CLEARED_TARGETS`가 배열이라 BackupTarget이 하나 늘면 그 저장소가 조용히 안 지워진다 — 파괴적 동작에서 가장 나쁜 실패 형태이고, 저장소 규율은 Record로 못박아 키 누락이 런타임으로 새지 않게 하는 것; -/-; src/core/reset.ts:-; res:none; 
+R-4 [AUTO CR-1 cr:standard] accept — Standards: 초기화 실패 문자열이 i18n 카탈로그를 우회해 내부 ResetStep 식별자가 ko 로케일에서도 영어로 배너에 앉는다(같은 파일의 clearFailureDetail이 정반대 선례); -/-; src/runtime/background-bootstrap.ts:-; res:none; 
+R-5 [AUTO CR-1 cr:standard] accept — Standards: 코드가 "공장 초기화"(commands.ts·backup-panel.tsx·background-bootstrap.ts)와 "전체 초기화"(reset.ts·stateStore.ts)로 갈렸다; -/-; src/core/commands.ts:314; res:none; 
+R-6 [AUTO CR-1 cr:smell] defer — Standards: `resetEverything`이 `deleteCloud`와 한 줄씩 같은 형태이고 한 컴포넌트에 2단계 확인 상태가 셋(confirmingId·confirmingClear·confirmingReset) — Duplicated Code; -/-; src/features/backup/backup-panel.tsx:-; res:none; follow-up docs/reviews/wide-ui-redesign/followups.md#T08-R-6
+R-7 [AUTO CR-1 cr:smell] defer — Standards: `reset.ts`의 `reason(error)`와 `backup-panel.tsx:41`의 `reasonText` 본문이 동일 — Duplicated Code; -/-; src/core/reset.ts:-; res:none; follow-up docs/reviews/wide-ui-redesign/followups.md#T08-R-7
+R-8 [AUTO CR-1 cr:smell] defer — Standards·Spec 양축: `resetToDefaults()`가 `createDefaultState()`를 그대로 감싸기만 한다 — Middle Man; -/-; src/core/commands.ts:320; res:none; follow-up docs/reviews/wide-ui-redesign/followups.md#T08-R-8
+R-9 [AUTO CR-1 cr:smell] defer — Standards: `CLEARED_TARGETS`가 "이미 지운"으로 읽히지만 "지울 목록"이고, `const applied: { state?: StoredState } = {}`는 반환 통로를 객체로 위장한 가변 상자 — Mysterious Name; -/-; src/core/reset.ts:-; res:none; follow-up docs/reviews/wide-ui-redesign/followups.md#T08-R-9
+R-10 [AUTO CR-1 cr:smell] defer — Standards: `suspendAutoBackup(): void | Promise<void>` 유니온은 두 구현 다 동기인데 남았고, `reset.ts`의 `if (keys.length > 0)`는 `removeBackupKeys`의 조기 반환과 중복 — Speculative Generality; -/-; src/runtime/background-bootstrap.ts:-; res:none; follow-up docs/reviews/wide-ui-redesign/followups.md#T08-R-10

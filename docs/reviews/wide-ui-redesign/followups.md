@@ -77,3 +77,30 @@
 (backupStore.ts · backup-panel.tsx · i18n.ts · backup-panel.stories.tsx · backupStore.test.ts)로
 커밋당 3파일 한도를 넘어 `guard:blast-radius`에 걸렸다** — fix가 아니라 별도 변경으로 다뤄야
 한다는 신호다.
+
+## T08-R-6 — 백업 패널의 2단계 확인 상태가 셋
+`resetEverything`은 `deleteCloud`와 한 줄씩 같은 형태다(확인 가드 → 확인 해제 → `setNotice(null)`
+→ await → `setError`/`setNotice` → `setCloudRevision(n+1)` → 스냅샷 재로딩). 한 컴포넌트에
+`confirmingId`·`confirmingClear`·`confirmingReset` 셋이 산다. 하나로 뽑을 것. — Fowler: Duplicated Code.
+
+## T08-R-7 — 오류 사유 포맷터 중복
+`src/core/reset.ts`의 `reason(error)`와 `src/features/backup/backup-panel.tsx:41`의 `reasonText`가
+본문이 같다. — Fowler: Duplicated Code.
+
+## T08-R-8 — `resetToDefaults()`가 위임만 한다
+`src/core/commands.ts:320`이 `createDefaultState()`를 그대로 감싼다. — Fowler: Middle Man.
+
+## T08-R-9 — `CLEARED_TARGETS` 이름과 `applied` 가변 상자
+`CLEARED_TARGETS`는 "이미 지운"으로 읽히지만 실제로는 "지울 목록"이다.
+`background-bootstrap.ts`의 `const applied: { state?: StoredState } = {}`는 반환 통로를 객체로
+위장한 가변 상자다. — Fowler: Mysterious Name.
+
+## T08-R-10 — `suspendAutoBackup`의 불필요한 유니온 + 중복 가드
+`suspendAutoBackup(): void | Promise<void>`는 두 구현 다 동기이고 스펙에 비동기 요구가 없다.
+`reset.ts`의 `if (keys.length > 0)`는 `backupStore.removeBackupKeys`의 조기 반환과 겹친다.
+— Fowler: Speculative Generality.
+
+## T08-R-5b — 전체 초기화 개념이 `CONTEXT.md` 용어집에 없다
+티켓 08이 새 도메인 개념을 들여왔는데 `CONTEXT.md` 항목이 없다. 코드 쪽 이름 분열은 CR-1 r1의
+R-5로 통일하지만, **용어집 등재와 `_Avoid_` 줄을 정하는 것은 도메인 결정이라 사람 몫으로 남긴다**
+— 기계가 표준 문서를 자기 코드에 맞춰 쓰는 것은 스펙을 고치는 것과 같은 종류의 부식이다.
