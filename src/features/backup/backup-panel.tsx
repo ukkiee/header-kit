@@ -146,10 +146,10 @@ export function BackupPanel({
         <div className="flex items-start justify-between gap-2">
           <div className="flex flex-col">
             <span className="font-medium">{t('cloudSync')}</span>
-            <span className="text-zinc-500">
+            <span className="text-zinc-500 dark:text-zinc-400">
               {syncBackup ? t('cloudSyncOn') : t('cloudSyncOff')}
             </span>
-            <span className="text-zinc-500">
+            <span className="text-zinc-500 dark:text-zinc-400">
               {cloudPresence === 'present'
                 ? t('cloudBackupsPresent')
                 : cloudPresence === 'none'
@@ -163,7 +163,7 @@ export function BackupPanel({
             aria-label={t('cloudSync')}
           />
         </div>
-        <p className="text-zinc-500">{t('cloudSyncKeepsHistory')}</p>
+        <p className="text-zinc-500 dark:text-zinc-400">{t('cloudSyncKeepsHistory')}</p>
 
         {/* 클라우드 삭제는 스위치와 분리된 명시적 동작이다 — 자체 확인을 거친다. */}
         <div className="flex justify-end">
@@ -177,7 +177,7 @@ export function BackupPanel({
             {confirmingClear ? t('confirmDeleteCloudBackups') : t('deleteCloudBackups')}
           </Button>
         </div>
-        {notice && <p className="text-zinc-500">{notice}</p>}
+        {notice && <p className="text-zinc-500 dark:text-zinc-400">{notice}</p>}
       </div>
 
       {snapshots.length === 0 ? (
