@@ -36,6 +36,16 @@ async function defaultLoadSnapshotText(entry: SnapshotStatus, target: BackupTarg
   return decodeSnapshotText(await readBackupKV(target), entry);
 }
 
+function reasonText(reason: unknown): string {
+  return reason instanceof Error ? reason.message : String(reason);
+}
+
+/**
+ * 잔존 여부는 **3상태**다 — 조회 실패를 'none'으로 접으면 잔재가 있는데도 "없습니다"를
+ * 말하고 삭제 버튼까지 잠긴다. 'unknown'은 아직 못 읽었거나 조회가 실패한 상태다.
+ */
+type CloudPresence = 'unknown' | 'present' | 'none';
+
 export function BackupPanel({
   syncBackup,
   onCommand,
@@ -51,7 +61,7 @@ export function BackupPanel({
   const [snapshots, setSnapshots] = useState<SnapshotStatus[]>([]);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [cloudPresent, setCloudPresent] = useState(false);
+  const [cloudPresence, setCloudPresence] = useState<CloudPresence>('unknown');
   const [confirmingClear, setConfirmingClear] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   /** 삭제 후 잔존 여부를 다시 읽게 하는 카운터 — 화면이 지운 사실을 스스로 확인한다. */
@@ -62,12 +72,21 @@ export function BackupPanel({
   const target = backupTarget({ syncBackup });
 
   useEffect(() => {
-    if (open) void loadSnapshots(target).then(setSnapshots);
+    if (open) void loadSnapshots(target).then(setSnapshots, (reason) => setError(reasonText(reason)));
   }, [open, loadSnapshots, target]);
 
+  // 조회 실패를 삼키지 않는다 — 배너로 표면화하고 'unknown'으로 남겨 문구가 "없습니다"를
+  // 말하지 않게 한다. deps에 활성 대상·히스토리를 넣어 토글이나 새 스냅샷 뒤에도 다시 읽는다.
   useEffect(() => {
-    if (open) void loadCloudPresence().then(setCloudPresent);
-  }, [open, loadCloudPresence, cloudRevision]);
+    if (!open) return;
+    void loadCloudPresence().then(
+      (present) => setCloudPresence(present ? 'present' : 'none'),
+      (reason) => {
+        setCloudPresence('unknown');
+        setError(reasonText(reason));
+      },
+    );
+  }, [open, loadCloudPresence, cloudRevision, target, snapshots]);
 
   const deleteCloud = async () => {
     if (!confirmingClear) {
@@ -131,7 +150,11 @@ export function BackupPanel({
               {syncBackup ? t('cloudSyncOn') : t('cloudSyncOff')}
             </span>
             <span className="text-zinc-500">
-              {cloudPresent ? t('cloudBackupsPresent') : t('cloudBackupsNone')}
+              {cloudPresence === 'present'
+                ? t('cloudBackupsPresent')
+                : cloudPresence === 'none'
+                  ? t('cloudBackupsNone')
+                  : t('cloudBackupsUnknown')}
             </span>
           </div>
           <ToggleSwitch
@@ -147,7 +170,7 @@ export function BackupPanel({
           <Button
             variant={confirmingClear ? 'destructive' : 'ghost'}
             size="sm"
-            disabled={!cloudPresent}
+            disabled={cloudPresence === 'none'}
             aria-label={confirmingClear ? t('confirmDeleteCloudBackups') : t('deleteCloudBackups')}
             onClick={() => void deleteCloud()}
           >
