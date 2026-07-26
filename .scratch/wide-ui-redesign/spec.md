@@ -3,7 +3,7 @@
 **Triage:** ready-for-agent
 
 원천: claude_design 프로젝트 "Mod Header 크롬 확장프로그램 디자인"
-(`HeaderKit 확장 UI.dc.html` → `RulePopup 아코디언` → `RuleForm`). 설계 결정의 정본은 `.scratch/wide-ui-redesign/decisions.md`, 아키텍처 개정은 `docs/adr/0015-wide-ui-redesign.md`.
+(`HeaderKit 확장 UI.dc.html` → `RulePopup 아코디언` → `RuleForm`). 설계 결정의 정본은 `docs/reviews/wide-ui-redesign/decisions.md`, 아키텍처 개정은 `docs/adr/0015-wide-ui-redesign.md`.
 
 ## Problem Statement
 
