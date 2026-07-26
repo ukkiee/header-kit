@@ -95,6 +95,8 @@ const en = {
   themeSystem: 'System',
   themeDark: 'Dark',
   themeLight: 'Light',
+  badgeCount: 'Applied rule count',
+  badgeCountNote: 'Shows how many rules are applied right now on the toolbar icon.',
   incognitoAllowed: 'Incognito access is enabled.',
   incognitoBlocked:
     'Not enabled in incognito windows. Turn on “Allow in Incognito” on the extension details page to modify incognito traffic.',
@@ -248,6 +250,8 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     themeSystem: '시스템',
     themeDark: '다크',
     themeLight: '라이트',
+    badgeCount: '적용 중인 규칙 수',
+    badgeCountNote: '툴바 아이콘에 지금 적용 중인 규칙 수를 표시합니다.',
     incognitoAllowed: '시크릿 창 접근이 허용되었습니다.',
     incognitoBlocked:
       '시크릿 창에서 활성화되지 않았습니다. 시크릿 트래픽을 수정하려면 확장 상세 페이지에서 “시크릿 모드에서 허용”을 켜세요.',

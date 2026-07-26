@@ -30,6 +30,7 @@ function InteractiveProfileSection({ initial }: { initial: Profile }) {
     schemaVersion: SCHEMA_VERSION,
     paused: false,
     theme: 'system',
+    badgeVisible: true,
     profiles: [initial],
     materialized: {},
     customHeaderNames: [],

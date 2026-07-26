@@ -493,10 +493,13 @@ try {
     (h) => h['x-timed'] === undefined,
   );
   const expiredBadge = await sw.evaluate(() => chrome.action.getBadgeText({}));
+  // 배지는 적용 중인 **규칙 수**다 (티켓 06) — 만료로 두 규칙 중 하나가 꺼졌으니 1이 남는다.
+  // 프로필이 살아 있다는 증거는 위의 active===true가 들고 있고, 여기서 보는 것은 "배지가
+  // 죽지 않고 줄어든 실제 적용 수를 계속 말한다"는 쪽이다.
   record('F3: 규칙 만료 → 그 규칙만 off + expiresAt 소비, 프로필·다른 규칙·배지 유지',
     beforeExpiry['x-timed'] === 'on' && beforeExpiry['x-stays'] === 'on'
       && expiredMod.enabled === false && expiredMod.active === true && expiredMod.conditions === null
-      && afterExpiry['x-timed'] === undefined && afterExpiry['x-stays'] === 'on' && expiredBadge === 'T',
+      && afterExpiry['x-timed'] === undefined && afterExpiry['x-stays'] === 'on' && expiredBadge === '1',
     `before=[${beforeExpiry['x-timed']},${beforeExpiry['x-stays']}], mod-off=${expiredMod.enabled === false}, active=${expiredMod.active}, cond=${JSON.stringify(expiredMod.conditions)}, after=[${afterExpiry['x-timed']},${afterExpiry['x-stays']}], badge="${expiredBadge}"`);
 
   // ---------- G. 이슈 07: Placeholder 실체화 수명주기 ----------
@@ -2337,6 +2340,47 @@ try {
   record('N35b: 시스템으로 되돌리면 OS 변화를 다시 따른다',
     followsSystemDark === 'dark' && followsSystemLight === 'light',
     `os-dark→${followsSystemDark}, os-light→${followsSystemLight}`);
+
+  /*
+   * N37: 배지 표시 토글 (티켓 06).
+   *
+   * 배지는 **적용 중인 규칙 수**이고 토글은 그 표시 여부만 정한다. 그래서 셋을 함께 본다 —
+   * (a) 끄면 사라지고, (b) 다시 열어도 꺼진 채이며, (c) 켜면 **같은 수**가 돌아온다.
+   * 그리고 끄는 동안에도 세션 규칙은 그대로다: 배지를 끄는 것과 규칙을 멈추는 것(Pause)은
+   * 다른 조작이라, 여기서 규칙까지 사라지면 "아이콘만 깔끔하게" 하려던 사용자가 규칙을 잃는다.
+   */
+  await seedProfiles([
+    baseProfile('p-badge-toggle', 'BadgeToggle', [
+      { kind: 'request-header', id: 'bt1', name: 'X-Badge-Count', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+    ]),
+  ]);
+  await pollSessionRuleCount(sw, 1);
+  const badgeText = () => sw.evaluate(() => chrome.action.getBadgeText({}));
+  const badgeSwitch = () => popup.getByRole('switch', { name: 'Applied rule count' });
+  const badgeOn = await pollUntil(badgeText, (t) => t === '1', 5000, 100);
+
+  await badgeSwitch().click();
+  const badgeOff = await pollUntil(badgeText, (t) => t === '', 5000, 100);
+  // 저장까지 갔는지는 storage가 권위다 — DOM만 보면 다시 열 때 되돌아가는 것을 못 잡는다.
+  const storedBadgeOff = await pollUntil(
+    () => sw.evaluate(async () => (await chrome.storage.local.get('state')).state?.badgeVisible),
+    (v) => v === false,
+  );
+  const rulesWhileOff = await sw.evaluate(async () =>
+    (await chrome.declarativeNetRequest.getSessionRules()).length);
+
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Show preferences' }).click();
+  await ensurePanelOpen(popup, 'Toggle preferences');
+  const keptOff = await badgeText();
+  const switchOff = await badgeSwitch().getAttribute('aria-checked');
+  await badgeSwitch().click();
+  const badgeBack = await pollUntil(badgeText, (t) => t === badgeOn, 5000, 100);
+  record('N37: 배지 토글 — 끄면 사라지고 다시 열어도 꺼진 채, 켜면 같은 수 복귀 (규칙은 그대로)',
+    badgeOn === '1' && badgeOff === '' && storedBadgeOff === false && keptOff === '' &&
+      switchOff === 'false' && badgeBack === '1' && rulesWhileOff === 1,
+    `on="${badgeOn}", off="${badgeOff}", stored=${storedBadgeOff}, reopen="${keptOff}", ` +
+      `switch-checked=${switchOff}, back="${badgeBack}", rules-while-off=${rulesWhileOff}`);
 
   /*
    * N36: 두 테마가 대비 기준을 지킨다 — 본문 4.5:1, 비텍스트(필드 경계·accent 표면) 3:1.

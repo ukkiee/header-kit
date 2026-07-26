@@ -30,7 +30,7 @@ function profile(id: string, active: boolean, modifications: Modification[]): Pr
 }
 
 function state(profiles: Profile[]): StoredState {
-  return { schemaVersion: SCHEMA_VERSION, paused: false, theme: 'system', profiles, materialized: {}, customHeaderNames: [] };
+  return { schemaVersion: SCHEMA_VERSION, paused: false, theme: 'system', badgeVisible: true, profiles, materialized: {}, customHeaderNames: [] };
 }
 
 describe('expireRules', () => {

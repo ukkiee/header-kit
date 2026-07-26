@@ -271,6 +271,13 @@ export interface StoredState {
    * **더해질** 뿐이라 예전 상태도 백필로 그대로 읽힌다(customHeaderNames와 같은 계열).
    */
   theme: ThemePreference;
+  /**
+   * 툴바 배지(적용 규칙 수)를 그릴지 (ADR 0015). theme와 같은 계열의 **더해지는** 선호
+   * 필드라 포맷 버전을 올리지 않는다 — 예전 상태는 백필로 그대로 읽힌다.
+   *
+   * 표시 여부만 정한다. 꺼도 규칙은 그대로 걸리고, 켜면 그때의 적용 수가 다시 보인다.
+   */
+  badgeVisible: boolean;
   profiles: Profile[];
   /**
    * Placeholder 실체화 값의 활성 상태 구역 — Modification id 키.
@@ -280,6 +287,9 @@ export interface StoredState {
   /** 헤더 이름 autocomplete에 더할 사용자 등록 항목. */
   customHeaderNames: string[];
 }
+
+/** 배지는 기본으로 켜져 있다 — 끄지 않은 사용자는 지금까지처럼 본다. */
+export const DEFAULT_BADGE_VISIBLE = true;
 
 export const PROFILE_COLORS = [
   '#2563eb',
@@ -358,6 +368,7 @@ export function createDefaultState(): StoredState {
     schemaVersion: SCHEMA_VERSION,
     paused: false,
     theme: DEFAULT_THEME,
+    badgeVisible: DEFAULT_BADGE_VISIBLE,
     profiles: [{ ...createProfile('Default Profile'), active: true }],
     materialized: {},
     customHeaderNames: [],

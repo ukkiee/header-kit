@@ -2,6 +2,7 @@ import { ALL_RESOURCE_TYPES, REQUEST_METHODS, type RequestMethod, type ResourceT
 import { DEFAULT_THEME, isThemePreference } from './theme';
 import {
   createDefaultState,
+  DEFAULT_BADGE_VISIBLE,
   PROFILE_COLORS,
   SCHEMA_VERSION,
   type Filter,
@@ -309,8 +310,18 @@ function validateStoredState(value: Record<string, unknown>): StoredState | null
    * 프로필을 날릴 이유가 없다. 그릴 수 없는 값은 여기서 기본값으로 접어 화면까지 가지 않게 한다.
    */
   const theme = isThemePreference(value.theme) ? value.theme : DEFAULT_THEME;
+  // 배지 표시도 같은 이유로 백필·치유 대상이다 — 툴바 배지 하나가 프로필을 날릴 수 없다.
+  const badgeVisible =
+    typeof value.badgeVisible === 'boolean' ? value.badgeVisible : DEFAULT_BADGE_VISIBLE;
   if (!profiles.every(isProfile) || !isMaterializedRecord(materialized)) return null;
-  return { ...value, theme, profiles, materialized, customHeaderNames } as unknown as StoredState;
+  return {
+    ...value,
+    theme,
+    badgeVisible,
+    profiles,
+    materialized,
+    customHeaderNames,
+  } as unknown as StoredState;
 }
 
 /**

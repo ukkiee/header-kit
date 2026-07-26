@@ -17,6 +17,7 @@ const sampleState: StoredState = {
   schemaVersion: SCHEMA_VERSION,
   paused: false,
   theme: 'system',
+  badgeVisible: true,
   profiles: [
     {
       id: 'p1',

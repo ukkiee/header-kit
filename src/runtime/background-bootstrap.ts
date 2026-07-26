@@ -1,3 +1,4 @@
+import { computeBadge, type BadgeSpec } from '@/core/badge';
 import { backupPayload } from '@/core/backup';
 import type { Command } from '@/core/commands';
 import { compile, type TabInfo } from '@/core/compile';
@@ -34,7 +35,13 @@ export interface BackgroundDeps {
   queryTabInfos(): Promise<TabInfo[]>;
   performBackup(payload: string, profileCount: number): Promise<unknown>;
   replaceSessionRules(rules: NetRule[]): Promise<void>;
-  applyBadge(state: StoredState): Promise<void>;
+  /**
+   * 계산된 배지를 툴바에 반영한다 — 어댑터는 그대로 그리기만 한다.
+   *
+   * 배지가 세는 것은 적용된 규칙 수라, 무엇을 그릴지는 이 스냅샷의 상태만으로 알 수 없다
+   * (quota·컴파일로 빠진 규칙이 있다). 계산은 요약을 가진 이 컴포지션 루트가 한다.
+   */
+  applyBadge(badge: BadgeSpec): Promise<void>;
   scheduleExpiryAlarm(state: StoredState, now: number): Promise<void>;
   validateCommand(command: Command): Promise<string | null>;
   now(): number;
@@ -87,16 +94,16 @@ export function bootstrap(deps: BackgroundDeps): void {
       } catch (error) {
         applyError = error instanceof Error ? error.message : String(error);
       }
-      await deps.applyBadge(snapshot.state);
-      await deps.scheduleExpiryAlarm(snapshot.state, snapshot.now);
       // 요약은 background가 실제 적용한 그 결과·스냅샷에서 만든다.
-      await deps.publishSummary(
-        summarizeCompile(result, {
-          profiles: snapshot.state.profiles,
-          paused: snapshot.state.paused,
-          applyError,
-        }),
-      );
+      const summary = summarizeCompile(result, {
+        profiles: snapshot.state.profiles,
+        paused: snapshot.state.paused,
+        applyError,
+      });
+      // 배지도 같은 요약을 본다 — 화면의 "적용 중인 규칙 수"와 툴바가 갈라지지 않는다.
+      await deps.applyBadge(computeBadge(summary, snapshot.state.badgeVisible));
+      await deps.scheduleExpiryAlarm(snapshot.state, snapshot.now);
+      await deps.publishSummary(summary);
       // 이미 지난 만료는 알람을 기다리지 않고 즉시 만료 전이를 태운다.
       if (hasExpiredRules(snapshot.state, snapshot.now)) {
         void executor

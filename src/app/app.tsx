@@ -287,6 +287,7 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
               <PreferencesPanel
                 customHeaderNames={state.customHeaderNames}
                 theme={state.theme}
+                badgeVisible={state.badgeVisible}
                 onCommand={dispatch}
                 incognitoAllowed={incognitoAllowed}
               />

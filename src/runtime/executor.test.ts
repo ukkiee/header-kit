@@ -8,6 +8,7 @@ function initialState(): StoredState {
     schemaVersion: SCHEMA_VERSION,
     paused: false,
     theme: 'system',
+    badgeVisible: true,
     profiles: [
       { id: 'p1', name: 'One', active: false, shortLabel: '1', color: '#2563eb', modifications: [] },
       { id: 'p2', name: 'Two', active: false, shortLabel: '2', color: '#16a34a', modifications: [] },

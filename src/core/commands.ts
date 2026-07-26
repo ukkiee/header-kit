@@ -283,6 +283,16 @@ export function setTheme(state: StoredState, theme: ThemePreference): StoredStat
   return { ...state, theme };
 }
 
+/**
+ * 툴바 배지를 보일지 정한다 (티켓 06) — **표시 여부만** 바꾼다.
+ *
+ * 규칙 적용은 이 값과 무관하다. 배지를 끄는 것과 규칙을 멈추는 것(Pause)은 다른 조작이고,
+ * 여기서 규칙까지 건드리면 "아이콘을 깔끔하게 두려던" 사용자가 규칙을 잃는다.
+ */
+export function setBadgeVisible(state: StoredState, visible: boolean): StoredState {
+  return { ...state, badgeVisible: visible };
+}
+
 export function addCustomHeaderName(state: StoredState, name: string): StoredState {
   const trimmed = name.trim();
   const lower = trimmed.toLowerCase();
@@ -345,6 +355,7 @@ export type Command =
   | { type: 'set-paused'; paused: boolean }
   | { type: 'toggle-pause' }
   | { type: 'set-theme'; theme: ThemePreference }
+  | { type: 'set-badge-visible'; visible: boolean }
   | { type: 'expire-rules'; now: number }
   | { type: 'add-custom-header-name'; name: string }
   | { type: 'remove-custom-header-name'; name: string }
@@ -414,6 +425,8 @@ export function applyCommand(
       return togglePause(state);
     case 'set-theme':
       return setTheme(state, command.theme);
+    case 'set-badge-visible':
+      return setBadgeVisible(state, command.visible);
     case 'expire-rules':
       return expireRules(state, command.now);
     case 'add-custom-header-name':

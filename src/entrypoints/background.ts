@@ -1,4 +1,4 @@
-import { computeBadge } from '@/core/badge';
+import type { BadgeSpec } from '@/core/badge';
 import type { Command } from '@/core/commands';
 import { nextExpiry } from '@/core/expiry';
 import type { NetRule } from '@/core/rules';
@@ -74,8 +74,7 @@ async function validateCommand(command: Command): Promise<string | null> {
   return null;
 }
 
-async function applyBadge(state: StoredState): Promise<void> {
-  const badge = computeBadge(state);
+async function applyBadge(badge: BadgeSpec): Promise<void> {
   await browser.action.setBadgeText({ text: badge.text });
   await browser.action.setBadgeBackgroundColor({ color: badge.color });
 }
