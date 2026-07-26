@@ -90,3 +90,19 @@ R-5 [AUTO CR-1 cr:smell] defer — Standards: Mysterious Name — `HIDDEN`이 �
 R-6 [AUTO CR-1 cr:out-of-diff] defer — Standards·Spec 양축: `Profile.shortLabel`이 렌더 소비자를 잃어 죽은 필드가 됐다(편집 입력과 2자 불변식은 남음); -/-; src/core/model.ts:-; res:none; follow-up docs/reviews/wide-ui-redesign/followups.md#T06-R-6
 R-7 [AUTO CR-1 cr:smell] defer — Standards·Spec 양축: 스모크 N37이 N36 앞에 삽입돼 파일 내 번호 순서가 어긋난다; -/-; scripts/smoke.mjs:2344; res:none; follow-up docs/reviews/wide-ui-redesign/followups.md#T06-R-7
 R-8 [AUTO CR-1 cr:smell] defer — Spec: `badgeCountNote` 보조 문구는 스펙에 없는 추가(오해 방지용 최소 문구); -/-; src/features/preferences/preferences-panel.tsx:82; res:none; follow-up docs/reviews/wide-ui-redesign/followups.md#T06-R-8
+
+### ticket 07 code-review r1 — auto-triage
+_policy CR-1 · feature-loop/policies/ticket-review-cr1.md · sha256 27ad2f0313d78a9b · decided 2026-07-26T08:12:04Z · fixed point 8776802169b550d16350a56b6e24436fe611e2ed · ticket .scratch/wide-ui-redesign/issues/07-backup-sync-switch.md_
+
+R-1 [AUTO CR-1 cr:defect] accept — Spec: 잔존 조회 실패에 catch가 없어 cloudPresent가 초기값 false로 남고, 잔재가 있는데도 "클라우드에 백업이 없습니다"라는 거짓 표시가 오류 없이 발생한다 — 티켓이 막으려던 바로 그 표시; -/-; src/features/backup/backup-panel.tsx:70; res:none; 
+R-2 [AUTO CR-1 cr:defect] accept — Spec: 잔존 표시가 토글·자동 백업 이후 갱신되지 않아, sync를 켜고 첫 스냅샷이 클라우드에 착지해도 패널을 닫았다 열기 전까지 "없습니다"가 유지된다; -/-; src/features/backup/backup-panel.tsx:70; res:none; 
+R-3 [AUTO CR-1 cr:missing-seam-test] accept — Spec: 티켓이 명시한 "클라우드 삭제 검증·실패 표면화"가 어느 시임에서도 테스트되지 않는다 — backup.test.ts는 순수 함수만, 스모크 N38은 삭제 버튼을 누르지 않는다; -/-; src/platform/backupStore.ts:88; res:none; 
+R-4 [AUTO CR-1 cr:standard] accept — Standards: 백업 패널 뮤티드 텍스트 4곳이 raw `text-zinc-500`에 `dark:` 짝도 없어 다크에서 약 3.6:1로 본문 4.5:1 미달; -/-; src/features/backup/backup-panel.tsx:130; res:none; 
+R-5 [AUTO CR-1 cr:standard] accept — Standards: 사용자 대면 오류 문자열이 i18n 카탈로그를 우회해 ko 로케일에서도 영어로 렌더된다; -/-; src/platform/backupStore.ts:-; res:none; 
+R-6 [AUTO CR-1 cr:standard] accept — Standards: 내부 식별자·i18n 키의 `cloud`가 CONTEXT.md Backup의 `_Avoid_: cloud sync`를 위반한다(예외는 사용자 대면 라벨 값만); -/-; src/platform/backupStore.ts:-; res:none; 
+R-7 [AUTO CR-1 cr:smell] defer — Standards·Spec 양축: `readSyncKV`가 "기존 호출부 호환"으로 남았으나 호출자 0이고, 이제 bk: 네임스페이스만 돌려주므로 이름도 거짓 — Middle Man + Mysterious Name; -/-; src/platform/backupStore.ts:37; res:none; follow-up docs/reviews/wide-ui-redesign/followups.md#T07-R-7
+R-8 [AUTO CR-1 cr:smell] defer — Standards: `planBackup(…, limits = SYNC_LIMITS)`의 기본값이 local에 쓰면서 sync 예산으로 계획하는 호출부를 컴파일에 통과시킨다 — Speculative Generality; -/-; src/core/backup.ts:-; res:none; follow-up docs/reviews/wide-ui-redesign/followups.md#T07-R-8
+R-9 [AUTO CR-1 cr:smell] defer — Standards: `'bk:'` 리터럴이 backup.ts 안에서 세 번 반복된다 — Primitive Obsession; -/-; src/core/backup.ts:264; res:none; follow-up docs/reviews/wide-ui-redesign/followups.md#T07-R-9
+R-10 [AUTO CR-1 cr:smell] defer — Standards: 성공 안내 문구가 라이브 리전이 아니라 스크린리더에 알려지지 않는다(실패만 role=alert); -/-; src/features/backup/backup-panel.tsx:-; res:none; follow-up docs/reviews/wide-ui-redesign/followups.md#T07-R-10
+R-11 [AUTO CR-1 cr:smell] defer — Spec: 삭제 버튼의 `disabled={!cloudPresent}`는 티켓이 요구하지 않은 추가이고, R-1의 거짓 false와 겹치면 잔재를 지울 수단까지 잠근다; -/-; src/features/backup/backup-panel.tsx:150; res:none; follow-up docs/reviews/wide-ui-redesign/followups.md#T07-R-11
+R-12 [AUTO CR-1 cr:smell] defer — Spec: 세 번째 안내 문단(`cloudSyncKeepsHistory`)은 티켓의 상태 문구 계약(켜짐/꺼짐 + 잔존 여부) 밖의 추가다; -/-; src/features/backup/backup-panel.tsx:-; res:none; follow-up docs/reviews/wide-ui-redesign/followups.md#T07-R-12

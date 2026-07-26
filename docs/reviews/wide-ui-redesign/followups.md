@@ -38,3 +38,31 @@
 `715a93b`가 `badge.ts`·`badge.test.ts`의 인용은 스펙 R-5로 정정했지만, `src/core/model.ts`의
 같은 주석은 같은 `guard:blast-radius` 때문에 남았다. ADR 0015에는 배지 카운터도 표시 토글도
 없다 — 인용을 스펙으로 바꾸거나 ADR에 항을 더한다.
+
+## T07-R-7 — `readSyncKV`가 호출자 없이 남았고 이름도 거짓
+`src/platform/backupStore.ts:37`에 "기존 호출부 호환"으로 남았지만 리포 전체에 소비자가 없다
+(전량 `readBackupKV`로 이동). 게다가 이제 sync 구역 전체가 아니라 `bk:` 네임스페이스만
+돌려주므로 이름이 동작과 어긋난다. 삭제. — Fowler: Middle Man + Mysterious Name.
+
+## T07-R-8 — `planBackup`의 limits 기본값이 잘못된 예산을 통과시킨다
+`planBackup(…, limits: BackupLimits = SYNC_LIMITS)` — 프로덕션 호출부는 모두 명시로 넘기고
+기본값은 기존 테스트만 먹인다. "종류·상태가 늘면 타입이 먼저 깨지게 한다"는 저장소 규율과
+반대로, local에 쓰면서 sync 예산으로 계획하는 새 호출부가 컴파일을 통과한다. 기본값을 없애고
+테스트가 넘기게. — Fowler: Speculative Generality.
+
+## T07-R-9 — `'bk:'` 리터럴 반복
+`src/core/backup.ts`에서 `chunkKey`, 264행, `backupNamespace` 세 곳에 흩어져 있다. 접두사
+상수 하나로. — Fowler: Primitive Obsession.
+
+## T07-R-10 — 성공 안내 문구가 라이브 리전이 아니다
+백업 패널의 성공 문구 `{notice && <p>}`는 스크린리더에 알려지지 않는다. 실패만
+`AlertBanner role=alert`를 탄다. 성공도 알려야 대칭이 맞는다.
+
+## T07-R-11 — 삭제 버튼의 `disabled={!cloudPresent}`
+티켓은 "자체 확인 + 삭제 검증"만 요구했고 잔존 여부로 버튼을 잠그라고 하지 않았다. T07-R-1의
+거짓 false와 겹치면 잔재가 있는데도 지울 수단이 잠긴다. R-1 수정 후 이 잠금이 여전히 필요한지
+다시 볼 것.
+
+## T07-R-12 — `cloudSyncKeepsHistory` 세 번째 안내 문단
+티켓의 상태 문구 계약은 "켜짐/꺼짐 + 클라우드 잔존 여부" 둘이다. 무해하지만 추가분이라
+카피 리뷰 대상.
