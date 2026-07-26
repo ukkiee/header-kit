@@ -106,6 +106,23 @@ describe('Block 검증 — 스코프만 필수', () => {
   it('넓은 스코프는 저장을 막지 않는다 — 막는 대신 폼이 확인을 요구한다', () => {
     expect(fieldIssues(block({ urlFilter: '*://*/*', urlMatchType: 'contains' }))).toEqual([]);
   });
+
+  /*
+   * 매치 방식이 정해진 뒤에 검증한다 (code-review).
+   *
+   * `urlMatchType` 부재는 core에서 regex를 뜻하는데(ADR 0008 하위 호환), 폼은 새 규칙에
+   * contains를 보여 주고 저장 직전에야 그 값을 초안에 박는다. 정리 전 초안을 검증하면
+   * 화면은 "Contains"인데 판정은 정규식으로 나서, `*ads` 같은 멀쩡한 부분 문자열이
+   * "이 패턴은 못 쓴다"로 막혔다. 폼이 정리된 초안을 넘기므로 아래가 성립한다.
+   */
+  it('contains로 저장되는 패턴은 정규식 문법으로 거부되지 않는다', () => {
+    expect(fieldIssues(block({ urlFilter: '*ads', urlMatchType: 'contains' }))).toEqual([]);
+    expect(fieldIssues(block({ urlFilter: 'ads.example.com/(?!x)', urlMatchType: 'contains' }))).toEqual([]);
+    // 같은 문자열이라도 정규식으로 저장한다면 거부가 맞다.
+    expect(fieldIssues(block({ urlFilter: '*ads', urlMatchType: 'regex' }))).toEqual([
+      { field: 'urlFilter', reason: 'unsupported-pattern' },
+    ]);
+  });
 });
 
 describe('Block 영속 계약', () => {

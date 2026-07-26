@@ -1,4 +1,4 @@
-import { useRef, useState, type RefObject } from 'react';
+import { useId, useRef, useState, type RefObject } from 'react';
 import type { MessageKey } from '@/core/i18n';
 import { fieldIssues, type FieldIssue, type RequiredField } from '@/core/rule-validation';
 import { urlScopeBreadth } from '@/core/url-scope';
@@ -17,7 +17,7 @@ import { Button } from '@/ui/press-button';
 import { Input } from '@/ui/text-field';
 import { LargeEditor } from '@/ui/large-editor';
 import { NoteText } from '@/ui/note-text';
-import { FieldLabeled, fieldCaption } from '@/ui/field-labeled';
+import { FieldLabeled, fieldCaption, InlineFieldError } from '@/ui/field-labeled';
 import { AnimatePresence, MotionRow } from '@/ui/motion-row';
 import { SelectOptions } from '@/ui/select-options';
 import { useT } from '@/ui/i18n-context';
@@ -83,6 +83,8 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
   const substitutionRef = useRef<HTMLInputElement>(null);
   const valueRef = useRef<HTMLInputElement>(null);
   const urlFilterRef = useRef<HTMLInputElement>(null);
+  // 다중 컨트롤 행이라 Field의 자동 연결을 못 쓴다 — 오류를 입력에 직접 이어 준다.
+  const scopeErrorId = useId();
   const requiredFieldRefs: Record<RequiredField, RefObject<HTMLInputElement | null>> = {
     name: nameRef,
     pattern: patternRef,
@@ -125,19 +127,39 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
   };
 
   /**
-   * 스코프가 어느 도메인에도 묶이지 않은 Block인가 — 확인을 받아야 하는 경우다.
-   * Block이 아닌 종류는 넓어도 헤더를 고칠 뿐이라 여기 오지 않는다.
+   * 저장될 모양으로 정리한 초안 — 스코프의 매치 방식을 확정하고 빈 조건을 벗긴다.
+   *
+   * **검증보다 먼저** 이걸 만드는 것이 중요하다. 새 규칙의 `urlMatchType`은 셀렉트가
+   * 기본값(contains)을 보여 주기만 할 뿐 초안에는 아직 없는데, core는 부재를 regex로
+   * 읽는다(ADR 0008 하위 호환). 정리 전 초안을 검증에 넘기면 화면은 "Contains"인데
+   * 검증은 정규식으로 판정해, 멀쩡한 패턴이 "이 패턴은 못 쓴다"로 막힌다.
    */
-  const needsWideScopeConfirm =
-    draft.kind === 'block' &&
-    urlScopeBreadth(draft.urlFilter, draft.urlMatchType ?? defaultMatchType) === 'wide';
+  const normalizedDraft = (): Modification => {
+    let next = draft;
+    // 스코프 정리: 필터가 비면 매치 방식도 벗기고, 있으면 셀렉트 기본값을 확정한다.
+    if (draft.kind !== 'redirect' && 'urlFilter' in draft) {
+      if (!draft.urlFilter) {
+        const { urlFilter: _f, urlMatchType: _m, ...rest } = draft;
+        next = rest as Modification;
+      } else if (draft.urlMatchType === undefined) {
+        next = { ...draft, urlMatchType: defaultMatchType } as Modification;
+      }
+    }
+    // 조건 정리: 빈 필드 제거, 전부 비면 conditions 자체를 벗긴다.
+    const conditions = normalizeConditions(next.conditions ?? {});
+    if (conditions) return { ...next, conditions } as Modification;
+    if (next.conditions === undefined) return next;
+    const { conditions: _c, ...rest } = next;
+    return rest as Modification;
+  };
 
   const save = async (confirmedWideScope = false) => {
     // 이미 보낸 저장이 응답을 기다리는 중이면 아무것도 하지 않는다. 버튼의 disabled는
     // 포인터 경로만 막고, Cmd/Ctrl+Enter는 여기를 직접 부른다.
     if (inFlight.current) return;
+    const toSave = normalizedDraft();
     // 빈 필수 필드는 저장을 통과하지 못한다 — 인라인 오류로 그 자리에서 알린다.
-    const issues = fieldIssues(draft);
+    const issues = fieldIssues(toSave);
     setFieldErrors(issues);
     // 첫 누락 항목으로 — Redirect에서 패턴·치환이 둘 다 비면 검증이 패턴을 먼저
     // 돌려주므로(rule-validation의 push 순서) 자연스러운 입력 순서를 따른다.
@@ -146,32 +168,21 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
       requiredFieldRefs[firstIssue.field].current?.focus();
       return;
     }
-    // 넓은 스코프 Block은 한 번 더 물어본다 — 검증과 달리 저장을 금지하는 게 아니라,
-    // 무엇이 일어날지 보여 주고 사용자가 다시 누르게 한다.
-    if (needsWideScopeConfirm && !confirmedWideScope) {
+    /*
+     * 넓은 스코프 Block은 한 번 더 물어본다 — 검증과 달리 저장을 금지하는 게 아니라,
+     * 무엇이 일어날지 보여 주고 사용자가 다시 누르게 한다. 검증과 **같은 초안**을 보므로
+     * 두 판정이 매치 방식을 다르게 읽는 일이 없다.
+     */
+    if (
+      toSave.kind === 'block' &&
+      !confirmedWideScope &&
+      urlScopeBreadth(toSave.urlFilter, toSave.urlMatchType) === 'wide'
+    ) {
       setWideScopePending(true);
       return;
     }
     inFlight.current = true;
     setSaving(true);
-    // 스코프 정리: 필터가 비면 매치 방식도 벗기고, 있으면 셀렉트 기본값을 확정한다.
-    let toSave = draft;
-    if (draft.kind !== 'redirect' && 'urlFilter' in draft) {
-      if (!draft.urlFilter) {
-        const { urlFilter: _f, urlMatchType: _m, ...rest } = draft;
-        toSave = rest as Modification;
-      } else if (!('urlMatchType' in draft) || draft.urlMatchType === undefined) {
-        toSave = { ...draft, urlMatchType: defaultMatchType } as Modification;
-      }
-    }
-    // 조건 정리: 빈 필드 제거, 전부 비면 conditions 자체를 벗긴다.
-    const normalized = normalizeConditions(toSave.conditions ?? {});
-    if (normalized) {
-      toSave = { ...toSave, conditions: normalized } as Modification;
-    } else if (toSave.conditions !== undefined) {
-      const { conditions: _c, ...rest } = toSave;
-      toSave = rest as Modification;
-    }
     // onSave는 거부를 `{ ok: false }`로 돌려주기도 하지만, background 왕복이
     // 끊기면(워커 teardown, 확장 리로드, 컨텍스트 무효화) **던진다**. 그 경로에서
     // 진행 중 플래그가 풀리지 않으면 저장·취소·Escape가 모두 막힌 채 폼이 갇히고
@@ -275,11 +286,15 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
               }}
               placeholder={scopePlaceholder[currentMatchType]}
               aria-label={t('urlFilterScope')}
+              aria-invalid={fieldError('urlFilter') !== undefined || undefined}
+              aria-describedby={fieldError('urlFilter') ? scopeErrorId : undefined}
               className="min-w-0 flex-1 font-mono"
             />
           </div>
+          {/* Field 컨텍스트를 못 쓰는 다중 컨트롤 행이라 인라인 오류를 직접 놓는다 —
+              모양·role은 FieldLabeled의 오류와 같은 것을 쓴다. */}
           {fieldError('urlFilter') && (
-            <span className="text-[11px] text-red-600 dark:text-red-400">{fieldError('urlFilter')}</span>
+            <InlineFieldError id={scopeErrorId}>{fieldError('urlFilter')}</InlineFieldError>
           )}
         </div>
       )}

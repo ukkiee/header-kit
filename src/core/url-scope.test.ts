@@ -66,6 +66,40 @@ describe('도메인 앵커가 없으면 넓음', () => {
   });
 });
 
+describe('도메인 토큰이 있어도 앵커가 아니면 넓음 (code-review)', () => {
+  /*
+   * "도메인처럼 생긴 조각이 어딘가 있다"와 "이 스코프가 그 도메인에 묶여 있다"는 다르다.
+   * 그 둘을 같게 보면 아래 패턴들이 전부 확인 없이 저장되는데, 하나같이 모든 호스트에
+   * 걸린다 — 가드레일이 정확히 놓치면 안 되는 모양들이다.
+   */
+  it.each([
+    // 대안(|)이 앵커를 우회한다 — 왼쪽은 묶여 있지만 오른쪽이 전부를 연다.
+    ['ads\\.example\\.com|.*', 'regex'],
+    // 선택 그룹이라 호스트가 없어도 매칭된다.
+    ['^https://(ads\\.example\\.com)?', 'regex'],
+    // 호스트가 아니라 경로에 있는 도메인꼴 조각 — 모든 사이트의 그 파일에 걸린다.
+    ['^https?://[^/]+/ads\\.js', 'regex'],
+    ['tracker.js', 'contains'],
+    ['index.php', 'contains'],
+    // 최상위 도메인 하나 = 그 TLD 전체 — `||com`은 모든 .com을 막는다.
+    ['com', 'domain'],
+    ['*.com', 'domain'],
+    ['*://*.com/', 'prefix'],
+  ] as const)('%s (%s) → wide', (pattern, matchType) => {
+    expect(urlScopeBreadth(pattern, matchType)).toBe('wide');
+  });
+
+  it('개발용 로컬 호스트는 라벨이 하나여도 좁다 — 기기 하나에 묶여 있다', () => {
+    expect(urlScopeBreadth('localhost', 'domain')).toBe('narrow');
+    expect(urlScopeBreadth('localhost:3000', 'domain')).toBe('narrow');
+    expect(urlScopeBreadth('http://localhost:3000/api', 'prefix')).toBe('narrow');
+  });
+
+  it('경로에 도메인꼴이 있어도 호스트가 묶여 있으면 좁다', () => {
+    expect(urlScopeBreadth('ads.example.com/tracker.js', 'contains')).toBe('narrow');
+  });
+});
+
 describe('규칙이 만들어지지 않는 패턴은 거부한다', () => {
   it.each([
     // 컴파일 자체가 안 되는 패턴.

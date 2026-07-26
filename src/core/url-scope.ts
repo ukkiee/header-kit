@@ -15,18 +15,49 @@ export type ScopeBreadth = 'wide' | 'narrow' | 'invalid';
 const GLOBAL_TOKENS = new Set(['*', '*://*/*', '<all_urls>', '*://*', '://*/*', '**']);
 
 /**
- * 리터럴 도메인처럼 읽히는 조각 — `label.tld`. 이것이 있으면 스코프가 어떤 호스트에
- * 묶여 있다고 본다. 판정의 중심 도구라 각 매치 방식이 자기 방식으로 이 함수를 부른다.
+ * 도메인처럼 읽히지만 호스트가 아닌 마지막 라벨 — `tracker.js`는 사이트가 아니라
+ * 모든 사이트에 있는 파일이다. 이걸 호스트로 세면 가드레일이 정확히 반대로 작동한다.
  */
-function hasDomainLikeToken(text: string): boolean {
-  return /[a-z0-9-]+\.[a-z0-9-]{2,}/i.test(text);
+const FILE_EXTENSIONS = new Set([
+  'js', 'mjs', 'cjs', 'css', 'html', 'htm', 'php', 'asp', 'aspx', 'jsp', 'json', 'xml',
+  'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico', 'woff', 'woff2', 'ttf', 'map',
+  'txt', 'pdf', 'wasm',
+]);
+
+/** 라벨이 하나뿐이지만 넓지 않은 호스트 — 이 확장이 존재하는 이유인 개발 호스트다. */
+const LOCAL_HOSTS = new Set(['localhost']);
+
+/**
+ * 이 문자열이 **어떤 호스트에 묶여 있는가**. 판정 전체가 이 질문 하나로 굴러간다.
+ *
+ * 도메인꼴 조각이 있는지만 보면 안 된다 — `tracker.js`도, 경로에 도메인이 섞인
+ * `^https?://[^/]+/ads\.js`도 그 검사를 통과하지만 둘 다 모든 호스트에 걸린다.
+ * 그래서 (1) `/`·`:`·`?`·끝으로 **닫히는** 자리에 있고, (2) 실제 라벨이 둘 이상이며,
+ * (3) 마지막 라벨이 파일 확장자가 아닐 때만 호스트로 인정한다.
+ */
+function isHostBound(text: string): boolean {
+  const head = text.split(/[/:?]/)[0] ?? '';
+  if (LOCAL_HOSTS.has(head.toLowerCase())) return true;
+  for (const match of text.matchAll(/[a-z0-9*_-]+(?:\.[a-z0-9*_-]+)+(?=[:/?]|$)/gi)) {
+    const labels = match[0].split('.');
+    if (FILE_EXTENSIONS.has(labels[labels.length - 1]!.toLowerCase())) continue;
+    // 와일드카드뿐인 라벨은 아무 호스트도 특정하지 못한다 — `*.com`은 사실상 `com`이고,
+    // `||com`은 모든 .com을 막는다.
+    if (labels.filter((label) => label.replace(/\*/g, '') !== '').length >= 2) return true;
+  }
+  return false;
 }
 
-/** 호스트 자리가 실제 호스트를 가리키는가 — `*`·`*.*`·빈 문자열은 아니다. */
-function isConcreteHost(host: string): boolean {
-  const bare = host.replace(/\*/g, '').replace(/^\.+|\.+$/g, '');
-  return bare !== '';
-}
+/**
+ * 어느 호스트에도 속하지 않는 탐침 URL. 정규식이 이 중 하나라도 물면 그 정규식은
+ * 특정 도메인에 묶여 있지 않다는 뜻이다.
+ *
+ * 구문을 뜯어보는 것보다 이쪽이 확실하다 — 대안(`ads\.example\.com|.*`)이나 선택
+ * 그룹(`^https://(ads\.example\.com)?`)처럼 앵커를 우회하는 모양은 종류가 끝없지만,
+ * "무관한 호스트에 걸리느냐"는 한 번에 전부 드러낸다. `.invalid`는 RFC 2606이
+ * 영원히 등록되지 않도록 예약한 TLD라, 사용자가 실제로 겨냥할 일이 없다.
+ */
+const UNRELATED_URLS = ['https://probe.invalid/', 'http://sub.probe.invalid/a/b.js?q=1'];
 
 export function urlScopeBreadth(
   urlFilter: string | undefined,
@@ -40,13 +71,13 @@ export function urlScopeBreadth(
   // 매치 방식 부재 = regex (ADR 0008의 하위 호환 규칙, compile과 같은 기본값).
   switch (matchType ?? 'regex') {
     case 'domain':
-      // 도메인 매치는 값 자체가 호스트다 — 실제 호스트를 가리키기만 하면 좁다.
-      return isConcreteHost(pattern) ? 'narrow' : 'wide';
+      // 도메인 매치는 값 자체가 호스트다.
+      return isHostBound(pattern) ? 'narrow' : 'wide';
     case 'prefix':
       return prefixBreadth(pattern);
     case 'contains':
-      // 부분 문자열은 도메인처럼 읽히는 조각을 품을 때만 호스트에 묶인다.
-      return hasDomainLikeToken(pattern) ? 'narrow' : 'wide';
+      // 부분 문자열은 호스트 자리에 놓인 도메인을 품을 때만 묶인다.
+      return isHostBound(pattern) ? 'narrow' : 'wide';
     case 'regex':
       return regexBreadth(pattern);
   }
@@ -59,9 +90,8 @@ function prefixBreadth(pattern: string): ScopeBreadth {
     // 스킴 구분자에 닿지 못한 접두(`http`, `*`)는 호스트를 특정하지 못한다.
     return 'wide';
   }
-  const afterScheme = pattern.slice(separator + 3);
-  const host = afterScheme.split('/')[0] ?? '';
-  return isConcreteHost(host) ? 'narrow' : 'wide';
+  const host = pattern.slice(separator + 3).split('/')[0] ?? '';
+  return isHostBound(host) ? 'narrow' : 'wide';
 }
 
 /**
@@ -78,13 +108,16 @@ const RE2_INLINE_FLAGS = /^\(\?[imsU]+\)/;
 
 function regexBreadth(pattern: string): ScopeBreadth {
   if (RE2_UNSUPPORTED.test(pattern)) return 'invalid';
+  let compiled: RegExp;
   try {
-    new RegExp(pattern.replace(RE2_INLINE_FLAGS, ''));
+    compiled = new RegExp(pattern.replace(RE2_INLINE_FLAGS, ''));
   } catch {
     return 'invalid';
   }
-  // 정규식은 메타문자를 빼고 **리터럴로 남는 부분**만 도메인 판정에 쓴다. `\.`는 리터럴
-  // 점이므로 되살리고, `.`·`*` 같은 메타문자는 도메인 조각을 만들어 내지 못하게 둔다.
-  const literals = pattern.replace(/\\\./g, '.');
-  return hasDomainLikeToken(literals) ? 'narrow' : 'wide';
+  // 무관한 호스트에 하나라도 걸리면 이 정규식은 어느 도메인에도 묶여 있지 않다.
+  if (UNRELATED_URLS.some((url) => compiled.test(url))) return 'wide';
+  // 통과했다면 호스트를 가리는 것까지는 하고 있다. 남은 질문은 **무엇으로** 가리느냐다 —
+  // 경로만 집는 `^https?://[^/]+/ads\.js`는 여기서 걸러진다.
+  // `\.`는 리터럴 점이라 되살리고, `.`·`*` 같은 메타문자는 도메인 조각을 만들지 못하게 둔다.
+  return isHostBound(pattern.replace(/\\\./g, '.')) ? 'narrow' : 'wide';
 }

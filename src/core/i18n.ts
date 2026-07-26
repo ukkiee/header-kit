@@ -52,7 +52,7 @@ const en = {
   modSetCookie: 'Response cookie',
   modRedirect: 'Redirect',
   redirectCaptureNote: 'Capture groups \\1–\\9 from the pattern can be reused in the substitution.',
-  blockNote: 'Matching requests are cancelled. The URL scope above decides what is blocked.',
+  blockNote: 'Matching requests are blocked. The URL scope above decides what is blocked.',
   unsupportedPattern: 'The browser cannot build a rule from this pattern.',
   wideScopeWarning:
     'This scope is not limited to a domain, so it can block far more than you expect and break pages. Pause stops every rule if that happens.',
@@ -201,7 +201,7 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     modSetCookie: '응답 쿠키',
     modRedirect: '리다이렉트',
     redirectCaptureNote: '패턴의 캡처 그룹 \\1–\\9를 치환 문자열에서 재사용할 수 있습니다.',
-    blockNote: '매칭된 요청이 취소됩니다. 무엇을 막을지는 위 URL 스코프가 정합니다.',
+    blockNote: '매칭된 요청이 차단됩니다. 무엇을 막을지는 위 URL 스코프가 정합니다.',
     unsupportedPattern: '이 패턴으로는 브라우저가 규칙을 만들지 못합니다.',
     wideScopeWarning:
       '이 스코프는 도메인에 묶여 있지 않아 생각보다 훨씬 많은 요청을 막고 페이지를 깨뜨릴 수 있습니다. 그럴 때는 일시정지가 모든 규칙을 멈춥니다.',
