@@ -6,11 +6,6 @@ dist/
 .output/
 storybook-static/
 
-# 이 워킹 카피의 node_modules는 npm으로 설치돼 있어 npm이 루트에 락파일을 다시 쓴다.
-# 추적되는 락파일은 pnpm-lock.yaml·bun.lock뿐이므로 세 번째 락파일은 커밋하지 않는다 —
-# 커밋하지 않고 두면 브랜치 스코프 게이트가 매번 더러운 트리를 보고 멈춘다.
-/package-lock.json
-
 # feature-loop이 계속 다시 쓰는 기계 생성 상태. 트래커(.scratch/*/issues, spec.md,
 # decisions.md)는 사람이 읽는 기록이라 커밋하지만, 아래는 매 반복마다 바뀐다 —
 # 커밋하면 브랜치 스코프 게이트가 늘 더러운 트리를 보고, 그 산문이 릴리스 렌즈가
