@@ -1,4 +1,4 @@
-import { computeBadge, type BadgeSpec } from '@/core/badge';
+import { computeBadge, drawsBadge, type BadgeSpec } from '@/core/badge';
 import { backupPayload } from '@/core/backup';
 import type { Command } from '@/core/commands';
 import { compile, type TabInfo } from '@/core/compile';
@@ -101,7 +101,10 @@ export function bootstrap(deps: BackgroundDeps): void {
         applyError,
       });
       // 배지도 같은 요약을 본다 — 화면의 "적용 중인 규칙 수"와 툴바가 갈라지지 않는다.
-      await deps.applyBadge(computeBadge(summary, snapshot.state.badgeVisible));
+      // 적용이 실패했으면 직전 규칙 세트가 그대로 걸려 있으므로 배지도 직전 값을 유지한다.
+      if (drawsBadge(summary, snapshot.state.badgeVisible)) {
+        await deps.applyBadge(computeBadge(summary, snapshot.state.badgeVisible));
+      }
       await deps.scheduleExpiryAlarm(snapshot.state, snapshot.now);
       await deps.publishSummary(summary);
       // 이미 지난 만료는 알람을 기다리지 않고 즉시 만료 전이를 태운다.

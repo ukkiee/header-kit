@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { computeBadge } from './badge';
+import { computeBadge, drawsBadge } from './badge';
 import { applyCommand } from './commands';
 import { compile, type CompileEnv } from './compile';
 import { createDefaultState, parseStoredState, type Modification, type Profile } from './schema';
 import { summarizeCompile, type StatusSummary } from './summary';
 
 /**
- * 배지 = **적용 중인 규칙 수** (티켓 06, ADR 0015). 예전 배지는 활성 프로필 표시기였지만
+ * 배지 = **적용 중인 규칙 수** (티켓 06, 스펙 R-5). 예전 배지는 활성 프로필 표시기였지만
  * 설정 라벨이 "적용 중인 규칙 수"이므로, 라벨과 값이 어긋나지 않도록 재조정이 실제로
  * 발행한 컴파일 요약의 규칙 수를 낸다.
  */
@@ -72,11 +72,20 @@ describe('computeBadge — 적용 규칙 수 카운터', () => {
     expect(computeBadge(status, true).text).toBe('2');
   });
 
-  it('적용 자체가 실패하면(quota 등) 걸리지도 않은 수를 주장하지 않는다', () => {
+  it('적용 자체가 실패하면(quota 등) 직전 배지를 그대로 둔다', () => {
     const status = summarizeOf([profile([mod('m1', 'X-A')])], 'MAX_NUMBER_OF_SESSION_RULES exceeded');
 
+    // updateSessionRules는 원자적이라 실패해도 직전 규칙 세트가 그대로 걸려 있다 —
+    // 실제 적용 수는 0이 아니라 직전 N이므로 배지를 다시 그리면 그 N과 어긋난다.
     expect(status.ruleCount).toBe(1);
-    expect(computeBadge(status, true).text).toBe('');
+    expect(drawsBadge(status, true)).toBe(false);
+    // 일시정지도 걸리지 못했다 — 'II'로 덮는 것도 같은 거짓말이다.
+    expect(drawsBadge({ ...status, paused: true }, true)).toBe(false);
+    // 표시를 껐으면 실패 중에도 지운다 — 토글은 표시 여부만 정한다.
+    expect(drawsBadge(status, false)).toBe(true);
+    expect(computeBadge(status, false).text).toBe('');
+    // 적용에 성공한 재조정은 늘 그대로 반영한다.
+    expect(drawsBadge(summarizeOf([profile([mod('m1', 'X-A')])]), true)).toBe(true);
   });
 
   it('표시가 꺼져 있으면 아무것도 보이지 않는다 — 일시정지 중에도', () => {
