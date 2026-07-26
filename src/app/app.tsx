@@ -282,7 +282,9 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
                 <TransferPanel state={state} onCommand={dispatchWithResult} />
               </>
             )}
-            {railView === 'backups' && <BackupPanel onCommand={dispatchWithResult} />}
+            {railView === 'backups' && (
+              <BackupPanel syncBackup={state.syncBackup} onCommand={dispatchWithResult} />
+            )}
             {railView === 'preferences' && (
               <PreferencesPanel
                 customHeaderNames={state.customHeaderNames}

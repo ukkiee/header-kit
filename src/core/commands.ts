@@ -293,6 +293,17 @@ export function setBadgeVisible(state: StoredState, visible: boolean): StoredSta
   return { ...state, badgeVisible: visible };
 }
 
+/**
+ * 백업을 클라우드에 둘지 정한다 (티켓 07, R-1) — **앞으로의** 저장 위치만 바꾼다.
+ *
+ * 이미 만들어진 스냅샷은 만들어진 저장소에 그대로 남는다. 여기서 이관까지 하면 커밋-후
+ * 삭제 실패·자동 백업과의 경쟁 같은 트랜잭션 문제가 따라 들어오고, 그것들은 v0.1.0이
+ * 감당할 이유가 없다. 클라우드 잔재를 지우는 것은 별도의 명시적 동작이다.
+ */
+export function setSyncBackup(state: StoredState, enabled: boolean): StoredState {
+  return { ...state, syncBackup: enabled };
+}
+
 export function addCustomHeaderName(state: StoredState, name: string): StoredState {
   const trimmed = name.trim();
   const lower = trimmed.toLowerCase();
@@ -356,6 +367,7 @@ export type Command =
   | { type: 'toggle-pause' }
   | { type: 'set-theme'; theme: ThemePreference }
   | { type: 'set-badge-visible'; visible: boolean }
+  | { type: 'set-sync-backup'; enabled: boolean }
   | { type: 'expire-rules'; now: number }
   | { type: 'add-custom-header-name'; name: string }
   | { type: 'remove-custom-header-name'; name: string }
@@ -427,6 +439,8 @@ export function applyCommand(
       return setTheme(state, command.theme);
     case 'set-badge-visible':
       return setBadgeVisible(state, command.visible);
+    case 'set-sync-backup':
+      return setSyncBackup(state, command.enabled);
     case 'expire-rules':
       return expireRules(state, command.now);
     case 'add-custom-header-name':

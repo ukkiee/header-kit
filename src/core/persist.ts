@@ -3,6 +3,7 @@ import { DEFAULT_THEME, isThemePreference } from './theme';
 import {
   createDefaultState,
   DEFAULT_BADGE_VISIBLE,
+  DEFAULT_SYNC_BACKUP,
   PROFILE_COLORS,
   SCHEMA_VERSION,
   type Filter,
@@ -313,11 +314,18 @@ function validateStoredState(value: Record<string, unknown>): StoredState | null
   // 배지 표시도 같은 이유로 백필·치유 대상이다 — 툴바 배지 하나가 프로필을 날릴 수 없다.
   const badgeVisible =
     typeof value.badgeVisible === 'boolean' ? value.badgeVisible : DEFAULT_BADGE_VISIBLE;
+  /*
+   * 백업 저장 위치도 같은 계열의 백필·치유 대상이다 — 필드가 없던 기존 설치는 sync ON으로
+   * 읽혀 자기 클라우드 히스토리를 그대로 보고, 알 수 없는 값 때문에 상태 전체가 리셋되지 않는다.
+   */
+  const syncBackup =
+    typeof value.syncBackup === 'boolean' ? value.syncBackup : DEFAULT_SYNC_BACKUP;
   if (!profiles.every(isProfile) || !isMaterializedRecord(materialized)) return null;
   return {
     ...value,
     theme,
     badgeVisible,
+    syncBackup,
     profiles,
     materialized,
     customHeaderNames,

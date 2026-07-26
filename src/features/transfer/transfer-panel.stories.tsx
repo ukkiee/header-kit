@@ -18,6 +18,7 @@ const sampleState: StoredState = {
   paused: false,
   theme: 'system',
   badgeVisible: true,
+  syncBackup: true,
   profiles: [
     {
       id: 'p1',

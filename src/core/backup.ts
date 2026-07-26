@@ -20,6 +20,46 @@ export const CHUNK_BYTE_LIMIT = 7_500;
 export const SYNC_BUDGET = 90_000;
 export const MAX_SNAPSHOTS = 5;
 
+/**
+ * 스냅샷이 실제로 놓이는 저장소 (R-1). 스위치는 **앞으로의** 대상만 정하고, 이미
+ * 만들어진 스냅샷은 만들어진 쪽에 그대로 남는다 — 이 타입이 가리키는 것은 언제나
+ * "지금 쓰고 읽을 곳"이지 "모든 스냅샷이 있는 곳"이 아니다.
+ */
+export type BackupTarget = 'sync' | 'local';
+
+/** 대상 저장소의 quota 성질 — 계획은 이 값만 보고 판단한다. */
+export interface BackupLimits {
+  /** 항목 하나에 담을 수 있는 직렬화 바이트. */
+  chunkBytes: number;
+  /** 백업이 써도 되는 총 바이트 (매니페스트 포함). */
+  budgetBytes: number;
+}
+
+/**
+ * storage.local의 예산.
+ *
+ * local의 문서화된 QUOTA_BYTES는 10,485,760B로 sync(102,400B)보다 두 자릿수 넉넉하지만,
+ * **권위 상태(`state`)가 같은 구역에 산다**. 백업이 구역을 다 먹으면 정작 프로필 저장이
+ * 실패하므로, 백업 몫은 상한 아래로 넉넉히 물러선 값으로 못박는다.
+ */
+export const LOCAL_BUDGET = 8_000_000;
+
+export const SYNC_LIMITS: BackupLimits = { chunkBytes: CHUNK_BYTE_LIMIT, budgetBytes: SYNC_BUDGET };
+/** 청크 크기는 sync와 같게 둔다 — 저장소가 달라도 스냅샷의 모양은 하나다. */
+export const LOCAL_LIMITS: BackupLimits = { chunkBytes: CHUNK_BYTE_LIMIT, budgetBytes: LOCAL_BUDGET };
+
+export function backupLimits(target: BackupTarget): BackupLimits {
+  return target === 'sync' ? SYNC_LIMITS : LOCAL_LIMITS;
+}
+
+/**
+ * 지금 백업을 쓰고 읽을 저장소. 저장 위치의 단일 판단 지점이다 — 어댑터는 이 답을
+ * 집행할 뿐이고, "sync를 껐는데 어딘가는 아직 sync를 쓰더라"가 생길 자리를 남기지 않는다.
+ */
+export function backupTarget(state: { syncBackup: boolean }): BackupTarget {
+  return state.syncBackup ? 'sync' : 'local';
+}
+
 const encoder = new TextEncoder();
 
 /** storage.sync가 과금하는 방식 그대로: JSON.stringify 직렬화의 UTF-8 바이트 수. */
@@ -157,6 +197,7 @@ export function planBackup(
   text: string,
   meta: { profileCount: number },
   deps: { id: () => string; now: () => number },
+  limits: BackupLimits = SYNC_LIMITS,
 ): BackupPlan {
   const existing = readManifest(kv).snapshots;
   const sum = checksum(text);
@@ -168,7 +209,7 @@ export function planBackup(
     return { kind: 'skip', reason: 'unchanged' };
   }
 
-  const chunks = chunkString(text);
+  const chunks = chunkString(text, limits.chunkBytes);
   const entry: ManifestEntry = {
     id: deps.id(),
     createdAt: deps.now(),
@@ -184,7 +225,7 @@ export function planBackup(
   const manifestBytes =
     BACKUP_MANIFEST_KEY.length +
     jsonBytes({ snapshots: Array.from({ length: MAX_SNAPSHOTS }, () => entry) });
-  if (newBytes + manifestBytes > SYNC_BUDGET) {
+  if (newBytes + manifestBytes > limits.budgetBytes) {
     return { kind: 'too-large' };
   }
 
@@ -193,7 +234,7 @@ export function planBackup(
   const intact = existing.filter((e) => isIntact(e, kv));
   const latestIntact = intact[0];
   const latestIntactBytes = latestIntact ? snapshotBytes(latestIntact, kv) : 0;
-  if (latestIntact && newBytes + manifestBytes + latestIntactBytes > SYNC_BUDGET) {
+  if (latestIntact && newBytes + manifestBytes + latestIntactBytes > limits.budgetBytes) {
     // 전환 기간 동안 직전 정상본과 공존이 불가능 — 정상본을 지키고 실패한다.
     return { kind: 'too-large' };
   }
@@ -205,7 +246,7 @@ export function planBackup(
   for (const candidate of intact) {
     if (kept.length >= MAX_SNAPSHOTS) break;
     const bytes = snapshotBytes(candidate, kv);
-    if (used + bytes > SYNC_BUDGET) {
+    if (used + bytes > limits.budgetBytes) {
       if (candidate === latestIntact) break; // 직전 정상본이 밀리면 그 뒤도 전부 밀린다
       continue;
     }
@@ -266,6 +307,35 @@ export function decodeSnapshotText(
     return { ok: false, reason: 'checksum mismatch' };
   }
   return { ok: true, text };
+}
+
+/**
+ * 백업 네임스페이스(`bk:`)에 속한 키만 걸러 낸다.
+ *
+ * 저장소가 백업 전용이 아니기 때문에 필요하다 — local 구역에는 권위 상태(`state`)가 함께
+ * 산다. "백업을 지운다"가 구역을 비우는 것으로 번역되면 프로필이 같이 사라진다.
+ */
+export function backupNamespace(kv: SyncKV): SyncKV {
+  return Object.fromEntries(Object.entries(kv).filter(([key]) => key.startsWith('bk:')));
+}
+
+/** 지울 키 목록이자 잔재 판정의 근거 — 삭제 계획과 검증이 같은 정의를 본다. */
+export function backupKeys(kv: SyncKV): string[] {
+  return Object.keys(backupNamespace(kv)).sort();
+}
+
+/**
+ * 삭제가 실제로 끝났는지 **다시 읽은 KV로** 확인한다 (R-1).
+ *
+ * 지웠다고 믿는 것과 지워진 것은 다르다: remove가 조용히 일부만 지우거나 실패하면
+ * "이 브라우저에만 저장됩니다"가 거짓 표시가 된다. 남은 키를 그대로 돌려주어 호출부가
+ * 성공으로 접지 못하게 한다.
+ */
+export function verifyBackupsCleared(
+  kv: SyncKV,
+): { ok: true } | { ok: false; remaining: string[] } {
+  const remaining = backupKeys(kv);
+  return remaining.length === 0 ? { ok: true } : { ok: false, remaining };
 }
 
 /** 복원 목록 — 손상 스냅샷도 사유와 함께 표시한다 (조용히 숨기지 않는다). */

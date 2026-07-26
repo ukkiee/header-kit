@@ -31,6 +31,7 @@ function InteractiveProfileSection({ initial }: { initial: Profile }) {
     paused: false,
     theme: 'system',
     badgeVisible: true,
+    syncBackup: true,
     profiles: [initial],
     materialized: {},
     customHeaderNames: [],

@@ -32,18 +32,35 @@ const snapshots: SnapshotStatus[] = [
 
 export const WithSnapshots: Story = {
   args: {
+    syncBackup: true,
     onCommand: async () => ({ ok: true }),
     loadSnapshots: async () => snapshots,
     loadSnapshotText: async () => ({
       ok: true,
       text: JSON.stringify({ headerkit: 1, profiles: [] }),
     }),
+    loadCloudPresence: async () => true,
+    clearCloud: async () => ({ ok: true }),
   },
 };
 
 export const Empty: Story = {
   args: {
+    syncBackup: true,
     onCommand: async () => ({ ok: true }),
     loadSnapshots: async () => [],
+    loadCloudPresence: async () => false,
+    clearCloud: async () => ({ ok: true }),
+  },
+};
+
+/** 동기화를 껐지만 클라우드에는 아직 백업이 남아 있는 상태 — 삭제는 별도 동작이다. */
+export const SyncOffCloudResidue: Story = {
+  args: {
+    syncBackup: false,
+    onCommand: async () => ({ ok: true }),
+    loadSnapshots: async () => [],
+    loadCloudPresence: async () => true,
+    clearCloud: async () => ({ ok: false, error: '2 backup key(s) still in cloud storage' }),
   },
 };

@@ -3454,6 +3454,65 @@ try {
     `아이콘 ${allRail.length}개 전부 ok=${everyIconOk} (예: ${railEn.backups.width}x${railEn.backups.height}/icon${railEn.backups.icon}), ` +
     `Tab 툴팁=${tabTip}, 선택 배경 ${unselectedBg} → ${railSelected.background} (pressed=${railSelected.pressed})`);
 
+  /*
+   * N38: 백업 sync 스위치 (티켓 07, R-1 단순 계약).
+   *
+   * 스위치는 **앞으로의** 저장 위치만 정한다. 그래서 셋을 함께 본다 — (a) 선택이 저장되고
+   * 다시 열어도 유지되며, (b) 끄는 것이 클라우드의 기존 스냅샷을 **지우거나 옮기지 않고**,
+   * (c) 히스토리가 **활성 저장소** 것을 보여준다. (b)가 빠지면 스위치가 조용히 파괴적이 되고,
+   * (c)가 빠지면 local로 바꿔도 클라우드 목록이 남아 어디에 저장되는지 거짓 표시가 된다.
+   */
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Show backups' }).click();
+  await ensurePanelOpen(popup, 'Toggle backups');
+  const syncSwitch = () => popup.getByRole('switch', { name: 'Cloud sync' });
+  const cloudKeys = () => sw.evaluate(async () => Object.keys(await chrome.storage.sync.get(null)).sort());
+  const manifestCount = (areaName) =>
+    sw.evaluate(async (a) => {
+      const kv = await chrome.storage[a].get('bk:manifest');
+      return kv['bk:manifest']?.snapshots?.length ?? 0;
+    }, areaName);
+  // 히스토리 행은 "N active profile(s)"를 달고 나온다 (섹션 I와 같은 선택자).
+  const historyRows = () => popup.locator('li').filter({ hasText: 'profile' }).count();
+
+  const switchOnBefore = await syncSwitch().getAttribute('aria-checked');
+  const cloudBefore = await cloudKeys();
+  const syncSnapshots = await manifestCount('sync');
+  const rowsWhileOn = await pollUntil(historyRows, (n) => n === syncSnapshots, 5000, 200);
+
+  await syncSwitch().click();
+  const storedOff = await pollUntil(
+    () => sw.evaluate(async () => (await chrome.storage.local.get('state')).state?.syncBackup),
+    (v) => v === false,
+  );
+  // 토글이 예약한 자동 백업이 (이제 local로) 내려앉을 시간을 준 뒤에 읽는다 —
+  // 그래야 아래 행 수 비교가 착지 중인 스냅샷과 경합하지 않는다.
+  await popup.waitForTimeout(4000);
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Show backups' }).click();
+  await ensurePanelOpen(popup, 'Toggle backups');
+  const switchOffAfterReopen = await syncSwitch().getAttribute('aria-checked');
+  const localSnapshots = await manifestCount('local');
+  const rowsWhileOff = await pollUntil(historyRows, (n) => n === localSnapshots, 5000, 200);
+  const cloudAfter = await cloudKeys();
+  // 클라우드 키는 하나도 사라지지 않는다 (자동 백업이 더할 수는 있으므로 부분집합으로 본다).
+  const cloudIntact = cloudBefore.every((k) => cloudAfter.includes(k));
+
+  // 다시 켜면 클라우드 히스토리가 그대로 돌아온다 — 어느 쪽도 잃지 않았다는 증거.
+  await syncSwitch().click();
+  const rowsBackOn = await pollUntil(historyRows, (n) => n === syncSnapshots, 5000, 200);
+  await pollUntil(
+    () => sw.evaluate(async () => (await chrome.storage.local.get('state')).state?.syncBackup),
+    (v) => v === true,
+  );
+  record('N38: 백업 sync 스위치 — 선택 유지, 클라우드 스냅샷 보존, 활성 저장소 히스토리',
+    switchOnBefore === 'true' && storedOff === false && switchOffAfterReopen === 'false' &&
+      cloudIntact && rowsWhileOn === syncSnapshots && rowsWhileOff === localSnapshots &&
+      rowsBackOn === syncSnapshots,
+    `on=${switchOnBefore}→stored-off=${storedOff}, reopen-checked=${switchOffAfterReopen}, ` +
+      `cloud ${cloudBefore.length}→${cloudAfter.length} keys (intact=${cloudIntact}), ` +
+      `rows sync ${rowsWhileOn}/${syncSnapshots} → local ${rowsWhileOff}/${localSnapshots} → back ${rowsBackOn}`);
+
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
   process.exitCode = failed.length === 0 ? 0 : 1;

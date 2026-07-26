@@ -1,5 +1,5 @@
 import { computeBadge, drawsBadge, type BadgeSpec } from '@/core/badge';
-import { backupPayload } from '@/core/backup';
+import { backupPayload, backupTarget, type BackupTarget } from '@/core/backup';
 import type { Command } from '@/core/commands';
 import { compile, type TabInfo } from '@/core/compile';
 import { hasExpiredRules } from '@/core/expiry';
@@ -33,7 +33,8 @@ export interface BackgroundDeps {
   persistState(state: StoredState): Promise<void>;
   publishSummary(summary: StatusSummary): Promise<void>;
   queryTabInfos(): Promise<TabInfo[]>;
-  performBackup(payload: string, profileCount: number): Promise<unknown>;
+  /** 대상 저장소는 상태의 sync 스위치가 정한다 — 어댑터는 받은 곳에 쓴다 (티켓 07). */
+  performBackup(payload: string, profileCount: number, target: BackupTarget): Promise<unknown>;
   replaceSessionRules(rules: NetRule[]): Promise<void>;
   /**
    * 계산된 배지를 툴바에 반영한다 — 어댑터는 그대로 그리기만 한다.
@@ -149,7 +150,7 @@ export function bootstrap(deps: BackgroundDeps): void {
         return;
       }
       const state = read.state;
-      await deps.performBackup(backupPayload(state), state.profiles.length);
+      await deps.performBackup(backupPayload(state), state.profiles.length, backupTarget(state));
     } catch (error) {
       deps.logError('backup failed', error);
     }

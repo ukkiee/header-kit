@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   BACKUP_MANIFEST_KEY,
+  backupKeys,
+  backupLimits,
+  backupTarget,
   checksum,
   chunkKey,
   chunkString,
@@ -8,8 +11,12 @@ import {
   listSnapshots,
   planBackup,
   readManifest,
+  verifyBackupsCleared,
+  type BackupTarget,
   type SyncKV,
 } from './backup';
+import { applyCommand } from './commands';
+import { createDefaultState, parseStoredState } from './schema';
 
 const deps = (id = 'snap-1', now = 1_000) => ({ id: () => id, now: () => now });
 
@@ -147,6 +154,94 @@ describe('planBackup — 손상 스냅샷의 링 슬롯 점유 방지', () => {
     if (plan.kind !== 'write') throw new Error('expected write plan');
 
     expect(plan.manifest.snapshots.map((s) => s.id)).toEqual(['sc', 'sb']);
+  });
+});
+
+describe('sync 저장 스위치 (R-1 — 단순 계약)', () => {
+  it('기존 설치 기본값은 sync ON — 필드가 없던 상태도 켜진 채로 읽힌다', () => {
+    expect(createDefaultState().syncBackup).toBe(true);
+    expect(backupTarget(createDefaultState())).toBe('sync');
+
+    const { syncBackup: _dropped, ...legacy } = createDefaultState();
+    expect(parseStoredState(JSON.parse(JSON.stringify(legacy))).syncBackup).toBe(true);
+  });
+
+  it('무효값은 기본값으로 치유된다 — 플래그 하나가 프로필을 날리지 않는다', () => {
+    const revived = parseStoredState({ ...createDefaultState(), syncBackup: 'yes' });
+
+    expect(revived.syncBackup).toBe(true);
+    expect(revived.profiles).toHaveLength(1);
+  });
+
+  it('토글은 앞으로의 저장 대상만 바꾼다 — 나머지 상태는 그대로다', () => {
+    const on = createDefaultState();
+    const off = applyCommand(on, { type: 'set-sync-backup', enabled: false });
+
+    expect(backupTarget(off)).toBe('local');
+    expect(off.profiles).toEqual(on.profiles);
+    expect(backupTarget(applyCommand(off, { type: 'set-sync-backup', enabled: true }))).toBe('sync');
+  });
+
+  it('토글해도 반대쪽 스냅샷은 옮겨지거나 지워지지 않고, 히스토리는 활성 저장소 것을 보여준다', () => {
+    const world: Record<BackupTarget, SyncKV> = { sync: {}, local: {} };
+    let state = createDefaultState();
+
+    // sync ON — 앞으로의 백업은 클라우드로 간다
+    world.sync = committedBackup(world.sync, 'cloud-payload', 'c1', 1);
+
+    // 스위치를 끈다 → 앞으로의 백업만 local로 간다 (이관 없음)
+    state = applyCommand(state, { type: 'set-sync-backup', enabled: false });
+    world[backupTarget(state)] = committedBackup(world[backupTarget(state)], 'local-payload', 'l1', 2);
+
+    expect(listSnapshots(world.sync).map((s) => s.id)).toEqual(['c1']);
+    expect(listSnapshots(world[backupTarget(state)]).map((s) => s.id)).toEqual(['l1']);
+
+    // 다시 켜면 클라우드 히스토리가 다시 보이고, local 스냅샷도 그대로 남아 있다
+    state = applyCommand(state, { type: 'set-sync-backup', enabled: true });
+    expect(listSnapshots(world[backupTarget(state)]).map((s) => s.id)).toEqual(['c1']);
+    expect(listSnapshots(world.local).map((s) => s.id)).toEqual(['l1']);
+  });
+
+  it('클라우드 삭제는 백업 네임스페이스만 지운다 — 같은 구역의 다른 키는 건드리지 않는다', () => {
+    const kv = committedBackup({}, 'payload', 's1', 1);
+    kv.state = { profiles: [] }; // local 구역에는 권위 상태가 함께 산다
+
+    const keys = backupKeys(kv);
+    expect(keys).toContain(BACKUP_MANIFEST_KEY);
+    expect(keys).toContain(chunkKey('s1', 0));
+    expect(keys).not.toContain('state');
+  });
+
+  it('삭제 후 잔재가 없어야 성공이다 — 남아 있으면 사유와 함께 실패로 표면화한다', () => {
+    const kv = committedBackup({}, 'payload', 's1', 1);
+    expect(verifyBackupsCleared({ state: { profiles: [] } })).toEqual({ ok: true });
+
+    // remove가 조용히 일부만 지웠다 (quota·경합·권한) — 성공으로 보고하면 "이 브라우저에만"이 거짓이 된다
+    const partial = { ...kv };
+    delete partial[BACKUP_MANIFEST_KEY];
+    const result = verifyBackupsCleared(partial);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.remaining).toEqual([chunkKey('s1', 0)]);
+  });
+
+  it('클라우드 잔존 여부는 상태 문구가 읽는다 — 스위치를 꺼도 잔재가 있으면 있다고 말한다', () => {
+    const kv = committedBackup({}, 'payload', 's1', 1);
+
+    expect(backupKeys({}).length > 0).toBe(false);
+    expect(backupKeys(kv).length > 0).toBe(true);
+  });
+
+  it('quota는 대상 저장소에 맞춘다 — sync 예산을 넘는 페이로드도 local에는 들어간다', () => {
+    const big = 'x'.repeat(120_000);
+
+    expect(planBackup({}, big, { profileCount: 1 }, deps(), backupLimits('sync')).kind).toBe(
+      'too-large',
+    );
+    expect(planBackup({}, big, { profileCount: 1 }, deps(), backupLimits('local')).kind).toBe(
+      'write',
+    );
   });
 });
 

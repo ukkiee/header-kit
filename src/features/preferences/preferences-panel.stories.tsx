@@ -25,6 +25,7 @@ function Interactive({ incognitoAllowed }: { incognitoAllowed: boolean }) {
         paused: false,
         theme,
         badgeVisible,
+        syncBackup: true,
         profiles: [],
         materialized: {},
         customHeaderNames: names,

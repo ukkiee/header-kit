@@ -278,6 +278,14 @@ export interface StoredState {
    * 표시 여부만 정한다. 꺼도 규칙은 그대로 걸리고, 켜면 그때의 적용 수가 다시 보인다.
    */
   badgeVisible: boolean;
+  /**
+   * 백업 스냅샷을 계정 동기화 저장소(storage.sync)에 둘지 (ADR 0015, R-1).
+   *
+   * **앞으로의** 저장 위치만 정한다 — 끄거나 켠다고 이미 만들어진 스냅샷이 옮겨지거나
+   * 지워지지 않는다. 클라우드 잔재를 지우는 것은 별도의 명시적 동작이다. 이 단순화가
+   * 원자적 이관·자동백업과의 경쟁을 구조에서 없앤다.
+   */
+  syncBackup: boolean;
   profiles: Profile[];
   /**
    * Placeholder 실체화 값의 활성 상태 구역 — Modification id 키.
@@ -290,6 +298,12 @@ export interface StoredState {
 
 /** 배지는 기본으로 켜져 있다 — 끄지 않은 사용자는 지금까지처럼 본다. */
 export const DEFAULT_BADGE_VISIBLE = true;
+
+/**
+ * 백업은 기본으로 클라우드(storage.sync)에 간다 — 지금까지 백업이 항상 sync였으므로,
+ * 기존 설치는 이 기본값으로 자기 히스토리를 그대로 본다.
+ */
+export const DEFAULT_SYNC_BACKUP = true;
 
 export const PROFILE_COLORS = [
   '#2563eb',
@@ -369,6 +383,7 @@ export function createDefaultState(): StoredState {
     paused: false,
     theme: DEFAULT_THEME,
     badgeVisible: DEFAULT_BADGE_VISIBLE,
+    syncBackup: DEFAULT_SYNC_BACKUP,
     profiles: [{ ...createProfile('Default Profile'), active: true }],
     materialized: {},
     customHeaderNames: [],
