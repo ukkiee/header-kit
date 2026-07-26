@@ -108,6 +108,7 @@ const en = {
   confirmDeleteCloudBackups: 'Delete from cloud?',
   cloudBackupsDeleted: 'Cloud backups deleted.',
   cloudDeleteFailed: 'Could not delete cloud backups',
+  cloudDeleteRemaining: '{count} backup key(s) still in the cloud.',
   incognitoAllowed: 'Incognito access is enabled.',
   incognitoBlocked:
     'Not enabled in incognito windows. Turn on “Allow in Incognito” on the extension details page to modify incognito traffic.',
@@ -274,6 +275,7 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     confirmDeleteCloudBackups: '클라우드에서 삭제?',
     cloudBackupsDeleted: '클라우드 백업을 삭제했습니다.',
     cloudDeleteFailed: '클라우드 백업을 삭제하지 못했습니다',
+    cloudDeleteRemaining: '클라우드에 백업 키 {count}개가 남아 있습니다.',
     incognitoAllowed: '시크릿 창 접근이 허용되었습니다.',
     incognitoBlocked:
       '시크릿 창에서 활성화되지 않았습니다. 시크릿 트래픽을 수정하려면 확장 상세 페이지에서 “시크릿 모드에서 허용”을 켜세요.',

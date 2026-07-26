@@ -85,16 +85,20 @@ export async function hasCloudBackups(): Promise<boolean> {
  * 지웠다고 보고하기 전에 다시 읽어 검증한다. 실패를 성공처럼 표시하면 사용자는 클라우드에
  * 남은 백업을 지웠다고 믿게 되고, 그것이 이 기능이 막으려는 유일한 거짓 표시다.
  */
-export async function clearCloudBackups(): Promise<{ ok: true } | { ok: false; error: string }> {
+export type ClearCloudResult =
+  | { ok: true }
+  /** 잔재가 남았다 — 개수는 **파라미터**로 넘긴다. 어댑터는 로케일을 모른다. */
+  | { ok: false; remaining: number }
+  | { ok: false; error: string };
+
+export async function clearCloudBackups(): Promise<ClearCloudResult> {
   try {
     const keys = backupKeys(await readBackupKV('sync'));
     if (keys.length > 0) {
       await browser.storage.sync.remove(keys);
     }
     const verified = verifyBackupsCleared(await readBackupKV('sync'));
-    return verified.ok
-      ? { ok: true }
-      : { ok: false, error: `${verified.remaining.length} backup key(s) still in cloud storage` };
+    return verified.ok ? { ok: true } : { ok: false, remaining: verified.remaining.length };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }

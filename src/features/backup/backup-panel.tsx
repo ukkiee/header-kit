@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react';
 import { backupTarget, decodeSnapshotText, type BackupTarget, type SnapshotStatus } from '@/core/backup';
 import type { Command } from '@/core/commands';
 import { parseImport } from '@/core/transfer';
+import { format, type Translator } from '@/core/i18n';
 import {
   clearCloudBackups,
   hasCloudBackups,
   listBackupSnapshots,
   readBackupKV,
+  type ClearCloudResult,
 } from '@/platform/backupStore';
 import { RotateCcw } from 'lucide-react';
 import { AlertBanner } from '@/ui/alert-banner';
@@ -29,7 +31,7 @@ export interface BackupPanelProps {
   ) => Promise<{ ok: true; text: string } | { ok: false; reason: string }>;
   /** 클라우드에 백업이 남아 있는지 — 스위치 상태와 **별개로** 조회한다. */
   loadCloudPresence?: () => Promise<boolean>;
-  clearCloud?: () => Promise<{ ok: true } | { ok: false; error: string }>;
+  clearCloud?: () => Promise<ClearCloudResult>;
 }
 
 async function defaultLoadSnapshotText(entry: SnapshotStatus, target: BackupTarget) {
@@ -38,6 +40,13 @@ async function defaultLoadSnapshotText(entry: SnapshotStatus, target: BackupTarg
 
 function reasonText(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason);
+}
+
+/** 삭제 실패 사유도 카탈로그를 거친다 — 잔여 개수는 파라미터 키로 보간한다. */
+function clearFailureDetail(result: Extract<ClearCloudResult, { ok: false }>, t: Translator) {
+  return 'remaining' in result
+    ? format(t('cloudDeleteRemaining'), { count: result.remaining })
+    : result.error;
 }
 
 /**
@@ -98,7 +107,7 @@ export function BackupPanel({
 
     const result = await clearCloud();
     // 삭제는 성공을 **검증한** 결과만 성공으로 표시한다 — 실패는 배너로 드러난다.
-    setError(result.ok ? null : `${t('cloudDeleteFailed')}: ${result.error}`);
+    setError(result.ok ? null : `${t('cloudDeleteFailed')}: ${clearFailureDetail(result, t)}`);
     setNotice(result.ok ? t('cloudBackupsDeleted') : null);
     setCloudRevision((n) => n + 1);
     if (target === 'sync') void loadSnapshots(target).then(setSnapshots);
