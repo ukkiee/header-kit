@@ -173,11 +173,11 @@ const en = {
   ariaReorderProfile: 'Reorder {name}',
   ariaShowProfiles: 'Show profiles',
   ariaShowBackups: 'Show backups',
-  ariaShowPreferences: 'Show preferences',
+  ariaShowPreferences: 'Show settings',
   /*
-   * 레일에 **보이는** 짧은 라벨 (티켓 10) — 접근성 이름(ariaShow*)과 따로 두는 이유는
-   * 둘의 일이 다르기 때문이다. 접근성 이름은 "무엇을 하는 버튼인가"(Show preferences)를
-   * 말해야 하고, 눈에 보이는 라벨은 레일 폭 안에서 "어느 화면인가"를 말한다.
+   * 레일에 **보이는** 짧은 라벨 (티켓 10) — 접근성 이름(ariaShow*)은 이 가시 라벨을
+   * 반드시 포함해야 한다(WCAG 2.5.3 Label in Name). 음성 제어는 사용자가 눈으로 읽은
+   * 그 단어로 버튼을 부르므로, 가시 라벨이 접근성 이름 밖에 있으면 조준할 수 없다.
    */
   railProfiles: 'Profiles',
   railBackups: 'Backups',

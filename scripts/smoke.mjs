@@ -815,7 +815,7 @@ try {
   ]);
   await popup.reload();
   // 단일 셸(ADR 0005): 환경설정은 레일 화면 경유, datalist 검사는 프로필 화면 복귀 후
-  await popup.getByRole('button', { name: 'Show preferences' }).click();
+  await popup.getByRole('button', { name: 'Show settings' }).click();
   await ensurePanelOpen(popup, 'Toggle preferences');
   await popup.getByLabel('New autocomplete header').fill('X-Team-Custom');
   await popup.getByRole('button', { name: 'Add autocomplete header' }).click();
@@ -1476,7 +1476,7 @@ try {
   await tabApp.getByRole('button', { name: 'Show backups' }).click();
   const backupsShown = await tabApp.getByRole('button', { name: 'Toggle backups' })
     .waitFor({ timeout: 5000 }).then(() => true, () => false);
-  await tabApp.getByRole('button', { name: 'Show preferences' }).click();
+  await tabApp.getByRole('button', { name: 'Show settings' }).click();
   const prefsShown = await tabApp.getByRole('button', { name: 'Toggle preferences' })
     .waitFor({ timeout: 5000 }).then(() => true, () => false);
   await tabApp.getByRole('button', { name: 'Show profiles' }).click();
@@ -1771,7 +1771,7 @@ try {
     `idle=${opacityIdle}, row-hover=${opacityRowHover}, tooltip-hover=${tooltipOnHover}, tooltip-focus=${tooltipOnFocus}`);
 
   // 환경설정: 단축키 문구 없음, 기본 사전 비제거 pill, 사용자 항목만 X
-  await popup.getByRole('button', { name: 'Show preferences' }).click();
+  await popup.getByRole('button', { name: 'Show settings' }).click();
   await ensurePanelOpen(popup, 'Toggle preferences');
   const hintGone = !(await popup.getByText(/chrome:\/\/extensions\/shortcuts/).isVisible().catch(() => false));
   const acceptPill = popup.locator('li').filter({ hasText: /^Accept$/ }).first();
@@ -2113,7 +2113,7 @@ try {
   await popup.getByRole('button', { name: 'Delete', exact: true }).first().click();
   const afterDelete = await pollSessionRuleCount(sw, 2).then(() => true, () => false);
   // 레일 화면 전환(cross-fade) 후 대상 화면이 뜬다
-  await popup.getByRole('button', { name: 'Show preferences' }).click();
+  await popup.getByRole('button', { name: 'Show settings' }).click();
   const prefsAfterFade = await popup.getByRole('button', { name: 'Toggle preferences' })
     .waitFor({ timeout: 5000 }).then(() => true, () => false);
   await popup.getByRole('button', { name: 'Show profiles' }).click();
@@ -2326,7 +2326,7 @@ try {
    * 값을 고르면 스위치가 죽어 있어도 통과한다.
    */
   await popup.emulateMedia({ colorScheme: 'dark' });
-  await popup.getByRole('button', { name: 'Show preferences' }).click();
+  await popup.getByRole('button', { name: 'Show settings' }).click();
   await ensurePanelOpen(popup, 'Toggle preferences');
   const canvasBg = () =>
     popup.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--background').trim());
@@ -2344,7 +2344,7 @@ try {
   );
   // 다시 열어도 유지 — 시스템은 여전히 다크인데 라이트로 떠야 한다.
   await popup.reload();
-  await popup.getByRole('button', { name: 'Show preferences' }).waitFor({ timeout: 5000 });
+  await popup.getByRole('button', { name: 'Show settings' }).waitFor({ timeout: 5000 });
   const keptAfterReopen = await pollUntil(rootTheme, (v) => v === 'light', 5000, 100);
   await popup.emulateMedia({ colorScheme: 'light' });
   record('N35: 테마 스위치 — 시스템을 이기고, 색을 바꾸고, 다시 열어도 유지된다',
@@ -2357,7 +2357,7 @@ try {
    * N35b: '시스템'으로 되돌리면 다시 OS를 따른다 — 되돌릴 수 없는 스위치는 함정이다.
    */
   // 위에서 새로고침했으므로 화면은 프로필로 돌아가 있다 — 칩을 다시 꺼내 온다.
-  await popup.getByRole('button', { name: 'Show preferences' }).click();
+  await popup.getByRole('button', { name: 'Show settings' }).click();
   await ensurePanelOpen(popup, 'Toggle preferences');
   await popup.getByRole('button', { name: 'System', exact: true }).click();
   await popup.emulateMedia({ colorScheme: 'dark' });
@@ -2397,7 +2397,7 @@ try {
     (await chrome.declarativeNetRequest.getSessionRules()).length);
 
   await popup.reload();
-  await popup.getByRole('button', { name: 'Show preferences' }).click();
+  await popup.getByRole('button', { name: 'Show settings' }).click();
   await ensurePanelOpen(popup, 'Toggle preferences');
   const keptOff = await badgeText();
   const switchOff = await badgeSwitch().getAttribute('aria-checked');
@@ -3074,7 +3074,7 @@ try {
   // 예전에는 오른쪽 끝 아이콘 버튼만 눌렸다 — 제목·여백을 눌러도 같은 동작이어야 하고,
   // 그러면서 포커스 대상은 하나로 남아야 한다(Tab 정지가 늘면 키보드 사용자가 손해다).
   await popup.reload();
-  await popup.getByRole('button', { name: 'Show preferences' }).click();
+  await popup.getByRole('button', { name: 'Show settings' }).click();
   const prefsHeader = popup.getByRole('button', { name: 'Toggle preferences', exact: true });
   // 헤더가 버튼이 아니게 되는 것이 이 테스트가 잡으려는 회귀다 — waitFor가 던져
   // 스위트를 중단시키면 FAIL로 기록되지 않는다(N22c·N24c에서 이미 겪었다).
@@ -3210,7 +3210,7 @@ try {
 
   await popup.emulateMedia({ reducedMotion: null });
   await popup.reload();
-  await popup.getByRole('button', { name: 'Show preferences' }).click();
+  await popup.getByRole('button', { name: 'Show settings' }).click();
   await popup.getByRole('button', { name: 'Toggle preferences', exact: true }).waitFor({ timeout: 5000 });
   const prefsDefaultOpen = await popup
     .getByRole('button', { name: 'Toggle preferences', exact: true })
@@ -3219,7 +3219,7 @@ try {
 
   await popup.emulateMedia({ reducedMotion: 'reduce' });
   await popup.reload();
-  await popup.getByRole('button', { name: 'Show preferences' }).click();
+  await popup.getByRole('button', { name: 'Show settings' }).click();
   await popup.getByRole('button', { name: 'Toggle preferences', exact: true }).waitFor({ timeout: 5000 });
   const reducedCloseMs = await panelCloseMs(popup, 'Toggle preferences');
   await popup.emulateMedia({ reducedMotion: null });
@@ -3337,7 +3337,7 @@ try {
     { ...baseProfile('p-b', 'Beta', []), active: false },
   ]);
   await popup.reload();
-  await popup.getByRole('button', { name: 'Show preferences' }).click();
+  await popup.getByRole('button', { name: 'Show settings' }).click();
   await popup.waitForTimeout(300);
   const onPrefs = await popup.evaluate(() =>
     [...document.querySelectorAll('nav button')].map((b) => b.getAttribute('aria-pressed')));
@@ -3433,7 +3433,7 @@ try {
   const railEn = {
     profiles: await railProbe(popup, 'Show profiles'),
     backups: await railProbe(popup, 'Show backups'),
-    preferences: await railProbe(popup, 'Show preferences'),
+    preferences: await railProbe(popup, 'Show settings'),
   };
   // 실제 Tab으로 도달했을 때도 열리는지 — 프로그램적 focus()와 focus-visible 판정이
   // 다를 수 있어 키보드 경로를 한 번은 진짜로 밟는다.
@@ -3513,7 +3513,7 @@ try {
     railStructure.length === 3 &&
     railStructure.every((r) => r.icon) &&
     railStructure.map((r) => r.text).join('|') === 'Profiles|Backups|Settings' &&
-    railStructure.map((r) => r.aria).join('|') === 'Show profiles|Show backups|Show preferences';
+    railStructure.map((r) => r.aria).join('|') === 'Show profiles|Show backups|Show settings';
 
   // 프로필 열 — 검색·색 스와치·인라인 토글·새 프로필. 스와치는 활성이면 채움, 비활성이면
   // 테두리다(색을 지워도 남는 차이) — 그러면서 프로필 색은 두 상태 모두에서 보인다.
@@ -3786,7 +3786,7 @@ try {
     .getByRole('button', { name: 'Pause' })
     .waitFor({ timeout: 5000 })
     .then(() => true, () => false);
-  await langPage.getByRole('button', { name: 'Show preferences' }).click();
+  await langPage.getByRole('button', { name: 'Show settings' }).click();
   await ensurePanelOpen(langPage, 'Toggle preferences');
   await langPage.getByRole('button', { name: '한국어' }).click();
   // 고른 즉시 바뀌는지 — 헤더의 Pause는 어느 화면에서나 보이는 문구다.
