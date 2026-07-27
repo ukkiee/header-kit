@@ -414,3 +414,56 @@ resolutions_checked 0 · human_rows [R-1, R-2, R-3] · gate_commits 3 · ledger_
 `rederived + resolutions_checked = 3 < rowCount 6` — **이 라운드는 "전량 기계 검증"으로 보고될 수
 없다.** 6행 중 3행(R-1·R-2·R-3)은 사람 결정이라 기계가 재도출하지 않았다. Stage 5 최종 보고서에
 이 숫자를 행 id와 함께 그대로 실어야 한다.
+
+### ESCALATION budget-insufficient 2026-07-27T18:10Z
+
+티켓 14(스모크 진단) 구현자가 **API 세션 한도**로 중도 사망했고, 그 뒤 세션이 약 8시간 30분
+차단돼 있는 사이 **이 루프 실행의 예산 시계와 티켓 14의 wall clock이 모두 만료**됐다.
+정지 사유는 구현자의 작업 품질도, 코드도, 게이트도 아니다 — 시계다.
+
+| 시계 | 값 | 상태 |
+|---|---|---|
+| 티켓 14 wall clock | `ticket.start` 09:38:17Z + 90분 → 11:08Z | 만료(약 7시간 초과) |
+| 루프 실행 예산 | `budget_until` 2026-07-27T15:26:40Z | 만료(약 2시간 44분 초과) |
+| 현재 시각 | 2026-07-27T18:10Z | — |
+
+**구현자는 커밋을 남기지 않았다.** `git log 6ea9fcf..HEAD` = 비어 있음. 대신 미커밋 WIP를
+남겼고, 그 귀속은 확정됐다 — 네 경로 전부 파견 창(`ticket.start` 09:38:17Z ~ 사망 09:4x Z)
+안쪽인 **09:45:22Z–09:47:08Z**에 쓰였고, 09:34:46Z에 `git status --porcelain`과
+`loop-state.mjs state`(`"dirty": []`) 두 독립 판독이 트리를 clean으로 보고했다. 8시간 30분의
+공백 동안에는 아무 경로도 수정되지 않았다. **`foreign-dirt`가 아니라 사망 지점 매트릭스
+row 14(mid-implementation)이다.**
+
+```
+ M src/platform/stateStore.test.ts            (+47/-… , 09:45:53Z)
+ M src/platform/stateStore.ts                 (+27/-… , 09:47:08Z)
+ M src/runtime/background-bootstrap.test.ts   (+68/-0 , 09:46:49Z)
+?? scripts/audit-smoke-barriers.mjs           (          09:45:22Z)
+                                    합계 3 files changed, 135 insertions(+), 7 deletions(-)
+```
+
+구현자가 남긴 부분 출력은 한 줄뿐이다 — `Red baseline captured (11 flags). Now the unit tests,
+red first.` **저널 `.scratch/wide-ui-redesign/tickets/14.md`는 쓰이지 않았다**(사망이 그보다
+앞섰다). 즉 저 135줄이 무엇을 의도했는지에 대한 기록은 이 한 줄이 전부다.
+
+**부수 발견 — 다음 진입은 현재 도구로는 두 문 모두 막혀 있다.** 이것이 사람이 필요한 이유다.
+
+- **`--resume`로 들어가면 P9a `budget-insufficient`로 즉시 실패한다.** `loop-state.mjs:1330`의
+  `opts.resume && meters.loop.budget_until ? meters.loop.budget_until : now + budgetHours`는
+  resume일 때 이전 `loop.start`의 `budget_until`을 **그대로 승계하며 `--budget-hours`를 무시**
+  한다. 승계값 15:26:40Z은 이미 과거이므로 `haveMin`은 음수, `need`는 180분(열린 티켓 4개)이다.
+  그리고 그 승계값의 출처는 저널의 마지막 `loop.start` 레코드(`loop-state.mjs:1026`)이고,
+  새 `loop.start`는 프리플라이트를 통과해야만 쓰인다 — **순환이다.**
+- **`--resume` 없이(콜드) 들어가면** 예산은 `now + 8h`로 새로 발급되지만 P1이 위 WIP를
+  `foreign-dirt`로 잡고, 그 다음 P2가 다시 `suite-red`로 잡는다.
+
+이 승계 규칙은 몇 분 뒤 재개에는 옳고, **세션 한도로 8시간 차단된 뒤의 재개에는 함정**이다.
+루프가 스스로 예산을 재발급하는 것은 이 설계가 가장 경계하는 자기승인이라 하지 않았다.
+
+**이 정지가 새로 미해결로 만든 게이트 finding은 없다.** 릴리스 r1의 처분은 그대로다 —
+적용됨 R-1 `5486f30` · R-2 `a711d57` · R-3 `4e4d024`(전부 HUMAN accept, sha 스탬프 보유),
+미적용 R-4(accept, 티켓 11·12·13으로 분해) · R-5/R-6(defer, followups). `### release r1`은
+`roundSuspended: false`이고 `verify-ledger` exit 0 상태를 유지한다(4f4b0a6). 건드리지 않았다.
+
+**이 정지는 spec hold(`blocks=`)를 걸지 않았다.** 티켓 11·12·13·14를 막는 것은 예산이지
+스펙 결정이 아니다.
