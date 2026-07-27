@@ -613,6 +613,25 @@ try {
   record('H2: 깨진 Import는 거부되고 상태가 불변', /JSON/i.test(importError ?? '') && profileCountAfter === 1,
     `error="${importError}", profiles=${profileCountAfter}`);
 
+  /*
+   * H2b: 그 거부 문구가 **전송 패널 자신의 것**인지 (티켓 09 리뷰 R-7).
+   *
+   * H2의 단언은 백업 화면에 패널이 둘 서면서 "첫 배너"로 넓어졌다 — 전송 경고가 통째로
+   * 사라지고 백업 패널 배너가 우연히 JSON을 언급하기만 해도 통과한다. 여기서 잃은 특정성을
+   * 되찾는다: Import 토글을 가진 섹션(=전송 패널) 안으로 범위를 좁혀, 거부를 말하는 것이
+   * 거부한 패널인지 본다. H2가 방금 남긴 화면을 읽기만 하고 상태는 더 건드리지 않는다.
+   */
+  const transferSection = popup
+    .locator('section')
+    .filter({ has: popup.getByRole('button', { name: 'Import…' }) });
+  const transferSectionCount = await transferSection.count();
+  const transferAlerts = transferSection.getByRole('alert');
+  const transferAlertCount = await transferAlerts.count();
+  const transferImportError = transferAlertCount > 0 ? await transferAlerts.first().textContent() : null;
+  record('H2b: 거부 문구는 전송 패널 자신의 경고다',
+    transferSectionCount === 1 && transferAlertCount > 0 && /JSON/i.test(transferImportError ?? ''),
+    `sections=${transferSectionCount}, alerts=${transferAlertCount}, error="${transferImportError}"`);
+
   // ---------- I. 이슈 09: 자동 Backup · 복원 ----------
   // 이전 섹션들의 누적 백업을 지우고 자족적으로 시작한다.
   await sw.evaluate(async () => chrome.storage.sync.clear());
