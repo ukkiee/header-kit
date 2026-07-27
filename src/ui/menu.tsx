@@ -65,7 +65,7 @@ const menuItem = cva(
     variants: {
       tone: {
         default: 'text-popover-foreground',
-        danger: 'text-red-600 dark:text-red-400',
+        danger: 'text-destructive',
       },
     },
     defaultVariants: { tone: 'default' },

@@ -18,8 +18,10 @@ const iconButton = cva(
     variants: {
       tone: {
         default: ghostInteractive,
+        // 파괴적 톤은 시맨틱 `--destructive` 하나에서 온다 — 채움 농도는 Button의
+        // destructive 변형과 같은 값(라이트 /10, 다크 /20)이라 두 표기가 갈리지 않는다.
         danger:
-          'text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 dark:hover:text-red-400',
+          'text-muted-foreground hover:bg-destructive/10 hover:text-destructive dark:hover:bg-destructive/20',
       },
       /**
        * `sm`은 행 안에 여럿 늘어서는 반복 액션(편집/삭제), `md`는 단독으로 서는
