@@ -1,7 +1,6 @@
 import type { Command } from '@/core/commands';
 import {
   isBlockedFromOverwrite,
-  parseStoredState,
   readStoredState,
   type StoredState,
   type StoredStateRead,
@@ -11,9 +10,23 @@ import type { StatusSummary } from '@/core/summary';
 const STATE_KEY = 'state';
 const COMMAND_MESSAGE = 'headerkit:command';
 
+/** 읽을 수 없는 저장 상태로 로드가 멈췄다는 **타입화된** 오류 (R-3) — 기본 상태로 접으면
+ *  화면은 "프로필이 사라진" 모습을 오류 없이 그리고 재조정은 빈 규칙을 적용한다. */
+export class StateLoadError extends Error {
+  constructor(readonly reason: 'newer' | 'unmigratable', readonly storedVersion: number) {
+    super(`Stored state is unreadable (${reason}, v${storedVersion}). Your data is left intact.`);
+    this.name = 'StateLoadError';
+  }
+}
+
+/** 권위 저장소에서 읽고 **마이그레이션을 커밋한다** — 검증을 통과한 v1→v2를 메모리에만 두면
+ *  저장소는 영원히 v1이다. 읽을 수 없는 값은 접지 않고 던진다(원본은 그대로 남는다). */
 export async function loadState(): Promise<StoredState> {
-  const result = await browser.storage.local.get(STATE_KEY);
-  return parseStoredState(result[STATE_KEY]);
+  const read = await readState();
+  if (read.status === 'blocked') throw new StateLoadError(read.reason, read.storedVersion);
+  // 덮어쓰기 가드를 다시 지나도록 persistState로 쓴다 — 새 쓰기 경로를 열지 않는다.
+  if (read.status === 'migrated') await persistState(read.state);
+  return read.state;
 }
 
 /**
@@ -26,7 +39,7 @@ export async function readState(): Promise<StoredStateRead> {
 }
 
 /**
- * background의 명령 실행자만 호출한다 — 다른 쓰기 경로는 없다.
+ * background의 명령 실행자와 위 마이그레이션 커밋만 호출한다 — 다른 쓰기 경로는 없다.
  *
  * **쓰기 전에 저장된 값을 다시 읽어 덮어써도 되는지 확인한다** (티켓 02, ADR 0015).
  * 이 가드가 없으면 데이터 손실 경로가 열린다: 이 버전이 이해 못 하는 상태(더 새 포맷,

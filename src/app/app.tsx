@@ -58,6 +58,8 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [railView, setRailView] = useState<RailView>('profiles');
   const [commandError, setCommandError] = useState<string | null>(null);
+  /** 로드가 멈춘 사유 (R-3) — 읽을 수 없는 상태를 빈 화면으로 그리지 않기 위해 따로 든다. */
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [summary, setSummary] = useState<StatusSummaryData | null>(null);
   /*
    * 언어의 두 **바깥** 출처 (티켓 09). 저장된 선호는 state가 들고 있으므로 여기 두지 않는다 —
@@ -78,9 +80,13 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
 
   useEffect(() => {
     // 요약은 background가 적용한 결과를 발행한 것을 읽기만 한다 (독립 재컴파일 없음).
-    void loadState().then(setState);
+    const refresh = () =>
+      void loadState().then(setState, (error: unknown) =>
+        setLoadError(error instanceof Error ? error.message : String(error)),
+      );
+    refresh();
     void getSummary().then(setSummary);
-    onStateChanged(() => void loadState().then(setState));
+    onStateChanged(refresh);
     onSummaryChanged(() => void getSummary().then(setSummary));
     // URL의 ?locale= 오버라이드(언어 강제)와 브라우저 UI 언어는 한 번만 읽으면 되는 값이다.
     setLocaleSources({
@@ -92,7 +98,8 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
 
   const toast = useToastManager();
 
-  if (!state) return null;
+  if (!state)
+    return loadError ? <AlertBanner severity="danger" role="alert">{loadError}</AlertBanner> : null;
 
   const locale = pickLocale(localeSources.override, state.locale, localeSources.uiLanguage);
   // 화면이 쓰는 언어와 **언어 칩이 짚는 값**은 다른 질문이다 — 칩은 오버라이드를 보지 않는다.
