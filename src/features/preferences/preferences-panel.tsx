@@ -6,6 +6,7 @@ import { LOCALES, type Locale, type MessageKey } from '@/core/i18n';
 import { describeShortcuts, type RegisteredCommand, type ShortcutRow } from '@/core/shortcuts';
 import { listShortcuts } from '@/platform/shortcuts';
 import { THEME_PREFERENCES, type ThemePreference } from '@/core/theme';
+import { AlertBanner } from '@/ui/alert-banner';
 import { ChoiceChips } from '@/ui/chip-group';
 import { Button } from '@/ui/press-button';
 import { Input } from '@/ui/text-field';
@@ -63,10 +64,20 @@ export function PreferencesPanel({
   const [open, setOpen] = useState(true);
   const [draft, setDraft] = useState('');
   const [shortcuts, setShortcuts] = useState<ShortcutRow[]>([]);
+  const [shortcutError, setShortcutError] = useState<string | null>(null);
 
   // 등록된 커맨드는 열려 있을 때만 읽는다 — 닫힌 패널을 위해 브라우저에 물을 이유가 없다.
+  // 거부는 BackupPanel의 loadSnapshots와 같은 결로 배너에 올린다: 목록은 비었을 때
+  // 통째로 사라지는 자리라, 삼키면 "단축키가 없다"와 "읽지 못했다"가 같은 화면이 된다.
   useEffect(() => {
-    if (open) void loadShortcuts().then((commands) => setShortcuts(describeShortcuts(commands)));
+    if (open)
+      void loadShortcuts().then(
+        (commands) => {
+          setShortcuts(describeShortcuts(commands));
+          setShortcutError(null);
+        },
+        (reason) => setShortcutError(reason instanceof Error ? reason.message : String(reason)),
+      );
   }, [open, loadShortcuts]);
 
   const add = () => {
@@ -129,6 +140,14 @@ export function PreferencesPanel({
           {/* 단축키 (티켓 09) — **읽기 전용**이다. 새 바인딩을 만들지 않고, 브라우저가 지금
               등록해 둔 것만 옮겨 적는다. 값이 비어 있어도 행을 지우지 않는다 — 커맨드가
               있는데 키가 없다는 사실 자체가 사용자가 알아야 할 정보다. */}
+          {shortcutError !== null && (
+            <div className="flex flex-col gap-1">
+              <span className="font-medium">{t('shortcuts')}</span>
+              <AlertBanner as="p" severity="danger" size="xs" role="alert">
+                {shortcutError}
+              </AlertBanner>
+            </div>
+          )}
           {shortcuts.length > 0 && (
             <div className="flex flex-col gap-1">
               <span className="font-medium">{t('shortcuts')}</span>
