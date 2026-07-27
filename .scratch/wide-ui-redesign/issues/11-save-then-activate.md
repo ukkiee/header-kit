@@ -1,0 +1,19 @@
+# 11 — 규칙 저장 후 바로 활성화 선택 (RuleForm 토글)
+
+**What to build:** RuleForm에 **"저장 후 바로 활성화"** 토글을 두어 새 규칙을 켠 채로 저장할지 꺼진 채로 저장할지 사용자가 고르게 한다(story 17). 지금은 폼 액션이 Cancel/Save 둘뿐이고(`src/features/modifications/rule-form.tsx:513-520`) 모든 새 초안이 `createModification`에서 `enabled: true`로 고정돼(`model.ts:358`) 선택 자체가 없다. 저장 경로는 이미 `enabled`를 그대로 나르므로(`add-modification`·`update-modification`이 `Modification` 전체를 받는다) **새 커맨드도 스키마 변경도 필요 없다** — 폼이 초안의 `enabled`를 편집 가능하게 만드는 것이 이 티켓의 전부다. 기본값은 켜짐으로 둔다: 토글을 만지지 않은 사용자에게는 지금과 완전히 같은 결과여야 하기 때문이다.
+
+릴리스 게이트 r1의 finding R-4(미배선 사용자 대면 기능 셋)를 쪼갠 티켓 중 하나다. 나머지 둘(백업 스냅샷 개별 삭제, 프로필 행의 규칙 수·일시정지 표시)과는 건드리는 파일도 계약도 겹치지 않아 **서로 독립**이며 어느 쪽도 다른 쪽을 막지 않는다.
+
+**Blocked by:** None — can start immediately.
+
+**Status:** ready-for-agent
+
+- [ ] 새 규칙 폼에 "저장 후 바로 활성화" 토글이 en·ko 문구로 있고 **기본은 켜짐** — 아무것도 만지지 않고 저장하면 지금과 같이 `enabled: true`로 저장된다
+- [ ] 토글을 끄고 저장하면 그 규칙이 `enabled: false`로 저장되어 목록에 꺼진 행으로 남고 컴파일 방출 대상에서 빠진다(`compile.ts`의 `m.enabled` 필터) — 만들자마자 죽은 채로 둘 수 있다
+- [ ] 기존 규칙을 수정할 때 토글이 그 규칙의 **현재 `enabled`를 반영**하고 폼에서 바꾼 값만 저장에 실린다 — 폼을 열었다 저장하는 것만으로 상태가 뒤집히지 않는다
+- [ ] 폼 안에서 종류를 바꿔도 토글 선택이 유지된다(초안 전환이 `id`·`enabled`·메모·조건을 승계하는 현재 동작과 정합, `src/features/modifications/rule-form.tsx:113-127`)
+- [ ] **커맨드·스키마·저장 경로는 이 티켓에서 바꾸지 않는다** — `add-modification`/`update-modification`이 이미 `enabled`를 나른다. 규칙 행의 인라인 토글(story 7)·전역 일시정지·배지도 손대지 않는다
+- [ ] 스펙 Testing Decisions가 이 기능의 시임 항목을 이름 붙이지 않았으므로 **새 시임을 만들지 않는다** — 기존 관례인 core 단위(src/core/*.test.ts)와 스모크 N-시리즈(scripts/smoke.mjs) 안에서만 검증한다
+- [ ] **core 단언은 새로 추가하지 않는다** — 꺼진 규칙이 컴파일 출력에서 빠지는 것은 compile.test.ts:222·384가, 새 라벨 키의 로케일 parity는 i18n.test.ts:8이 이미 덮고, 이 티켓은 core 로직을 더하지 않는다(저장 경로가 이미 `enabled`를 나른다). 이 기능의 **새 증거는 아래 smoke 한 줄뿐**이다 — 단위 단언을 채우려고 없는 시임을 파지 말 것
+- [ ] smoke: 토글을 끄고 저장한 새 규칙이 꺼진 상태로 저장되고, 토글을 만지지 않은 저장은 켜진 채로 남는다(기존 N-시리즈 단언 스타일, 다음 번호를 잇는다)
+- [ ] 전 게이트 그린

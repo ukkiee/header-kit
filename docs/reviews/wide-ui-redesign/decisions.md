@@ -183,7 +183,7 @@ _ROUND NOT APPLIED — R-3 escalated; per AT-1 guard:two-phase no accept from th
 R-1 [AUTO AT-1 release:high@asserted] accept (NOT APPLIED — round escalated) — 실패한 전체 초기화 뒤 예약 백업이 삭제된 데이터를 재생성한다; high/0.99; src/runtime/background-bootstrap.ts:191; res:none;
 R-2 [AUTO AT-1 release:high@asserted] accept (NOT APPLIED — round escalated) — Block 광범위 정규식이 확인 절차를 우회한다; high/0.99; src/core/url-scope.ts:117; res:none;
 R-3 [AUTO AT-1 reserved:migration] escalate — v1 마이그레이션이 권위 저장소에 커밋되지 않고 실패도 숨겨진다; high/0.99; src/platform/stateStore.ts:14; res:migration; reserved class — human decision required: irreversible in a way code is not, and the real decision — backfill window, downtime, ordering vs deploy — lives outside the diff
-R-4 [AUTO AT-1 release:high@asserted] accept (NOT APPLIED — round escalated) — Spec fidelity: 세 가지 사용자 대면 기능이 배선되지 않았다; high/0.98; src/features/modifications/rule-form.tsx:513; res:none;
+R-4 [AUTO AT-1 release:high@asserted] accept (NOT APPLIED — round escalated) — Spec fidelity: 세 가지 사용자 대면 기능이 배선되지 않았다; high/0.98; src/features/modifications/rule-form.tsx:513; res:none; 인간 결정 2026-07-27T06:40Z — 이 브랜치에서 고친다. 게이트 픽스 한도(≤3파일·≤80줄)로는 user story 3건의 수직 배선이 들어가지 않으므로 티켓으로 분해해 Stage 4 정규 경로(구현→기준 감사→/code-review→클로즈)로 배선한다 → .scratch/wide-ui-redesign/issues/11-save-then-activate.md · 12-snapshot-delete.md · 13-profile-row-status.md. 이 행 자체는 커밋 sha를 갖지 않는다 — 이 라운드는 픽스를 하나도 만들지 않았고, 그 사실은 위 `_ROUND NOT APPLIED_` 줄이 그대로 나른다
 R-5 [AUTO AT-1 release:med@asserted] defer — 활성 백업 저장소 전환에서 늦은 응답이 현재 히스토리를 덮는다; medium/0.95; src/features/backup/backup-panel.tsx:90; res:none; a fix here buys nothing downstream and costs the committed verification evidence; follow-up docs/reviews/wide-ui-redesign/followups.md#R-5
 R-6 [AUTO AT-1 release:med@asserted] defer — 커밋된 검증 증거가 UI 릴리스 위험을 검사하지 않는다; medium/0.99; docs/reviews/wide-ui-redesign/verification.md:13; res:none; a fix here buys nothing downstream and costs the committed verification evidence; follow-up docs/reviews/wide-ui-redesign/followups.md#R-6
 
@@ -221,3 +221,34 @@ defer 2건(R-5 medium, R-6 medium)은 `followups.md`의 "릴리스 게이트 r1 
 
 릴리스 게이트는 통과하지 않았다(`ok:true`, `verdict: needs-attention`). auto-triage에는 waiver가
 없으므로 이 게이트는 사람이 R-3을 결정하고 high 3건의 처리를 정하기 전에는 닫히지 않는다.
+
+### 인간 결정 — 릴리스 게이트 r1 에스컬레이션 처분 2026-07-27T06:40Z
+
+사용자 결정: **이 브랜치에서 고친다.** 6개 행의 처분을 여기 못박는다. 이 블록은 다음 무인
+실행이 읽는 정본이며, `.scratch/wide-ui-redesign/ESCALATION.md`의 `Resolved:` 줄과 같은 내용이다.
+
+| 행 | 심각도 | 처분 | 어떻게 |
+|---|---|---|---|
+| R-1 | high | **이 브랜치에서 픽스** | 게이트 픽스 1커밋 (`Conductor-Gate: release-r1`) |
+| R-2 | high | **이 브랜치에서 픽스** | 게이트 픽스 1커밋 (`Conductor-Gate: release-r1`) |
+| R-3 | high (escalate) | **이 브랜치에서 픽스** | 게이트 픽스 1커밋 (`Conductor-Gate: release-r1`) |
+| R-4 | high | **이 브랜치에서 배선** | 티켓 11·12·13 (Stage 4 정규 경로) |
+| R-5 | medium | defer 유지 | `followups.md` "릴리스 게이트 r1 이월" |
+| R-6 | medium | defer 유지 | `followups.md` "릴리스 게이트 r1 이월" |
+
+**Phase A의 정지는 그대로 유효하다.** `_ROUND NOT APPLIED_` 줄은 기계가 무엇을 했는지의 기록이고,
+이 결정은 그 뒤에 사람이 무엇을 하기로 했는지의 기록이다. 두 줄은 서로를 지우지 않는다.
+
+R-1·R-2·R-3을 적용할 때는 각각 HUMAN 오버라이드 행을 이 `### release r1` 섹션에 추가하고
+(`<ID> [HUMAN AT-1 overrides release:high@asserted] accept — …` 형식), 커밋 sha를 그 행에
+스탬프한다. 세 커밋 모두 `Conductor-Gate: release-r1` 트레일러를 달아야 `verify-ledger`의
+`commit-not-in-ledger` 교차 검사를 통과한다.
+
+R-3은 게이트 픽스 한도(≤3파일·≤80줄)를 넘길 수 있다. 넘치면 fix 서브에이전트가
+`guard-would-trip`으로 커밋 없이 멈추는 것이 정상이며, 그때는 R-4처럼 티켓으로 돌려야 한다 —
+한도를 늘리거나 가드를 우회하지 말 것.
+
+**적용 후에는 `verification.md`가 낡는다.** 픽스가 검증 증거를 쓴 시점 이후에 착지하므로,
+전체 스위트를 다시 돌려 `verification.md`를 새 SHA/tree로 다시 쓰고 커밋한 뒤에야 릴리스
+라운드 2를 띄울 수 있다. 라운드 2는 **검증 전용**이라 거기서 나오는 새 finding은 accept되지
+않는다 — 라운드 2 전에 사람이 픽스를 확인하는 편이 낫다.
