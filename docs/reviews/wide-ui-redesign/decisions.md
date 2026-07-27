@@ -188,6 +188,7 @@ R-5 [AUTO AT-1 release:med@asserted] defer — 활성 백업 저장소 전환에
 R-6 [AUTO AT-1 release:med@asserted] defer — 커밋된 검증 증거가 UI 릴리스 위험을 검사하지 않는다; medium/0.99; docs/reviews/wide-ui-redesign/verification.md:13; res:none; a fix here buys nothing downstream and costs the committed verification evidence; follow-up docs/reviews/wide-ui-redesign/followups.md#R-6
 R-1 [HUMAN AT-1 overrides release:high@asserted] accept — 실패한 전체 초기화 뒤 예약 백업이 삭제된 데이터를 재생성한다; high/0.99; src/runtime/background-bootstrap.ts:191; res:none; 인간 결정 2026-07-27T06:40Z — 이 브랜치에서 고친다(ESCALATION.md `Resolved:`). Phase A의 정지는 기계가 한 일의 기록으로 그대로 유효하고, 이 행은 그 뒤 사람이 정한 처분의 기록이다; applied 5486f300d8b43513fd65e61a6fe1964a01229d86 (2 files, 73 lines); suite green→green
 R-2 [HUMAN AT-1 overrides release:high@asserted] accept — Block 광범위 정규식이 확인 절차를 우회한다; high/0.99; src/core/url-scope.ts:117; res:none; 인간 결정 2026-07-27T06:40Z — 이 브랜치에서 고친다(ESCALATION.md `Resolved:`). Phase A의 정지는 기계가 한 일의 기록으로 그대로 유효하고, 이 행은 그 뒤 사람이 정한 처분의 기록이다; applied a711d57b45d0eb147564830c90393e95bdfe57ab (3 files, 78 lines); suite green→green
+R-3 [HUMAN AT-1 overrides reserved:migration] accept — v1 마이그레이션이 권위 저장소에 커밋되지 않고 실패도 숨겨진다; high/0.99; src/platform/stateStore.ts:14; res:migration; 인간 결정 2026-07-27T06:40Z — 이 브랜치에서 고친다(ESCALATION.md `Resolved:`). AT-1 §2가 reserved:migration으로 예약한 것은 이 행의 **처분 결정**이고, 그 결정을 사람이 내린 뒤의 구현은 게이트 픽스 가드(≤3파일·≤80줄) 안에 들어갔다. Phase A의 정지는 기계가 한 일의 기록으로 그대로 유효하다; applied 4e4d024f970c79333eccd36460bab9cd5be8509d (3 files, 77 lines); suite green→green
 
 ### ESCALATION reserved:migration 2026-07-27T05:48:43Z
 
@@ -302,3 +303,48 @@ R-2·R-3을 먼저 쌓으면 같은 수리가 3커밋짜리 `rebase -i`가 된�
 위 R-1 HUMAN 행의 스탬프도 새 sha로 갱신했다. 브랜치는 origin에 푸시된 적이 없어 재작성의
 외부 영향은 없다. 다음 게이트 픽스 서브에이전트 브리프에는 "모든 트레일러를 `Co-Authored-By`와
 같은 마지막 한 문단에 넣어라"를 명시한다.
+
+### ESCALATION not-applied-without-escalation 2026-07-27T08:03:22Z
+
+`verify-ledger`가 `### release r1`의 부기 커밋을 거부했다(exit 2, 위반 1건). 원인은 픽스가
+아니라 **이 섹션의 두 기록이 서로 모순**하게 된 것이다.
+
+R-1·R-2·R-3은 2026-07-27T06:40Z 인간 결정에 따라 모두 게이트 픽스로 적용·스탬프됐다:
+
+| 행 | 기계 판정 | 사람 판정 | 커밋 | 검증 |
+|---|---|---|---|---|
+| R-1 | `[AUTO AT-1 release:high@asserted] accept (NOT APPLIED)` | HUMAN accept | `5486f30` (2파일 73줄) | suite green→green |
+| R-2 | `[AUTO AT-1 release:high@asserted] accept (NOT APPLIED)` | HUMAN accept | `a711d57` (3파일 78줄) | diff-guard clean · vitest 358 · smoke 124 |
+| R-3 | `[AUTO AT-1 reserved:migration] escalate` | HUMAN accept | `4e4d024` (3파일 77줄) | diff-guard clean · vitest 360 · smoke 124 |
+| R-4 | `[AUTO AT-1 release:high@asserted] accept (NOT APPLIED)` | 티켓 11·12·13으로 분해 | — | 미착수 |
+| R-5 · R-6 | `defer` | defer 유지 | — | followups |
+
+`verify-ledger`는 finding index별로 한 결정만 도출하고 HUMAN 행이 AUTO 행을 대체한다
+(`loop-state.mjs:3146-3149`). R-3이 이 라운드의 **유일한 escalate 행**이었으므로, 그 행을
+사람이 accept로 오버라이드한 순간 파생 escalate 수가 0이 됐다. 그러면
+`_ROUND NOT APPLIED — R-3 escalated; …_` 줄은 가리킬 원인을 잃는다:
+
+    not-applied-without-escalation — The section carries a `_ROUND NOT APPLIED_` line
+    but no escalate row, and its cause is not a named `guard:<name>`.
+
+도구가 받아들이는 형태는 하나뿐이다 — **그 줄의 삭제**. 확인한 대안은 모두 막힌다:
+
+- 줄을 `guard:two-phase`로 시작하게 고쳐 쓰기 → `guard-not-derived`. 파생 행에서 §4 가드를
+  재실행하면 아무것도 반환하지 않는다(`round_guards_derived: []`).
+- R-3 HUMAN 행 제거 → `commit-not-in-ledger`. `4e4d024`가 `Conductor-Gate: release-r1`을
+  달고 있어 반드시 accept 행이 주장해야 한다.
+- R-3 HUMAN 행을 `escalate`로 기록 → 사람이 accept로 정한 사실에 반하는 허위 기록.
+
+**루프가 스스로 결정할 수 없는 이유**는 도구 제약이 아니라 사람의 지시다. 위
+`### 인간 결정 — 릴리스 게이트 r1 에스컬레이션 처분 2026-07-27T06:40Z` 블록은
+"Phase A의 `_ROUND NOT APPLIED_` 줄은 유지 — 기계 기록과 인간 결정은 공존한다"고 명시했다.
+같은 결정의 나머지 절반(R-1·R-2·R-3을 이 브랜치에서 고친다)을 끝까지 집행하자 그 두 지시가
+양립 불가능해졌다. 어느 쪽을 접을지는 기계가 정할 문제가 아니다.
+
+이 정지는 기계 판정 행을 하나도 건드리지 않았고 픽스를 되돌리지 않았다. 세 커밋은 각각
+diff-guard clean · 전체 스위트 green으로 개별 검증됐다.
+
+**이 라운드의 재도출 범위(보고 의무):** rowCount 6 / rederived **3** / judgement_rows [] /
+resolutions_checked 0 / human_rows [R-1, R-2, R-3] / gate_commits 3 / ledger_shas 3.
+6행 중 3행(R-1·R-2·R-3)은 사람 결정으로 기계 재도출 대상에서 빠졌다 — 이 라운드는
+"전량 기계 검증"으로 보고될 수 없다.
