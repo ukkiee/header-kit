@@ -146,6 +146,12 @@ export function bootstrap(deps: BackgroundDeps): void {
   let backupSuspended = false;
   /** 진행 중인 백업 — 중단은 이것을 기다려야 가드를 이미 지난 스냅샷이 뒤늦게 착지하지 않는다. */
   let inFlightBackup: Promise<void> = Promise.resolve();
+  /**
+   * 예약 세대 — `setTimer`는 취소할 수 없으므로 중단이 이 값을 올려 이미 걸린 타이머를
+   * **무효화**한다. 없으면 초기화가 삭제 뒤에 실패해 중단이 풀린 다음 옛 예약이 발화해,
+   * 방금 지운 백업을 옛 상태로 되살린다.
+   */
+  let backupGeneration = 0;
   const runBackup = async () => {
     backupScheduled = false;
     /*
@@ -191,8 +197,12 @@ export function bootstrap(deps: BackgroundDeps): void {
   const scheduleBackup = () => {
     if (backupScheduled) return; // 이미 예약됨 — 가장 이른 실행 유지
     backupScheduled = true;
+    const generation = backupGeneration;
     const delay = Math.max(3_000, lastBackupAt + 30_000 - deps.now());
     deps.setTimer(() => {
+      // 중단이 무효화한 예약이면 발화해도 쓰지 않는다. 예약 자리는 중단이 이미 비웠으므로
+      // 여기서 되돌리지 않는다 — 그 사이 걸린 새 예약을 덮어쓰지 않기 위해서다.
+      if (generation !== backupGeneration) return;
       inFlightBackup = runBackup();
     }, delay);
   };
@@ -207,6 +217,11 @@ export function bootstrap(deps: BackgroundDeps): void {
     const result = await performFullReset({
       suspendAutoBackup: async () => {
         backupSuspended = true;
+        // 아직 발화하지 않은 예약은 취소할 수 없다 — 세대를 올려 무효화하고 예약 자리를
+        // 비운다. 플래그만 풀리는 실패 경로에서 옛 타이머가 뒤늦게 발화해도 쓰지 않고,
+        // 재개는 이 빈 자리에 새 예약을 건다.
+        backupGeneration += 1;
+        backupScheduled = false;
         // 플래그만으로는 이미 가드를 지나 진행 중인 백업을 막을 수 없다 — 그것이 끝나기를
         // 기다린 뒤에 삭제를 시작한다(그 실행은 performBackup 직전 재검사에서 멈춘다).
         await inFlightBackup;

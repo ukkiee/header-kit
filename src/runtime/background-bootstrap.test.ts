@@ -330,6 +330,64 @@ describe('background bootstrap', () => {
     expect(Object.keys(areas.sync!)).toEqual([]);
   });
 
+  /*
+   * 중단 전에 걸린 예약은 **취소할 수 없다**. 초기화가 삭제를 마친 뒤 reset-state에서
+   * 실패하면 중단이 풀리고 상태는 아직 옛 프로필이라, 그 옛 예약이 뒤늦게 발화하면 방금
+   * 지운 스냅샷이 되살아난다 (릴리스 게이트 R-1). 성공 경로 테스트는 타이머를 중단 **중**에
+   * 터뜨려 이 순서를 비워 두었다.
+   */
+  it('실패한 초기화 뒤 발화한 옛 예약은 지운 백업을 되살리지 않는다', async () => {
+    const areas: Record<string, Record<string, unknown>> = {
+      local: {},
+      sync: { 'bk:manifest': { snapshots: [] }, 'bk:s1:0': 'chunk' },
+    };
+    const populated: StoredState = {
+      ...createDefaultState(),
+      profiles: [
+        { id: 'p1', name: 'One', active: true, shortLabel: '1', color: '#2563eb', modifications: [] },
+      ],
+    };
+    const timers: (() => void)[] = [];
+    let handler: ((command: Command) => Promise<StoredState>) | undefined;
+    let backups = 0;
+
+    bootstrap(
+      fakeDeps({
+        loadState: async () => populated,
+        readState: async () => ({ status: 'ok', state: populated }),
+        // 상태 리셋만 실패한다 — 삭제는 이미 끝난 뒤다(멱등이라 되돌리지 않는다).
+        persistState: async () => {
+          throw new Error('storage write failed');
+        },
+        readBackupKV: async (target) => ({ ...areas[target] }),
+        removeBackupKeys: async (target, keys) => {
+          for (const key of keys) delete areas[target]![key];
+        },
+        performBackup: async (payload) => {
+          backups += 1;
+          areas.sync!['bk:late:0'] = payload;
+        },
+        onCommand: (h) => {
+          handler = h;
+        },
+        setTimer: (cb) => {
+          timers.push(cb);
+        },
+      }),
+    );
+    await flush();
+    expect(timers.length).toBeGreaterThan(0); // 중단 전에 걸린 예약
+
+    await expect(handler!({ type: 'full-reset' })).rejects.toThrow();
+
+    // 실패로 중단이 풀린 **뒤에** 옛 예약이 발화한다.
+    for (const fire of timers.splice(0)) fire();
+    await flush();
+
+    expect(backups).toBe(0);
+    expect(Object.keys(areas.sync!)).toEqual([]); // 지운 스냅샷이 그대로 비어 있다
+  });
+
   it('onExpiryAlarm이 실행자를 지나 만료 전이를 태운다 (persist)', async () => {
     let expiryAlarm = () => {};
     let persistCalls = 0;
