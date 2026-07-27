@@ -175,3 +175,49 @@ R-3 [HUMAN CR-1 overrides cr:test-weakening] accept — en 접근성 이름이 �
 
 **이 라운드는 CR-1 트리아지이며 `verify-ledger`가 재도출하지 않는다** — `/code-review`는 아티팩트를
 내지 않으므로 이 12행은 감사 가능(auditable)하지만 재계산된(verified) 것이 아니다.
+
+### release r1 — auto-triage
+_policy AT-1 · review-gate/policies/auto-triage-v1.md · sha256 e7c15be62c42c6a9 · launcher ack=auto-triage · decided 2026-07-27T05:47:26Z · artifact docs/reviews/wide-ui-redesign/release-r1.json_
+_ROUND NOT APPLIED — R-3 escalated; per AT-1 guard:two-phase no accept from this round was applied. Loop STOPPED. See .scratch/wide-ui-redesign/ESCALATION.md_
+
+R-1 [AUTO AT-1 release:high@asserted] accept (NOT APPLIED — round escalated) — 실패한 전체 초기화 뒤 예약 백업이 삭제된 데이터를 재생성한다; high/0.99; src/runtime/background-bootstrap.ts:191; res:none;
+R-2 [AUTO AT-1 release:high@asserted] accept (NOT APPLIED — round escalated) — Block 광범위 정규식이 확인 절차를 우회한다; high/0.99; src/core/url-scope.ts:117; res:none;
+R-3 [AUTO AT-1 reserved:migration] escalate — v1 마이그레이션이 권위 저장소에 커밋되지 않고 실패도 숨겨진다; high/0.99; src/platform/stateStore.ts:14; res:migration; reserved class — human decision required: irreversible in a way code is not, and the real decision — backfill window, downtime, ordering vs deploy — lives outside the diff
+R-4 [AUTO AT-1 release:high@asserted] accept (NOT APPLIED — round escalated) — Spec fidelity: 세 가지 사용자 대면 기능이 배선되지 않았다; high/0.98; src/features/modifications/rule-form.tsx:513; res:none;
+R-5 [AUTO AT-1 release:med@asserted] defer — 활성 백업 저장소 전환에서 늦은 응답이 현재 히스토리를 덮는다; medium/0.95; src/features/backup/backup-panel.tsx:90; res:none; a fix here buys nothing downstream and costs the committed verification evidence; follow-up docs/reviews/wide-ui-redesign/followups.md#R-5
+R-6 [AUTO AT-1 release:med@asserted] defer — 커밋된 검증 증거가 UI 릴리스 위험을 검사하지 않는다; medium/0.99; docs/reviews/wide-ui-redesign/verification.md:13; res:none; a fix here buys nothing downstream and costs the committed verification evidence; follow-up docs/reviews/wide-ui-redesign/followups.md#R-6
+
+### ESCALATION reserved:migration 2026-07-27T05:48:43Z
+
+릴리스 게이트 라운드 1이 **정지**했다. AT-1 Phase A에서 R-3이 예약 클래스
+`reserved:migration`으로 escalate 판정을 받았고, `guard:two-phase`에 따라 **이 라운드의 어떤
+행도 적용되지 않았다**(`round_escalated: true`, `round_guards: []` — 가드가 아니라 행이 라운드를
+세웠다). 라운드 2는 띄우지 않았다: 이 라운드가 트리를 전혀 바꾸지 않았으므로 라운드 2는 같은
+findings를 같은 이유로 되돌려줄 뿐이고, 종단 라운드라 그중 아무것도 accept할 수 없다.
+
+**재도출 검증은 통과했다** — `verify-ledger` exit 0, `rowCount 6 / rederived 6 /
+resolutions_checked 0 / judgement_rows []`. 6행 전부를 기계가 재계산했고 이 컨덕터의 판단만으로
+결정된 행은 **없다**. `gate_commits 0`, `ledger_shas 0` — 적용된 것이 없다는 사실과 일치한다.
+
+미해결 finding (전부 미적용, 사람의 콜드 트리아지 필요):
+
+- **R-3 escalate** `reserved:migration` — `src/platform/stateStore.ts:14` (high/0.99).
+  v1 마이그레이션이 권위 저장소에 커밋되지 않고 실패도 숨겨진다. `spec.md:84`(성공 후 persist,
+  실패 시 원본 보존·오류 표면화)와 `spec.md:133`(실제 storage.local seam 테스트)을 모두 누락.
+  AT-1이 이 클래스를 사람에게 넘기는 이유: 되돌릴 수 없고, 실제 결정(백필 시점·다운타임·배포
+  순서)이 diff 밖 운영 영역에 있다.
+- **R-1 accept, NOT APPLIED** — `src/runtime/background-bootstrap.ts:191` (high/0.99).
+  실패한 전체 초기화 뒤 취소되지 않은 예약 타이머가 삭제된 데이터를 재생성한다.
+- **R-2 accept, NOT APPLIED** — `src/core/url-scope.ts:117` (high/0.99).
+  `regexBreadth`가 광범위 정규식을 narrow로 오판해 Block 확인 절차를 우회한다.
+- **R-4 accept, NOT APPLIED** — `src/features/modifications/rule-form.tsx:513` (high/0.98).
+  Spec fidelity — user story 17(저장 후 즉시 활성화), 36(개별 스냅샷 삭제), 22/25(프로필 행의
+  규칙 수·전역 일시정지)가 배선되지 않았다.
+
+defer 2건(R-5 medium, R-6 medium)은 `followups.md`의 "릴리스 게이트 r1 이월"에 있다. 이쪽도
+적용된 것은 없다.
+
+**적용된 행: 없음.** 이 라운드는 커밋을 하나도 만들지 않았다.
+
+릴리스 게이트는 통과하지 않았다(`ok:true`, `verdict: needs-attention`). auto-triage에는 waiver가
+없으므로 이 게이트는 사람이 R-3을 결정하고 high 3건의 처리를 정하기 전에는 닫히지 않는다.

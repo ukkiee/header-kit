@@ -1,0 +1,96 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "release",
+  "ack": "auto-triage",
+  "triageMode": "unattended",
+  "verdict": "needs-attention",
+  "summary": "NO-SHIP: 전체 초기화가 삭제한 백업을 되살릴 수 있고, Block 안전 가드의 재현 가능한 우회와 미배선된 v1 마이그레이션이 있다. 이월 건은 T06-R-1은 해결됨, T06-R-2r·T07-R-6은 각각 문서·용어 문제로 릴리스 finding 기준 미달로 판정했다. 티켓 10의 인간 결정은 재개하지 않았다.",
+  "planFile": "docs/reviews/wide-ui-redesign/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 94,
+  "target": "branch diff against main",
+  "reviewedSha": "e129a6f6d0651dba99e3218cf71ece0b3a2b0965",
+  "reviewedTree": "a5e136bcd766cca840495970470bfa43d6d5d429",
+  "reviewedPlanSha256": "15c23c01429652244a16c047351c96fe2e4c71a24178a9b21ef9faa64bf3d207",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 6,
+  "planFindingCount": 0,
+  "triage": "review-gate SKILL.md § Unattended triage governs: do NOT triage by hand — run your conductor's policy tool, which applies the policy and computes its hash itself; decide the whole round before applying anything; apply NOTHING if any row escalates; one recorded row per finding index with none missing; the final round is verification-only; max 2 rounds; no waiver; verify the ledger against this artifact, then COMMIT decisions.md with it.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "실패한 전체 초기화 뒤 예약 백업이 삭제된 데이터를 재생성한다",
+      "body": "scheduleBackup은 취소할 수 없는 타이머를 남기지만 suspendAutoBackup은 이미 실행 중인 Promise만 기다린다. 초기화가 백업 삭제 후 reset-state 등에서 실패하면 resumeAutoBackup이 backupSuspended를 false로 되돌리고, 아직 발화하지 않은 기존 타이머가 옛 상태를 다시 백업한다. 이는 부분 실패 후 삭제를 유지한다는 docs/reviews/wide-ui-redesign/spec.md:112-113 계약을 깨고 민감한 프로필 백업을 재생성한다. 성공 경로 테스트는 타이머를 중단 중 발화시켜 이 순서를 다루지 않는다.",
+      "file": "src/runtime/background-bootstrap.ts",
+      "line_start": 191,
+      "line_end": 220,
+      "confidence": 0.99,
+      "recommendation": "예약 타이머 핸들 또는 generation을 보관해 중단 시 무효화하고, 백업 삭제 후 resetState가 실패한 다음 기존 타이머를 발화해도 저장 호출이 없는 런타임 회귀 테스트를 추가한다.",
+      "isPlanFinding": false
+    },
+    {
+      "severity": "high",
+      "title": "Block 광범위 정규식이 확인 절차를 우회한다",
+      "body": "regexBreadth는 두 개의 .invalid 탐침에 매칭되지 않은 뒤 패턴 어디든 호스트 모양 토큰이 있으면 narrow로 판정한다. 실제 실행에서 `^https://.*\\.com/|ads\\.example\\.net`은 google.com을 포함한 모든 .com 요청에 매칭하지만 narrow로 반환됐다. 따라서 RuleForm의 src/features/modifications/rule-form.tsx:176-182 확인 분기를 건너뛰어 파괴적인 Block이 첫 저장으로 활성화된다. 기존 테스트의 `ads\\.example\\.com|.*`는 탐침이 우연히 잡는 형태만 검사해 이 위험 표면을 증명하지 못한다.",
+      "file": "src/core/url-scope.ts",
+      "line_start": 117,
+      "line_end": 122,
+      "confidence": 0.99,
+      "recommendation": "모든 최상위 대안이 특정 호스트에 묶였음을 증명할 때만 narrow로 판정하고, 증명할 수 없으면 보수적으로 wide를 반환한다. 위 반례의 순수 함수 테스트와 첫 Save가 저장되지 않는 UI 테스트를 추가한다.",
+      "isPlanFinding": false
+    },
+    {
+      "severity": "high",
+      "title": "v1 마이그레이션이 권위 저장소에 커밋되지 않고 실패도 숨겨진다",
+      "body": "loadState는 parseStoredState 결과만 반환하므로 valid v1의 메모리상 변환을 storage.local에 v2로 저장하지 않는다. unmigratable v1은 parseStoredState가 default 상태로 접어 UI와 reconciler에 전달하므로 사용자는 프로필이 사라지고 규칙 적용이 중단된 화면을 보지만 로드 오류는 받지 못한다. 이는 성공 후 persist와 실패 시 원본 보존·오류 표면화를 요구한 spec.md:84 및 실제 storage.local seam 테스트를 요구한 spec.md:133을 모두 누락한다. src/core/schema-version.test.ts:56-87은 순수 분류기만 검사해 이 배선 결함을 통과시킨다.",
+      "file": "src/platform/stateStore.ts",
+      "line_start": 14,
+      "line_end": 17,
+      "confidence": 0.99,
+      "recommendation": "stateStore 로드에서 StoredStateRead를 직접 처리해 migrated는 검증 후 v2로 저장하고 blocked는 타입화된 로드 오류로 UI/runtime에 전달하며 reconcile하지 않는다. 실제 browser.storage.local fixture로 성공 persist와 실패 no-write/error를 검증한다.",
+      "isPlanFinding": false
+    },
+    {
+      "severity": "high",
+      "title": "Spec fidelity: 세 가지 사용자 대면 기능이 배선되지 않았다",
+      "body": "RuleForm에는 Cancel/Save만 있고 모든 새 초안은 src/core/model.ts:357-377에서 enabled=true이므로 story 17의 '저장 후 바로 활성화' 선택이 불가능하다. 백업 목록 src/features/backup/backup-panel.tsx:241-268에는 복원만 있어 story 36의 개별 스냅샷 삭제가 없다. 프로필 행 src/features/profiles/profile-dot.tsx:119-128은 색·이름·토글만 표시해 stories 22/25의 규칙 수와 전역 일시정지 상태를 제공하지 않는다. 최종 UI 슬라이스가 명시된 인수 범위를 완결하지 못했다.",
+      "file": "src/features/modifications/rule-form.tsx",
+      "line_start": 513,
+      "line_end": 519,
+      "confidence": 0.98,
+      "recommendation": "세 동작을 명령·저장소·UI까지 수직 배선하고 smoke로 검증하거나, 병합 전에 명시적인 인간 결정으로 spec 범위를 수정한다.",
+      "isPlanFinding": false
+    },
+    {
+      "severity": "medium",
+      "title": "활성 백업 저장소 전환에서 늦은 응답이 현재 히스토리를 덮는다",
+      "body": "target이 바뀔 때마다 loadSnapshots를 시작하지만 이전 요청을 취소하거나 응답의 target을 확인하지 않는다. local/sync를 빠르게 전환해 이전 저장소 응답이 늦게 도착하면 현재 저장소 화면에 잘못된 목록이 표시되고, restore는 src/features/backup/backup-panel.tsx:150에서 현재 target과 그 stale entry를 조합해 복원 실패 또는 잘못된 스냅샷 선택을 유발한다.",
+      "file": "src/features/backup/backup-panel.tsx",
+      "line_start": 90,
+      "line_end": 92,
+      "confidence": 0.95,
+      "recommendation": "effect cleanup의 ignore flag나 요청 generation을 사용해 현재 target의 최신 응답만 반영하고, 두 deferred Promise를 역순 resolve하는 테스트를 추가한다.",
+      "isPlanFinding": false
+    },
+    {
+      "severity": "medium",
+      "title": "커밋된 검증 증거가 UI 릴리스 위험을 검사하지 않는다",
+      "body": "검증 문서는 build, Vitest, smoke, tsc만 기록한다. spec.md:137과 티켓 01/05/10이 요구한 ui-diag의 팝업 760×580, 탭 가로 overflow, 다크·라이트 스크린샷, 시작 지표 증거가 없고 Storybook 및 bundle-gate도 기록되지 않았다. 문서 자체도 lines 45-49에서 티켓 01-05의 criteria audit를 하지 않았다고 명시하므로, 352/123 통과는 이 UI 리디자인의 레이아웃·폰트·성능 위험을 승인하는 증거가 아니다.",
+      "file": "docs/reviews/wide-ui-redesign/verification.md",
+      "line_start": 13,
+      "line_end": 32,
+      "confidence": 0.99,
+      "recommendation": "최종 소스 트리에서 Storybook build, bundle-gate, ui-diag를 실행하고 양 테마 스크린샷·overflow·팝업 치수·시작 지표 결과를 커밋된 검증 증거에 추가한다.",
+      "isPlanFinding": false
+    }
+  ],
+  "next_steps": [
+    "예약 백업 무효화, Block 분류 보수화, stateStore 마이그레이션 배선을 병합 전에 수정한다.",
+    "누락된 UI 인수 기준을 구현하거나 인간 승인으로 spec을 명시적으로 변경한다.",
+    "실패·경쟁 반례 테스트와 최종 ui-diag/Storybook/bundle 검증 증거를 추가한다."
+  ]
+}

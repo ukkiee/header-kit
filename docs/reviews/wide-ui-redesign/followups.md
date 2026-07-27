@@ -168,3 +168,29 @@ R-4(dd0c7da)가 칩을 저장된 선호에 묶으면서 JSDoc 첫 줄이 실제�
 **2026-07-27 해소** — 사용자가 옵션 B로 병치를 확정된 설계로 판정했다(`decisions.md`의
 `R-6 [HUMAN CR-1 overrides cr:defect] reject`). 화살표는 아이콘 대체를 뜻하고 툴팁은 유지한다.
 코드 변경 없음. **릴리스 게이트 `--focus` 대상이 아니다.**
+
+---
+
+# 릴리스 게이트 r1 이월 (AT-1 defer, 2026-07-27)
+
+아래 두 건은 릴리스 게이트 라운드 1에서 `release:med@asserted`로 defer 판정됐다. 라운드 자체는
+R-3(`reserved:migration`) 때문에 정지됐고 **아무 행도 적용되지 않았다** — 이 두 건도 코드에
+반영된 것이 없다. 원본은 `docs/reviews/wide-ui-redesign/release-r1.json`.
+
+## R-5 — 활성 백업 저장소 전환에서 늦은 응답이 현재 히스토리를 덮는다
+`src/features/backup/backup-panel.tsx:90` (medium/0.95). target이 바뀔 때마다 `loadSnapshots`를
+시작하지만 이전 요청을 취소하거나 응답의 target을 확인하지 않는다. local/sync를 빠르게 전환해
+이전 저장소 응답이 늦게 도착하면 현재 저장소 화면에 잘못된 목록이 뜨고, restore는
+`backup-panel.tsx:150`에서 현재 target과 그 stale entry를 조합해 복원 실패나 잘못된 스냅샷
+선택을 유발한다.
+**권고**: effect cleanup의 ignore flag나 요청 generation으로 현재 target의 최신 응답만 반영하고,
+두 deferred Promise를 역순 resolve하는 테스트를 추가한다.
+
+## R-6 — 커밋된 검증 증거가 UI 릴리스 위험을 검사하지 않는다
+`docs/reviews/wide-ui-redesign/verification.md:13` (medium/0.99). 검증 문서는 build·Vitest·smoke·
+tsc만 기록한다. `spec.md:137`과 티켓 01/05/10이 요구한 ui-diag의 팝업 760×580, 탭 가로 overflow,
+다크·라이트 스크린샷, 시작 지표 증거가 없고 Storybook·bundle-gate도 기록되지 않았다. 문서 자체가
+티켓 01–05의 기준 감사를 하지 않았다고 명시하므로, 352/123 통과는 이 UI 리디자인의 레이아웃·
+폰트·성능 위험을 승인하는 증거가 아니다.
+**권고**: 최종 소스 트리에서 Storybook build·bundle-gate·ui-diag를 돌리고 양 테마 스크린샷,
+overflow, 팝업 치수, 시작 지표를 커밋된 검증 증거에 추가한다.
