@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { applyCommand } from './commands';
 import { createDefaultState, parseStoredState } from './schema';
 import { LOCALES, MESSAGES, pickLocale, resolveLocale, t } from './i18n';
+import { pickLocalePreference } from './i18n';
 
 describe('i18n 카탈로그', () => {
   it('모든 로케일이 en과 정확히 같은 키 집합을 갖는다 (누락·잉여 없음)', () => {
@@ -85,5 +86,30 @@ describe('언어 선호값의 영속 (티켓 09)', () => {
     expect(revived.locale).toBeUndefined();
     // 치유가 다른 것을 건드리지 않았는지 — 리셋됐다면 프로필이 사라졌을 것이다.
     expect(revived.profiles).toHaveLength(1);
+  });
+});
+
+/**
+ * 언어 칩이 짚는 값 (티켓 09 리뷰 R-4) — 컨트롤은 자기가 **설정하는** 것을 보여야 한다.
+ * 실효 로케일에 묶으면 `?locale=`로 열린 화면에서 칩을 눌러도 저장만 되고 화면은 그대로라
+ * 칩이 원래 자리로 튕겨 돌아온다. 테마 칩이 실효 테마가 아니라 저장된 선호에 묶인 것과
+ * 같은 결이다. 여기서 못박는 것은 **오버라이드가 이 값에 닿지 않는다**는 사실 하나다.
+ */
+describe('pickLocalePreference', () => {
+  it.each([
+    // 고른 선호가 그대로 보인다 — 오버라이드가 무엇이든 칩은 저장된 값을 짚는다.
+    ['ko', 'en-US', 'ko'],
+    ['en', 'ko-KR', 'en'],
+    // 고른 적 없으면 브라우저 UI 언어 — 부재는 "브라우저를 따른다"이고, 빈 칩이 아니다.
+    [undefined, 'ko-KR', 'ko'],
+    [undefined, 'fr', 'en'],
+  ] as const)('선호=%s, UI=%s → %s', (preference, uiLanguage, expected) => {
+    expect(pickLocalePreference(preference, uiLanguage)).toBe(expected);
+  });
+
+  it('오버라이드가 걸린 화면에서도 칩은 저장된 선호를 짚는다', () => {
+    // 같은 입력으로 실효 로케일은 오버라이드를 따라 en이 된다 — 칩은 따라가지 않는다.
+    expect(pickLocale('en', 'ko', 'ko-KR')).toBe('en');
+    expect(pickLocalePreference('ko', 'ko-KR')).toBe('ko');
   });
 });

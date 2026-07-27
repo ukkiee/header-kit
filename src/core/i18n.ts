@@ -418,3 +418,19 @@ export function pickLocale(
   if (override !== null && override !== undefined) return resolveLocale(override);
   return preference ?? resolveLocale(uiLanguage);
 }
+
+/**
+ * 언어 **컨트롤**이 짚을 값 — `pickLocale`에서 오버라이드만 뺀 것이다.
+ *
+ * 칩은 자기가 **설정하는** 값을 보여야 한다. 실효 로케일에 묶으면 `?locale=`로 열린
+ * 화면에서 칩을 눌러도 저장만 되고 화면은 그대로라, 칩이 원래 자리로 튕겨 돌아온다 —
+ * 설정하는 값과 보여 주는 값이 다른 컨트롤이 된다. 테마 컨트롤이 실효 테마가 아니라
+ * 저장된 선호에 묶여 있는 것과 같은 결이다.
+ *
+ * 선호가 **없을** 때 UI 언어로 떨어지는 것은 남긴다: 부재는 "브라우저를 따른다"는 뜻이고
+ * (model의 `locale?`), 그 상태를 빈 칩으로 그리면 아직 고른 적 없는 사용자에게 지금
+ * 무슨 언어인지 말해 주지 않는 목록이 보인다.
+ */
+export function pickLocalePreference(preference: Locale | undefined, uiLanguage: string): Locale {
+  return pickLocale(null, preference, uiLanguage);
+}

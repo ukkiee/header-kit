@@ -15,7 +15,7 @@ import { Button } from '@/ui/press-button';
 import { LocaleProvider } from '@/ui/i18n-context';
 import { ScrollArea } from '@/ui/scroll-area';
 import type { Command } from '@/core/commands';
-import { pickLocale, t, type MessageKey } from '@/core/i18n';
+import { pickLocale, pickLocalePreference, t, type MessageKey } from '@/core/i18n';
 import { createProfile, PROFILE_COLORS, type StoredState } from '@/core/schema';
 import { DEFAULT_THEME } from '@/core/theme';
 import { useAppliedTheme } from '@/ui/use-theme';
@@ -85,6 +85,8 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
   if (!state) return null;
 
   const locale = pickLocale(localeSources.override, state.locale, localeSources.uiLanguage);
+  // 화면이 쓰는 언어와 **언어 칩이 짚는 값**은 다른 질문이다 — 칩은 오버라이드를 보지 않는다.
+  const localePreference = pickLocalePreference(state.locale, localeSources.uiLanguage);
   const effectiveSelectedId = reconcileSelection(selectedId, state.profiles);
   // 재조정 결과를 상태로 커밋(렌더 중 상태 조정 패턴) — 자동 선택·폴백이 고정되어,
   // 활성 토글로 뷰가 점프하거나 옛 ID 재도입 시 선택이 되돌아가지 않는다.
@@ -305,7 +307,7 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
               <PreferencesPanel
                 customHeaderNames={state.customHeaderNames}
                 theme={state.theme}
-                locale={locale}
+                locale={localePreference}
                 badgeVisible={state.badgeVisible}
                 onCommand={dispatch}
                 incognitoAllowed={incognitoAllowed}
