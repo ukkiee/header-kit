@@ -64,7 +64,9 @@ export function profileReorderLabel(profile: Pick<Profile, 'name'>, t: Translato
 export const sidebarListClass = 'flex flex-col gap-0.5';
 export const sidebarRowClass = 'flex items-center gap-0.5';
 
-const gripClass = `flex shrink-0 cursor-grab touch-none items-center text-border hover:text-muted-foreground focus-visible:text-muted-foreground active:cursor-grabbing ${focusRing}`;
+// 평상 색은 `--input`이다 — `--border`는 **장식 구분선**용이라(global.css의 보더 두 종)
+// 대비를 지지 않는데(라이트 #e2e2e6 ≈ 1.24:1), 그립은 눌러 끄는 상호작용 요소다.
+const gripClass = `flex shrink-0 cursor-grab touch-none items-center text-input hover:text-muted-foreground focus-visible:text-muted-foreground active:cursor-grabbing ${focusRing}`;
 
 /**
  * 재정렬 그립 — dnd-kit attributes/listeners를 받으면 드래그 핸들이 되고, 없으면
