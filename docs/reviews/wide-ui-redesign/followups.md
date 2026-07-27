@@ -104,3 +104,26 @@
 티켓 08이 새 도메인 개념을 들여왔는데 `CONTEXT.md` 항목이 없다. 코드 쪽 이름 분열은 CR-1 r1의
 R-5로 통일하지만, **용어집 등재와 `_Avoid_` 줄을 정하는 것은 도메인 결정이라 사람 몫으로 남긴다**
 — 기계가 표준 문서를 자기 코드에 맞춰 쓰는 것은 스펙을 고치는 것과 같은 종류의 부식이다.
+
+## T09-R-2 — `COMMAND_LABELS`가 커맨드 이름을 타입에 고정하지 않는다
+`src/core/shortcuts.ts:29`의 `Record<string, MessageKey>`. 매니페스트 커맨드는 닫힌 집합인데
+(`wxt.config.ts`: `_execute_action`, `toggle-pause`) 타입이 `string`이라, 커맨드가 늘어도 컴파일이
+깨지지 않고 화면에 원시 기계 이름이 샌다. 레포 규율은 "종류·상태가 늘면 타입이 먼저 깨지게 한다".
+미지 이름에 관대한 조회 자체는 유지한 채 `Record<CommandName, MessageKey>`로 좁히면 분리 가능.
+
+## T09-R-3 — 테마 블록과 언어 블록의 중복
+`preferences-panel.tsx:88-99` vs `119-127`. 캡션 span + `ChoiceChips` + `Record<T, MessageKey>`
+라벨맵 + 단일 필드 커맨드로 모양이 같다 — Fowler: Duplicated Code. 두 번째 인스턴스는 임계일 뿐
+강제는 아니지만, `<ChoiceSetting>` 하나로 접을 수 있다.
+
+## T09-R-5 — `shortcuts.ts`의 요구되지 않은 일반성
+티켓은 "등록된 두 커맨드를 표시"만 요구하는데 미지 커맨드 원시 이름 통과·이름 없는 항목 제거·
+공백 정규화까지 다루고, 단위 테스트 5개 중 3개가 그 일반성만 검증한다 — Speculative Generality.
+
+## T09-R-6 — `loadShortcuts?` 주입 prop의 소비자가 하나
+소비자가 Storybook 하나뿐이고 어떤 테스트도 쓰지 않는다. 다만 `src/platform/` 시임 관례
+(`backupStore.ts`·`stateStore.ts`·`tabs.ts`)와 상충하므로 스타일 판단으로 남긴다.
+
+## T09-R-1b — `preferences-panel.tsx`의 `locale` prop JSDoc 첫 줄이 낡았다
+R-4(dd0c7da)가 칩을 저장된 선호에 묶으면서 JSDoc 첫 줄이 실제와 어긋났다. 픽서가 같이 고치면
+커밋이 4파일이 되어 `guard:blast-radius`를 밟기에 남겼다. 한 줄짜리 후속.

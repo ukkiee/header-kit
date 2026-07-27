@@ -4,7 +4,7 @@
 
 **Blocked by:** 01 (설정·백업 화면 셸).
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] 설정에 **읽기 전용** 단축키 목록 — 현재 등록된 커맨드(_execute_action, toggle-pause)를 표시. 새 키보드 커맨드는 추가하지 않는다
 - [ ] 설정에 언어 선택(ko/en). 일본어(ja)는 넣지 않는다(미번역)
