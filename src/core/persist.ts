@@ -1,3 +1,4 @@
+import { isLocale } from './i18n';
 import { ALL_RESOURCE_TYPES, REQUEST_METHODS, type RequestMethod, type ResourceType } from './rules';
 import { DEFAULT_THEME, isThemePreference } from './theme';
 import {
@@ -320,12 +321,19 @@ function validateStoredState(value: Record<string, unknown>): StoredState | null
    */
   const syncBackup =
     typeof value.syncBackup === 'boolean' ? value.syncBackup : DEFAULT_SYNC_BACKUP;
+  /*
+   * 언어 선호도 같은 계열의 치유 대상이다 (티켓 09). 지원하지 않는 값(번역이 없는 'ja' 등)이
+   * 들어와도 상태 전체를 리셋하지 않고 **선호 없음**으로 접는다 — 그러면 화면은 브라우저 UI
+   * 언어로 돌아가고, 카탈로그에 없는 로케일을 번역기에 넘겨 undefined 문자열을 그리는 일이 없다.
+   */
+  const locale = isLocale(value.locale) ? value.locale : undefined;
   if (!profiles.every(isProfile) || !isMaterializedRecord(materialized)) return null;
   return {
     ...value,
     theme,
     badgeVisible,
     syncBackup,
+    locale,
     profiles,
     materialized,
     customHeaderNames,

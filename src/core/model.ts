@@ -1,3 +1,4 @@
+import type { Locale } from './i18n';
 import type { RequestMethod, ResourceType } from './rules';
 import { DEFAULT_THEME, type ThemePreference } from './theme';
 
@@ -286,6 +287,15 @@ export interface StoredState {
    * 원자적 이관·자동백업과의 경쟁을 구조에서 없앤다.
    */
   syncBackup: boolean;
+  /**
+   * 화면 언어 선호 (티켓 09). **선택 필드**이고, 부재가 곧 "고른 적 없음 = 브라우저 UI
+   * 언어를 따른다"는 뜻이다 — theme의 'system'이 하는 역할을 여기서는 부재가 한다.
+   *
+   * 필수 필드로 만들고 기본값을 박지 않는 이유: 그리려면 구체적인 언어 하나를 골라야 하고,
+   * 그 값이 무엇이든 지금 브라우저 언어를 따르고 있던 사용자 절반의 화면이 이 필드가
+   * 생겼다는 이유만으로 뒤집힌다. 우선순위 해석은 i18n의 `pickLocale` 한 곳이 맡는다.
+   */
+  locale?: Locale;
   profiles: Profile[];
   /**
    * Placeholder 실체화 값의 활성 상태 구역 — Modification id 키.

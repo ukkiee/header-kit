@@ -580,6 +580,9 @@ try {
     ],
   });
 
+  // 단일 셸(ADR 0005): JSON 내보내기·가져오기는 백업 화면이 소유한다 (티켓 09) —
+  // 스냅샷 히스토리와 같은 자리다.
+  await popup.getByRole('button', { name: 'Show backups' }).click();
   await popup.getByRole('button', { name: 'Import…' }).click();
   await popup.getByLabel('Import JSON').fill(exportJson);
   await popup.getByRole('button', { name: 'Run import' }).click();
@@ -600,7 +603,9 @@ try {
   await popup.getByRole('button', { name: 'Import…' }).click();
   await popup.getByLabel('Import JSON').fill('{broken json');
   await popup.getByRole('button', { name: 'Run import' }).click();
-  const importError = await popup.getByRole('alert').textContent();
+  // 백업 화면에는 스냅샷 패널도 자기 오류 배너를 가질 수 있다 — Import 패널이 위에 서므로
+  // 첫 배너가 여기서 보는 것이다(단언 자체는 그대로: 이 문구가 JSON 거부여야 한다).
+  const importError = await popup.getByRole('alert').first().textContent();
   const profileCountAfter = await sw.evaluate(async () => {
     const { state } = await chrome.storage.local.get('state');
     return state.profiles.length;
@@ -1538,6 +1543,7 @@ try {
 
   // N13: Export 경로 — 실제 다운로드 캡처 → 페이로드 검증 (release r1 R-2)
   // 현재 상태: Renamed(k-a) + KeyB(k-b). 전체 선택 기본 → 2개 내보내기.
+  await popup.getByRole('button', { name: 'Show backups' }).click();
   await popup.getByRole('button', { name: 'Export…' }).click();
   const [exportDownload] = await Promise.all([
     popup.waitForEvent('download'),
@@ -1552,6 +1558,8 @@ try {
       && exportPayload.profiles?.length === 2
       && exportPayload.profiles.some((p) => p.name === 'Renamed'),
     `file=${exportDownload.suggestedFilename()}, profiles=${exportPayload.profiles?.length}, names=[${exportPayload.profiles?.map((p) => p.name).join('|')}]`);
+  // 뒤 시나리오는 규칙 본문을 만진다 — 프로필 화면으로 돌아간다.
+  await popup.getByRole('button', { name: 'Show profiles' }).click();
 
   // N14: ko 로케일 접근성 이름 — aria-label이 en/ko 카탈로그를 경유한다 (aria-label-i18n)
   // 상태: Renamed(k-a, 켬) + KeyB(k-b, 꺼짐)
@@ -3512,6 +3520,117 @@ try {
     `on=${switchOnBefore}→stored-off=${storedOff}, reopen-checked=${switchOffAfterReopen}, ` +
       `cloud ${cloudBefore.length}→${cloudAfter.length} keys (intact=${cloudIntact}), ` +
       `rows sync ${rowsWhileOn}/${syncSnapshots} → local ${rowsWhileOff}/${localSnapshots} → back ${rowsBackOn}`);
+
+  /*
+   * N40: 설정·백업 화면 마무리 (티켓 09).
+   *
+   * 셋을 함께 본다 — (a) 백업 화면의 JSON 내보내기·가져오기가 **왕복**한다: 내보낸 파일
+   * 하나만으로 통째로 지운 프로필이 규칙째 돌아온다. 내보내기만 보면 파일이 실제로 읽히는지
+   * 모르고, 가져오기만 보면 우리가 쓴 파일이 우리가 읽는 파일인지 모른다. (b) 언어 선택이
+   * 실제 문구를 바꾸고 **다시 열어도** 유지된다 — 저장을 빼면 새로고침에 날아간다.
+   * (c) 단축키 목록이 등록된 커맨드를 읽기 전용으로 보여 준다(바꾸는 컨트롤 없음).
+   */
+  await seedProfiles([
+    baseProfile('p-rt', 'RoundTrip', [hdr({ id: 'm1', name: 'X-Round-Trip', value: 'rt' })]),
+  ]);
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Show backups' }).click();
+  await popup.getByRole('button', { name: 'Export…' }).click();
+  const [rtDownload] = await Promise.all([
+    popup.waitForEvent('download'),
+    popup.getByRole('button', { name: /Export… \(1\)/ }).click(),
+  ]);
+  const rtJson = readFileSync(await rtDownload.path(), 'utf8');
+
+  // 프로필을 통째로 지운다 — 되살아난다면 그것은 방금 내보낸 파일에서 온 것이다.
+  await seedProfiles([]);
+  await pollSessionRuleCount(sw, 0);
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Show backups' }).click();
+  await popup.getByRole('button', { name: 'Import…' }).click();
+  await popup.getByLabel('Import JSON').fill(rtJson);
+  await popup.getByRole('button', { name: 'Run import' }).click();
+  const rtState = await pollUntil(
+    () => sw.evaluate(async () => (await chrome.storage.local.get('state')).state),
+    (s) => s?.profiles?.length === 1,
+    8000,
+    200,
+  );
+  const rtProfile = rtState?.profiles?.[0];
+  const rtMod = rtProfile?.modifications?.[0];
+  const roundTripped =
+    rtProfile?.name === 'RoundTrip' &&
+    rtProfile.modifications.length === 1 &&
+    rtMod?.name === 'X-Round-Trip' &&
+    rtMod?.value === 'rt';
+
+  /*
+   * 언어는 `?locale=` 없이 연 화면에서 본다. 오버라이드는 무엇보다 앞서는 강제 로케일이라,
+   * 그것을 달고 열면 저장된 선호가 화면을 바꾸는지 영영 알 수 없다.
+   *
+   * 대신 **저장된 선호를 먼저 en으로 심는다**. 오버라이드가 없을 때의 폴백은 브라우저 UI
+   * 언어인데 그 값은 이 스위트가 정하지 못한다 — `--lang=en-US`로 띄워도
+   * `chrome.i18n.getUILanguage()`는 호스트 OS 언어를 따라간다(이 기기에서는 ko다). 선호를
+   * 심어 두면 화면이 en에서 시작하는 것이 기기와 무관하게 확정되고, 그 시작 자체가
+   * "저장된 선호가 브라우저 UI 언어를 이긴다"의 실측이 된다.
+   */
+  await sw.evaluate(async () => {
+    const { state } = await chrome.storage.local.get('state');
+    await chrome.storage.local.set({ state: { ...state, locale: 'en' } });
+  });
+  const langPage = await context.newPage();
+  await langPage.goto(`chrome-extension://${extensionId}/popup.html`);
+  const startedEn = await langPage
+    .getByRole('button', { name: 'Pause' })
+    .waitFor({ timeout: 5000 })
+    .then(() => true, () => false);
+  await langPage.getByRole('button', { name: 'Show preferences' }).click();
+  await ensurePanelOpen(langPage, 'Toggle preferences');
+  await langPage.getByRole('button', { name: '한국어' }).click();
+  // 고른 즉시 바뀌는지 — 헤더의 Pause는 어느 화면에서나 보이는 문구다.
+  const switchedToKo = await langPage
+    .getByRole('button', { name: '일시정지' })
+    .waitFor({ timeout: 5000 })
+    .then(() => true, () => false);
+
+  await langPage.reload();
+  const keptKo = await langPage
+    .getByRole('button', { name: '일시정지' })
+    .waitFor({ timeout: 5000 })
+    .then(() => true, () => false);
+
+  // (c) 단축키 목록 — ko 라벨로 두 커맨드가 서고, 그 행에는 누를 것이 없다(읽기 전용).
+  await langPage.getByRole('button', { name: '환경설정 화면' }).click();
+  await ensurePanelOpen(langPage, '환경설정 펼치기/접기');
+  const openRow = langPage.locator('li').filter({ hasText: 'HeaderKit 열기' }).first();
+  const shortcutOpenShown = await openRow
+    .waitFor({ timeout: 5000 })
+    .then(() => true, () => false);
+  const shortcutPauseShown = await langPage
+    .locator('li')
+    .filter({ hasText: '모든 수정을 일시정지하거나 재개' })
+    .first()
+    .isVisible()
+    .catch(() => false);
+  const shortcutReadOnly = shortcutOpenShown
+    ? (await openRow.getByRole('button').count()) === 0 &&
+      (await openRow.getByRole('textbox').count()) === 0
+    : false;
+
+  // 되돌아오는 길도 있어야 한다 — 한 번 고르면 갇히는 선택이면 안 된다.
+  await langPage.getByRole('button', { name: 'English' }).click();
+  const switchedBackToEn = await langPage
+    .getByRole('button', { name: 'Pause' })
+    .waitFor({ timeout: 5000 })
+    .then(() => true, () => false);
+  await langPage.close();
+
+  record('N40: 백업 화면 JSON 왕복 + 언어 선택(유지·복귀) + 읽기 전용 단축키 목록',
+    roundTripped && startedEn && switchedToKo && keptKo && switchedBackToEn &&
+      shortcutOpenShown && shortcutPauseShown && shortcutReadOnly,
+    `왕복=${roundTripped}(${rtProfile?.name}/${rtMod?.name}=${rtMod?.value}), ` +
+      `en시작=${startedEn} → ko=${switchedToKo} → 재열람 ko=${keptKo} → en복귀=${switchedBackToEn}, ` +
+      `단축키 열기=${shortcutOpenShown}, 일시정지=${shortcutPauseShown}, 읽기전용=${shortcutReadOnly}`);
 
   /*
    * N39: 2단계 전체 초기화 (티켓 08, R-3).

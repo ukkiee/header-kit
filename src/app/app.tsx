@@ -15,7 +15,7 @@ import { Button } from '@/ui/press-button';
 import { LocaleProvider } from '@/ui/i18n-context';
 import { ScrollArea } from '@/ui/scroll-area';
 import type { Command } from '@/core/commands';
-import { resolveLocale, t, type Locale, type MessageKey } from '@/core/i18n';
+import { pickLocale, t, type MessageKey } from '@/core/i18n';
 import { createProfile, PROFILE_COLORS, type StoredState } from '@/core/schema';
 import { DEFAULT_THEME } from '@/core/theme';
 import { useAppliedTheme } from '@/ui/use-theme';
@@ -49,7 +49,15 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
   const [railView, setRailView] = useState<RailView>('profiles');
   const [commandError, setCommandError] = useState<string | null>(null);
   const [summary, setSummary] = useState<StatusSummaryData | null>(null);
-  const [locale, setLocale] = useState<Locale>('en');
+  /*
+   * 언어의 두 **바깥** 출처 (티켓 09). 저장된 선호는 state가 들고 있으므로 여기 두지 않는다 —
+   * 복사본을 두면 설정에서 언어를 바꾼 뒤 그 복사본이 낡아 화면이 옛 언어로 남는다.
+   * 우선순위 판단은 pickLocale 한 곳이 한다.
+   */
+  const [localeSources, setLocaleSources] = useState<{ override: string | null; uiLanguage: string }>({
+    override: null,
+    uiLanguage: 'en',
+  });
   const [incognitoAllowed, setIncognitoAllowed] = useState<boolean | null>(null);
   /*
    * 명암 적용 (ADR 0015). 상태가 아직 없는 동안(로드 전)은 'system'으로 둔다 — 그 순간의
@@ -64,9 +72,11 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
     void getSummary().then(setSummary);
     onStateChanged(() => void loadState().then(setState));
     onSummaryChanged(() => void getSummary().then(setSummary));
-    // URL의 ?locale= 오버라이드를 우선하고(언어 강제), 없으면 브라우저 UI 언어.
-    const override = new URLSearchParams(window.location.search).get('locale');
-    setLocale(resolveLocale(override ?? browser.i18n.getUILanguage()));
+    // URL의 ?locale= 오버라이드(언어 강제)와 브라우저 UI 언어는 한 번만 읽으면 되는 값이다.
+    setLocaleSources({
+      override: new URLSearchParams(window.location.search).get('locale'),
+      uiLanguage: browser.i18n.getUILanguage(),
+    });
     void browser.extension.isAllowedIncognitoAccess().then(setIncognitoAllowed);
   }, []);
 
@@ -74,6 +84,7 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
 
   if (!state) return null;
 
+  const locale = pickLocale(localeSources.override, state.locale, localeSources.uiLanguage);
   const effectiveSelectedId = reconcileSelection(selectedId, state.profiles);
   // 재조정 결과를 상태로 커밋(렌더 중 상태 조정 패턴) — 자동 선택·폴백이 고정되어,
   // 활성 토글로 뷰가 점프하거나 옛 ID 재도입 시 선택이 되돌아가지 않는다.
@@ -279,16 +290,22 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
               <>
                 {summary && <StatusSummary summary={summary} />}
                 {profileEditor}
-                <TransferPanel state={state} onCommand={dispatchWithResult} />
               </>
             )}
+            {/* 백업 화면이 파일 왕복(JSON 내보내기·가져오기)과 스냅샷 히스토리를 함께 갖는다
+                (티켓 09) — 둘 다 "프로필 전체를 어딘가에 두고 되찾는" 같은 일이라, 파일은
+                프로필 화면에 두고 스냅샷만 여기 두면 백업하러 온 사람이 반쪽만 찾는다. */}
             {railView === 'backups' && (
-              <BackupPanel syncBackup={state.syncBackup} onCommand={dispatchWithResult} />
+              <>
+                <TransferPanel state={state} onCommand={dispatchWithResult} />
+                <BackupPanel syncBackup={state.syncBackup} onCommand={dispatchWithResult} />
+              </>
             )}
             {railView === 'preferences' && (
               <PreferencesPanel
                 customHeaderNames={state.customHeaderNames}
                 theme={state.theme}
+                locale={locale}
                 badgeVisible={state.badgeVisible}
                 onCommand={dispatch}
                 incognitoAllowed={incognitoAllowed}

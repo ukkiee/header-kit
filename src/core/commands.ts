@@ -15,6 +15,7 @@ import {
   type Profile,
   type StoredState,
 } from './schema';
+import type { Locale } from './i18n';
 import type { ThemePreference } from './theme';
 
 /** Modification이 Placeholder를 담은 값을 가지면 그 템플릿, 아니면 null. */
@@ -291,6 +292,16 @@ export function setTheme(state: StoredState, theme: ThemePreference): StoredStat
 }
 
 /**
+ * 화면 언어를 고른다 (티켓 09) — 고르는 순간부터 브라우저 UI 언어 대신 이 값이 쓰인다.
+ *
+ * 되돌릴 값이 필요하면 다른 언어를 고르면 된다. '브라우저를 따름'으로 되돌아가는 경로를
+ * 선택지로 두지 않은 것은 스펙이 정한 선택지가 ko/en 둘뿐이기 때문이다.
+ */
+export function setLocale(state: StoredState, locale: Locale): StoredState {
+  return { ...state, locale };
+}
+
+/**
  * 툴바 배지를 보일지 정한다 (티켓 06) — **표시 여부만** 바꾼다.
  *
  * 규칙 적용은 이 값과 무관하다. 배지를 끄는 것과 규칙을 멈추는 것(Pause)은 다른 조작이고,
@@ -384,6 +395,7 @@ export type Command =
   | { type: 'set-paused'; paused: boolean }
   | { type: 'toggle-pause' }
   | { type: 'set-theme'; theme: ThemePreference }
+  | { type: 'set-locale'; locale: Locale }
   | { type: 'set-badge-visible'; visible: boolean }
   | { type: 'set-sync-backup'; enabled: boolean }
   /** 전체 초기화의 상태 부분 — 저장소 삭제·자동 백업 중단은 런타임이 이 명령 주변에서 조율한다. */
@@ -457,6 +469,8 @@ export function applyCommand(
       return togglePause(state);
     case 'set-theme':
       return setTheme(state, command.theme);
+    case 'set-locale':
+      return setLocale(state, command.locale);
     case 'set-badge-visible':
       return setBadgeVisible(state, command.visible);
     case 'set-sync-backup':

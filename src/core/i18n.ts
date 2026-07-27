@@ -95,6 +95,16 @@ const en = {
   themeSystem: 'System',
   themeDark: 'Dark',
   themeLight: 'Light',
+  language: 'Language',
+  // 언어 이름은 두 로케일에서 같다 — 언어 선택지는 그 언어 자신의 이름으로 읽는 것이
+  // 관례다(영어 화면의 '한국어'를 한국어 사용자가 알아볼 수 있어야 고를 수 있다).
+  languageEn: 'English',
+  languageKo: '한국어',
+  shortcuts: 'Keyboard shortcuts',
+  shortcutsReadOnly: 'Read-only here — rebind them on the browser’s extension shortcuts page.',
+  shortcutOpenApp: 'Open HeaderKit',
+  shortcutTogglePause: 'Pause or resume all modifications',
+  shortcutUnset: 'Not set',
   badgeCount: 'Applied rule count',
   badgeCountNote: 'Shows how many rules are applied right now on the toolbar icon.',
   cloudSync: 'Cloud sync',
@@ -273,6 +283,14 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     themeSystem: '시스템',
     themeDark: '다크',
     themeLight: '라이트',
+    language: '언어',
+    languageEn: 'English',
+    languageKo: '한국어',
+    shortcuts: '키보드 단축키',
+    shortcutsReadOnly: '여기서는 읽기 전용입니다 — 변경은 브라우저의 확장 단축키 페이지에서 합니다.',
+    shortcutOpenApp: 'HeaderKit 열기',
+    shortcutTogglePause: '모든 수정을 일시정지하거나 재개',
+    shortcutUnset: '지정 없음',
     badgeCount: '적용 중인 규칙 수',
     badgeCountNote: '툴바 아이콘에 지금 적용 중인 규칙 수를 표시합니다.',
     cloudSync: '클라우드 동기화',
@@ -377,4 +395,26 @@ export function format(template: string, params: Record<string, string | number>
 export function resolveLocale(uiLanguage: string): Locale {
   const base = uiLanguage.toLowerCase().split('-')[0];
   return (LOCALES as readonly string[]).includes(base ?? '') ? (base as Locale) : 'en';
+}
+
+export function isLocale(value: unknown): value is Locale {
+  return (LOCALES as readonly unknown[]).includes(value);
+}
+
+/**
+ * 화면 언어의 단일 판단 지점 (티켓 09) — 세 출처의 우선순위를 여기 한 곳에서만 정한다.
+ *
+ * 1. URL `?locale=` 오버라이드: 한 화면만 특정 언어로 강제하는 도구용이라 무엇보다 앞선다.
+ * 2. 저장된 선호: 사용자가 설정에서 고른 값. 브라우저 UI 언어를 이겨야 스위치가 뜻을 갖는다.
+ * 3. 브라우저 UI 언어: 아무것도 고르지 않은 사용자의 기본 — 선호가 **없음**으로 남아 있는
+ *    한 지금까지의 동작 그대로다. 필드를 필수로 만들어 'en'을 박으면 한국어 브라우저
+ *    사용자가 이 티켓 하나로 영어 화면을 받게 된다.
+ */
+export function pickLocale(
+  override: string | null | undefined,
+  preference: Locale | undefined,
+  uiLanguage: string,
+): Locale {
+  if (override !== null && override !== undefined) return resolveLocale(override);
+  return preference ?? resolveLocale(uiLanguage);
 }
