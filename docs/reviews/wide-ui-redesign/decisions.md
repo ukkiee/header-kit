@@ -186,6 +186,7 @@ R-3 [AUTO AT-1 reserved:migration] escalate — v1 마이그레이션이 권위 
 R-4 [AUTO AT-1 release:high@asserted] accept (NOT APPLIED — round escalated) — Spec fidelity: 세 가지 사용자 대면 기능이 배선되지 않았다; high/0.98; src/features/modifications/rule-form.tsx:513; res:none; 인간 결정 2026-07-27T06:40Z — 이 브랜치에서 고친다. 게이트 픽스 한도(≤3파일·≤80줄)로는 user story 3건의 수직 배선이 들어가지 않으므로 티켓으로 분해해 Stage 4 정규 경로(구현→기준 감사→/code-review→클로즈)로 배선한다 → .scratch/wide-ui-redesign/issues/11-save-then-activate.md · 12-snapshot-delete.md · 13-profile-row-status.md. 이 행 자체는 커밋 sha를 갖지 않는다 — 이 라운드는 픽스를 하나도 만들지 않았고, 그 사실은 위 `_ROUND NOT APPLIED_` 줄이 그대로 나른다
 R-5 [AUTO AT-1 release:med@asserted] defer — 활성 백업 저장소 전환에서 늦은 응답이 현재 히스토리를 덮는다; medium/0.95; src/features/backup/backup-panel.tsx:90; res:none; a fix here buys nothing downstream and costs the committed verification evidence; follow-up docs/reviews/wide-ui-redesign/followups.md#R-5
 R-6 [AUTO AT-1 release:med@asserted] defer — 커밋된 검증 증거가 UI 릴리스 위험을 검사하지 않는다; medium/0.99; docs/reviews/wide-ui-redesign/verification.md:13; res:none; a fix here buys nothing downstream and costs the committed verification evidence; follow-up docs/reviews/wide-ui-redesign/followups.md#R-6
+R-1 [HUMAN AT-1 overrides release:high@asserted] accept — 실패한 전체 초기화 뒤 예약 백업이 삭제된 데이터를 재생성한다; high/0.99; src/runtime/background-bootstrap.ts:191; res:none; 인간 결정 2026-07-27T06:40Z — 이 브랜치에서 고친다(ESCALATION.md `Resolved:`). Phase A의 정지는 기계가 한 일의 기록으로 그대로 유효하고, 이 행은 그 뒤 사람이 정한 처분의 기록이다; applied 5486f300d8b43513fd65e61a6fe1964a01229d86 (2 files, 73 lines); suite green→green
 
 ### ESCALATION reserved:migration 2026-07-27T05:48:43Z
 
@@ -252,3 +253,51 @@ R-3은 게이트 픽스 한도(≤3파일·≤80줄)를 넘길 수 있다. 넘�
 전체 스위트를 다시 돌려 `verification.md`를 새 SHA/tree로 다시 쓰고 커밋한 뒤에야 릴리스
 라운드 2를 띄울 수 있다. 라운드 2는 **검증 전용**이라 거기서 나오는 새 finding은 accept되지
 않는다 — 라운드 2 전에 사람이 픽스를 확인하는 편이 낫다.
+
+### ESCALATION needs-decision 2026-07-27T07:13:24Z
+
+릴리스 게이트 r1의 **인간 결정 집행 중** 정지. 사람이 정한 처분(R-1·R-2·R-3을 게이트 픽스로
+적용)의 **첫 번째 픽스 R-1은 적용·커밋됐고**(`5486f30`, 2파일 73줄, 스위트 green→green,
+diff-guard clean), 그 결과가 위 `R-1 [HUMAN AT-1 overrides release:high@asserted] accept` 행이다.
+이 시점의 원장은 재도출 검증을 통과한다 — `verify-ledger` exit 0, rowCount 6 / rederived 5 /
+human_rows [R-1] / gate_commits 0 / ledger_shas 1.
+
+**멈춘 이유는 픽스가 아니라 그 커밋의 트레일러 블록이다.** 5486f30의 메시지는
+
+    <본문>
+    (빈 줄)
+    Conductor: feature-loop/wide-ui-redesign
+    Conductor-Gate: release-r1
+    Conductor-Findings: R-1
+    (빈 줄)
+    Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+
+형태다. git의 트레일러 파서는 **마지막 문단만** 읽으므로
+`git log --format='%(trailers:key=Conductor-Gate,valueonly)'`가 빈 문자열을 돌려준다. 확인:
+`gate_commits: 0`. 세 `Conductor-*` 줄은 본문 텍스트로는 남아 있다(grep으로 보인다).
+
+지금은 이것이 위반이 아니다 — `verify-ledger`의 `ledger-sha-not-a-gate-fix`는
+`if (gateCommits.length > 0)` 안에 있어서(loop-state.mjs:3333), 이 라운드에 트레일러가 읽히는
+커밋이 하나도 없으면 검사 자체를 건너뛴다("기계 트레일러를 금지하는 저장소를 벌하지 않는다").
+**R-2나 R-3이 정상 트레일러로 착지하는 순간 그 조건이 참이 되고 R-1의 스탬프가 위반으로
+발화한다.** 즉 라운드를 계속 진행하면 반드시 `verify-ledger` 실패로 멈춘다.
+
+루프가 스스로 고칠 수 없다: 커밋 메시지 수정은 `git commit --amend` 또는 `rebase`뿐이고
+둘 다 이 스킬의 git 허용목록 밖이다(`forbidden-git-op`). 나머지 두 픽스를 같은 방식으로
+망가뜨려 검사를 건너뛰게 만드는 것은 감사 장치를 스스로 끄는 행위이므로 하지 않았다.
+
+**지금 멈추는 이유:** 5486f30은 현재 **브랜치 팁**이다. 수리가 `git commit --amend` 한 번이다.
+R-2·R-3을 먼저 쌓으면 같은 수리가 3커밋짜리 `rebase -i`가 된다.
+
+적용된 행: R-1(`5486f30`). 미적용: R-2·R-3(게이트 픽스 예정, 미착수) · R-4(티켓 11·12·13,
+미착수) · R-5·R-6(defer 유지). 티켓 11·12·13은 열린 채로 남았다.
+
+**해소 2026-07-27T07:18:36Z** — 사용자가 amend를 승인했다(대화 내 결정). 루프가 정지·락 해제된
+상태에서, 루프 밖에서 픽스 커밋의 **메시지만** 재작성했다: 네 트레일러를 한 문단으로 합쳐
+`Conductor: / Conductor-Gate: / Conductor-Findings: / Co-Authored-By:` 순으로 두었다.
+`264ee980` → `5486f300d8b43513fd65e61a6fe1964a01229d86`. **트리 해시는 동일하다**
+(`00c0310c5c03f53deed0fd0375cb996c733c80ab`) — 코드는 한 바이트도 바뀌지 않았고 커밋 메시지만
+바뀌었다. 확인: `git log -1 --format='%(trailers:key=Conductor-Gate,valueonly)'` → `release-r1`.
+위 R-1 HUMAN 행의 스탬프도 새 sha로 갱신했다. 브랜치는 origin에 푸시된 적이 없어 재작성의
+외부 영향은 없다. 다음 게이트 픽스 서브에이전트 브리프에는 "모든 트레일러를 `Co-Authored-By`와
+같은 마지막 한 문단에 넣어라"를 명시한다.
