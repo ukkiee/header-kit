@@ -36,10 +36,20 @@ export type AppSurface = 'popup' | 'tab';
 /** 레일 화면 — 관리 기능(백업/환경설정)이 본문 편집과 분리된다 (ADR 0005). */
 type RailView = 'profiles' | 'backups' | 'preferences';
 
-const RAIL_ITEMS: Array<{ view: RailView; Icon: typeof Layers; labelKey: MessageKey }> = [
-  { view: 'profiles', Icon: Layers, labelKey: 'ariaShowProfiles' },
-  { view: 'backups', Icon: History, labelKey: 'ariaShowBackups' },
-  { view: 'preferences', Icon: Settings, labelKey: 'ariaShowPreferences' },
+/*
+ * 레일 항목 — 접근성 이름(`labelKey`)과 **보이는 라벨**(`textKey`)을 따로 든다 (티켓 10).
+ * 보이는 라벨은 레일 폭 안에 들어가는 화면 이름(프로필/백업/설정)이고, 접근성 이름은
+ * 그 버튼이 하는 일("프로필 화면"으로 이동)을 그대로 말한다.
+ */
+const RAIL_ITEMS: Array<{
+  view: RailView;
+  Icon: typeof Layers;
+  labelKey: MessageKey;
+  textKey: MessageKey;
+}> = [
+  { view: 'profiles', Icon: Layers, labelKey: 'ariaShowProfiles', textKey: 'railProfiles' },
+  { view: 'backups', Icon: History, labelKey: 'ariaShowBackups', textKey: 'railBackups' },
+  { view: 'preferences', Icon: Settings, labelKey: 'ariaShowPreferences', textKey: 'railSettings' },
 ];
 
 export function App({ surface = 'popup' }: { surface?: AppSurface }) {
@@ -208,7 +218,7 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
       onCommandWithResult={dispatchWithResult}
     />
   ) : (
-    <p className="text-xs text-zinc-500 dark:text-zinc-400">{t(locale, 'noProfilesYet')}</p>
+    <p className="text-xs text-muted-foreground">{t(locale, 'noProfilesYet')}</p>
   );
 
   // 단일 셸 (ADR 0005) — 두 표면이 같은 레일+사이드바+본문을 쓴다.
@@ -222,25 +232,44 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
       <MotionProvider>
       <IconTooltipProvider>
       <div
-        className={`grid grid-cols-[3rem_14rem_minmax(0,1fr)] ${canvas} ${
-          surface === 'tab' ? 'h-screen' : 'h-[580px] w-[760px]'
+        className={`grid ${canvas} ${
+          surface === 'tab'
+            ? 'h-screen grid-cols-[10rem_16rem_minmax(0,1fr)]'
+            : 'h-[580px] w-[760px] grid-cols-[8rem_12rem_minmax(0,1fr)]'
         }`}
       >
-        <nav className="flex flex-col items-center gap-1 border-r border-border py-3">
+        <nav className="flex flex-col gap-1 border-r border-border p-2">
           {/* 레일 아이콘도 다른 아이콘 버튼과 같은 셸을 쓴다 — 툴팁(호버·키보드 포커스)과
-              접근성 이름이 같은 카탈로그 키에서 나와 갈라지지 않는다. size="md"는 기존
-              클릭 대상(32×28)과 아이콘 크기(16px)를 그대로 유지하기 위한 것이다. */}
-          {RAIL_ITEMS.map(({ view, Icon, labelKey }) => (
+              접근성 이름이 같은 카탈로그 키에서 나와 갈라지지 않는다. size="rail"은 그 셸에
+              보이는 라벨을 세운 것으로(티켓 10), 클릭 대상은 오히려 커진다(높이 32).
+
+              선택 표시는 **색만이 아니다** — 왼쪽 2px 막대(위치·형태)가 함께 선다. 색을
+              지워도 어느 화면인지 남아야 한다(스펙 story 38). */}
+          {RAIL_ITEMS.map(({ view, Icon, labelKey, textKey }) => (
             <IconButton
               key={view}
-              size="md"
+              size="rail"
               label={t(locale, labelKey)}
+              text={t(locale, textKey)}
               icon={Icon}
               aria-pressed={railView === view}
-              className={railView === view ? 'bg-zinc-100 dark:bg-zinc-800' : ''}
+              className={
+                railView === view
+                  ? 'border-l-2 border-primary bg-secondary font-medium'
+                  : 'border-l-2 border-transparent'
+              }
               onClick={() => setRailView(view)}
             />
           ))}
+          {/*
+            레일 하단 — 지금 실제로 걸려 있는 규칙 수(스펙 story 20). 값의 출처는 background가
+            발행한 요약 하나뿐이라(독립 재컴파일 없음) 툴바 배지·상태 줄과 같은 수를 말한다.
+            일시정지면 요약의 규칙 수가 0이므로 여기도 0으로 떨어진다.
+          */}
+          <p className="mt-auto flex flex-col px-2 pt-2 text-xs">
+            <strong className="font-mono text-sm font-medium">{summary?.ruleCount ?? 0}</strong>
+            <span className="text-muted-foreground">{t(locale, 'railApplied')}</span>
+          </p>
         </nav>
 
         {/* 랜드마크(aside/main)가 곧 스크롤 컨테이너다 — render 합성이라 껍데기 div가
@@ -258,6 +287,9 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
             onCreate={createAndSelectProfile}
             onReorder={(profileId, toIndex) =>
               dispatch({ type: 'move-profile', profileId, toIndex })
+            }
+            onToggleActive={(profileId, active) =>
+              dispatch({ type: 'toggle-profile', profileId, active })
             }
           />
           </div>

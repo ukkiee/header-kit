@@ -114,7 +114,7 @@ export function PreferencesPanel({
           <div className="flex items-start justify-between gap-2">
             <div className="flex flex-col">
               <span className="font-medium">{t('badgeCount')}</span>
-              <span className="text-zinc-500">{t('badgeCountNote')}</span>
+              <span className="text-muted-foreground">{t('badgeCountNote')}</span>
             </div>
             <ToggleSwitch
               checked={badgeVisible}
@@ -194,7 +194,7 @@ export function PreferencesPanel({
                   <button
                     type="button"
                     aria-label={format(t('ariaRemoveName'), { name })}
-                    className="text-zinc-400 hover:text-red-500"
+                    className="text-muted-foreground hover:text-red-500"
                     onClick={() => onCommand({ type: 'remove-custom-header-name', name })}
                   >
                     <X size={12} strokeWidth={1.75} />
@@ -204,7 +204,7 @@ export function PreferencesPanel({
             </ul>
           </div>
 
-          {incognitoAllowed && <p className="text-zinc-500">{t('incognitoAllowed')}</p>}
+          {incognitoAllowed && <p className="text-muted-foreground">{t('incognitoAllowed')}</p>}
         </div>
     </CollapsiblePanel>
   );

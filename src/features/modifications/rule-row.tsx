@@ -18,7 +18,7 @@ function ConditionBadges({ badges }: { badges: ConditionBadge[] }) {
           className={`inline-flex items-center gap-0.5 ${badgePill} ${
             b.tone === 'exclude'
               ? 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300'
-              : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300'
+              : 'bg-secondary text-muted-foreground'
           }`}
         >
           {b.icon === 'clock' && <Clock size={9} strokeWidth={2} />}
@@ -76,7 +76,7 @@ export function ItemRow({
             {badge}
           </span>
         </div>
-        <div className="truncate font-mono text-xs text-zinc-500 dark:text-zinc-400">{summary}</div>
+        <div className="truncate font-mono text-xs text-muted-foreground">{summary}</div>
         <ConditionBadges badges={conditionBadges} />
       </div>
       {/*

@@ -64,7 +64,7 @@ const menuItem = cva(
   {
     variants: {
       tone: {
-        default: 'text-zinc-700 dark:text-zinc-200',
+        default: 'text-popover-foreground',
         danger: 'text-red-600 dark:text-red-400',
       },
     },

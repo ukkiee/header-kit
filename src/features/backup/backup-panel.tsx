@@ -182,10 +182,10 @@ export function BackupPanel({
         <div className="flex items-start justify-between gap-2">
           <div className="flex flex-col">
             <span className="font-medium">{t('cloudSync')}</span>
-            <span className="text-zinc-500 dark:text-zinc-400">
+            <span className="text-muted-foreground">
               {syncBackup ? t('cloudSyncOn') : t('cloudSyncOff')}
             </span>
-            <span className="text-zinc-500 dark:text-zinc-400">
+            <span className="text-muted-foreground">
               {cloudPresence === 'present'
                 ? t('cloudBackupsPresent')
                 : cloudPresence === 'none'
@@ -199,7 +199,7 @@ export function BackupPanel({
             aria-label={t('cloudSync')}
           />
         </div>
-        <p className="text-zinc-500 dark:text-zinc-400">{t('cloudSyncKeepsHistory')}</p>
+        <p className="text-muted-foreground">{t('cloudSyncKeepsHistory')}</p>
 
         {/* 클라우드 삭제는 스위치와 분리된 명시적 동작이다 — 자체 확인을 거친다. */}
         <div className="flex justify-end">
@@ -213,14 +213,14 @@ export function BackupPanel({
             {confirmingClear ? t('confirmDeleteCloudBackups') : t('deleteCloudBackups')}
           </Button>
         </div>
-        {notice && <p className="text-zinc-500 dark:text-zinc-400">{notice}</p>}
+        {notice && <p className="text-muted-foreground">{notice}</p>}
 
         {/* 전체 초기화 (R-3) — 되돌릴 수 없으므로 2단계 확인을 거친다. 무엇이 지워지는지와
             "실패해도 되돌아오지 않는다"를 누르기 전에 말한다. */}
-        <div className="mt-2 flex flex-col gap-1 border-t border-zinc-200 pt-2 dark:border-zinc-800">
+        <div className="mt-2 flex flex-col gap-1 border-t border-border pt-2">
           <span className="font-medium">{t('resetEverything')}</span>
-          <p className="text-zinc-500 dark:text-zinc-400">{t('resetEverythingNote')}</p>
-          <p className="text-zinc-500 dark:text-zinc-400">{t('resetRetryNote')}</p>
+          <p className="text-muted-foreground">{t('resetEverythingNote')}</p>
+          <p className="text-muted-foreground">{t('resetRetryNote')}</p>
           <div className="flex justify-end">
             <Button
               variant={confirmingReset ? 'destructive' : 'ghost'}
@@ -235,7 +235,7 @@ export function BackupPanel({
       </div>
 
       {snapshots.length === 0 ? (
-        <p className="text-xs text-zinc-400">{t('noBackupsYet')}</p>
+        <p className="text-xs text-muted-foreground">{t('noBackupsYet')}</p>
       ) : (
         <ul className="flex flex-col gap-1">
           {snapshots.map((snapshot) => (

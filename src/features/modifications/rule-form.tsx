@@ -235,7 +235,7 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
   };
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg bg-zinc-50 p-3 dark:bg-zinc-900" onKeyDown={onKeyDown}>
+    <div className="flex flex-col gap-3 rounded-lg bg-secondary p-3" onKeyDown={onKeyDown}>
       <FieldLabeled label={t('ruleKind')}>
         <SelectOptions
           value={draft.kind}
@@ -450,7 +450,7 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
           type="button"
           aria-expanded={condOpen}
           onClick={() => setCondOpen((v) => !v)}
-          className="flex cursor-pointer items-center text-xs font-medium text-zinc-500 select-none hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+          className="flex cursor-pointer items-center text-xs font-medium text-muted-foreground select-none hover:text-foreground"
         >
           <span className={`mr-1 inline-block transition-transform ${condOpen ? 'rotate-90' : ''}`}>›</span>
           {t('conditionsCaption')}

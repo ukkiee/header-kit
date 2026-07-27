@@ -12,8 +12,8 @@ const switcherChip = cva(
   {
     variants: {
       selected: {
-        true: 'bg-zinc-100 font-medium text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100',
-        false: 'text-zinc-600 hover:bg-zinc-50 dark:text-zinc-400 dark:hover:bg-zinc-900',
+        true: 'bg-secondary font-medium text-foreground',
+        false: 'text-muted-foreground hover:bg-accent',
       },
     },
     defaultVariants: { selected: false },

@@ -13,21 +13,27 @@ import { focusRing, ghostInteractive, tooltipPopup } from './tokens';
  * Base UI render 합성을 위해 나머지 버튼 props와 ref를 그대로 통과시킨다.
  */
 const iconButton = cva(
-  `flex shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors ${focusRing}`,
+  `flex shrink-0 cursor-pointer items-center rounded-md transition-colors ${focusRing}`,
   {
     variants: {
       tone: {
         default: ghostInteractive,
         danger:
-          'text-zinc-500 hover:bg-red-50 hover:text-red-600 dark:text-zinc-400 dark:hover:bg-red-950 dark:hover:text-red-400',
+          'text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 dark:hover:text-red-400',
       },
       /**
        * `sm`은 행 안에 여럿 늘어서는 반복 액션(편집/삭제), `md`는 단독으로 서는
-       * 내비게이션(레일). 레일을 sm으로 바꾸면 32×28 → 24×24로 클릭 대상이 줄어든다.
+       * 내비게이션. 레일을 sm으로 바꾸면 32×28 → 24×24로 클릭 대상이 줄어든다.
+       *
+       * `rail`은 아이콘 옆에 **보이는 라벨**을 세우는 레일 전용 셸(티켓 10) — 칸 폭을
+       * 가득 채우고 내용을 왼쪽으로 정렬한다. `justify-*`가 베이스가 아니라 각 크기에
+       * 붙어 있는 이유가 이것이다: 베이스에 두면 두 유틸이 한 클래스 목록에 함께 실려
+       * 승자가 CSS 출력 순서에 달리고, 그건 소스에서 읽히지 않는다.
        */
       size: {
-        sm: 'size-6',
-        md: 'h-7 w-8',
+        sm: 'size-6 justify-center',
+        md: 'h-7 w-8 justify-center',
+        rail: 'h-8 w-full justify-start gap-2 px-2 text-xs',
       },
     },
     defaultVariants: { tone: 'default', size: 'sm' },
@@ -35,7 +41,7 @@ const iconButton = cva(
 );
 
 /** 셸 크기와 짝을 이루는 아이콘 px — 둘이 따로 놀면 여백이 어긋난다. */
-const ICON_PX = { sm: 14, md: 16 } as const;
+const ICON_PX = { sm: 14, md: 16, rail: 16 } as const;
 
 /** 인접 아이콘 사이 툴팁 딜레이 그룹화 — 셸(App) 루트에서 한 번 감싼다. */
 export function IconTooltipProvider({ children }: { children: ReactNode }) {
@@ -49,6 +55,11 @@ export interface IconButtonProps
   label: string;
   /** 툴팁 표시 문구 덮어쓰기 (aria-label은 label 유지). */
   tooltip?: string;
+  /**
+   * 아이콘 옆에 **보이는** 짧은 라벨 (레일, 티켓 10). aria-label(`label`)은 그대로
+   * 남는다 — 보이는 라벨은 폭에 맞춰 짧고, 접근성 이름은 동작을 온전히 말한다.
+   */
+  text?: string;
   icon: LucideIcon;
   ref?: Ref<HTMLButtonElement>;
 }
@@ -56,6 +67,7 @@ export interface IconButtonProps
 export function IconButton({
   label,
   tooltip,
+  text,
   icon: Icon,
   tone,
   size,
@@ -78,7 +90,10 @@ export function IconButton({
           />
         }
       >
-        <Icon size={ICON_PX[size ?? 'sm']} strokeWidth={1.75} />
+        <>
+          <Icon size={ICON_PX[size ?? 'sm']} strokeWidth={1.75} />
+          {text && <span className="min-w-0 truncate">{text}</span>}
+        </>
       </Tooltip.Trigger>
       <Tooltip.Portal>
         <Tooltip.Positioner sideOffset={6}>

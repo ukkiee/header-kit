@@ -14,8 +14,7 @@ export const fieldSolid = 'border border-zinc-300 bg-white dark:border-zinc-700 
 export const fieldFocus = 'outline-none transition-colors focus:border-ring';
 
 /** ghost 상호작용 표면 — Button.ghost / Select.ghost 가 공유한다. */
-export const ghostInteractive =
-  'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800';
+export const ghostInteractive = 'text-muted-foreground hover:bg-accent hover:text-foreground';
 
 /**
  * accent 배경 조각 — 활성·선택 표면이 공유한다.
@@ -30,12 +29,11 @@ export const ghostInteractive =
 export const accentBg = 'bg-primary';
 
 /** 떠 있는 팝업 표면 — Menu / Select / Autocomplete 팝업이 공유한다 (보더+명도, 무그림자). */
-export const popupSurface =
-  'rounded-lg border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-zinc-900';
+export const popupSurface = 'rounded-lg border border-border bg-popover p-1';
 
 /** 팝업 항목 — Menu / Select / Autocomplete 항목이 공유한다 (하이라이트는 data-highlighted). */
 export const popupItem =
-  'flex cursor-pointer items-center rounded-md px-2 py-1.5 text-xs outline-none select-none data-[highlighted]:bg-zinc-100 dark:data-[highlighted]:bg-zinc-800';
+  'flex cursor-pointer items-center rounded-md px-2 py-1.5 text-xs outline-none select-none data-[highlighted]:bg-accent';
 
 /** 팝업 포지셔너 — 앵커에 붙는 떠 있는 레이어. Select / Autocomplete 가 공유한다. */
 export const popupPositioner = 'z-50 outline-none';
@@ -44,7 +42,7 @@ export const popupPositioner = 'z-50 outline-none';
 export const popupAnchored = `min-w-[var(--anchor-width)] outline-none ${popupSurface}`;
 
 /** 본문 색이 붙은 팝업 항목 — 값 목록(Select / Autocomplete)이 공유한다. */
-export const popupItemText = `text-zinc-700 dark:text-zinc-200 ${popupItem}`;
+export const popupItemText = `text-popover-foreground ${popupItem}`;
 
 /** 툴팁 표면 — 반전 명도(라이트에서 어두운 배경). IconButton 계열이 공유한다. */
 export const tooltipPopup =

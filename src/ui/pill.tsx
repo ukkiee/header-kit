@@ -9,7 +9,7 @@ const pill = cva('rounded px-1.5 py-0.5', {
   variants: {
     tone: {
       danger: 'text-[10px] bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300',
-      neutral: 'flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800',
+      neutral: 'flex items-center gap-1 bg-secondary',
     },
   },
   defaultVariants: { tone: 'neutral' },

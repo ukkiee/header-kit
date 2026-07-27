@@ -21,6 +21,7 @@ import {
   ProfileSelectRow,
   profileReorderLabel,
   profileSelectLabel,
+  profileToggleLabel,
   sidebarListClass,
   sidebarRowClass,
 } from './profile-dot';
@@ -35,17 +36,21 @@ export interface SortableProfileListProps {
   selectedId: string | null;
   onSelect: (id: string) => void;
   onReorder: (profileId: string, toIndex: number) => void;
+  /** 인라인 on/off — 정적 목록과 같은 컨트롤을 드래그 목록도 갖는다 (티켓 10). */
+  onToggleActive: (profileId: string, active: boolean) => void;
 }
 
 function SortableItem({
   profile,
   selected,
   onSelect,
+  onToggleActive,
   dragLabel,
 }: {
   profile: Profile;
   selected: boolean;
   onSelect: () => void;
+  onToggleActive: (active: boolean) => void;
   dragLabel: string;
 }) {
   const t = useT();
@@ -59,7 +64,14 @@ function SortableItem({
       className={`${sidebarRowClass} ${isDragging ? 'z-10 opacity-70' : ''}`}
     >
       <ProfileGrip label={dragLabel} attributes={attributes} listeners={listeners} />
-      <ProfileSelectRow profile={profile} selected={selected} onSelect={onSelect} label={profileSelectLabel(profile, t)} />
+      <ProfileSelectRow
+        profile={profile}
+        selected={selected}
+        onSelect={onSelect}
+        onToggleActive={onToggleActive}
+        label={profileSelectLabel(profile, t)}
+        toggleLabel={profileToggleLabel(profile, t)}
+      />
     </li>
   );
 }
@@ -69,6 +81,7 @@ export default function SortableProfileList({
   selectedId,
   onSelect,
   onReorder,
+  onToggleActive,
 }: SortableProfileListProps) {
   const t = useT();
   const sensors = useSensors(
@@ -93,6 +106,7 @@ export default function SortableProfileList({
               profile={profile}
               selected={profile.id === selectedId}
               onSelect={() => onSelect(profile.id)}
+              onToggleActive={(active) => onToggleActive(profile.id, active)}
               dragLabel={profileReorderLabel(profile, t)}
             />
           ))}

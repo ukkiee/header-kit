@@ -174,6 +174,16 @@ const en = {
   ariaShowProfiles: 'Show profiles',
   ariaShowBackups: 'Show backups',
   ariaShowPreferences: 'Show preferences',
+  /*
+   * 레일에 **보이는** 짧은 라벨 (티켓 10) — 접근성 이름(ariaShow*)과 따로 두는 이유는
+   * 둘의 일이 다르기 때문이다. 접근성 이름은 "무엇을 하는 버튼인가"(Show preferences)를
+   * 말해야 하고, 눈에 보이는 라벨은 레일 폭 안에서 "어느 화면인가"를 말한다.
+   */
+  railProfiles: 'Profiles',
+  railBackups: 'Backups',
+  railSettings: 'Settings',
+  /** 레일 하단 — 지금 브라우저에 실제로 걸려 있는 규칙 수의 캡션. */
+  railApplied: 'applied',
   ariaToggleBackups: 'Toggle backups',
   ariaTogglePreferences: 'Toggle preferences',
   ariaNewAutocompleteHeader: 'New autocomplete header',
@@ -357,6 +367,10 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     ariaShowProfiles: '프로필 화면',
     ariaShowBackups: '백업 화면',
     ariaShowPreferences: '환경설정 화면',
+    railProfiles: '프로필',
+    railBackups: '백업',
+    railSettings: '설정',
+    railApplied: '적용 중',
     ariaToggleBackups: '백업 펼치기/접기',
     ariaTogglePreferences: '환경설정 펼치기/접기',
     ariaNewAutocompleteHeader: '새 자동완성 헤더',

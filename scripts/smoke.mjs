@@ -3481,6 +3481,152 @@ try {
     `아이콘 ${allRail.length}개 전부 ok=${everyIconOk} (예: ${railEn.backups.width}x${railEn.backups.height}/icon${railEn.backups.icon}), ` +
     `Tab 툴팁=${tabTip}, 선택 배경 ${unselectedBg} → ${railSelected.background} (pressed=${railSelected.pressed})`);
 
+
+  /*
+   * N41: 셸 구조 재작업 (티켓 10) — 레일 라벨·적용 수, 프로필 열, 두 표면 치수.
+   *
+   * N28은 레일이 **툴팁**을 갖는지를 본다(그건 그대로 유효하다). 여기서 보는 것은 그 위에
+   * 얹힌 구조다 — 아이콘 옆에 **보이는 라벨**이 서고, 레일 하단이 지금 걸려 있는 규칙 수를
+   * 말하며, 프로필 열이 색 스와치와 인라인 토글을 갖는지. 라벨은 접근성 이름(Show …)과
+   * 다른 짧은 문자열이라, 접근성 이름만 보는 단언으로는 라벨이 없어도 통과한다.
+   */
+  await seedProfiles([
+    baseProfile('r-a', 'RailA', [hdr({ id: 'm1', name: 'X-Rail', value: '1' })]),
+    { ...baseProfile('r-b', 'RailB', []), active: false },
+  ]);
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Show profiles', exact: true }).waitFor({ timeout: 5000 });
+  const railStructure = await popup.evaluate(() =>
+    [...document.querySelectorAll('nav button')].map((b) => ({
+      aria: b.getAttribute('aria-label'),
+      text: b.textContent.trim(),
+      icon: !!b.querySelector('svg'),
+    })));
+  // 레일 하단의 적용 수 — background가 발행한 요약이 도착할 때까지 기다린다(규칙 1개).
+  const appliedText = await pollUntil(
+    () => popup.evaluate(() => document.querySelector('nav p')?.textContent?.trim() ?? ''),
+    (v) => v === '1applied',
+    8000,
+    200,
+  );
+  const railOk =
+    railStructure.length === 3 &&
+    railStructure.every((r) => r.icon) &&
+    railStructure.map((r) => r.text).join('|') === 'Profiles|Backups|Settings' &&
+    railStructure.map((r) => r.aria).join('|') === 'Show profiles|Show backups|Show preferences';
+
+  // 프로필 열 — 검색·색 스와치·인라인 토글·새 프로필. 스와치는 활성이면 채움, 비활성이면
+  // 테두리다(색을 지워도 남는 차이) — 그러면서 프로필 색은 두 상태 모두에서 보인다.
+  const column = await popup.evaluate(() => {
+    const rows = [...document.querySelectorAll('[aria-label^="Select profile"]')];
+    return {
+      rows: rows.length,
+      swatches: rows.map((r) => {
+        const s = r.querySelector('span[aria-hidden]');
+        const cs = s ? getComputedStyle(s) : null;
+        return cs ? { bg: cs.backgroundColor, border: cs.borderTopColor } : null;
+      }),
+      switches: [...document.querySelectorAll('[role="switch"]')].map((s) => s.getAttribute('aria-label')),
+      search: !!document.querySelector('input[aria-label^="Search profiles"]'),
+      newProfile: [...document.querySelectorAll('button')].some((b) => b.textContent.trim() === '+ New profile'),
+    };
+  });
+  // 인라인 토글이 실제로 상태를 바꾼다 — 프로필을 고르지 않고 목록에서 바로.
+  await popup.getByRole('switch', { name: 'Toggle RailB' }).click();
+  const inlineToggled = await pollUntil(
+    () => sw.evaluate(async () => {
+      const { state } = await chrome.storage.local.get('state');
+      return state.profiles.find((p) => p.id === 'r-b')?.active;
+    }),
+    (v) => v === true,
+  );
+  const columnOk =
+    column.rows === 2 &&
+    column.search &&
+    column.newProfile &&
+    // 스위치는 프로필 하나에 하나뿐이다 — 편집기 헤더에 같은 이름의 스위치가 남아 있으면 4개가 된다.
+    column.switches.join('|') === 'Toggle RailA|Toggle RailB' &&
+    column.swatches[0]?.bg === 'rgb(37, 99, 235)' &&
+    column.swatches[1]?.bg === 'rgba(0, 0, 0, 0)' &&
+    column.swatches[1]?.border === 'rgb(37, 99, 235)';
+
+  // 치수 — 팝업은 760×580 고정, 레일 < 프로필 열 (ADR 0005). 가로 오버플로 0.
+  const shellProbe = () => ({
+    ...(() => {
+      const el = document.querySelector('nav').parentElement;
+      const r = el.getBoundingClientRect();
+      return {
+        w: Math.round(r.width),
+        h: Math.round(r.height),
+        cols: getComputedStyle(el).gridTemplateColumns.split(' ').map((v) => Math.round(parseFloat(v))),
+      };
+    })(),
+    overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  });
+  const popupShell = await popup.evaluate(shellProbe);
+  // 탭은 전폭·전고 — 같은 셸이 뷰포트를 가득 채우고 열이 팝업보다 넓다.
+  const tabShellPage = await context.newPage();
+  await tabShellPage.setViewportSize({ width: 1100, height: 700 });
+  await tabShellPage.goto(`chrome-extension://${extensionId}/app.html?locale=en`);
+  await tabShellPage.getByRole('button', { name: 'Show profiles', exact: true }).waitFor({ timeout: 5000 });
+  const tabShell = await tabShellPage.evaluate(shellProbe);
+  await tabShellPage.close();
+  const sizeOk =
+    popupShell.w === 760 && popupShell.h === 580 && popupShell.overflow === 0 &&
+    popupShell.cols[0] < popupShell.cols[1] &&
+    tabShell.w === 1100 && tabShell.h === 700 && tabShell.overflow === 0 &&
+    tabShell.cols[0] > popupShell.cols[0] && tabShell.cols[1] > popupShell.cols[1];
+
+  record('N41: 셸 구조 — 레일 라벨·적용 수, 프로필 열(스와치·인라인 토글), 팝업 760×580 · 탭 전폭',
+    railOk && appliedText === '1applied' && columnOk && inlineToggled && sizeOk,
+    `rail=${JSON.stringify(railStructure.map((r) => r.text))} applied="${appliedText}", ` +
+      `열 rows=${column.rows} switches=${JSON.stringify(column.switches)} swatch=${JSON.stringify(column.swatches)} ` +
+      `search=${column.search} new=${column.newProfile} inline-toggle=${inlineToggled}, ` +
+      `popup=${popupShell.w}x${popupShell.h} cols=${JSON.stringify(popupShell.cols)} overflow=${popupShell.overflow}, ` +
+      `tab=${tabShell.w}x${tabShell.h} cols=${JSON.stringify(tabShell.cols)} overflow=${tabShell.overflow}`);
+
+  /*
+   * N41b: 아코디언 편집 (티켓 10, 스펙 story 4·5) — 두 번째 규칙의 수정 아이콘을 누르면
+   * 그 규칙이 **맨 위로** 올라오며 폼이 인라인으로 펼쳐지고, 저장하면 접혀 두 줄 요약으로
+   * 돌아온다. 순서는 목록 상태가 아니라 렌더만 바꾸므로 편집이 끝나면 원래대로 돌아온다.
+   */
+  await seedProfiles([
+    baseProfile('acc-1', 'Accordion', [
+      hdr({ id: 'a1', name: 'X-First', value: '1' }),
+      hdr({ id: 'a2', name: 'X-Second', value: '2' }),
+    ]),
+  ]);
+  await popup.reload();
+  const ruleRows = popup.locator('.group').filter({ has: popup.getByRole('button', { name: 'Edit', exact: true }) });
+  const orderBefore = await ruleRows.allTextContents();
+  await popup.getByRole('button', { name: 'Edit', exact: true }).nth(1).click();
+  const typeField = popup.getByRole('combobox', { name: 'Type', exact: true });
+  await typeField.waitFor({ timeout: 5000 });
+  // 펼쳐진 폼이 남은 행보다 **위**에 있다 = 편집 중인 규칙이 맨 위로 올라왔다.
+  const formY = await typeField.evaluate((el) => el.getBoundingClientRect().y);
+  // 퇴장 중인 옛 행이 아직 DOM에 남아 있으면(AnimatePresence) 남은 행을 잘못 짚는다 —
+  // 접힘이 끝나 행이 하나가 될 때까지 기다린 뒤 잰다.
+  await pollUntil(() => ruleRows.count(), (n) => n === 1, 5000, 100);
+  const remaining = await ruleRows.first().evaluate((el) => ({
+    y: el.getBoundingClientRect().y,
+    text: el.textContent.trim(),
+  }));
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  // 저장하면 폼이 사라지고 두 행이 원래 순서로 돌아온다.
+  const collapsed = await pollUntil(() => typeField.count(), (n) => n === 0, 5000, 100);
+  const orderAfter = await pollUntil(() => ruleRows.allTextContents(), (t) => t.length === 2, 5000, 100);
+  const sameOrder =
+    orderAfter.length === 2 &&
+    orderAfter[0]?.includes('X-First') &&
+    orderAfter[1]?.includes('X-Second');
+  record('N41b: 아코디언 편집 — 수정 시 해당 규칙 맨 위 정렬·인라인 펼침, 저장 시 접힘·순서 복귀',
+    orderBefore.length === 2 && orderBefore[0]?.includes('X-First') &&
+      formY < remaining.y && remaining.text.includes('X-First') &&
+      collapsed === 0 && sameOrder,
+    `before=${orderBefore.length}행(첫 X-First=${orderBefore[0]?.includes('X-First')}), ` +
+      `폼 y=${Math.round(formY)} < 남은 행 y=${Math.round(remaining.y)} (남은 행 X-First=${remaining.text.includes('X-First')}), ` +
+      `저장 후 폼=${collapsed}, 순서=${JSON.stringify(orderAfter.map((t) => t.slice(0, 10)))}`);
+
   /*
    * N38: 백업 sync 스위치 (티켓 07, R-1 단순 계약).
    *

@@ -16,9 +16,9 @@ export function StatusSummary({ summary }: StatusSummaryProps) {
   const t = useT();
   return (
     <section className="flex flex-col gap-1.5 text-xs">
-      <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400">
+      <div className="flex items-center gap-2 text-muted-foreground">
         <span>
-          <strong className="font-medium text-zinc-900 dark:text-zinc-100">
+          <strong className="font-medium text-foreground">
             {summary.ruleCount}
           </strong>{' '}
           {summary.applyError
@@ -27,17 +27,17 @@ export function StatusSummary({ summary }: StatusSummaryProps) {
               ? t('activeRule')
               : t('activeRules')}
         </span>
-        <span aria-hidden className="text-zinc-300 dark:text-zinc-700">
+        <span aria-hidden className="text-border">
           ·
         </span>
         <span>
-          <strong className="font-medium text-zinc-900 dark:text-zinc-100">
+          <strong className="font-medium text-foreground">
             {summary.activeProfileCount}
           </strong>{' '}
           {summary.activeProfileCount === 1 ? t('activeProfile') : t('activeProfiles')}
         </span>
         {(summary.paused || (!summary.hasProblems && !summary.paused)) && (
-          <span aria-hidden className="text-zinc-300 dark:text-zinc-700">
+          <span aria-hidden className="text-border">
             ·
           </span>
         )}

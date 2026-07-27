@@ -2,14 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { Ellipsis, Plus } from 'lucide-react';
 import type { Command } from '@/core/commands';
 import type { Modification, Profile } from '@/core/schema';
-import { format, type MessageKey } from '@/core/i18n';
 import { Button } from '@/ui/press-button';
 import { Card } from '@/ui/card';
 import { Input } from '@/ui/text-field';
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from '@/ui/menu';
 import { MotionSwap } from '@/ui/motion-swap';
 import { AnimatePresence, MotionRow } from '@/ui/motion-row';
-import { ToggleSwitch } from '@/ui/toggle-switch';
 import { RuleForm } from '@/features/modifications/rule-form';
 import { RuleRow } from '@/features/modifications/rule-row';
 import { useT } from '@/ui/i18n-context';
@@ -57,6 +55,16 @@ export function ProfileSection({
     return result;
   };
 
+  /*
+   * 편집 중인 규칙을 목록 맨 위로 (티켓 10, 스펙 story 4). 목록 자체의 순서(상태)는
+   * 건드리지 않는다 — 렌더 순서만 바꾸므로 폼을 닫으면 원래 자리로 돌아온다. 편집이
+   * 저장으로 끝나든 취소로 끝나든 사용자가 기억하는 순서가 유지된다.
+   */
+  const editing = profile.modifications.find((m) => m.id === editingRule);
+  const orderedModifications = editing
+    ? [editing, ...profile.modifications.filter((m) => m !== editing)]
+    : profile.modifications;
+
   const meta = { name: profile.name, shortLabel: profile.shortLabel, color: profile.color };
   const updateMeta = (patch: Partial<typeof meta>) =>
     onCommand({ type: 'update-profile-meta', profileId: profile.id, meta: { ...meta, ...patch } });
@@ -88,13 +96,9 @@ export function ProfileSection({
           maxLength={2}
           className="w-10"
         />
-        <ToggleSwitch
-          checked={profile.active}
-          onCheckedChange={(active) =>
-            onCommand({ type: 'toggle-profile', profileId: profile.id, active })
-          }
-          aria-label={format(t('ariaToggleProfile'), { name: profile.name })}
-        />
+        {/* on/off 스위치는 프로필 열의 각 행으로 갔다 (티켓 10) — 목록에서 바로 켜고 끄는
+            것이 디자인이고, 같은 이름의 컨트롤을 여기 하나 더 두면 무엇을 누르든 같은 일이
+            일어나는 중복 컨트롤이 된다. */}
         <Menu
           onOpenChange={(open) => {
             // 메뉴가 닫히면 무장된 삭제 확인을 해제 — Esc 후 재열기에 즉시 삭제 방지.
@@ -133,8 +137,8 @@ export function ProfileSection({
       </div>
 
       {profile.modifications.length === 0 && editingRule === null && (
-        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-zinc-200 py-6 text-center dark:border-zinc-800">
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">{t('noRulesYet')}</p>
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border py-6 text-center">
+          <p className="text-xs text-muted-foreground">{t('noRulesYet')}</p>
           <Button size="sm" onClick={() => setEditingRule('new')}>
             <Plus size={14} strokeWidth={1.75} className="mr-1" />
             {t('addRule')}
@@ -142,14 +146,18 @@ export function ProfileSection({
         </div>
       )}
 
-      <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+      {/* 아코디언 카드 목록 (티켓 10, ADR 0006/0009) — 규칙 하나가 카드 하나다. 수정
+          아이콘을 누르면 그 규칙이 **맨 위로 올라오며**(orderedModifications) 카드가 폼으로
+          펼쳐지고, 저장·취소하면 접혀 두 줄 요약으로 돌아온다. 편집 중인 규칙을 목록에서
+          잃지 않게 하는 것이 목적이라 순서는 편집이 끝나면 원래대로 돌아온다. */}
+      <div className="flex flex-col gap-1.5">
         <AnimatePresence initial={false}>
-          {profile.modifications.map((modification) =>
+          {orderedModifications.map((modification) =>
             // 행↔폼 교체는 키를 달리해 AnimatePresence가 height enter/exit로 전환한다 —
             // 폼 열림에 부드러운 height-in을 준다 (ui-refine 08).
             editingRule === modification.id ? (
               <MotionRow key={`${modification.id}-form`}>
-                <div className="py-2">
+                <div className="rounded-lg border border-border p-2">
                   <RuleForm
                     initial={modification}
                     userHeaders={userHeaders}
@@ -161,18 +169,20 @@ export function ProfileSection({
             ) : (
               // 규칙 행 추가/삭제 시 fade+height enter/exit (ui-refine 08) — reduced-motion 존중.
               <MotionRow key={modification.id}>
-                <RuleRow
-                  modification={modification}
-                  onToggleEnabled={(enabled) =>
-                    onCommand({
-                      type: 'update-modification',
-                      profileId: profile.id,
-                      modification: { ...modification, enabled } as Modification,
-                    })
-                  }
-                  onEdit={() => setEditingRule(modification.id)}
-                  onRemove={() => onDeleteRule(profile.id, modification.id)}
-                />
+                <div className="rounded-lg border border-border px-2.5">
+                  <RuleRow
+                    modification={modification}
+                    onToggleEnabled={(enabled) =>
+                      onCommand({
+                        type: 'update-modification',
+                        profileId: profile.id,
+                        modification: { ...modification, enabled } as Modification,
+                      })
+                    }
+                    onEdit={() => setEditingRule(modification.id)}
+                    onRemove={() => onDeleteRule(profile.id, modification.id)}
+                  />
+                </div>
               </MotionRow>
             ),
           )}
