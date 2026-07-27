@@ -28,6 +28,12 @@ export function profileSelectLabel(
  *
  * 크기를 size-2.5로 키운 것도 같은 이유다 — 6px 도형에 얇은 테두리는 형태 차이가 뭉갠다.
  *
+ * **대비는 사용자 색에 맡기지 않는다.** 비활성의 테두리는 프로필 색이라 흰색에 가까운
+ * 색을 고르면 라이트 캔버스에서 도형이 사라진다(색은 `<input type="color">`에서 오므로
+ * 아무 값이나 될 수 있다). 그래서 그 위에 `--input` 윤곽선을 한 겹 겹친다 — 이 토큰은
+ * bg·surface·fill 어느 면 위에서도 3:1을 넘기도록(라이트 최저 3.18:1, 다크 3.20:1)
+ * 고른 값이라, 상태를 나르는 비텍스트 요소의 하한이 색 선택과 무관해진다.
+ *
  * 상태는 여기 말고도 두 곳에서 더 말한다: `profileSelectLabel`의 aria-label(문자열)과
  * 같은 행의 인라인 토글(손잡이 **위치**). 색 하나에 상태를 싣지 않는다(스펙 story 38).
  */
@@ -35,7 +41,9 @@ export function ProfileDot({ profile }: { profile: Pick<Profile, 'active' | 'col
   return (
     <span
       aria-hidden
-      className={`size-2.5 shrink-0 rounded-[3px] ${profile.active ? '' : 'border-2'}`}
+      className={`size-2.5 shrink-0 rounded-[3px] ${
+        profile.active ? '' : 'border-2 outline-1 outline-input'
+      }`}
       style={
         profile.active ? { backgroundColor: profile.color } : { borderColor: profile.color }
       }

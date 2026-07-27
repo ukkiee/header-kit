@@ -3586,6 +3586,34 @@ try {
       `tab=${tabShell.w}x${tabShell.h} cols=${JSON.stringify(tabShell.cols)} overflow=${tabShell.overflow}`);
 
   /*
+   * N41c: 비활성 스와치의 대비 (fix R-1) — 비활성 스와치의 테두리는 **프로필 색**이라,
+   * 사용자가 흰색에 가까운 색을 고르면(색은 <input type="color">에서 온다) 라이트 캔버스
+   * 위에서 도형이 사라진다. 색과 무관하게 3:1을 지는 윤곽선이 한 겹 겹쳐 있는지 본다.
+   * N41은 디자인 팔레트의 파랑 하나만 보므로 이 구멍을 볼 수 없다.
+   */
+  await seedProfiles([
+    { ...baseProfile('sw-w', 'Whiteish', []), active: false, color: '#ffffff' },
+  ]);
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Show profiles', exact: true }).waitFor({ timeout: 5000 });
+  const whiteSwatch = await popup.evaluate(() => {
+    const s = document.querySelector('[aria-label^="Select profile"] span[aria-hidden]');
+    if (!s) return null;
+    const cs = getComputedStyle(s);
+    return {
+      border: cs.borderTopColor,
+      outline: cs.outlineColor,
+      style: cs.outlineStyle,
+      width: Math.round(parseFloat(cs.outlineWidth) || 0),
+    };
+  });
+  record('N41c: 비활성 스와치 — 사용자 색(흰색)과 무관한 대비 윤곽선 (비텍스트 3:1)',
+    !!whiteSwatch && whiteSwatch.border === 'rgb(255, 255, 255)' &&
+      whiteSwatch.style !== 'none' && whiteSwatch.width >= 1 &&
+      whiteSwatch.outline !== whiteSwatch.border,
+    `swatch=${JSON.stringify(whiteSwatch)}`);
+
+  /*
    * N41b: 아코디언 편집 (티켓 10, 스펙 story 4·5) — 두 번째 규칙의 수정 아이콘을 누르면
    * 그 규칙이 **맨 위로** 올라오며 폼이 인라인으로 펼쳐지고, 저장하면 접혀 두 줄 요약으로
    * 돌아온다. 순서는 목록 상태가 아니라 렌더만 바꾸므로 편집이 끝나면 원래대로 돌아온다.
