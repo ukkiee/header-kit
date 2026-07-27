@@ -131,3 +131,44 @@ R-4 [AUTO CR-1 cr:defect] accept — Spec: 언어 칩이 저장된 선호가 아
 R-5 [AUTO CR-1 cr:smell] defer — Spec: `shortcuts.ts`가 티켓이 요구하지 않은 일반성을 처리한다(미지 커맨드 원시 이름 통과·이름 없는 항목 제거·공백 정규화), 단위 테스트 5개 중 3개가 그 일반성만 검증 — Speculative Generality; -/-; src/core/shortcuts.ts:-; res:none; follow-up docs/reviews/wide-ui-redesign/followups.md#T09-R-5
 R-6 [AUTO CR-1 cr:smell] defer — Spec: `loadShortcuts?` 주입 prop의 소비자가 Storybook 하나뿐이고 어떤 테스트도 쓰지 않는다 — Speculative Generality(판단: platform 시임 관례와 상충하므로 스타일 판단으로 남김); -/-; src/features/preferences/preferences-panel.tsx:-; res:none; follow-up docs/reviews/wide-ui-redesign/followups.md#T09-R-6
 R-7 [AUTO CR-1 cr:defect] accept — Spec: smoke H2의 기존 단언이 `getByRole('alert').first()`로 느슨해져(백업 화면에 패널 둘이 생기며) 전송 경고가 사라지고 백업 경고가 우연히 JSON을 언급하기만 해도 통과한다 — 구현자가 자기가 쓰지 않은 단언을 약화시켰다; -/-; scripts/smoke.mjs:-; res:none; applied 11dc7aa (1 file, 19 lines, 19+/0− 순수 추가) ; suite green 352 unit / 119 smoke — H2는 바이트 단위로 불변, 새 H2b가 Import 토글을 가진 섹션으로 범위를 좁혀 단언(sections=1, alerts=1). guard:test-touch를 밟지 않는 유일한 합법 경로
+
+### ticket 10 code-review r1 — auto-triage
+_policy CR-1 · feature-loop/policies/ticket-review-cr1.md · sha256 27ad2f0313d78a9b · decided 2026-07-27T04:03:54Z · fixed point a6b21c13d6f0d214e407107c6de3263e39e8bcd2 · ticket .scratch/wide-ui-redesign/issues/10-shell-structure-restyle.md_
+
+R-1 [AUTO CR-1 cr:standard] accept — Standards·Spec 양축: 비활성 스와치가 `profile.color`로 테두리를 그려 비텍스트 3:1 하한을 사용자가 고른 색에 맡긴다 — 이 diff가 지운 주석이 바로 그 규칙을 기록하고 있었다("zinc-300은 1.51:1로 하한 3:1에 못 미쳐 zinc-400으로 올린다"), 흰색에 가까운 프로필 색이면 라이트 캔버스에서 스와치가 보이지 않는다; -/-; src/features/profiles/profile-dot.tsx:210; res:none; applied 3fd6de4 (2 files, 38 lines); suite green 352 unit / 123 smoke — 고정 zinc 테두리로 되돌리는 길은 N41이 "비활성 스와치 테두리 == 프로필 색"을 단언해 막혀 있어, 소견의 두 번째 경로(대비를 보장하는 `outline-1 outline-input` 겹치기)를 택했다. 새 스모크 N41c(흰색 프로필 색도 대비 윤곽선을 갖는다)
+R-2 [AUTO CR-1 cr:standard] accept — Standards: 드래그 그립의 평상 색이 `text-border`(#e2e2e6, ~1.24:1)로, 대체한 zinc-300보다 오히려 밝다 — global.css가 border를 "장식 구분선" 토큰으로, `--input`을 대비를 지는 형제로 문서화한다; -/-; src/features/profiles/profile-dot.tsx:321; res:none; applied 7773858 (1 file, 4 lines); suite green 352 unit / 123 smoke
+R-3 [AUTO CR-1 cr:standard] accept — Standards: en 가시 라벨 `Settings`가 접근성 이름 `Show preferences`에 포함되지 않아 음성 제어가 조준할 수 없다(ko `설정`/`환경설정 화면`은 정상) — 가시 라벨은 이 diff가 새로 붙인 것; -/-; src/app/app.tsx:26; res:none; NOT APPLIED — fix 서브에이전트가 `test-weakening`을 제기: 가시 라벨 `Settings`와 접근성 이름 `Show preferences`를 **둘 다** 기존 스모크가 정확 일치로 고정하고 있다(N28 `railProbe(popup, 'Show preferences')` smoke.mjs:3436·3467, N41의 `'Profiles|Backups|Settings'` + `'Show profiles|Show backups|Show preferences'` smoke.mjs:3515-3516). 어느 문자열을 고쳐도 기존 단언이 거짓이 되고, 티켓 09의 "옆에 좁은 케이스를 추가한다" 해법은 옛 단언이 참으로 남아야 성립하므로 쓸 수 없다. 사람이 테스트와 라벨 중 무엇이 틀렸는지 정해야 한다
+R-4 [AUTO CR-1 cr:standard] accept — Standards: 같은 줄을 `text-popover-foreground`/`text-muted-foreground`로 옮기면서 raw `text-red-600 dark:text-red-400`·`hover:bg-red-50`를 남긴 반쪽 이행 — `--color-destructive`가 이미 있다; -/-; src/ui/menu.tsx:64; res:none; applied f1f9123 (2 files, 6 lines); suite green 352 unit / 123 smoke
+R-5 [AUTO CR-1 cr:defect] accept — Spec: 티켓이 "그리드 치수를 디자인에 맞춰 넓힘"을 요구했는데 팝업 프로필 열은 좁아졌다(`3rem_14rem` → `8rem_12rem`), 게다가 행마다 36px 스위치가 더해져 이름 칩에 남는 폭이 반토막 — N41은 `cols[0] < cols[1]`만 보므로 이 축소를 볼 수 없다; -/-; src/app/app.tsx:238; res:none; applied cdcfc10 (2 files, 15 lines); suite green 352 unit / 123 smoke — 14rem을 택했다: 티켓이 "넓힘"이라 했으나 목표 폭을 소스할 곳이 없고, 소견이 명시한 하한(라벨화 이전 폭)이 유일하게 소스 가능한 값. 새 스모크 N41d(팝업 프로필 열 ≥ 224px)
+R-6 [AUTO CR-1 cr:defect] accept — Spec: 티켓의 "(현재 아이콘+툴팁 → 디자인의 라벨)"을 대체가 아니라 병치로 구현해, "Profiles"라고 적힌 버튼에 호버하면 "Show profiles" 툴팁이 겹쳐 뜬다 — 기준 감사자는 met으로, 스펙 리뷰어는 미완으로 읽었다(티켓 문구가 양쪽으로 읽힌다); -/-; src/app/app.tsx:251; res:none; NOT APPLIED — fix 서브에이전트가 `needs-decision`을 제기: 티켓 AC1의 `(현재 아이콘+툴팁 → 디자인의 라벨)`도, 스펙 user story 19·구현 결정("레일은 아이콘+라벨")도 툴팁을 뺀다고 말하지 않는다 — 대체인지 병치인지 소스 불가. 게다가 제거하려면 기존 N28을 다시 써야 해 `test-weakening`이 함께 걸린다. 사람이 티켓 의도를 정해야 한다
+R-7 [AUTO CR-1 cr:smell] defer — Standards: N41/N41b가 렌더 형태(`.group` 유틸리티 클래스, `nav p`, `gridTemplateColumns`)에 걸려 있어 모든 가시 행동을 보존한 리스타일에도 빨개질 수 있다 — 브리프의 "테스트는 외부 관측 가능한 행동만 본다"와 상충; -/-; scripts/smoke.mjs:-; res:none; follow-up docs/reviews/wide-ui-redesign/followups.md#T10-R-7
+R-8 [AUTO CR-1 cr:smell] defer — Standards: Mysterious Name·Divergent Change — `ProfileDot`이 `size-2.5 rounded-[3px]` 사각 스와치를 그리는데 이름은 Dot이고, 한 파일이 무관한 export 7개를 담으며, `IconButton`이 `text?`+`size:'rail'`을 얻어 더 이상 아이콘 전용이 아니다; -/-; src/features/profiles/profile-dot.tsx:-; res:none; follow-up docs/reviews/wide-ui-redesign/followups.md#T10-R-8
+R-9 [AUTO CR-1 cr:smell] defer — Standards: Data Clumps·Shotgun Surgery — `onToggleActive`와 `label`/`toggleLabel` 쌍이 app.tsx→profile-sidebar(3 호출부)→sortable-profile-list→ProfileSelectRow를 관통하는데, 두 목록 파일 모두 이미 `useT()`를 들고 있어 행이 스스로 계산할 수 있다; -/-; src/features/profiles/profile-sidebar.tsx:-; res:none; follow-up docs/reviews/wide-ui-redesign/followups.md#T10-R-9
+R-10 [AUTO CR-1 cr:smell] defer — Standards: Duplicated Code — `rounded-lg border border-border` 카드 껍데기가 `AnimatePresence` 두 분기에 그대로 중복; -/-; src/features/profiles/profile-section.tsx:458; res:none; follow-up docs/reviews/wide-ui-redesign/followups.md#T10-R-10
+R-11 [AUTO CR-1 cr:out-of-diff] defer — Spec: `src/ui`의 잔여 raw dark fill(`tokens.ts` fieldSolid `dark:bg-zinc-900`, `large-editor.tsx:40`, `toggle-switch.tsx:12`) — 티켓이 지명한 범위는 "피처 컴포넌트"이고 기준 감사도 그 범위에서 met으로 확인했다; -/-; src/ui/tokens.ts:7; res:none; follow-up docs/reviews/wide-ui-redesign/followups.md#T10-R-11
+R-12 [AUTO CR-1 cr:smell] defer — Spec: scope creep — `ghostInteractive`에 `hover:text-foreground`가 붙어 모든 ghost Button/IconButton/Select에 새 호버 행동이 생겼다, 티켓이 요구한 것은 토큰 개명뿐; -/-; src/ui/tokens.ts:32; res:none; follow-up docs/reviews/wide-ui-redesign/followups.md#T10-R-12
+
+### ESCALATION needs-decision 2026-07-27T04:28:08Z
+
+루프 정지. 티켓 10의 code-review r1에서 accept 6건 중 **4건 적용, 2건 미적용** — 둘 다 fix
+서브에이전트가 올린 릴레이 코드이고, 컨덕터는 Stage 4에서 스펙 본문을 읽는 것이 금지되어 있어
+평가할 수 없다(CR-1: `cr:needs-decision`·`cr:test-weakening` → escalate).
+
+미해결 finding:
+- **R-6 `needs-decision`** (src/app/app.tsx:251) — 티켓 AC1 `(현재 아이콘+툴팁 → 디자인의 라벨)`이
+  대체인지 병치인지 티켓·스펙 어디서도 소스되지 않는다. 기준 감사자는 met으로, 스펙 리뷰어는
+  미완으로 읽었다. 제거가 답이면 기존 스모크 N28을 다시 써야 해 `test-weakening`도 함께 걸린다.
+- **R-3 `test-weakening`** (src/app/app.tsx:26 + src/core/i18n.ts:117) — en 가시 라벨 `Settings`가
+  접근성 이름 `Show preferences`에 포함되지 않는다(WCAG 2.5.3). 두 문자열 모두 기존 스모크가
+  정확 일치로 고정(N28 smoke.mjs:3436·3467, N41 smoke.mjs:3515-3516)하여, 어느 쪽을 고쳐도
+  기존 단언이 거짓이 된다.
+
+적용된 행: R-1 3fd6de4 · R-2 7773858 · R-4 f1f9123 · R-5 cdcfc10 — 전부 개별 커밋, 각각 가드
+안(≤3파일·≤80줄), 적용 후 전체 스위트 그린(vitest 352, smoke 123/123).
+미적용 행: R-3, R-6 (위 사유).
+
+티켓 10은 **열린 채로 둔다** — 리뷰 라운드가 미해결 blocking 행을 남겼으므로 클로즈 조건을
+만족하지 않는다. 릴리스 게이트는 실행하지 않았다.
+
+**이 라운드는 CR-1 트리아지이며 `verify-ledger`가 재도출하지 않는다** — `/code-review`는 아티팩트를
+내지 않으므로 이 12행은 감사 가능(auditable)하지만 재계산된(verified) 것이 아니다.

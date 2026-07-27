@@ -127,3 +127,39 @@ R-5로 통일하지만, **용어집 등재와 `_Avoid_` 줄을 정하는 것은 
 ## T09-R-1b — `preferences-panel.tsx`의 `locale` prop JSDoc 첫 줄이 낡았다
 R-4(dd0c7da)가 칩을 저장된 선호에 묶으면서 JSDoc 첫 줄이 실제와 어긋났다. 픽서가 같이 고치면
 커밋이 4파일이 되어 `guard:blast-radius`를 밟기에 남겼다. 한 줄짜리 후속.
+
+## T10-R-7 — N41/N41b가 렌더 형태에 걸려 있다
+`.group`(Tailwind 유틸리티 클래스), `document.querySelector('nav p')`,
+`nav.parentElement`의 `gridTemplateColumns`를 직접 읽는다. 모든 가시 행동을 보존한 리스타일에도
+빨개질 수 있어, 브리프의 "테스트는 외부 관측 가능한 행동만 본다"와 상충한다. N41c·N41d도 같은 결.
+
+## T10-R-8 — `ProfileDot` 이름과 파일 응집
+`size-2.5 rounded-[3px]` 사각 스와치를 그리는데 이름은 Dot이고, 한 파일이 무관한 export 7개를
+담으며(Divergent Change), `IconButton`이 `text?`+`size:'rail'`을 얻어 더 이상 아이콘 전용이 아니다.
+
+## T10-R-9 — `onToggleActive`·라벨 쌍의 관통
+`app.tsx` → `profile-sidebar`(3 호출부) → `sortable-profile-list` → `ProfileSelectRow`로
+`label`/`toggleLabel`이 함께 흐른다. 두 목록 파일 모두 이미 `useT()`를 들고 있어 행이 스스로
+계산할 수 있다 — Data Clumps + Shotgun Surgery.
+
+## T10-R-10 — 카드 껍데기 중복
+`rounded-lg border border-border`가 `profile-section.tsx`의 `AnimatePresence` 두 분기에 중복.
+
+## T10-R-11 — `src/ui`의 잔여 raw dark fill
+`tokens.ts:7` fieldSolid `dark:bg-zinc-900`, `large-editor.tsx:40`(형제 `popupSurface`는 이미
+`bg-popover`로 옮겼다), `toggle-switch.tsx:12` 트랙. 티켓 10이 지명한 범위는 "피처 컴포넌트"라
+범위 밖으로 미뤘다.
+
+## T10-R-12 — `ghostInteractive`의 hover 추가
+`tokens.ts:32`에 `hover:text-foreground`가 붙어 모든 ghost Button/IconButton/Select에 새 호버
+행동이 생겼다. 티켓이 요구한 것은 토큰 개명뿐 — scope creep.
+
+## T10-R-3 — en 가시 라벨이 접근성 이름에 포함되지 않는다 (accept 되었으나 미적용)
+`Settings`(가시) vs `Show preferences`(접근성) — WCAG 2.5.3 Label in Name 위반이고, 가시 라벨은
+티켓 10이 새로 붙였다. **미적용 사유**: 두 문자열을 기존 스모크가 정확 일치로 고정한다
+(N28 smoke.mjs:3436·3467, N41 smoke.mjs:3515-3516) → `test-weakening`. 릴리스 게이트 `--focus` 필수.
+
+## T10-R-6 — 레일 라벨 옆에 툴팁이 남았다 (accept 되었으나 미적용)
+"Profiles" 라벨 버튼에 호버하면 "Show profiles" 툴팁이 겹친다. **미적용 사유**: 티켓 AC1의
+`(현재 아이콘+툴팁 → 디자인의 라벨)`이 대체인지 병치인지 스펙 어디서도 소스되지 않고, 제거하면
+기존 N28을 다시 써야 한다 → `needs-decision` + `test-weakening`. 릴리스 게이트 `--focus` 필수.
