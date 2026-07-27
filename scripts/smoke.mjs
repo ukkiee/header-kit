@@ -1957,6 +1957,30 @@ try {
     narrowSaved === 2 && wideScopeVisibleInList,
     `narrow-saved=${narrowSaved}, wide-scope-in-list=${wideScopeVisibleInList}`);
 
+  /*
+   * N18j: 무관 호스트 탐침을 피해 가는 광범위 정규식도 확인을 요구한다 (릴리스 R-2).
+   *
+   * `^https://.*\.com/|ads\.example\.net`은 어느 탐침에도 걸리지 않으면서 모든 .com을
+   * 삼킨다 — 대안 하나가 도메인에 묶였다는 이유로 좁다고 읽으면 확인 없이 저장된다.
+   * N18h와 같은 눈으로 본다: 배너가 아니라 **저장이 일어나지 않았는지**.
+   */
+  await popup.getByRole('button', { name: 'Add rule' }).click();
+  await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
+  await pickOption(popup, 'Type', 'Block request');
+  await pickOption(popup, 'URL match type', 'Regex (advanced)');
+  await popup.getByLabel('URL filter').fill('^https://.*\\.com/|ads\\.example\\.net');
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  const sneakyWarned = await popup
+    .getByRole('button', { name: 'Block anyway', exact: true })
+    .waitFor({ timeout: 5000 })
+    .then(() => true, () => false);
+  const sneakyNotSaved = (await blockRuleCount()) === 2;
+  await popup.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await waitFormClosed();
+  record('N18j: 탐침을 피하는 광범위 정규식 Block도 첫 Save는 저장하지 않는다',
+    sneakyWarned && sneakyNotSaved,
+    `warned=${sneakyWarned}, not-saved=${sneakyNotSaved}`);
+
   // 아래 c~e는 열린 폼을 이어서 굴린다 — Block 저장으로 닫혔으니 다시 연다.
   await popup.getByRole('button', { name: 'Add rule' }).click();
   await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });

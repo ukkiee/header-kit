@@ -100,6 +100,32 @@ describe('도메인 토큰이 있어도 앵커가 아니면 넓음 (code-review)
   });
 });
 
+describe('대안이 여럿이면 전부 호스트에 묶여야 좁다 (release R-2)', () => {
+  /*
+   * 대안(`|`)은 각자 독립적으로 매칭된다 — 하나라도 호스트에 안 묶이면 그 조각이 여는
+   * 트래픽이 전부 차단된다. 아래 반례는 `.invalid` 탐침 둘을 모두 피하면서 모든 .com에 걸린다.
+   */
+  it.each([
+    ['^https://.*\\.com/|ads\\.example\\.net', 'regex'],
+    // 순서를 뒤집어도 같다 — 묶인 조각이 앞에 있다고 뒤가 좁아지지 않는다.
+    ['ads\\.example\\.net|^https://.*\\.com/', 'regex'],
+    // 경로만 집는 대안도 모든 호스트를 연다.
+    ['^https://ads\\.example\\.com/|^https?://[^/]+/ads\\.js', 'regex'],
+  ] as const)('%s (%s) → wide', (pattern, matchType) => {
+    expect(urlScopeBreadth(pattern, matchType)).toBe('wide');
+  });
+
+  it('모든 대안이 호스트에 묶이면 좁다 — 대안을 쓴다는 이유만으로 넓다고 하지 않는다', () => {
+    expect(urlScopeBreadth('ads\\.example\\.com|ads\\.example\\.net', 'regex')).toBe('narrow');
+    expect(urlScopeBreadth('^https://(ads|cdn)\\.example\\.com/', 'regex')).toBe('narrow');
+  });
+
+  it('최상위가 아닌 `|`는 대안이 아니다 — 문자 클래스와 이스케이프 안쪽', () => {
+    expect(urlScopeBreadth('ads\\.example\\.com/[a|b]', 'regex')).toBe('narrow');
+    expect(urlScopeBreadth('ads\\.example\\.com/a\\|b', 'regex')).toBe('narrow');
+  });
+});
+
 describe('규칙이 만들어지지 않는 패턴은 거부한다', () => {
   it.each([
     // 컴파일 자체가 안 되는 패턴.

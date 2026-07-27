@@ -106,6 +106,28 @@ const RE2_UNSUPPORTED = /\(\?=|\(\?!|\(\?<=|\(\?<!|\\[1-9]/;
  */
 const RE2_INLINE_FLAGS = /^\(\?[imsU]+\)/;
 
+/** 최상위 대안(`|`)으로 자른다 — 이스케이프·문자 클래스·그룹 안의 `|`는 대안이 아니다. */
+function topLevelAlternatives(pattern: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let inClass = false;
+  let start = 0;
+  for (let i = 0; i < pattern.length; i += 1) {
+    const ch = pattern[i];
+    if (ch === '\\') i += 1;
+    else if (inClass) inClass = ch !== ']';
+    else if (ch === '[') inClass = true;
+    else if (ch === '(') depth += 1;
+    else if (ch === ')') depth -= 1;
+    else if (ch === '|' && depth === 0) {
+      parts.push(pattern.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(pattern.slice(start));
+  return parts;
+}
+
 function regexBreadth(pattern: string): ScopeBreadth {
   if (RE2_UNSUPPORTED.test(pattern)) return 'invalid';
   let compiled: RegExp;
@@ -118,6 +140,10 @@ function regexBreadth(pattern: string): ScopeBreadth {
   if (UNRELATED_URLS.some((url) => compiled.test(url))) return 'wide';
   // 통과했다면 호스트를 가리는 것까지는 하고 있다. 남은 질문은 **무엇으로** 가리느냐다 —
   // 경로만 집는 `^https?://[^/]+/ads\.js`는 여기서 걸러진다.
+  // 대안은 각자 매칭되므로 **모든** 최상위 대안이 호스트에 묶였음을 증명해야 좁다 —
+  // `^https://.*\.com/|ads\.example\.net`은 오른쪽만 보면 좁지만 왼쪽이 모든 .com을 삼킨다.
   // `\.`는 리터럴 점이라 되살리고, `.`·`*` 같은 메타문자는 도메인 조각을 만들지 못하게 둔다.
-  return isHostBound(pattern.replace(/\\\./g, '.')) ? 'narrow' : 'wide';
+  return topLevelAlternatives(pattern).every((alt) => isHostBound(alt.replace(/\\\./g, '.')))
+    ? 'narrow'
+    : 'wide';
 }
