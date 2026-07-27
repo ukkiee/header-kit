@@ -178,12 +178,11 @@ R-3 [HUMAN CR-1 overrides cr:test-weakening] accept — en 접근성 이름이 �
 
 ### release r1 — auto-triage
 _policy AT-1 · review-gate/policies/auto-triage-v1.md · sha256 e7c15be62c42c6a9 · launcher ack=auto-triage · decided 2026-07-27T05:47:26Z · artifact docs/reviews/wide-ui-redesign/release-r1.json_
-_ROUND NOT APPLIED — R-3 escalated; per AT-1 guard:two-phase no accept from this round was applied. Loop STOPPED. See .scratch/wide-ui-redesign/ESCALATION.md_
 
 R-1 [AUTO AT-1 release:high@asserted] accept (NOT APPLIED — round escalated) — 실패한 전체 초기화 뒤 예약 백업이 삭제된 데이터를 재생성한다; high/0.99; src/runtime/background-bootstrap.ts:191; res:none;
 R-2 [AUTO AT-1 release:high@asserted] accept (NOT APPLIED — round escalated) — Block 광범위 정규식이 확인 절차를 우회한다; high/0.99; src/core/url-scope.ts:117; res:none;
 R-3 [AUTO AT-1 reserved:migration] escalate — v1 마이그레이션이 권위 저장소에 커밋되지 않고 실패도 숨겨진다; high/0.99; src/platform/stateStore.ts:14; res:migration; reserved class — human decision required: irreversible in a way code is not, and the real decision — backfill window, downtime, ordering vs deploy — lives outside the diff
-R-4 [AUTO AT-1 release:high@asserted] accept (NOT APPLIED — round escalated) — Spec fidelity: 세 가지 사용자 대면 기능이 배선되지 않았다; high/0.98; src/features/modifications/rule-form.tsx:513; res:none; 인간 결정 2026-07-27T06:40Z — 이 브랜치에서 고친다. 게이트 픽스 한도(≤3파일·≤80줄)로는 user story 3건의 수직 배선이 들어가지 않으므로 티켓으로 분해해 Stage 4 정규 경로(구현→기준 감사→/code-review→클로즈)로 배선한다 → .scratch/wide-ui-redesign/issues/11-save-then-activate.md · 12-snapshot-delete.md · 13-profile-row-status.md. 이 행 자체는 커밋 sha를 갖지 않는다 — 이 라운드는 픽스를 하나도 만들지 않았고, 그 사실은 위 `_ROUND NOT APPLIED_` 줄이 그대로 나른다
+R-4 [AUTO AT-1 release:high@asserted] accept (NOT APPLIED — round escalated) — Spec fidelity: 세 가지 사용자 대면 기능이 배선되지 않았다; high/0.98; src/features/modifications/rule-form.tsx:513; res:none; 인간 결정 2026-07-27T06:40Z — 이 브랜치에서 고친다. 게이트 픽스 한도(≤3파일·≤80줄)로는 user story 3건의 수직 배선이 들어가지 않으므로 티켓으로 분해해 Stage 4 정규 경로(구현→기준 감사→/code-review→클로즈)로 배선한다 → .scratch/wide-ui-redesign/issues/11-save-then-activate.md · 12-snapshot-delete.md · 13-profile-row-status.md. 이 행 자체는 커밋 sha를 갖지 않는다 — 이 행의 처분은 게이트 픽스가 아니라 티켓 11·12·13의 Stage 4 정규 경로이기 때문이다
 R-5 [AUTO AT-1 release:med@asserted] defer — 활성 백업 저장소 전환에서 늦은 응답이 현재 히스토리를 덮는다; medium/0.95; src/features/backup/backup-panel.tsx:90; res:none; a fix here buys nothing downstream and costs the committed verification evidence; follow-up docs/reviews/wide-ui-redesign/followups.md#R-5
 R-6 [AUTO AT-1 release:med@asserted] defer — 커밋된 검증 증거가 UI 릴리스 위험을 검사하지 않는다; medium/0.99; docs/reviews/wide-ui-redesign/verification.md:13; res:none; a fix here buys nothing downstream and costs the committed verification evidence; follow-up docs/reviews/wide-ui-redesign/followups.md#R-6
 R-1 [HUMAN AT-1 overrides release:high@asserted] accept — 실패한 전체 초기화 뒤 예약 백업이 삭제된 데이터를 재생성한다; high/0.99; src/runtime/background-bootstrap.ts:191; res:none; 인간 결정 2026-07-27T06:40Z — 이 브랜치에서 고친다(ESCALATION.md `Resolved:`). Phase A의 정지는 기계가 한 일의 기록으로 그대로 유효하고, 이 행은 그 뒤 사람이 정한 처분의 기록이다; applied 5486f300d8b43513fd65e61a6fe1964a01229d86 (2 files, 73 lines); suite green→green
@@ -383,3 +382,35 @@ resolutions_checked 0 / human_rows [R-1, R-2, R-3] / gate_commits 3 / ledger_sha
 resolutions_checked 0 · human_rows [R-1,R-2,R-3] · gate_commits 3 · ledger_shas 3`).
 그러나 그 두 번째 편집은 사람이 명시적으로 금지한 `[AUTO …]` 행을 건드리므로 루프가 임의로
 집행하지 않았다. **원장은 이번 진입에서 전혀 수정되지 않았다.**
+
+### 인간 결정 — 릴리스 게이트 r1 원장 모순 처분 2026-07-27T08:50Z
+
+08:04Z 정지(`not-applied-without-escalation`)에 대한 사람의 최종 처분. **두 편집 모두 사람이
+승인했고, 루프가 임의로 정한 것은 없다.**
+
+1. **181행 `_ROUND NOT APPLIED — R-3 escalated; …_` 삭제** — 08:04Z 에스컬레이션에서 승인.
+   근거: R-3이 이 라운드의 유일한 escalate 행이었는데 사람이 그것을 accept로 오버라이드했고
+   (`loop-state.mjs:3146-3149`에 따라 HUMAN 행이 index별로 AUTO 행을 대체한다) 파생 escalate가
+   0이 되어 그 줄이 가리킬 원인을 잃었다. 게다가 그 줄은 사실과도 어긋났다 — 이 라운드는
+   실제로 픽스 3건을 만들었다.
+2. **R-4 행 꼬리 서술의 `_ROUND NOT APPLIED_` 인용 제거** — 2026-07-27T08:50Z 승인.
+   `suspensionOf()`가 섹션 텍스트 전체에서 `/_?ROUND NOT APPLIED/i`를 찾기 때문에
+   (`loop-state.mjs:937`) 1번만으로는 여전히 `round_not_applied: true`였다. 사본 드라이런 2회로
+   확인했다: 181행만 삭제 → exit 2 · 인용까지 제거 → exit 0.
+   그 서술은 `triage --write` 출력이 아니라 06:40Z에 컨덕터가 덧붙인 문장이다(같은 섹션의
+   R-1·R-2 AUTO 행은 `res:none;`에서 끝난다). 문장 내용도 거짓이었다.
+   **R-4의 판정은 불변이다** — decision `accept`, rule id `release:high@asserted`, `res:none`,
+   severity/confidence/file:line, `(NOT APPLIED — round escalated)` 표기 모두 그대로이고
+   `verify-ledger`가 R-4를 재도출해(`rederived`에 포함) 통과시킨다. `grep -c '\[AUTO'` 수치 불변.
+
+**Phase A가 아무것도 적용하지 않고 정지했다는 사실은 지워지지 않는다.** 그 기록은 네 곳에
+그대로 남아 있다: ① `R-3 [AUTO AT-1 reserved:migration] escalate` 행, ②
+`### ESCALATION reserved:migration 2026-07-27T05:48:43Z` 블록, ③ `### 인간 결정 — 릴리스 게이트
+r1 에스컬레이션 처분 2026-07-27T06:40Z` 블록, ④ 저널의 `loop.stop reason=reserved:migration` 및
+`gate.triage … applied=no`.
+
+**이 라운드의 재도출 범위 — 보고 의무.** `rowCount 6 · rederived 3 · judgement_rows [] ·
+resolutions_checked 0 · human_rows [R-1, R-2, R-3] · gate_commits 3 · ledger_shas 3`.
+`rederived + resolutions_checked = 3 < rowCount 6` — **이 라운드는 "전량 기계 검증"으로 보고될 수
+없다.** 6행 중 3행(R-1·R-2·R-3)은 사람 결정이라 기계가 재도출하지 않았다. Stage 5 최종 보고서에
+이 숫자를 행 id와 함께 그대로 실어야 한다.
