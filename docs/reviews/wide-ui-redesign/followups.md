@@ -154,12 +154,17 @@ R-4(dd0c7da)가 칩을 저장된 선호에 묶으면서 JSDoc 첫 줄이 실제�
 `tokens.ts:32`에 `hover:text-foreground`가 붙어 모든 ghost Button/IconButton/Select에 새 호버
 행동이 생겼다. 티켓이 요구한 것은 토큰 개명뿐 — scope creep.
 
-## T10-R-3 — en 가시 라벨이 접근성 이름에 포함되지 않는다 (accept 되었으나 미적용)
+## ~~T10-R-3~~ — en 가시 라벨이 접근성 이름에 포함되지 않는다 (해소됨, 이월 아님)
 `Settings`(가시) vs `Show preferences`(접근성) — WCAG 2.5.3 Label in Name 위반이고, 가시 라벨은
-티켓 10이 새로 붙였다. **미적용 사유**: 두 문자열을 기존 스모크가 정확 일치로 고정한다
-(N28 smoke.mjs:3436·3467, N41 smoke.mjs:3515-3516) → `test-weakening`. 릴리스 게이트 `--focus` 필수.
+티켓 10이 새로 붙였다. 한때 미적용이었던 사유: 두 문자열을 기존 스모크가 정확 일치로 고정한다
+(N28 smoke.mjs:3436·3467, N41 smoke.mjs:3515-3516) → `test-weakening`.
+**2026-07-27 해소** — 사용자가 옵션 B로 기존 단언 수정을 명시 승인했고(`decisions.md`의
+`R-3 [HUMAN CR-1 overrides cr:test-weakening]`), 접근성 이름을 `Show settings`로 고쳐 `1870bb7`로
+착지했다. 스위트 그린(352/123). **릴리스 게이트 `--focus` 대상이 아니다.**
 
-## T10-R-6 — 레일 라벨 옆에 툴팁이 남았다 (accept 되었으나 미적용)
-"Profiles" 라벨 버튼에 호버하면 "Show profiles" 툴팁이 겹친다. **미적용 사유**: 티켓 AC1의
-`(현재 아이콘+툴팁 → 디자인의 라벨)`이 대체인지 병치인지 스펙 어디서도 소스되지 않고, 제거하면
-기존 N28을 다시 써야 한다 → `needs-decision` + `test-weakening`. 릴리스 게이트 `--focus` 필수.
+## ~~T10-R-6~~ — 레일 라벨 옆에 툴팁이 남았다 (결함 아님으로 확정, 이월 아님)
+"Profiles" 라벨 버튼에 호버하면 "Show profiles" 툴팁이 겹친다. 한때 미적용이었던 사유: 티켓 AC1의
+`(현재 아이콘+툴팁 → 디자인의 라벨)`이 대체인지 병치인지 스펙 어디서도 소스되지 않았다.
+**2026-07-27 해소** — 사용자가 옵션 B로 병치를 확정된 설계로 판정했다(`decisions.md`의
+`R-6 [HUMAN CR-1 overrides cr:defect] reject`). 화살표는 아이콘 대체를 뜻하고 툴팁은 유지한다.
+코드 변경 없음. **릴리스 게이트 `--focus` 대상이 아니다.**
