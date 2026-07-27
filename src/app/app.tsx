@@ -224,6 +224,10 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
   // 단일 셸 (ADR 0005) — 두 표면이 같은 레일+사이드바+본문을 쓴다.
   // 차이는 크기(팝업 760×580 고정 / 탭 전폭·전고)와 "탭에서 열기"뿐.
   //
+  // 팝업 프로필 열은 **14rem 아래로 내려가지 않는다**. 총폭 760은 고정값이라(ADR 0005)
+  // 레일이 라벨을 얻어 넓어진 만큼을 프로필 열에서 빼면, 행에 새로 붙은 인라인 토글까지
+  // 겹쳐 이름 칩이 라벨화 이전보다 좁아진다 — 티켓이 "넓힘"이라 적은 열이 오히려 줄어든다.
+  //
   // 두 표면 모두 **확정 높이**여야 한다. 탭이 min-h-screen이면 행이 내용만큼 늘어나
   // 뷰포트가 넘칠 일이 없고, 스크롤이 ScrollArea가 아니라 문서로 떨어진다 — 탭에서만
   // OS 기본 스크롤바가 뜨고 앱 스타일 스크롤바는 아예 렌더되지 않는다 (structure r1 S-2).
@@ -235,7 +239,7 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
         className={`grid ${canvas} ${
           surface === 'tab'
             ? 'h-screen grid-cols-[10rem_16rem_minmax(0,1fr)]'
-            : 'h-[580px] w-[760px] grid-cols-[8rem_12rem_minmax(0,1fr)]'
+            : 'h-[580px] w-[760px] grid-cols-[8rem_14rem_minmax(0,1fr)]'
         }`}
       >
         <nav className="flex flex-col gap-1 border-r border-border p-2">
