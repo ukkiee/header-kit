@@ -348,3 +348,38 @@ diff-guard clean · 전체 스위트 green으로 개별 검증됐다.
 resolutions_checked 0 / human_rows [R-1, R-2, R-3] / gate_commits 3 / ledger_shas 3.
 6행 중 3행(R-1·R-2·R-3)은 사람 결정으로 기계 재도출 대상에서 빠졌다 — 이 라운드는
 "전량 기계 검증"으로 보고될 수 없다.
+
+### ESCALATION suite-red 2026-07-27T08:36:23Z
+
+프리플라이트 P2 실패로 정지. HEAD `9b50905`에서 전체 스위트를 3회 실행해 **3회 모두 red**
+(`bun run build && bun run test && bun run smoke`). build·vitest(360 passed)는 매번 통과했고,
+실패는 전부 smoke의 헤더/쿠키 적용 관측에 몰려 있다:
+
+| 실행 | 결과 | 실패 |
+|---|---|---|
+| preflight5-suite | 121/124, exit 1 | M2b · M2c · N34b |
+| preflight5-suite-rerun1 | 122/124, exit 1 | K1 · M2b |
+| preflight5-suite-rerun2 | 121/124, exit 1 | M1 · M2b · M2d |
+
+플레이크 재실행 예산 2/2 소진. 실패 집합이 매번 달라 결정론적 회귀는 아니지만,
+**M2b는 3/3 실패이며 시그니처가 매번 동일**(`cookie=existing=preset` — 오버라이드 적용 전 값)
+이라 단독 결함 의심이 남는다. 코드는 `4e4d024`와 바이트 동일하고(트리 diff는 decisions.md 46줄
+추가가 전부), 그 트리에서 `release-r1-R-3-suite.txt`는 124/124 green으로 기록돼 있다.
+
+이 정지는 릴리스 게이트 r1의 finding을 새로 미해결로 만들지 않는다. r1의 처분은 이미 끝나 있다:
+
+- **적용됨(HUMAN accept, sha 스탬프 보유)** — R-1 `5486f30`(2파일 73줄) · R-2 `a711d57`(3파일 78줄)
+  · R-3 `4e4d024`(3파일 77줄). 셋 다 착지 당시 diff-guard clean·스위트 green.
+- **미적용** — R-4(accept, sha 없음; 티켓 11·12·13으로 분해, 미착수) · R-5(defer, followups#R-5)
+  · R-6(defer, followups#R-6).
+
+**부수 발견 — 승인된 원장 처분이 그대로는 동작하지 않는다.** 2026-07-27 사람 승인은
+`### release r1`의 `_ROUND NOT APPLIED_` 줄 **하나만** 지우면 `verify-ledger`가 통과한다고
+예측했으나, 사본 드라이런 결과 그 편집만으로는 여전히 `round_not_applied: true` / exit 2
+(`not-applied-without-escalation`)다. `suspensionOf()`가 섹션 텍스트 전체에서
+`/_?ROUND NOT APPLIED/i`를 찾는데(`loop-state.mjs:937`), R-4 행 끝의 서술이 그 문자열을 문자
+그대로 인용하고 있기 때문이다. 두 번째 편집(R-4 서술의 인용 제거)까지 하면 exit 0이며 카운터는
+승인 문서의 예측과 정확히 일치한다(`rowCount 6 · rederived 3 · judgement_rows [] ·
+resolutions_checked 0 · human_rows [R-1,R-2,R-3] · gate_commits 3 · ledger_shas 3`).
+그러나 그 두 번째 편집은 사람이 명시적으로 금지한 `[AUTO …]` 행을 건드리므로 루프가 임의로
+집행하지 않았다. **원장은 이번 진입에서 전혀 수정되지 않았다.**
