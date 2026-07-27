@@ -148,6 +148,9 @@ R-10 [AUTO CR-1 cr:smell] defer — Standards: Duplicated Code — `rounded-lg b
 R-11 [AUTO CR-1 cr:out-of-diff] defer — Spec: `src/ui`의 잔여 raw dark fill(`tokens.ts` fieldSolid `dark:bg-zinc-900`, `large-editor.tsx:40`, `toggle-switch.tsx:12`) — 티켓이 지명한 범위는 "피처 컴포넌트"이고 기준 감사도 그 범위에서 met으로 확인했다; -/-; src/ui/tokens.ts:7; res:none; follow-up docs/reviews/wide-ui-redesign/followups.md#T10-R-11
 R-12 [AUTO CR-1 cr:smell] defer — Spec: scope creep — `ghostInteractive`에 `hover:text-foreground`가 붙어 모든 ghost Button/IconButton/Select에 새 호버 행동이 생겼다, 티켓이 요구한 것은 토큰 개명뿐; -/-; src/ui/tokens.ts:32; res:none; follow-up docs/reviews/wide-ui-redesign/followups.md#T10-R-12
 
+R-6 [HUMAN CR-1 overrides cr:defect] reject — 레일 라벨 옆 툴팁 병치는 결함이 아니라 확정된 설계다; -/-; src/app/app.tsx:251; res:none; 사용자 결정 2026-07-27T05:00:25Z(옵션 B) — 티켓 AC1의 화살표는 아이콘 대체를 뜻하고 툴팁은 유지한다. 기계는 이 행을 accept로 판정했으나 티켓 문구가 소스하지 못한 것이 바로 그 판정의 근거였고, 그 판단은 사람 몫이다. 코드 변경 없음
+R-3 [HUMAN CR-1 overrides cr:test-weakening] accept — en 접근성 이름이 가시 라벨을 포함하도록 고친다 (WCAG 2.5.3 Label in Name); -/-; src/core/i18n.ts:176; res:none; 사용자 결정 2026-07-27T05:00:25Z(옵션 B) — 기존 스모크 문자열 단언 수정을 사람이 명시적으로 승인하므로 `test-weakening` 차단이 해제된다. **승인됨, 아직 미적용** — 다음 루프의 fix 패스가 적용한다. 파급: `ariaShowPreferences` en 값 1곳(i18n.ts:176) + `scripts/smoke.mjs`의 `'Show preferences'` 15곳(대부분 내비게이션 호출) = 2파일 약 16줄로 guard:blast-radius 안. ko(`설정` ⊂ `환경설정 화면`)와 `Show profiles`/`Show backups`는 이미 적합해 손대지 않는다. i18n.ts:177-181의 "접근성 이름과 보이는 라벨은 일이 다르다" 주석은 이 결정으로 뒤집혔으므로 함께 고쳐야 한다
+
 ### ESCALATION needs-decision 2026-07-27T04:28:08Z
 
 루프 정지. 티켓 10의 code-review r1에서 accept 6건 중 **4건 적용, 2건 미적용** — 둘 다 fix
