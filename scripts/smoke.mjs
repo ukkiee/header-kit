@@ -2467,12 +2467,19 @@ try {
     // `data-theme`을 실제로 뒤집은 뒤에야 `--primary`도 칠해진 색도 그 테마의 값이 된다.
     // `data-theme`은 아래 단언 어디에도 쓰이지 않으므로 이 대기가 단언을 약화시키지 않는다
     // (고정 대기를 지우면서 이 구간이 무대기가 됐던 것이 실제 실패 원인이었다).
-    await pollUntil(
+    // `pollUntil`은 타임아웃이면 **마지막 값을 그냥 돌려준다** — 결과를 버리면 뒤집히지 않은
+    // 테마도 배리어를 조용히 통과하고 아래에서 반대 테마의 색을 표본으로 삼는다. 형제 배리어
+    // (`pollSessionRuleMatch`·`pollStable`)와 같이 마지막 값을 담아 시끄럽게 실패시킨다.
+    const theme = await pollUntil(
       () => popup.evaluate(() => document.documentElement.dataset.theme ?? ''),
       (t) => t === scheme,
       5000,
       50,
     );
+    if (theme !== scheme) {
+      throw new Error(
+        `N34b: data-theme never flipped to ${scheme} within 5000ms; last seen "${theme}"`);
+    }
     // 켜져 있는 프로필의 토글 스위치 — data-[checked]로 accent가 칠해지는 대표 컨트롤.
     const swEl = popup.locator('[data-checked]').first();
     const shown = await swEl.waitFor({ timeout: 5000 }).then(() => true, () => false);
