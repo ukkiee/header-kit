@@ -19,14 +19,33 @@ export class StateLoadError extends Error {
   }
 }
 
-/** 권위 저장소에서 읽고 **마이그레이션을 커밋한다** — 검증을 통과한 v1→v2를 메모리에만 두면
- *  저장소는 영원히 v1이다. 읽을 수 없는 값은 접지 않고 던진다(원본은 그대로 남는다). */
+/** 권위 저장소에서 **읽기만 한다** — 마이그레이션 커밋은 `commitMigration`이 따로 한다.
+ *  읽을 수 없는 값은 접지 않고 던진다(원본은 그대로 남는다).
+ *
+ *  왜 읽기 경로가 쓰지 않는가 (티켓 14): 이 함수는 재조정의 loadSnapshot이 쓰는 읽기다.
+ *  여기서 storage.local에 쓰면 그 쓰기가 `onStateChanged`를 때려 새 세대를 만들고, 쓰기를
+ *  수행한 그 세대 자신이 post-loadSnapshot 가드에서 물러나 `apply`를 부르지 못한다 —
+ *  규칙 적용이 저장소 왕복 한 번만큼 밀린다. */
 export async function loadState(): Promise<StoredState> {
   const read = await readState();
   if (read.status === 'blocked') throw new StateLoadError(read.reason, read.storedVersion);
-  // 덮어쓰기 가드를 다시 지나도록 persistState로 쓴다 — 새 쓰기 경로를 열지 않는다.
-  if (read.status === 'migrated') await persistState(read.state);
   return read.state;
+}
+
+/**
+ * 검증을 통과한 v1→v2를 **권위 저장소에 굳힌다** (R-3) — 메모리 변환만이면 저장소는
+ * 영원히 v1이다. 이미 v2면 아무것도 쓰지 않고 `false`.
+ *
+ * 호출부는 background 컴포지션 루트 하나뿐이고, **재조정 바깥에서 한 번만** 돈다(티켓 14).
+ * 실패는 삼키지 않고 호출자에게 전파한다 — 저장소가 v1로 남은 사실이 조용히 묻히지 않게.
+ */
+export async function commitMigration(): Promise<boolean> {
+  const read = await readState();
+  if (read.status === 'blocked') throw new StateLoadError(read.reason, read.storedVersion);
+  if (read.status !== 'migrated') return false;
+  // 덮어쓰기 가드를 다시 지나도록 persistState로 쓴다 — 새 쓰기 경로를 열지 않는다.
+  await persistState(read.state);
+  return true;
 }
 
 /**

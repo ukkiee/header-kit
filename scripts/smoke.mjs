@@ -112,6 +112,70 @@ async function pollSessionRuleCount(sw, expected, timeoutMs = 15000) {
   return count;
 }
 
+/*
+ * 규칙 **내용** 배리어 (티켓 14) — 개수 배리어가 무효인 자리에서 쓴다.
+ *
+ * `pollSessionRuleCount`는 `rules.length`만 본다. `replaceSessionRules`는 단일 원자
+ * `updateSessionRules`라 1개 → 1개 교체에서 개수가 기대치를 한 번도 벗어나지 않는다.
+ * 그래서 개수 배리어는 `pollUntil`의 **첫 프로브**(첫 sleep 전이다)에서 **이전 테스트의
+ * 규칙 세트**로 즉시 만족되고, 단언이 정확히 한 테스트씩 밀린다(M2b가 이전 시드의
+ * `existing=preset`을 관측한 그 결함). ADR 0002가 규칙 공백을 감수한다고 정한 이상
+ * 준비 상태는 **가정이 아니라 관측**해야 한다.
+ *
+ * predicate는 Node 쪽에서 돈다 — evaluate로는 규칙 배열만 넘겨받아 직렬화 문제를 피한다.
+ * 타임아웃이면 **마지막으로 본 규칙 세트를 담아** 실패한다. 진짜 회귀가 조용히 통과하면
+ * 안 되므로 여기서 record를 완화하지 않는다.
+ */
+async function pollSessionRuleMatch(sw, predicate, label, timeoutMs = 15000) {
+  const safe = (rules) => {
+    try {
+      return predicate(rules ?? []);
+    } catch {
+      return false;
+    }
+  };
+  const rules = await pollUntil(
+    () => sw.evaluate(async () => await chrome.declarativeNetRequest.getSessionRules()),
+    safe,
+    timeoutMs,
+    100,
+  );
+  if (!safe(rules)) {
+    throw new Error(`session rules never matched ${label}; last seen ${JSON.stringify(rules)}`);
+  }
+  return rules;
+}
+
+/** 규칙 세트가 낸 요청·응답 헤더 연산 전부 — 어느 쪽에 실렸는지는 배리어의 관심사가 아니다. */
+const headerOps = (rules) =>
+  rules.flatMap((r) => [...(r.action?.requestHeaders ?? []), ...(r.action?.responseHeaders ?? [])]);
+
+/** "이 헤더에 이런 연산이 실린 규칙이 지금 설치돼 있다" — 이번 시드의 양성 증거. */
+const headerOpLive = (name, match = () => true) => (rules) =>
+  headerOps(rules).some((h) => h.header?.toLowerCase() === name.toLowerCase() && match(h));
+
+/*
+ * 안정화 폴링 (티켓 14) — 전이 **중간 프레임**을 표본으로 삼지 않는다.
+ *
+ * 고정 대기로 색을 읽으면 Tailwind `transition-colors` 기본 150ms와 정확히 겹쳐
+ * 라이트·다크 사이의 보간값(예: rgb(30, 80, 218))을 읽는다. 채널당 1~2 차이라
+ * 단언은 실패하는데 원인은 제품이 아니라 표본 추출 시점이다.
+ *
+ * **기댓값을 향해 폴링하지 않는다** — "연속 2회 같은 값"만 기다린다. 그래야 단언 강도가
+ * 그대로 유지된다. 안정되지 않으면 마지막 값을 담아 실패한다.
+ */
+async function pollStable(probe, label, timeoutMs = 2000, intervalMs = 50) {
+  const start = Date.now();
+  let previous = await probe();
+  while (Date.now() - start < timeoutMs) {
+    await new Promise((r) => setTimeout(r, intervalMs));
+    const next = await probe();
+    if (next === previous) return next;
+    previous = next;
+  }
+  throw new Error(`${label} never stabilized within ${timeoutMs}ms; last seen ${previous}`);
+}
+
 const { server, port } = await startEchoServer();
 const origin = `http://127.0.0.1:${port}`;
 
@@ -364,7 +428,12 @@ try {
         conditions: { excludedDomains: ['localhost'] } }]),
   ]);
   await pollSessionRuleCount(sw, 1);
-  const onIncluded = await fetchEchoHeaders(page, '/headers');
+  // 개수 1 → 1이라 위 배리어는 E1의 규칙 세트로도 만족된다 — 내용·효과를 양성 확인한다.
+  await pollSessionRuleMatch(sw, headerOpLive('X-Ex', (h) => h.value === 'on'), 'E2 X-Ex=on');
+  const onIncluded = await pollUntil(
+    () => fetchEchoHeaders(page, '/headers'),
+    (h) => h['x-ex'] === 'on',
+  );
   await page.goto(`http://localhost:${port}/`);
   const onExcluded = await fetchEchoHeaders(page, '/headers');
   await page.goto(origin);
@@ -379,8 +448,14 @@ try {
         conditions: { requestMethods: ['post'] } }]),
   ]);
   await pollSessionRuleCount(sw, 1);
+  await pollSessionRuleMatch(
+    sw, headerOpLive('X-Post-Only', (h) => h.value === 'on'), 'E3 X-Post-Only=on');
+  // 양성 절반(POST)을 먼저 폴링해 적용을 관측하고, 음성 절반(GET)은 그 뒤 한 번만 읽는다.
+  const viaPost = await pollUntil(
+    () => fetchEchoHeaders(page, '/headers', 'POST'),
+    (h) => h['x-post-only'] === 'on',
+  );
   const viaGet = await fetchEchoHeaders(page, '/headers');
-  const viaPost = await fetchEchoHeaders(page, '/headers', 'POST');
   record('E3: 메서드 조건 — POST에만 적용', viaGet['x-post-only'] === undefined && viaPost['x-post-only'] === 'on',
     `GET=${viaGet['x-post-only']}, POST=${viaPost['x-post-only']}`);
 
@@ -391,6 +466,10 @@ try {
         conditions: { resourceTypes: ['main_frame'] } }]),
   ]);
   await pollSessionRuleCount(sw, 1);
+  // 음성 절반(XHR 제외)이 먼저라 부재를 폴링할 수 없다 — 새 시드의 내용을 양성 확인한 뒤
+  // 한 번만 읽고, 양성 절반(내비게이션)은 goto가 실제 문서 요청을 낸다.
+  await pollSessionRuleMatch(
+    sw, headerOpLive('X-Doc-Only', (h) => h.value === 'on'), 'E5 X-Doc-Only=on');
   const viaXhr = await fetchEchoHeaders(page, '/headers');
   await page.goto(`${origin}/headers?nav=1`);
   const viaNav = JSON.parse(await page.evaluate(() => document.body.innerText));
@@ -405,11 +484,20 @@ try {
       [{ kind: 'request-header', id: 'm1', name: 'X-From-Local', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
         conditions: { initiatorDomains: [domain] } }]),
   ];
+  /** 두 시드가 같은 헤더를 쓴다 — 구분되는 것은 initiatorDomains뿐이다. */
+  const initiatorLive = (domain) => (rules) =>
+    rules.some((r) => (r.condition?.initiatorDomains ?? []).includes(domain));
   await seedProfiles(idProfile('127.0.0.1'));
   await pollSessionRuleCount(sw, 1);
-  const matched = await fetchEchoHeaders(page, '/headers');
+  await pollSessionRuleMatch(sw, initiatorLive('127.0.0.1'), 'E6 initiator=127.0.0.1');
+  const matched = await pollUntil(
+    () => fetchEchoHeaders(page, '/headers'),
+    (h) => h['x-from-local'] === 'on',
+  );
   await seedProfiles(idProfile('nomatch.example'));
-  await new Promise((r) => setTimeout(r, 300));
+  // 음성 단언이라 부재를 폴링하면 안 된다 — 매직 넘버 300ms 대신 새 시드의 조건이
+  // 실제로 설치됐음을 양성 확인한 뒤 한 번만 관측한다.
+  await pollSessionRuleMatch(sw, initiatorLive('nomatch.example'), 'E6 initiator=nomatch.example');
   const unmatched = await fetchEchoHeaders(page, '/headers');
   record('E6: Initiator 도메인 조건 — 출처 도메인 매칭 시에만 적용',
     matched['x-from-local'] === 'on' && unmatched['x-from-local'] === undefined,
@@ -762,10 +850,17 @@ try {
       [hdr({ kind: 'response-header', id: 'm1', name: 'X-Injected-Resp', value: 'yes' })]),
   ]);
   await pollSessionRuleCount(sw, 1);
-  const respHeader = await pageB.evaluate(async () => {
-    const res = await fetch('/headers', { cache: 'no-store' });
-    return res.headers.get('x-injected-resp');
-  });
+  // 개수가 1 → 1이라 위 배리어는 이전 시드의 규칙 세트로도 만족된다 — 내용을 양성 확인한다.
+  await pollSessionRuleMatch(
+    sw, headerOpLive('X-Injected-Resp', (h) => h.value === 'yes'), 'K1 X-Injected-Resp=yes');
+  // 설치와 네트워크 반영 사이에도 지연이 있다 — 효과 자체를 폴링한다 (F1과 같은 패턴).
+  const respHeader = await pollUntil(
+    () => pageB.evaluate(async () => {
+      const res = await fetch('/headers', { cache: 'no-store' });
+      return res.headers.get('x-injected-resp');
+    }),
+    (v) => v === 'yes',
+  );
   record('K1: Response Header 수정이 실응답에 반영', respHeader === 'yes', `x-injected-resp=${respHeader}`);
 
   // K2: send-empty는 빈 문자열을, remove는 헤더 자체를 없앤다 (직접 대조)
@@ -773,11 +868,22 @@ try {
     baseProfile('p-se', 'Se', [hdr({ id: 'm1', name: 'X-Empty-Test', value: '', emptyMeans: 'send-empty' })]),
   ]);
   await pollSessionRuleCount(sw, 1);
-  const sentEmpty = await fetchEchoHeaders(pageB, '/headers');
+  // 두 시드가 같은 헤더를 쓰므로 이름만으로는 구분되지 않는다 — 연산까지 본다.
+  await pollSessionRuleMatch(
+    sw, headerOpLive('X-Empty-Test', (h) => h.operation === 'set'), 'K2 X-Empty-Test set');
+  // 양성 절반(빈 문자열 전송)은 효과를 폴링한다.
+  const sentEmpty = await pollUntil(
+    () => fetchEchoHeaders(pageB, '/headers'),
+    (h) => h['x-empty-test'] === '',
+  );
   await seedProfiles([
     baseProfile('p-rm3', 'Rm', [hdr({ id: 'm1', name: 'X-Empty-Test', value: '', emptyMeans: 'remove' })]),
   ]);
-  await new Promise((r) => setTimeout(r, 300));
+  // 음성 절반(헤더 부재)이라 **부재를 폴링하면 안 된다** — 이전 규칙 세트가 즉시 만족시킨다.
+  // 매직 넘버 300ms 대기를 걷어내고, 새 시드의 remove 연산이 살아 있음을 양성 확인한 뒤
+  // 한 번만 관측한다.
+  await pollSessionRuleMatch(
+    sw, headerOpLive('X-Empty-Test', (h) => h.operation === 'remove'), 'K2 X-Empty-Test remove');
   const afterRemove = await fetchEchoHeaders(pageB, '/headers');
   record('K2: send-empty는 빈 값 전송, remove는 헤더 없음',
     sentEmpty['x-empty-test'] === '' && afterRemove['x-empty-test'] === undefined,
@@ -789,7 +895,13 @@ try {
       [hdr({ id: 'm1', name: 'Accept-Language', value: 'ko', mode: 'append' })]),
   ]);
   await pollSessionRuleCount(sw, 1);
-  const appended = (await fetchEchoHeaders(pageB, '/headers'))['accept-language'];
+  await pollSessionRuleMatch(
+    sw, headerOpLive('Accept-Language', (h) => h.operation === 'append' && h.value === 'ko'),
+    'K3 Accept-Language append=ko');
+  const appended = (await pollUntil(
+    () => fetchEchoHeaders(pageB, '/headers'),
+    (h) => /ko/.test(h['accept-language'] ?? ''),
+  ))['accept-language'];
   record('K3: 허용 목록 요청 헤더 append가 기존 값에 누적', /ko/.test(appended ?? '') && (appended ?? '').includes(','),
     `accept-language=${appended}`);
 
@@ -1025,10 +1137,15 @@ try {
       [modBase('cookie', { name: 'smoke_sid', value: 'xyz', mode: 'append', emptyMeans: 'remove' })]),
   ]);
   await pollSessionRuleCount(sw, 1);
-  const cookieEcho = await pageB.evaluate(async () => {
-    const res = await fetch('/setcookie', { cache: 'no-store' });
-    return res.json();
-  });
+  await pollSessionRuleMatch(
+    sw, headerOpLive('Cookie', (h) => (h.value ?? '').includes('smoke_sid=xyz')), 'M1 Cookie smoke_sid=xyz');
+  const cookieEcho = await pollUntil(
+    () => pageB.evaluate(async () => {
+      const res = await fetch('/setcookie', { cache: 'no-store' });
+      return res.json();
+    }),
+    (v) => /smoke_sid=xyz/.test(v?.cookie ?? ''),
+  );
   record('M1: Request Cookie append가 Cookie 헤더에 반영', /smoke_sid=xyz/.test(cookieEcho.cookie ?? ''),
     `cookie=${cookieEcho.cookie}`);
 
@@ -1038,13 +1155,18 @@ try {
       [modBase('set-cookie', { value: 'injected=1; Path=/', mode: 'append', emptyMeans: 'remove' })]),
   ]);
   await pollSessionRuleCount(sw, 1);
+  await pollSessionRuleMatch(
+    sw, headerOpLive('Set-Cookie', (h) => (h.value ?? '').includes('injected=1')), 'M2 Set-Cookie injected=1');
   // 브라우저는 fetch 응답의 Set-Cookie를 JS에 숨기므로, 실제 쿠키가 설정됐는지
   // document.cookie로 확인한다 (DNR이 append한 Set-Cookie를 브라우저가 처리).
-  const docCookie = await pageB.evaluate(async () => {
-    await fetch('/headers', { cache: 'no-store' });
-    await new Promise((r) => setTimeout(r, 100));
-    return document.cookie;
-  });
+  const docCookie = await pollUntil(
+    () => pageB.evaluate(async () => {
+      await fetch('/headers', { cache: 'no-store' });
+      await new Promise((r) => setTimeout(r, 100));
+      return document.cookie;
+    }),
+    (v) => /injected=1/.test(v ?? ''),
+  );
   record('M2: Set-Cookie 응답 헤더 주입 → 브라우저 쿠키 설정', /injected=1/.test(docCookie),
     `document.cookie=${docCookie}`);
 
@@ -1067,10 +1189,17 @@ try {
       [modBase('cookie', { name: 'session', value: 'new', mode: 'override', emptyMeans: 'remove' })]),
   ]);
   await pollSessionRuleCount(sw, 1);
-  const overridden = (await pageB.evaluate(async () => {
-    const res = await fetch('/setcookie', { cache: 'no-store' });
-    return res.json();
-  })).cookie;
+  // 이 자리가 흔들림의 진원이었다 — 개수 1 → 1이라 배리어가 M2의 규칙 세트로 즉시 만족돼
+  // 아직 규칙이 안 걸린 `existing=preset`(브라우저 원본값)을 관측했다.
+  await pollSessionRuleMatch(
+    sw, headerOpLive('Cookie', (h) => h.value === 'session=new'), 'M2b Cookie=session=new');
+  const overridden = (await pollUntil(
+    () => pageB.evaluate(async () => {
+      const res = await fetch('/setcookie', { cache: 'no-store' });
+      return res.json();
+    }),
+    (v) => v?.cookie === 'session=new',
+  )).cookie;
   record('M2b: Cookie override가 기존 Cookie 헤더를 통째 교체', overridden === 'session=new',
     `cookie=${overridden}`);
 
@@ -1080,6 +1209,10 @@ try {
       [modBase('cookie', { name: 'anything', value: '', mode: 'override', emptyMeans: 'remove' })]),
   ]);
   await pollSessionRuleCount(sw, 1);
+  // 음성 단언(헤더 부재)이라 **부재를 폴링하면 안 된다** — 새 시드의 remove 연산이 살아
+  // 있음을 양성 확인한 뒤 한 번만 관측한다.
+  await pollSessionRuleMatch(
+    sw, headerOpLive('Cookie', (h) => h.operation === 'remove'), 'M2c Cookie remove');
   const removedCookie = (await pageB.evaluate(async () => {
     const res = await fetch('/setcookie', { cache: 'no-store' });
     return res.json();
@@ -1094,11 +1227,18 @@ try {
       [modBase('set-cookie', { value: 'replaced=1; Path=/', mode: 'override', emptyMeans: 'remove' })]),
   ]);
   await pollSessionRuleCount(sw, 1);
-  const afterScOverride = await pageB.evaluate(async () => {
-    await fetch('/withcookie', { cache: 'no-store' });
-    await new Promise((r) => setTimeout(r, 100));
-    return document.cookie;
-  });
+  await pollSessionRuleMatch(
+    sw, headerOpLive('Set-Cookie', (h) => (h.value ?? '').includes('replaced=1')), 'M2d Set-Cookie replaced=1');
+  // 양성(replaced=1)을 폴링하고 음성(!server_cookie=base)은 **같은 응답에서** 단언한다 —
+  // 음성만 따로 폴링하면 이전 규칙 세트가 그 조건을 즉시 만족시킨다.
+  const afterScOverride = await pollUntil(
+    () => pageB.evaluate(async () => {
+      await fetch('/withcookie', { cache: 'no-store' });
+      await new Promise((r) => setTimeout(r, 100));
+      return document.cookie;
+    }),
+    (v) => /replaced=1/.test(v ?? ''),
+  );
   record('M2d: Set-Cookie override가 서버 Set-Cookie를 대체',
     /replaced=1/.test(afterScOverride) && !/server_cookie=base/.test(afterScOverride),
     `document.cookie=${afterScOverride}`);
@@ -1110,6 +1250,9 @@ try {
       [modBase('set-cookie', { value: '', mode: 'override', emptyMeans: 'remove' })]),
   ]);
   await pollSessionRuleCount(sw, 1);
+  // 순수 음성 단언 — 새 시드의 Set-Cookie remove가 살아 있음을 양성 확인한 뒤 한 번만 관측.
+  await pollSessionRuleMatch(
+    sw, headerOpLive('Set-Cookie', (h) => h.operation === 'remove'), 'M2e Set-Cookie remove');
   const afterScBlock = await pageB.evaluate(async () => {
     await fetch('/withcookie', { cache: 'no-store' });
     await new Promise((r) => setTimeout(r, 100));
@@ -1128,10 +1271,19 @@ try {
       })]),
   ]);
   await pollSessionRuleCount(sw, 1);
-  const landed = await pageB.evaluate(async () => {
-    const res = await fetch('/redir-src?q=1', { cache: 'no-store', redirect: 'follow' });
-    return res.text();
-  });
+  // 리다이렉트는 헤더 연산이 아니다 — 이번 시드의 치환 대상으로 내용을 확인한다.
+  await pollSessionRuleMatch(
+    sw,
+    (rules) => rules.some((r) =>
+      r.action?.type === 'redirect' && /redir-dst/.test(r.action?.redirect?.regexSubstitution ?? '')),
+    'M4 redirect → /redir-dst');
+  const landed = await pollUntil(
+    () => pageB.evaluate(async () => {
+      const res = await fetch('/redir-src?q=1', { cache: 'no-store', redirect: 'follow' });
+      return res.text();
+    }),
+    (v) => /\/redir-dst\?q=1/.test(v ?? ''),
+  );
   record('M4: Redirect regex 캡처 그룹 치환', /\/redir-dst\?q=1/.test(landed), `landed=${landed}`);
 
   // M4b: 새 UI 경로(확장 편집)로 치환·패턴 편집 → 실제 리다이렉트 반영 (슬라이스 05)
@@ -2311,13 +2463,31 @@ try {
    */
   const activeAccent = async (scheme) => {
     await popup.emulateMedia({ colorScheme: scheme });
-    await popup.waitForTimeout(150);
+    // 준비 배리어 — `emulateMedia`는 즉시 반영되지 않는다. 앱이 matchMedia를 받아 루트
+    // `data-theme`을 실제로 뒤집은 뒤에야 `--primary`도 칠해진 색도 그 테마의 값이 된다.
+    // `data-theme`은 아래 단언 어디에도 쓰이지 않으므로 이 대기가 단언을 약화시키지 않는다
+    // (고정 대기를 지우면서 이 구간이 무대기가 됐던 것이 실제 실패 원인이었다).
+    await pollUntil(
+      () => popup.evaluate(() => document.documentElement.dataset.theme ?? ''),
+      (t) => t === scheme,
+      5000,
+      50,
+    );
+    // 켜져 있는 프로필의 토글 스위치 — data-[checked]로 accent가 칠해지는 대표 컨트롤.
+    const swEl = popup.locator('[data-checked]').first();
+    const shown = await swEl.waitFor({ timeout: 5000 }).then(() => true, () => false);
+    // 고정 150ms 대기는 toggle-switch의 `transition-colors`(Tailwind 기본 150ms)와 정확히
+    // 겹쳐 **전이 중간 프레임**을 표본으로 삼았다. 안정될 때까지만 기다린다 — 기댓값을
+    // 향해 폴링하지 않으므로 아래 단언 3개의 강도는 그대로다. 제품(transition-colors)은
+    // 고치지 않는다.
+    const swBg = shown
+      ? await pollStable(
+          () => swEl.evaluate((el) => getComputedStyle(el).backgroundColor),
+          `N34b ${scheme} switch background`)
+      : '';
+    // 색이 안정된 **뒤에** 읽는다 — 같은 테마의 값이어야 둘을 비교하는 의미가 있다.
     const rootPrimary = await popup.evaluate(() =>
       getComputedStyle(document.documentElement).getPropertyValue('--primary').trim());
-    // 켜져 있는 프로필의 토글 스위치 — data-[checked]로 accent가 칠해지는 대표 컨트롤.
-    const sw = popup.locator('[data-checked]').first();
-    const shown = await sw.waitFor({ timeout: 5000 }).then(() => true, () => false);
-    const swBg = shown ? await sw.evaluate((el) => getComputedStyle(el).backgroundColor) : '';
     return { rootPrimary, swBg, shown };
   };
   const accLight = await activeAccent('light');

@@ -44,6 +44,15 @@ export interface BackgroundDeps {
    */
   readState(): Promise<StoredStateRead>;
   persistState(state: StoredState): Promise<void>;
+  /**
+   * 검증을 통과한 v1→v2를 권위 저장소에 굳힌다 (R-3). 이미 v2면 아무것도 쓰지 않고 `false`.
+   *
+   * **재조정 바깥**에서 한 번만 도는 것이 이 dep의 존재 이유다(티켓 14). 커밋이 읽기 경로
+   * (`loadState` = `loadSnapshot`) 안에 있으면 그 `storage.local` 쓰기가 `onStateChanged`를
+   * 때려 새 세대를 만들고, 쓰기를 수행한 그 세대 자신이 post-loadSnapshot 가드에서 물러나
+   * `apply`(=`replaceSessionRules`)를 부르지 못한다 — 규칙이 저장소 왕복 한 번 뒤로 밀린다.
+   */
+  commitMigration(): Promise<boolean>;
   publishSummary(summary: StatusSummary): Promise<void>;
   queryTabInfos(): Promise<TabInfo[]>;
   /** 대상 저장소는 상태의 sync 스위치가 정한다 — 어댑터는 받은 곳에 쓴다 (티켓 07). */
@@ -275,6 +284,18 @@ export function bootstrap(deps: BackgroundDeps): void {
   });
 
   // SW가 깨어날 때마다 저장소 기준으로 수렴 + 디바운스 중 유실된 백업 catch-up.
-  converge();
-  scheduleBackup();
+  //
+  // 마이그레이션 커밋은 재조정 **바깥**에서 한 번만 — loadSnapshot 안에서 쓰면 그 쓰기가
+  // 자기 세대를 무효화해 apply가 통째로 한 왕복 밀린다(티켓 14). 커밋 실패는 삼키지 않고
+  // 드러내되 수렴은 계속한다 — 저장소가 v1로 남아도 규칙은 걸려야 한다.
+  //
+  // MV3: 이벤트 리스너는 위에서 이미 서비스워커 첫 턴에 동기 등록됐다. 커밋은 그 뒤에
+  // 돌므로 `bootstrap()` 자체를 await 뒤로 미루지 않는다.
+  void deps
+    .commitMigration()
+    .catch((error: unknown) => deps.logError('migration commit failed', error))
+    .finally(() => {
+      converge();
+      scheduleBackup();
+    });
 }

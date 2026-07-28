@@ -9,6 +9,7 @@ function fakeDeps(overrides: Partial<BackgroundDeps> = {}): BackgroundDeps {
     loadState: async () => createDefaultState(),
     readState: async () => ({ status: 'ok', state: createDefaultState() }),
     persistState: async () => {},
+    commitMigration: async () => false,
     publishSummary: async () => {},
     queryTabInfos: async () => [],
     performBackup: async () => undefined,
@@ -406,5 +407,72 @@ describe('background bootstrap', () => {
     expiryAlarm();
     await flush();
     expect(persistCalls).toBeGreaterThan(before);
+  });
+
+  /*
+   * 마이그레이션 커밋은 **재조정 바깥에서** 한 번만 돈다 (티켓 14) — 메커니즘 잠금.
+   *
+   * 커밋이 loadSnapshot 안(=loadState)에서 일어나면 그 storage 쓰기가 onStateChanged를 때려
+   * 새 세대를 만들고, 쓰기를 수행한 그 세대 자신이 post-loadSnapshot 가드에서 물러나
+   * apply(replaceSessionRules)를 부르지 못한다 — 규칙이 저장소 왕복 한 번 뒤로 밀린다.
+   * 스모크가 시드 직후 관측하면 "수정이 아직 안 걸린" 상태를 본다(M2b `cookie=existing=preset`).
+   * 표본 수와 무관하게 잠그려면 그 순서를 여기서 못 박아야 한다: 커밋이 첫 apply보다 앞서고,
+   * 커밋이 발화시킨 onStateChanged에도 apply가 시드 프로필의 규칙으로 실제 일어난다.
+   */
+  it('v1 커밋이 첫 converge 앞에서 돌고, 그 쓰기의 onStateChanged에도 규칙이 걸린다', async () => {
+    const seeded: StoredState = {
+      ...createDefaultState(),
+      profiles: [
+        {
+          id: 'p1',
+          name: 'Legacy',
+          active: true,
+          shortLabel: 'L',
+          color: '#2563eb',
+          modifications: [
+            {
+              kind: 'request-header',
+              id: 'm1',
+              name: 'X-Migrated',
+              value: 'yes',
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+              enabled: true,
+            },
+          ],
+        },
+      ],
+    };
+    let stateChanged = () => {};
+    const order: string[] = [];
+    const applied: unknown[][] = [];
+    let persistCalls = 0;
+    bootstrap(
+      fakeDeps({
+        loadState: async () => seeded,
+        // 실제 커밋은 storage.local.set이라 onStateChanged가 뒤따른다 — 그 왕복을 그대로 흉낸다.
+        commitMigration: async () => {
+          order.push('commit');
+          stateChanged();
+          return true;
+        },
+        onStateChanged: (cb) => {
+          stateChanged = cb;
+        },
+        persistState: async () => {
+          persistCalls += 1;
+        },
+        replaceSessionRules: async (rules) => {
+          order.push('apply');
+          applied.push(rules);
+        },
+      }),
+    );
+    await flush();
+    expect(order[0]).toBe('commit'); // 커밋이 첫 apply보다 앞선다
+    expect(order).toContain('apply'); // 세대 자기무효화로 apply가 통째로 스킵되지 않는다
+    expect(JSON.stringify(applied.at(-1))).toContain('X-Migrated'); // 시드 프로필에서 컴파일된 규칙
+    expect(persistCalls).toBe(0); // 재조정 스냅샷 경로에서는 아무것도 쓰지 않는다
   });
 });

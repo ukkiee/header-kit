@@ -6,6 +6,7 @@ import type { StoredState } from '@/core/schema';
 import { performBackup, readBackupKV, removeBackupKeys } from '@/platform/backupStore';
 import {
   clearSummary,
+  commitMigration,
   loadState,
   readState,
   onCommand,
@@ -95,6 +96,7 @@ export default defineBackground(() => {
     loadState,
     readState,
     persistState,
+    commitMigration,
     publishSummary,
     queryTabInfos,
     performBackup,
