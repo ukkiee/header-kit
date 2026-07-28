@@ -822,3 +822,46 @@ N41f, 3파일 ≈25줄. 티켓 AC7이 선례로 든 `'II'` 대체 경로는 `smo
 사용자가 고른 것이다. **결정 주체는 사용자, `ESCALATION.md`의 `Resolved:` 줄을 타이핑한 주체는
 컨덕터다.** 이 브랜치의 선례(`862478e`)와 같은 형태이며, 재개하는 컨덕터가 그 줄을 사람이 직접
 쓴 것으로 오인하지 않도록 여기에 적는다.
+
+### 인간 결정 집행 — 티켓 13 R-1·R-4 적용 2026-07-28T07:28Z
+
+`### ESCALATION guard-would-trip 2026-07-28T06:30:00Z` 가 남긴 accept 2행의 **집행** 기록이다.
+그 정지 블록은 지우지 않는다 — **기계가 한 일의 기록으로 그대로 유효하며**, 그 시점에 두 행은
+실제로 적용되지 않았다. 아래 두 행은 사람이 `guard:test-touch` 를 명시 승인한 뒤
+(`### 인간 결정 — 티켓 13 R-1 test-touch 승인 2026-07-28T06:36:23Z`) 새 루프 시작(9/10)에서
+**각각 별개의 커밋으로** 집행한 결과다.
+
+R-1 [HUMAN CR-1 overrides cr:standard] accept — Standards: ruleCount이 한 모듈 안에서 서로 다른 두 가지를 뜻한다 (CONTEXT.md:13 hard violation); -/-; src/core/summary.ts:76; res:none; blocking. 인간 승인 2026-07-28T06:36:23Z — `src/core/summary.test.ts` 5줄(:100 :103 :109 :112 :133)의 1:1 필드 개명을 명시 승인했고, 브리프에는 그 승인을 **좁게** 옮겼다(순-라인 0, 단언 삭제·skip·완화·재기준화 금지, 다른 테스트 파일 금지, 그 이상이면 정지). applied c58b141 (3 files, 18 lines, +9/−9); suite green→green
+R-4 [HUMAN CR-1 overrides cr:defect] accept — Spec: 일시정지가 아이콘과 색으로만 표시되고 보이는 텍스트가 없다; -/-; src/features/profiles/profile-dot.tsx:179; res:none; non-blocking. 픽스 에이전트가 그려 둔 막히지 않는 경로 그대로 — Pause 아이콘 유지, 기존 `ariaStatePaused`(en `paused` / ko `정지`) 재사용, 이름과 표식 사이에 배치, 신규 스모크 단언 N41f. 티켓 AC7의 `'II'` 대체 경로는 `smoke.mjs:3850-3853`의 N41e를 깨뜨리므로 쓰지 않았다. applied 05a9b76 (2 files, 62 lines, 순수 추가); suite green→green
+
+**두 커밋 각각에 대해 `diff-guard --mode fix` 를 돌렸다.** R-1: 3파일 18줄, `test_net_lines 0`,
+`test_weakening false`, `suite_tampered false`, `blast_radius_ok true`, `untouchable_touched []`.
+R-4: 2파일 62줄, `test_net_lines +44`(순수 추가), 같은 네 플래그 모두 통과.
+`test_net_lines 0` 은 사람의 승인이 걸린 바로 그 수치다 — 그 편집은 치환이지 제거가 아니다.
+
+**예측과 다르게 나온 것 둘, 숨기지 않고 적는다.**
+
+1. **R-4는 3파일이 아니라 2파일이었다.** 사전 분석은 `i18n.ts` 편집을 포함해 3파일 ≈25줄로
+   봤으나, `ariaStatePaused` 가 이미 양쪽 카탈로그에 있어 카탈로그 편집이 필요 없었다.
+   실제 62줄은 대부분 신규 스모크 단언 N41f 다.
+2. **픽스 에이전트가 `ProfileRowMark` 안쪽 배치를 스스로 기각했다.** 그 변형은 기존 7줄을
+   재들여쓰기해 커밋을 86줄(추가+삭제)로 만들어 `≤80` 가드를 넘겼다. 커밋 전에 잡아
+   `ProfileSelectRow` 쪽 배치로 바꿨고 최종본은 아무것도 삭제하지 않는다.
+
+**기준 재감사.** 첫 감사는 `6a7ebda` 단독을 보고 9/9 met 을 냈으나 그 뒤 코드가 두 번 움직였고,
+릴리스 라운드 2는 검증 전용이라 여기서 놓친 기준 회귀를 잡을 라운드가 남지 않는다. 그래서
+컨덕터가 전체 티켓 범위(`a262809...HEAD`)로 **신선한 감사자에게 재감사를 발주**했다. 결과
+**8 met · 1 not-verifiable · 0 not-met, verdict pass**.
+
+- 재감사는 **AC2 분쟁을 독립적으로 리뷰어 쪽으로 판정했다** — AC2 가 접근성 이름을 `도` 로 따로
+  열거하므로 앞 절의 "텍스트"는 접근성 이름일 수 없다는 읽기가 옳고, R-4 가 그것을 충족한다.
+  즉 R-4 는 실재 결함의 픽스였고, 첫 감사자의 "criterion 2 met" 이 뒤집힌 것은 **라운드가 일한
+  결과**다.
+- 기준 9("모든 게이트 green")는 첫 감사에서 met, 재감사에서 **not-verifiable** 로 바뀌었다.
+  읽기 전용 감사자가 게이트를 돌릴 수 없기 때문이며 not-met 이 아니다. 그 실체는 컨덕터 자체
+  스위트가 답한다 — exit 0, vitest 372/372, smoke 128/128(127→128, 증가분이 정확히 N41f),
+  typecheck exit 0.
+
+**이 두 행은 기계 검증 대상이 아니다.** `verify-ledger` 는 `### <kind> r<n>` 게이트 섹션만
+게이트 아티팩트에 대해 재도출하며, `/code-review` 는 아티팩트를 만들지 않는다. 티켓 단위 CR-1
+행은 **감사 가능하되 재계산되지 않는다** — 최종 보고서에서 "전량 기계 검증"으로 묶지 말 것.
