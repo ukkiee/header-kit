@@ -763,3 +763,32 @@ R-4 [AUTO CR-1 cr:defect] accept — Spec: 일시정지가 아이콘과 색으�
 R-5 [AUTO CR-1 cr:smell] defer — Spec: 규칙 수가 aria-hidden이라 어떤 보조 채널로도 닿지 않는다; -/-; src/features/profiles/profile-dot.tsx:174; res:none; R-2와 **같은 결함을 다른 축에서 본 것**이며 CR-1이 "두 보고서의 모든 finding은 정확히 한 행씩"을 요구하므로 별도 행으로 남긴다. Spec 축이 low로 매기고 "티켓이 요구한 것은 접근 가능한 이름이 정지를 나르는 것뿐이므로 문언 안이며, story 38 의도에 대한 간극으로 표시할 뿐 위반이 아니다"라고 스스로 한정했다. follow-up docs/reviews/wide-ui-redesign/followups.md#T13-R-2 (R-2와 동일 항목)
 R-6 [AUTO CR-1 cr:smell] defer — Spec: "active 불변" core 단언이 공허하다; -/-; src/core/summary.test.ts:135; res:none; expect(target.active).toBe(true)는 순수·비변이 함수 호출 뒤라 결코 실패할 수 없다. cr:missing-seam-test를 검토했으나 그 규칙의 문언은 "스펙이 지명한 시임에 이 diff의 테스트가 **없다**"이고 여기서는 시임에 4개 케이스가 실제로 있다 — 규칙을 확장 적용하지 않고 CR-1의 잔여 규칙("어떤 규칙에도 맞지 않으면 판단 호출로서 cr:smell")을 따른다. Spec 축 스스로 "요구는 전체적으로 덮여 있고(스모크의 activeWhilePaused === true가 하중을 받는 판) core 쪽 항목이 일을 안 할 뿐"이라고 했다. follow-up docs/reviews/wide-ui-redesign/followups.md#T13-R-6
 R-7 [AUTO CR-1 cr:out-of-diff] defer — Standards: ui-diag first-paint 수치가 재기준선 없이는 판정 불가다; -/-; docs/reviews/ui-polish/perf-baseline.md:-; res:none; 코드 쪽은 **오탐으로 확인됐다** — summary.ts:1-3이 전부 import type이라 eager한 profile-sidebar.tsx에서 런타임 import로 바꿔도 의존성 없는 모듈을 끌 뿐이고, Pause는 이미 lucide를 import하는 파일에 얹히며, 행당 작업은 .filter().length 한 번이다. 남은 것은 절차다: perf-baseline.md의 caveat는 실재하나("유효한 비교는 같은 기기에서 이 기준선 대비뿐이다"; 기준선 darwin/arm64 M5 Pro, 현재 x86_64 i7-10700K) 그 문서는 **면제가 아니라 처방**을 적는다 — "기기가 바뀌면 변경 전 빌드로 되돌려 다시 떠야 한다". 아무도 재기준선을 뜨지 않았으므로 276 ms는 *설명된* 것이 아니라 *무의미한* 것이고, 구현자와 기준 감사자가 쓴 "기기 차이"는 문서가 재측정을 요구하는 자리에서의 단정이다. 이 티켓이 건드리지 않은 자산의 절차 결함이라 cr:out-of-diff. follow-up docs/reviews/wide-ui-redesign/followups.md#T13-R-7
+
+### ESCALATION guard-would-trip 2026-07-28T06:30:00Z
+
+티켓 13의 리뷰 픽스 서브에이전트가 accept 2행(R-1·R-4)을 적용하려다 `guard:test-touch`로
+**커밋 전에** 멈췄다. 트리는 `04d737c`에서 움직이지 않았고 스위트는 그린이다(진입 확인 exit 0,
+127/127). `guard-abort`가 아니라 `guard-would-trip`인 이유가 그것이다 — 원장에 sha가 하나도
+붙지 않았다.
+
+**미적용 2행 (accept로 판정됐으나 적용되지 않음).**
+
+R-1 [AUTO CR-1 cr:standard] accept — **not applied (guard:test-touch)** — ruleCount이 한 모듈 안에서
+서로 다른 두 가지를 뜻한다; src/core/summary.ts:76. 최소 수정은 3파일 8줄이나 그중 5줄이
+`src/core/summary.test.ts`(:100 :103 :109 :112 :133)다. 필드 1:1 개명이라 **약화가 아니고**
+diff-guard의 순-라인 검사에도 걸리지 않지만 **순수 추가도 아니어서** 서브에이전트 측 가드가 금지한다.
+우회로 없음이 확인됐다: 별칭을 남기면 "두 뜻 공존"이라는 finding 자체가 안 풀리고, 함수를 새 모듈로
+옮겨도 테스트의 `.ruleCount` 접근은 그대로 깨진다.
+
+R-4 [AUTO CR-1 cr:defect] accept — **not applied (guard:blast-radius, 동반 커밋)** — 일시정지가
+아이콘과 색으로만 표시되고 보이는 텍스트가 없다; src/features/profiles/profile-dot.tsx:179.
+서브에이전트는 이 행에 대해 `needs-decision`이 아니라 **결함 확정** 판정을 냈고, 그 판정은 기준
+감사자와 충돌한다: 티켓 AC2가 접근성 이름을 `도`로 따로 열거하므로 앞 절의 "텍스트"가 접근성
+이름일 수 없다(그러면 한 기준이 같은 채널을 두 번 요구한다). 막히지 않는 경로도 지도까지 그렸다 —
+아이콘 유지 + 기존 `ariaStatePaused` 낱말을 이름과 표식 사이에 + 신규 N41f, 3파일 ≈25줄로
+**단독이면 가드 안에 든다.** 한 커밋에 R-1과 함께 담으면 5파일이라 blast-radius까지 밟는다.
+
+**defer 4행**(R-2·R-3·R-5·R-6)과 R-7은 `followups.md` `## 티켓 13 /code-review r1 이월`에 있고
+이 정지와 무관하다. 티켓 13은 **닫히지 않았다.** 릴리스 라운드 2는 실행되지 않았다.
+
+선례: 티켓 09 fix R-7, 티켓 10 R-3 — 같은 형태의 test-touch가 사람의 명시 승인으로 풀렸다.
