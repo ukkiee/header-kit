@@ -645,18 +645,54 @@ _policy CR-1 · feature-loop/policies/ticket-review-cr1.md · sha256 27ad2f0313d
 Spec 축과 같은 정상 경로 추론으로 기준 3을 met으로 통과시켰다 — 축을 분리해 두고 재순위화하지
 않는 이유가 이것이다.
 
-R-1 [AUTO CR-1 cr:defect] accept — Standards(blocking): 스윕이 경계되지 않는다 — snapshotId가 빈 문자열이면 접두사가 bk:로 붕괴해 매니페스트 키와 다른 모든 스냅샷 청크를 한 번에 지운다; -/-; src/core/backup.ts:360; res:none; 사용자 데이터 손실 경로이고, 주석이 선언한 불변식을 코드가 강제하지 않는 전형이다. 빈 id 및 ':'를 품은 id에 빈 plan을 돌려주는 가드가 필요하다
+R-1 [AUTO CR-1 cr:defect] accept — Standards(blocking): 스윕이 경계되지 않는다 — snapshotId가 빈 문자열이면 접두사가 bk:로 붕괴해 매니페스트 키와 다른 모든 스냅샷 청크를 한 번에 지운다; -/-; src/core/backup.ts:360; res:none; 사용자 데이터 손실 경로이고, 주석이 선언한 불변식을 코드가 강제하지 않는 전형이다. 빈 id 및 ':'를 품은 id에 빈 plan을 돌려주는 가드가 필요하다; fixed 8e823e4 (3 files, 41 lines); suite green→green 368/368 · smoke 126/126
 R-2 [AUTO CR-1 cr:smell] defer — Standards: 반쯤 지워진 상태의 보고가 거꾸로다 — 매니페스트가 먼저 커밋되므로 removeBackupKeys가 던지면 행은 이미 목록에서 사라졌는데 배너는 "삭제하지 못했다"고 말한다; -/-; src/platform/backupStore.ts:116; res:none; 리뷰어가 데이터 순서 자체는 옳고 planBackup의 preRemoves가 고아 청크를 수거함을 확인했다 — UI 메시지의 혼선이지 데이터 결함이 아니다. follow-up docs/reviews/wide-ui-redesign/followups.md#T12-R-2
-R-3 [AUTO CR-1 cr:defect] accept — Standards: remaining이 공유 매니페스트 키를 이 백업의 잔여 키 수에 포함시킨다; -/-; src/core/backup.ts:386; res:none; snapshotDeleteRemaining이 "{count} key(s) of this backup are still stored"로 노출하는 숫자가 틀린다 — 공유 키는 그 백업의 키가 아니다
+R-3 [AUTO CR-1 cr:defect] accept — Standards: remaining이 공유 매니페스트 키를 이 백업의 잔여 키 수에 포함시킨다; -/-; src/core/backup.ts:386; res:none; snapshotDeleteRemaining이 "{count} key(s) of this backup are still stored"로 노출하는 숫자가 틀린다 — 공유 키는 그 백업의 키가 아니다; **not applied (blocked at test-weakening)** — 픽스가 기존 단언 `expect(stillListed.remaining).toContain(BACKUP_MANIFEST_KEY)`(src/core/backup.test.ts:352, 이번 시도에서 쓰지 않은 테스트)의 재기준화를 요구하고, 유일한 대안인 src/platform/backupStore.ts:129에서의 필터링은 네 번째 파일이라 guard:blast-radius에 걸린다. 커밋 sha 없음
 R-4 [AUTO CR-1 cr:smell] defer — Standards: 주석이 실제보다 강한 안전 성질을 주장한다 — "다른 파괴적 동작을 켜는 것이 앞의 확인을 그대로 취소한다"는 행 사이에서만 참이고 confirmingClear·confirmingReset은 별개 불리언이라 파괴적 확인 셋이 동시에 무장될 수 있다; -/-; src/features/backup/backup-panel.tsx:72; res:none; 동작 결함이 아니라 주석의 과장이다. follow-up …#T12-R-4
 R-5 [AUTO CR-1 cr:smell] defer — Standards(smell, Duplicated Code): removeSnapshot과 restore가 바이트 동일한 arm-then-run 서두를 공유하고 파일이 확인 메커니즘 셋을 이고 있다; -/-; src/features/backup/backup-panel.tsx:173; res:none; follow-up …#T12-R-5
-R-6 [AUTO CR-1 cr:defect] accept — Standards: removeSnapshot만 setNotice(null)을 부르지 않아 "Cloud backups deleted." 성공 알림이 새 삭제 실패 배너 아래 남는다; -/-; src/features/backup/backup-panel.tsx:180; res:none; R-9와 같은 결함을 Standards 축에서 본 것 — 한 번의 픽스가 두 행을 닫는다
+R-6 [AUTO CR-1 cr:defect] accept — Standards: removeSnapshot만 setNotice(null)을 부르지 않아 "Cloud backups deleted." 성공 알림이 새 삭제 실패 배너 아래 남는다; -/-; src/features/backup/backup-panel.tsx:180; res:none; R-9와 같은 결함을 Standards 축에서 본 것 — 한 번의 픽스가 두 행을 닫는다; fixed 8e823e4 (3 files, 41 lines); suite green→green 368/368 · smoke 126/126
 R-7 [AUTO CR-1 cr:smell] defer — Standards(smell, Middle Man): DeleteSnapshotResult = ClearCloudResult는 타입이 아니라 이름만 더하고, 순서 근거가 그 별칭에 docblock돼 있어 정작 그것이 규율하는 deleteBackupSnapshot에서는 보이지 않는다; -/-; src/platform/backupStore.ts:105; res:none; follow-up …#T12-R-7
 R-8 [AUTO CR-1 cr:smell] defer — Spec(b, 범위 이탈): 티켓 16행이 "일괄 클라우드 백업 삭제(스펙 R-1)는 이 티켓에서 바꾸지 않는다"고 울타리를 쳤는데 clearFailureDetail이 verifiedDeleteDetail로 개명·재서명되고 deleteCloud 호출부가 수정됐다; -/-; src/features/backup/backup-panel.tsx:134; res:none; 동작은 동일(같은 키 전달)하고 기준 감사도 R-1/R-3 경로 코드가 기준선과 바이트 동일함을 확인했다. 규칙 표에 scope-creep 항목이 없어 판단 호출(CR-1 28-30행). follow-up …#T12-R-8
-R-9 [AUTO CR-1 cr:defect] accept — Spec(c1): 티켓 14행 "지우지 못한 것이 지워진 것처럼 보이지 않는다"를 위반한다 — 일괄 삭제 후 남은 성공 알림이 스냅샷 삭제 실패 배너 옆에 그대로 있다; -/-; src/features/backup/backup-panel.tsx:173; res:none; 티켓이 명시적으로 요구한 조항이라 판단 호출이 아니라 결함이다. R-6과 동일 결함, 한 번의 픽스가 둘을 닫는다
+R-9 [AUTO CR-1 cr:defect] accept — Spec(c1): 티켓 14행 "지우지 못한 것이 지워진 것처럼 보이지 않는다"를 위반한다 — 일괄 삭제 후 남은 성공 알림이 스냅샷 삭제 실패 배너 옆에 그대로 있다; -/-; src/features/backup/backup-panel.tsx:173; res:none; 티켓이 명시적으로 요구한 조항이라 판단 호출이 아니라 결함이다. R-6과 동일 결함, 한 번의 픽스가 둘을 닫는다; fixed 8e823e4 (3 files, 41 lines); suite green→green 368/368 · smoke 126/126
 R-10 [AUTO CR-1 cr:smell] defer — Spec(c2): 첫 삭제 클릭 직후 정착 창 없이 armed = await bkView(snapArea)를 읽어, 클릭이 실제로 지웠다면 비동기 쓰기가 안 내려앉아 armedNothingRemoved가 그냥 통과한다; -/-; scripts/smoke.mjs:-; res:none; deleteArmed가 그 시나리오에서 실패하므로 단독 가드가 아니라 중복 가드다. **이 루프에서 같은 계열(공허해질 수 있는 단언)이 세 번째다** — T14-R-11·T11-R-7과 함께 읽을 것. follow-up …#T12-R-10
 
 라운드 판정: blocking 1건(R-1) → accept 4행(R-1·R-3·R-6·R-9, 이 중 R-6·R-9는 같은 결함), defer 6행,
 reject 0행, escalate 0행. 픽스 1회 통과로 accept를 닫는다. 픽스는 `src/core/backup.ts`,
 `src/core/backup.test.ts`, `src/features/backup/backup-panel.tsx` 셋으로 가드 상한(≤3파일)을 정확히
 소진하므로 네 번째 파일이 필요해지면 `guard-would-trip`으로 멈춰야 한다.
+
+**픽스 결과: 부분 적용 후 `test-weakening` 정지.** R-1·R-6·R-9는 `8e823e4`로 적용됐고 가드를
+전부 통과했다(3파일 41줄, 테스트 순증 +19, blast_radius_ok, untouchable 무접촉). R-3은 적용되지
+않았다 — 아래 ESCALATION 블록이 그 이유와 사람에게 필요한 결정을 담는다.
+
+### ESCALATION test-weakening 2026-07-28T05:03Z
+
+**정지 사유.** 티켓 12의 픽스 서브에이전트가 R-3을 적용하려면 이번 시도에서 자기가 쓰지 않은
+기존 단언을 재기준화해야 했고, `test-weakening`으로 멈췄다. 컨덕터가 파일에서 직접 확인한 사실:
+
+- 문제의 단언 — `src/core/backup.test.ts:352`
+  `expect(stillListed.remaining).toContain(BACKUP_MANIFEST_KEY);`
+- R-3의 주장 — `verifySnapshotDeleted`의 `remaining`이 **공유** 매니페스트 키를 포함하고, 그 수가
+  `snapshotDeleteRemaining`("{count} key(s) of this backup are still stored")으로 사용자에게
+  노출된다. 공유 키는 삭제 대상 백업의 키가 아니므로 숫자가 틀린다.
+- 유일한 대안 — 수를 세는 지점(`src/platform/backupStore.ts:129`)에서 거르기. 그건 **네 번째
+  파일**이라 `guard:blast-radius`(≤3파일)에 걸린다.
+
+**즉 테스트가 리뷰가 결함이라고 부른 바로 그 동작을 고정하고 있다.** 어느 쪽이 옳은지는 기계가
+정할 문제가 아니다 — 테스트가 의도된 계약이면 R-3은 오탐이고, 리뷰가 옳으면 그 테스트는 결함을
+박제한 것이다. 이 판정이 이 정지가 사람에게 묻는 전부다.
+
+**적용된 것 / 적용되지 않은 것.**
+
+- `accept` R-1 — applied `8e823e4`. 빈 id·`:` 포함 id에서 빈 plan을 돌려주는 가드 + 코어 단위
+  테스트 1건(`''`, `'bk:'`, `'sa:0'`). **이것이 blocking 데이터 손실 경로였고 닫혔다.**
+- `accept` R-6 / R-9 — applied `8e823e4`. `removeSnapshot`이 형제 파괴적 동작들처럼
+  `setNotice(null)`을 부른다.
+- `accept` R-3 — **not applied, 커밋 sha 없음.** 위 사유.
+- `defer` R-2·R-4·R-5·R-7·R-8·R-10 — `followups.md` T12-R-* 로 이월됨(정지와 무관).
+
+**되돌리지 않았다.** 적용된 픽스는 커밋돼 있고 개별 검토를 거쳤으며, 무인 상태의 되돌리기는
+검토받지 않은 변경을 하나 더 만드는 일이다. 티켓 12는 **닫지 않았다**.
+
+**전체 스위트는 정지 시점에 green이다** — `8e823e4`에서 컨덕터 독립 실행 exit 0,
+Tests 368 passed (368), smoke 126/126. 즉 이 정지는 깨진 트리가 아니라 판정 요청이다.
