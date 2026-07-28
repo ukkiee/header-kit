@@ -338,6 +338,55 @@ export function verifyBackupsCleared(
   return remaining.length === 0 ? { ok: true } : { ok: false, remaining };
 }
 
+/** 한 스냅샷을 지우는 계획 — 어댑터는 매니페스트 커밋 → 청크 정리 순으로 집행한다. */
+export interface SnapshotDeletePlan {
+  /** 매니페스트에 그 항목이 있었는가 — 없으면 커밋할 것도 없다(멱등 재실행). */
+  found: boolean;
+  /** 그 스냅샷에 속한 키만. 매니페스트 키도 다른 스냅샷의 청크도 여기 들어오지 않는다. */
+  removeKeys: string[];
+  /** 그 항목만 빠진 매니페스트 — 나머지 순서는 그대로다. */
+  manifest: Manifest;
+}
+
+/**
+ * 히스토리 한 행을 지우는 **가장 좁은** 계획 (티켓 12).
+ *
+ * 일괄 클라우드 삭제(R-1)·전체 초기화(R-3)와 다른 동작이다: 지우는 것은 그 스냅샷의
+ * 매니페스트 항목과 그 청크뿐이고, 다른 스냅샷·반대쪽 저장소·같은 구역의 권위 상태(`state`)는
+ * 손대지 않는다. 청크 키는 매니페스트의 `chunkCount`만이 아니라 `bk:<id>:` 접두 전체에서
+ * 모은다 — 손상 스냅샷(중단된 쓰기·유실)은 매니페스트가 세지 않는 잔여 청크를 남기고,
+ * 그것을 두고 오면 "지웠는데 quota는 그대로"가 된다.
+ */
+export function planSnapshotDelete(kv: SyncKV, snapshotId: string): SnapshotDeletePlan {
+  const { snapshots } = readManifest(kv);
+  const entry = snapshots.find((s) => s.id === snapshotId);
+  const prefix = `bk:${snapshotId}:`;
+  const keys = new Set(Object.keys(kv).filter((key) => key.startsWith(prefix)));
+  if (entry) for (const key of chunkKeysOf(entry)) keys.add(key);
+
+  return {
+    found: entry !== undefined,
+    removeKeys: [...keys].sort(),
+    manifest: { snapshots: snapshots.filter((s) => s.id !== snapshotId) },
+  };
+}
+
+/**
+ * 그 스냅샷이 정말 사라졌는지 **다시 읽은 KV로** 확인한다 (티켓 12).
+ *
+ * `verifyBackupsCleared`와 같은 이유로 있다: 지웠다고 믿는 것과 지워진 것은 다르다.
+ * 매니페스트 커밋이나 청크 정리 중 하나만 성공하면 목록에서 사라진 행의 데이터가 남거나,
+ * 데이터는 없는데 행이 남는다. 남은 근거를 그대로 돌려주어 호출부가 성공으로 접지 못하게 한다.
+ */
+export function verifySnapshotDeleted(
+  kv: SyncKV,
+  snapshotId: string,
+): { ok: true } | { ok: false; remaining: string[] } {
+  const plan = planSnapshotDelete(kv, snapshotId);
+  const remaining = [...(plan.found ? [BACKUP_MANIFEST_KEY] : []), ...plan.removeKeys];
+  return remaining.length === 0 ? { ok: true } : { ok: false, remaining };
+}
+
 /** 복원 목록 — 손상 스냅샷도 사유와 함께 표시한다 (조용히 숨기지 않는다). */
 export function listSnapshots(kv: SyncKV): SnapshotStatus[] {
   return readManifest(kv).snapshots.map((entry) => {

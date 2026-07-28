@@ -41,6 +41,8 @@ export const WithSnapshots: Story = {
     }),
     loadCloudPresence: async () => true,
     clearCloud: async () => ({ ok: true }),
+    // 한 행 삭제도 효과다 — 스토리에서는 성공만 흉내 내고 저장소를 만지지 않는다.
+    deleteSnapshot: async () => ({ ok: true }),
   },
 };
 

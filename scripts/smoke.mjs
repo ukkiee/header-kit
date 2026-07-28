@@ -4143,6 +4143,164 @@ try {
       `편집반영=${editReflectsOff}, 편집유지=${editKeptOff}(enabled=${seededAfterEdit?.enabled}), 종류전환유지=${keptAcrossKind}`);
 
   /*
+   * N43: 히스토리 한 행 삭제 (티켓 12, story 36).
+   *
+   * 삭제는 일괄 "클라우드 백업 삭제"(R-1)·전체 초기화(R-3)와 **다른 동작**이다. 그래서
+   * 넷을 함께 본다 — (a) 첫 클릭은 확인만 켜고 아무것도 지우지 않는다, (b) 복원 확인과
+   * 삭제 확인은 서로를 취소한다(확인 중인 행·동작은 한 번에 하나), (c) 확인 클릭 뒤에야
+   * **그 행만** 사라지고 활성 저장소의 매니페스트가 하나 줄며 그 청크 키도 함께 없어진다,
+   * (d) 같은 저장소의 다른 스냅샷과 **반대쪽 저장소**는 그대로다. (a)가 빠지면 오클릭
+   * 하나가 스냅샷을 지우고, (c)·(d)가 빠지면 한 행을 정리하려던 손이 저장소를 통째로 비운
+   * 것을 못 잡는다. 손상 행에도 삭제가 서는지 함께 본다 — 복원이 막힌 스냅샷을 치울 길은
+   * 그것뿐이다.
+   *
+   * **픽스처가 배리어를 겸한다** — 시드가 부른 자동 백업이 착지한 것을 스냅샷 안의 표식으로
+   * 관측한 뒤, 그 스냅샷을 복제해 매니페스트 맨 앞에 놓는다. 맨 앞 항목의 체크섬이 지금
+   * 상태의 페이로드와 같아지므로, 이 시나리오 도중 뒤늦게 발화하는 자동 백업은 planBackup의
+   * skip 경로로 빠져 매니페스트를 건드리지 않는다(개수 단언이 경합하지 않는 이유다).
+   */
+  const SNAP_MARKER = 'SnapDelete';
+  await seedProfiles([
+    baseProfile('p-snapdel', SNAP_MARKER, [hdr({ id: 'm1', name: 'X-Snap-Del', value: 'sd' })]),
+  ]);
+  // 활성 저장소는 저장된 스위치가 정한다 (R-1) — 화면과 같은 곳을 본다.
+  const snapArea = (await sw.evaluate(
+    async () => (await chrome.storage.local.get('state')).state?.syncBackup ?? true,
+  ))
+    ? 'sync'
+    : 'local';
+  const snapOther = snapArea === 'sync' ? 'local' : 'sync';
+
+  const snapLanded = await pollUntil(
+    () =>
+      sw.evaluate(async ([area, marker]) => {
+        const kv = await chrome.storage[area].get(null);
+        const entry = kv['bk:manifest']?.snapshots?.[0];
+        if (!entry) return false;
+        let text = '';
+        for (let i = 0; i < entry.chunkCount; i += 1) {
+          const part = kv[`bk:${entry.id}:${i}`];
+          if (typeof part !== 'string') return false;
+          text += part;
+        }
+        return text.includes(marker);
+      }, [snapArea, SNAP_MARKER]),
+    (landed) => landed === true,
+    55_000,
+    500,
+  );
+  // pollUntil은 타임아웃에 마지막 값을 돌려준다 — 배리어로 쓰려면 반환값을 검사해야 한다.
+  if (snapLanded !== true) {
+    throw new Error(`N43 준비 실패: ${snapArea} 저장소에 시드 스냅샷이 착지하지 않았다`);
+  }
+
+  const seededSnap = await sw.evaluate(async ([area, other]) => {
+    const kv = await chrome.storage[area].get(null);
+    const manifest = kv['bk:manifest'];
+    const newest = manifest.snapshots[0];
+    const writes = {};
+    // 지울 행: 정상 스냅샷의 복제본(같은 청크·체크섬, 다른 키·id).
+    for (let i = 0; i < newest.chunkCount; i += 1) {
+      writes[`bk:del-row:${i}`] = kv[`bk:${newest.id}:${i}`];
+    }
+    const clone = {
+      ...newest,
+      id: 'del-row',
+      createdAt: Date.UTC(2020, 0, 2, 3, 4),
+      profileCount: 7,
+    };
+    // 복원이 막히는 손상 행 — 청크가 아예 없다.
+    const corrupt = {
+      id: 'del-corrupt',
+      createdAt: Date.UTC(2020, 0, 1, 3, 4),
+      chunkCount: 1,
+      checksum: 'deadbeef',
+      profileCount: 9,
+    };
+    writes['bk:manifest'] = { ...manifest, snapshots: [clone, ...manifest.snapshots, corrupt] };
+    await chrome.storage[area].set(writes);
+    // 반대쪽 저장소의 표식 — 이 삭제가 넘보면 안 되는 구역이다.
+    await chrome.storage[other].set({ 'bk:del-other:0': 'other-store-payload' });
+    return { keptId: newest.id };
+  }, [snapArea, snapOther]);
+
+  const bkView = (area) =>
+    sw.evaluate(async (a) => {
+      const kv = await chrome.storage[a].get(null);
+      return {
+        ids: (kv['bk:manifest']?.snapshots ?? []).map((s) => s.id),
+        keys: Object.keys(kv)
+          .filter((k) => k.startsWith('bk:'))
+          .sort(),
+      };
+    }, area);
+
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Show backups' }).click();
+  await ensurePanelOpen(popup, 'Toggle backups');
+  const delRow = popup.locator('li').filter({ hasText: '7 active profiles' }).first();
+  const corruptRow = popup.locator('li').filter({ hasText: '9 active profiles' }).first();
+  await delRow.waitFor({ timeout: 5000 });
+  const corruptDeletable = await corruptRow
+    .getByRole('button', { name: 'Delete backup', exact: true })
+    .isVisible();
+
+  const snapBefore = await bkView(snapArea);
+  const otherBefore = await bkView(snapOther);
+
+  // (a) 첫 클릭은 확인만 켠다 — 저장소는 아직 그대로여야 한다.
+  await delRow.getByRole('button', { name: 'Delete backup', exact: true }).click();
+  const deleteArmed = await delRow
+    .getByRole('button', { name: 'Confirm delete backup', exact: true })
+    .isVisible();
+  const armed = await bkView(snapArea);
+  const armedNothingRemoved = armed.ids.includes('del-row') && armed.keys.includes('bk:del-row:0');
+
+  // (b) 복원 확인을 켜면 삭제 확인이 꺼지고, 다시 삭제를 켜면 복원 확인이 꺼진다.
+  await delRow.getByRole('button', { name: 'Restore backup', exact: true }).click();
+  const restoreArmed = await delRow
+    .getByRole('button', { name: 'Confirm restore', exact: true })
+    .isVisible();
+  const deleteDisarmed =
+    (await delRow.getByRole('button', { name: 'Confirm delete backup', exact: true }).count()) === 0;
+  await delRow.getByRole('button', { name: 'Delete backup', exact: true }).click();
+  const restoreDisarmed =
+    (await delRow.getByRole('button', { name: 'Confirm restore', exact: true }).count()) === 0;
+
+  // (c) 확인 클릭에서만 실행된다.
+  await delRow.getByRole('button', { name: 'Confirm delete backup', exact: true }).click();
+  const snapAfter = await pollUntil(
+    () => bkView(snapArea),
+    (v) => !v.ids.includes('del-row'),
+    8000,
+    200,
+  );
+  const rowsLeft = await pollUntil(() => delRow.count(), (n) => n === 0, 5000, 200);
+  const otherAfter = await bkView(snapOther);
+
+  const deletedGone =
+    !snapAfter.ids.includes('del-row') && !snapAfter.keys.some((k) => k.startsWith('bk:del-row:'));
+  const othersKept =
+    snapAfter.ids.includes(seededSnap.keptId) &&
+    snapAfter.ids.includes('del-corrupt') &&
+    snapBefore.keys
+      .filter((k) => !k.startsWith('bk:del-row:'))
+      .every((k) => snapAfter.keys.includes(k));
+  const countDropped = snapAfter.ids.length === snapBefore.ids.length - 1;
+  const otherIntact =
+    JSON.stringify(otherAfter) === JSON.stringify(otherBefore) &&
+    otherAfter.keys.includes('bk:del-other:0');
+
+  record('N43: 히스토리 한 행 삭제 — 2단계 확인(복원 확인과 상호 취소), 그 행·그 청크만 사라지고 반대쪽 저장소는 무사',
+    corruptDeletable && deleteArmed && armedNothingRemoved && restoreArmed && deleteDisarmed &&
+      restoreDisarmed && deletedGone && othersKept && countDropped && rowsLeft === 0 && otherIntact,
+    `손상행 삭제가능=${corruptDeletable}, 1클릭 확인=${deleteArmed}·무삭제=${armedNothingRemoved}, ` +
+      `복원확인=${restoreArmed}(삭제확인 해제=${deleteDisarmed}) → 삭제확인 복귀(복원 해제=${restoreDisarmed}), ` +
+      `매니페스트(${snapArea}) ${snapBefore.ids.length}→${snapAfter.ids.length}, 남은 행=${rowsLeft}, ` +
+      `그 청크 잔재=${snapAfter.keys.some((k) => k.startsWith('bk:del-row:'))}, 나머지 보존=${othersKept}, ` +
+      `반대쪽(${snapOther}) 키 ${otherBefore.keys.length}→${otherAfter.keys.length} 동일=${otherIntact}`);
+
+  /*
    * N39: 2단계 전체 초기화 (티켓 08, R-3).
    *
    * 초기화는 되돌릴 수 없으므로 **한 번 더 눌러 확인**하기 전에는 아무것도 지워지면 안 된다.

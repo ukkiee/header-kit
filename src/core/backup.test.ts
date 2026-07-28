@@ -10,8 +10,10 @@ import {
   decodeSnapshotText,
   listSnapshots,
   planBackup,
+  planSnapshotDelete,
   readManifest,
   verifyBackupsCleared,
+  verifySnapshotDeleted,
   type BackupTarget,
   type SyncKV,
 } from './backup';
@@ -242,6 +244,93 @@ describe('sync 저장 스위치 (R-1 — 단순 계약)', () => {
     expect(planBackup({}, big, { profileCount: 1 }, deps(), backupLimits('local')).kind).toBe(
       'write',
     );
+  });
+});
+
+/**
+ * 개별 스냅샷 삭제 (티켓 12) — 히스토리 한 행을 지우는 것은 "백업을 지운다"의
+ * **가장 좁은** 단위다. 일괄 클라우드 삭제(R-1)·전체 초기화(R-3)와 같은 경로를 쓰면
+ * 한 행을 정리하려던 손이 저장소를 통째로 비운다. 계획이 무엇을 지울지 여기서 못박는다.
+ */
+describe('planSnapshotDelete / verifySnapshotDeleted (티켓 12)', () => {
+  /** 어댑터가 지킬 순서 그대로: 매니페스트 커밋 → 청크 정리. */
+  function appliedDelete(kv: SyncKV, snapshotId: string): SyncKV {
+    const plan = planSnapshotDelete(kv, snapshotId);
+    const next: SyncKV = { ...kv };
+    if (plan.found) next[BACKUP_MANIFEST_KEY] = plan.manifest;
+    for (const key of plan.removeKeys) delete next[key];
+    return next;
+  }
+
+  it('그 스냅샷의 매니페스트 항목과 청크 키만 지운다 — 다른 스냅샷·비백업 키는 그대로다', () => {
+    let kv = committedBackup({}, 'payload-A', 'sa', 1);
+    kv = committedBackup(kv, 'payload-B', 'sb', 2);
+    kv.state = { profiles: ['keep-me'] }; // 같은 구역의 권위 상태
+
+    const plan = planSnapshotDelete(kv, 'sa');
+    expect(plan.found).toBe(true);
+    expect(plan.removeKeys).toEqual([chunkKey('sa', 0)]);
+    expect(plan.manifest.snapshots.map((s) => s.id)).toEqual(['sb']);
+
+    const after = appliedDelete(kv, 'sa');
+    expect(listSnapshots(after).map((s) => s.id)).toEqual(['sb']);
+    expect(decodeSnapshotText(after, readManifest(after).snapshots[0]!)).toEqual({
+      ok: true,
+      text: 'payload-B',
+    });
+    expect(backupKeys(after)).toEqual([BACKUP_MANIFEST_KEY, chunkKey('sb', 0)]);
+    expect(after.state).toEqual({ profiles: ['keep-me'] });
+  });
+
+  it('복원이 막히는 손상 스냅샷도 지운다 — 남은 청크까지 함께 정리한다', () => {
+    let kv = committedBackup({}, 'payload-long-enough-to-split-into-two', 'sa', 1);
+    kv = committedBackup(kv, 'payload-B', 'sb', 2);
+    kv[chunkKey('sa', 0)] = 'tampered'; // 체크섬 불일치 → corrupt (복원 불가)
+    kv[chunkKey('sa', 1)] = 'orphan-leftover'; // 매니페스트가 세지 않는 잔여 청크
+
+    expect(listSnapshots(kv).find((s) => s.id === 'sa')).toMatchObject({ status: 'corrupt' });
+
+    const after = appliedDelete(kv, 'sa');
+    expect(listSnapshots(after).map((s) => s.id)).toEqual(['sb']);
+    expect(backupKeys(after).some((key) => key.startsWith('bk:sa:'))).toBe(false);
+  });
+
+  it('이미 없는 id를 다시 지워도 무해하다 (멱등) — 매니페스트를 건드리지 않는다', () => {
+    const kv = committedBackup({}, 'payload-A', 'sa', 1);
+    const once = appliedDelete(kv, 'sa');
+    const twice = appliedDelete(once, 'sa');
+
+    expect(planSnapshotDelete(once, 'sa')).toEqual({
+      found: false,
+      removeKeys: [],
+      manifest: { snapshots: [] },
+    });
+    expect(twice).toEqual(once);
+    // 비어 있던 저장소에서도 계획은 아무것도 지우지 않는다.
+    expect(planSnapshotDelete({}, 'never-existed').removeKeys).toEqual([]);
+  });
+
+  it('삭제 검증은 다시 읽은 KV로 한다 — 잔재가 남으면 성공으로 접지 않는다', () => {
+    let kv = committedBackup({}, 'payload-A', 'sa', 1);
+    kv = committedBackup(kv, 'payload-B', 'sb', 2);
+
+    expect(verifySnapshotDeleted(appliedDelete(kv, 'sa'), 'sa')).toEqual({ ok: true });
+
+    // remove가 청크를 남겼다 — 목록에서 사라졌다고 지워진 것은 아니다.
+    const chunkLeft = appliedDelete(kv, 'sa');
+    chunkLeft[chunkKey('sa', 0)] = 'still-here';
+    expect(verifySnapshotDeleted(chunkLeft, 'sa')).toEqual({
+      ok: false,
+      remaining: [chunkKey('sa', 0)],
+    });
+
+    // 매니페스트 커밋이 실패했다 — 행이 그대로 남는다.
+    const entryLeft = { ...kv };
+    delete entryLeft[chunkKey('sa', 0)];
+    const stillListed = verifySnapshotDeleted(entryLeft, 'sa');
+    expect(stillListed.ok).toBe(false);
+    if (stillListed.ok) return;
+    expect(stillListed.remaining).toContain(BACKUP_MANIFEST_KEY);
   });
 });
 

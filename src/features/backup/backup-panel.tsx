@@ -5,12 +5,14 @@ import { parseImport } from '@/core/transfer';
 import { format, MESSAGES, type MessageKey, type Translator } from '@/core/i18n';
 import {
   clearCloudBackups,
+  deleteBackupSnapshot,
   hasCloudBackups,
   listBackupSnapshots,
   readBackupKV,
   type ClearCloudResult,
+  type DeleteSnapshotResult,
 } from '@/platform/backupStore';
-import { RotateCcw } from 'lucide-react';
+import { RotateCcw, Trash2 } from 'lucide-react';
 import { AlertBanner } from '@/ui/alert-banner';
 import { Button } from '@/ui/press-button';
 import { CollapsiblePanel } from '@/ui/collapsible-panel';
@@ -32,6 +34,8 @@ export interface BackupPanelProps {
   /** 클라우드에 백업이 남아 있는지 — 스위치 상태와 **별개로** 조회한다. */
   loadCloudPresence?: () => Promise<boolean>;
   clearCloud?: () => Promise<ClearCloudResult>;
+  /** 히스토리 한 행 삭제 (티켓 12) — 일괄 삭제·전체 초기화와 **별개의** 좁은 동작이다. */
+  deleteSnapshot?: (entry: SnapshotStatus, target: BackupTarget) => Promise<DeleteSnapshotResult>;
 }
 
 async function defaultLoadSnapshotText(entry: SnapshotStatus, target: BackupTarget) {
@@ -42,11 +46,16 @@ function reasonText(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason);
 }
 
-/** 삭제 실패 사유도 카탈로그를 거친다 — 잔여 개수는 파라미터 키로 보간한다. */
-function clearFailureDetail(result: Extract<ClearCloudResult, { ok: false }>, t: Translator) {
-  return 'remaining' in result
-    ? format(t('cloudDeleteRemaining'), { count: result.remaining })
-    : result.error;
+/**
+ * 삭제 실패 사유도 카탈로그를 거친다 — 잔여 개수는 파라미터 키로 보간한다.
+ * 일괄 삭제와 한 행 삭제는 남은 것이 가리키는 범위가 달라 문구 키를 갈라 받는다.
+ */
+function verifiedDeleteDetail(
+  result: Extract<ClearCloudResult, { ok: false }>,
+  remainingKey: MessageKey,
+  t: Translator,
+) {
+  return 'remaining' in result ? format(t(remainingKey), { count: result.remaining }) : result.error;
 }
 
 /** 초기화가 멈춘 단계도 카탈로그를 거친다 — background는 메시지 키로 말한다(위와 같은 결). */
@@ -60,6 +69,13 @@ function resetFailureDetail(error: string | undefined, t: Translator): string {
  */
 type CloudPresence = 'unknown' | 'present' | 'none';
 
+/**
+ * 확인 중인 행과 동작 — **한 번에 하나뿐**이다 (티켓 12). 행마다 확인 상태를 따로 들면
+ * 복원 확인과 삭제 확인이 나란히 켜져, 다음 클릭이 무엇을 실행할지 화면만 봐서는 모른다.
+ * 하나만 담기 때문에 다른 파괴적 동작을 켜는 것이 앞의 확인을 그대로 취소한다.
+ */
+type Confirming = { id: string; action: 'restore' | 'delete' };
+
 export function BackupPanel({
   syncBackup,
   onCommand,
@@ -67,13 +83,14 @@ export function BackupPanel({
   loadSnapshotText = defaultLoadSnapshotText,
   loadCloudPresence = hasCloudBackups,
   clearCloud = clearCloudBackups,
+  deleteSnapshot = (entry, target) => deleteBackupSnapshot(entry.id, target),
 }: BackupPanelProps) {
   const t = useT();
   // 처음부터 펼쳐 둔다 — 환경설정 패널과 같은 이유(레일에서 이 화면으로 온 사람은
   // 이미 백업을 보러 온 것이다).
   const [open, setOpen] = useState(true);
   const [snapshots, setSnapshots] = useState<SnapshotStatus[]>([]);
-  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<Confirming | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cloudPresence, setCloudPresence] = useState<CloudPresence>('unknown');
   const [confirmingClear, setConfirmingClear] = useState(false);
@@ -114,7 +131,11 @@ export function BackupPanel({
 
     const result = await clearCloud();
     // 삭제는 성공을 **검증한** 결과만 성공으로 표시한다 — 실패는 배너로 드러난다.
-    setError(result.ok ? null : `${t('cloudDeleteFailed')}: ${clearFailureDetail(result, t)}`);
+    setError(
+      result.ok
+        ? null
+        : `${t('cloudDeleteFailed')}: ${verifiedDeleteDetail(result, 'cloudDeleteRemaining', t)}`,
+    );
     setNotice(result.ok ? t('cloudBackupsDeleted') : null);
     setCloudRevision((n) => n + 1);
     if (target === 'sync') void loadSnapshots(target).then(setSnapshots);
@@ -140,12 +161,37 @@ export function BackupPanel({
     void loadSnapshots(target).then(setSnapshots, (reason) => setError(reasonText(reason)));
   };
 
-  const restore = async (entry: SnapshotStatus) => {
-    if (confirmingId !== entry.id) {
-      setConfirmingId(entry.id);
+  /** 이 행의 이 동작이 지금 확인 대기인가 — 다른 행·다른 동작이 켜지면 자동으로 거짓이 된다. */
+  const isConfirming = (entry: SnapshotStatus, action: Confirming['action']) =>
+    confirming?.id === entry.id && confirming.action === action;
+
+  /**
+   * 한 스냅샷만 지운다 (티켓 12) — 복원과 같은 2단계 확인을 거친다. 첫 클릭은 확인만 켜고,
+   * 두 번째 클릭에서만 실행된다. 성공·실패 모두 히스토리를 다시 읽어, 지우지 못한 행이
+   * 지워진 것처럼 사라지지 않는다.
+   */
+  const removeSnapshot = async (entry: SnapshotStatus) => {
+    if (!isConfirming(entry, 'delete')) {
+      setConfirming({ id: entry.id, action: 'delete' });
       return;
     }
-    setConfirmingId(null);
+    setConfirming(null);
+
+    const result = await deleteSnapshot(entry, target);
+    setError(
+      result.ok
+        ? null
+        : `${t('snapshotDeleteFailed')}: ${verifiedDeleteDetail(result, 'snapshotDeleteRemaining', t)}`,
+    );
+    await loadSnapshots(target).then(setSnapshots, (reason) => setError(reasonText(reason)));
+  };
+
+  const restore = async (entry: SnapshotStatus) => {
+    if (!isConfirming(entry, 'restore')) {
+      setConfirming({ id: entry.id, action: 'restore' });
+      return;
+    }
+    setConfirming(null);
 
     const decoded = await loadSnapshotText(entry, target);
     if (!decoded.ok) {
@@ -248,7 +294,7 @@ export function BackupPanel({
                   <Pill tone="danger" title={snapshot.reason}>
                     {t('corrupt')}
                   </Pill>
-                ) : confirmingId === snapshot.id ? (
+                ) : isConfirming(snapshot, 'restore') ? (
                   // 파괴적 확인 단계는 문구가 명시적인 텍스트 버튼을 유지한다
                   <Button
                     variant="destructive"
@@ -264,6 +310,26 @@ export function BackupPanel({
                     tooltip={t('restore')}
                     icon={RotateCcw}
                     onClick={() => void restore(snapshot)}
+                  />
+                )}
+                {/* 삭제는 복원과 **나란히** 선다 — 복원이 막히는 손상 스냅샷도 정리할 수
+                    있어야 하고(story 36), 지우는 범위는 이 행 하나뿐이다. */}
+                {isConfirming(snapshot, 'delete') ? (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    aria-label={t('ariaConfirmDeleteBackup')}
+                    onClick={() => void removeSnapshot(snapshot)}
+                  >
+                    {t('confirmDeleteBackup')}
+                  </Button>
+                ) : (
+                  <IconButton
+                    label={t('ariaDeleteBackup')}
+                    tooltip={t('menuDelete')}
+                    icon={Trash2}
+                    tone="danger"
+                    onClick={() => void removeSnapshot(snapshot)}
                   />
                 )}
               </li>

@@ -124,6 +124,10 @@ const en = {
   cloudBackupsDeleted: 'Cloud backups deleted.',
   cloudDeleteFailed: 'Could not delete cloud backups',
   cloudDeleteRemaining: '{count} backup key(s) still in the cloud.',
+  // 히스토리 한 행 삭제 (티켓 12) — 일괄 클라우드 삭제와 다른 동작이라 문구도 갈라 둔다.
+  confirmDeleteBackup: 'Delete backup?',
+  snapshotDeleteFailed: 'Could not delete this backup',
+  snapshotDeleteRemaining: '{count} key(s) of this backup are still stored.',
   resetEverything: 'Reset everything',
   confirmResetEverything: 'Erase everything?',
   resetEverythingNote:
@@ -199,6 +203,8 @@ const en = {
   ariaRunImport: 'Run import',
   ariaRestoreBackup: 'Restore backup',
   ariaConfirmRestore: 'Confirm restore',
+  ariaDeleteBackup: 'Delete backup',
+  ariaConfirmDeleteBackup: 'Confirm delete backup',
   ariaSaveLargeEditor: 'Save large editor',
   ariaOpenLargeEditor: '{title} — open large editor',
   ariaToggleProfile: 'Toggle {name}',
@@ -321,6 +327,9 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     cloudBackupsDeleted: '클라우드 백업을 삭제했습니다.',
     cloudDeleteFailed: '클라우드 백업을 삭제하지 못했습니다',
     cloudDeleteRemaining: '클라우드에 백업 키 {count}개가 남아 있습니다.',
+    confirmDeleteBackup: '이 백업을 지울까요?',
+    snapshotDeleteFailed: '이 백업을 삭제하지 못했습니다',
+    snapshotDeleteRemaining: '이 백업의 키 {count}개가 아직 남아 있습니다.',
     resetEverything: '전체 초기화',
     confirmResetEverything: '전부 지울까요?',
     resetEverythingNote:
@@ -387,6 +396,8 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     ariaRunImport: '가져오기 실행',
     ariaRestoreBackup: '백업 복원',
     ariaConfirmRestore: '복원 확인',
+    ariaDeleteBackup: '백업 삭제',
+    ariaConfirmDeleteBackup: '백업 삭제 확인',
     ariaSaveLargeEditor: '대형 편집기 저장',
     ariaOpenLargeEditor: '{title} — 대형 편집기 열기',
     ariaToggleProfile: '{name} 켬/끔',

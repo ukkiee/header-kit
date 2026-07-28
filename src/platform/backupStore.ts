@@ -5,7 +5,9 @@ import {
   backupNamespace,
   listSnapshots,
   planBackup,
+  planSnapshotDelete,
   verifyBackupsCleared,
+  verifySnapshotDeleted,
   type BackupPlan,
   type BackupTarget,
   type SnapshotStatus,
@@ -99,6 +101,36 @@ export type ClearCloudResult =
   /** 잔재가 남았다 — 개수는 **파라미터**로 넘긴다. 어댑터는 로케일을 모른다. */
   | { ok: false; remaining: number }
   | { ok: false; error: string };
+
+/**
+ * 히스토리 한 행 삭제 (티켓 12) — 일괄 삭제(위)와 **다른 동작**이다. 지우는 것은 그
+ * 스냅샷뿐이고, 대상은 언제나 호출부가 정한 활성 저장소 하나다.
+ *
+ * 순서는 **매니페스트 먼저, 청크 나중**이다(쓰기의 manifest-last와 거울상). 중간에 끊기면
+ * 남는 것은 목록에 없는 고아 청크뿐이고 그건 다음 `planBackup`이 정리한다. 반대로 청크를
+ * 먼저 지우면 매니페스트에 살아 있는 항목의 청크가 사라져, 지웠다는 행이 '손상됨'으로
+ * 되살아난다.
+ */
+export type DeleteSnapshotResult = ClearCloudResult;
+
+export async function deleteBackupSnapshot(
+  snapshotId: string,
+  target: BackupTarget,
+): Promise<DeleteSnapshotResult> {
+  try {
+    const plan = planSnapshotDelete(await readBackupKV(target), snapshotId);
+    // 매니페스트에 없으면 커밋할 것이 없다 — 이미 지운 행을 다시 지워도 무해하다(멱등).
+    // 잔여 청크는 그 경우에도 정리한다.
+    if (plan.found) {
+      await area(target).set({ [BACKUP_MANIFEST_KEY]: plan.manifest });
+    }
+    await removeBackupKeys(target, plan.removeKeys);
+    const verified = verifySnapshotDeleted(await readBackupKV(target), snapshotId);
+    return verified.ok ? { ok: true } : { ok: false, remaining: verified.remaining.length };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
 
 export async function clearCloudBackups(): Promise<ClearCloudResult> {
   try {
