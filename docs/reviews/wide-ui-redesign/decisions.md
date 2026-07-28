@@ -490,3 +490,36 @@ red first.` **저널 `.scratch/wide-ui-redesign/tickets/14.md`는 쓰이지 않�
   유효하다. 14의 스위트 red는 상속된 것이며 구현자에게 `suite-red-at-entry`를 주지 않는다.
 - **계량:** 이 재개로 티켓 14는 attempt 2/3, crash-resume 1/1을 쓴다. 환경(세션 한도)으로 또
   죽으면 `crash-loop`으로 읽히며, 그때는 계량을 우회하지 않고 그대로 정지한다.
+
+### ESCALATION criteria-unmet 2026-07-28T00:58Z
+
+티켓 14는 **코드로서는 성공했고 기준 기록으로서 실패했다.** 컨덕터의 독립 스위트 실행이
+`fd3610b`에서 exit 0 · 124/124 green — 티켓 14가 존재한 이유인 상속된 스모크 red가 걷혔다.
+독립 기준 감사(구현자 아님)는 12개 중 10개 met, **A10·A11 not-met**으로 `verdict: fail`.
+
+- **A10 not-met** — green 7회 자체는 확인됐다(`run1..7`: `Tests 363 passed (363)`, `124/124 passed`,
+  `^FAIL ` 0줄, exit 0). 그러나 보존된 red 실행(`ticket-14-suite-red1.txt`, N34b 123/124)의
+  **실패 id·시그니처·분류가 이슈 파일 `## Comments`에 없다.** 이슈 파일에 그 섹션 자체가 없고
+  `issues/14-reconcile-readiness-flake.md`는 `6ea9fcf` 이후 무변경이다. 분류는 gitignored 저널에만 있다.
+- **A11 not-met** — A10 회수(N≥6.53 → 7)의 근거가 이슈 파일에 기입되지 않았다. 현재 이슈 파일의
+  N=7 유도문은 티켓 저자가 쓴 A11 조항 본문(`:114`)이지 구현자의 기록이 아니다.
+
+**원인은 코드 결함이 아니라 브리프와 기준의 정면 충돌이다.** 구현자 브리프의 NEVER 절은
+이슈 트래커 쓰기를 금지하고, A10·A11은 이슈 파일 쓰기를 요구한다. 구현자는 **자기승인 대신
+거부를 택했고** 그 충돌을 `learned`로 보고했다 — 설계가 원하는 행동이다. 컨덕터도 이 구멍을
+메울 수 없다: 채우려면 (1) Stage 4가 금지한 티켓 본문 읽기가 필요하고, (2) 채우는 내용 자체가
+채점 대상인 기준 증거라 감사받는 쪽이 자기 감사 기록을 쓰는 것이 된다.
+
+기계 검증 상태: `diff-guard` 두 범위 모두 `test_weakening:false`·`suite_tampered:false`,
+구현자 커밋 단독 범위는 `untouchable_touched: []`(테스트 순증 +279줄, 가드 경로 무변경).
+범위 `6ea9fcf..HEAD`가 뱉는 `decisions.md`는 컨덕터 자신의 부기 커밋 `e9d0b33`/`63a367b` 분이다.
+
+**티켓 14는 닫지 않았다.** 11·12·13은 `Blocked by: 14`로 여전히 막혀 있다. spec hold는 걸지 않았다 —
+막는 것은 기준 기록의 위치 문제이지 스펙 결정이 아니다.
+
+릴리스 r1 처분은 불변(`4f4b0a6`, `verify-ledger` exit 0, `roundSuspended:false`). R-4는 11·12·13으로
+분해된 채 미착수, R-5·R-6은 defer 유지.
+
+**최종 보고서 의무(그대로 유효):** 릴리스 r1은 `rowCount 6 · rederived 3 · resolutions_checked 0`
+이므로 6행 중 3행(R-1·R-2·R-3)은 사람 결정이라 기계가 재도출하지 않았다.
+**"전량 기계 검증"으로 보고하지 마라.**
