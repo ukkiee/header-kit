@@ -1,0 +1,63 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "release",
+  "ack": "auto-triage",
+  "triageMode": "unattended",
+  "verdict": "needs-attention",
+  "summary": "NO-SHIP. R-1, R-2, and R-3 are all still open under reproducible inputs or interleavings. The committed 390/390 unit and 129/129 smoke evidence misses these paths. No existing assertion was weakened beyond the authorized N43 comment edit.",
+  "planFile": "docs/reviews/wide-ui-redesign/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 106,
+  "target": "branch diff against main",
+  "reviewedSha": "a736598a5da5aa5ae06c93a29f8b255c707bf9e3",
+  "reviewedTree": "f009be6b35f2a653a2bd483b4fa3e287256459f9",
+  "reviewedPlanSha256": "95ae6f325d7c57a65e8e5a1a93dfbffb4f70aeb46b2060c8578759d0dc681518",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 3,
+  "planFindingCount": 0,
+  "triage": "review-gate SKILL.md § Unattended triage governs: do NOT triage by hand — run your conductor's policy tool, which applies the policy and computes its hash itself; decide the whole round before applying anything; apply NOTHING if any row escalates; one recorded row per finding index with none missing; the final round is verification-only; max 2 rounds; no waiver; verify the ledger against this artifact, then COMMIT decisions.md with it.",
+  "findings": [
+    {
+      "severity": "critical",
+      "title": "R-1 still open: a path token makes a broad grouped branch look narrow",
+      "body": "After expanding grouped alternatives, `isHostBound` still accepts a domain-shaped token anywhere in the branch, including its path. `^(https://ads\\.example\\.net/|https://.*\\.com/path\\.example\\.net/)` returns `narrow` while matching `https://www.google.com/path.example.net/` and avoiding both `.invalid` probes. RuleForm therefore skips its `wide` confirmation at `src/features/modifications/rule-form.tsx:177`. The added cases at `src/core/url-scope.test.ts:139` omit this path-token shape.",
+      "file": "src/core/url-scope.ts",
+      "line_start": 38,
+      "line_end": 47,
+      "confidence": 0.99,
+      "recommendation": "Prove host binding from the URL authority portion of every expanded branch, defaulting to `wide` when that cannot be established. Add this counterexample to both the pure-function table and first-save confirmation coverage.",
+      "isPlanFinding": false
+    },
+    {
+      "severity": "critical",
+      "title": "R-2 still open: the migration guard is not an atomic CAS",
+      "body": "Using a FIFO storage fake—the ordering assumption documented by this fix—the sequence `G(initial migration), G(command), G(migration guard), S(command), S(migration)` leaves the stale migrated `Legacy` state after the newer command state was saved. Both reads can observe v1 before either set, so calling `set` immediately after the predicate is not atomic. The regression test avoids this ordering by awaiting `persistState(edited)` completely before releasing migration at `src/platform/stateStore.test.ts:117-123`.",
+      "file": "src/platform/stateStore.ts",
+      "line_start": 106,
+      "line_end": 118,
+      "confidence": 0.99,
+      "recommendation": "Put migration and command read-modify-write operations behind the same FIFO barrier, or introduce a real revision/CAS mechanism. Add a regression where the command read is already queued before the migration guard read.",
+      "isPlanFinding": false
+    },
+    {
+      "severity": "critical",
+      "title": "R-3 still open: service-worker ownership does not serialize manifest writers",
+      "body": "Each delete request independently suspends automatic Backup and then invokes the whole-manifest delete; concurrent message handlers are not queued. Running two current `deleteBackupSnapshot` calls against a valid `[a,b]` manifest left `a` listed after its chunk was removed, reproducing the reverse corrupt-row race. The reentrancy test at `src/runtime/background-bootstrap.test.ts:484` substitutes a delete fake that never touches a manifest, while the adapter fixture at `src/platform/backupStore.test.ts:123` uses invalid `{at, bytes}` entries and never exercises the real manifest-write branch. Literal single-writer ownership is also false because `clearCloudBackups` remains a renderer-side writer at `src/features/backup/backup-panel.tsx:85`. N43 still explicitly steers around concurrency at `scripts/smoke.mjs:4300-4308`.",
+      "file": "src/runtime/background-bootstrap.ts",
+      "line_start": 294,
+      "line_end": 302,
+      "confidence": 0.99,
+      "recommendation": "Route every per-target `bk:manifest` mutation—including automatic Backup, snapshot deletion, cloud clearing, and reset—through one service-worker FIFO. Add valid-fixture tests for overlapping deletions and clear-versus-Backup, asserting both manifest entries and chunks remain consistent.",
+      "isPlanFinding": false
+    }
+  ],
+  "next_steps": [
+    "Block merge until all three reproduced paths are fixed.",
+    "Replace the current race tests with interleavings that exercise the real adapters and valid manifest data.",
+    "Re-run the full build, typecheck, unit, and smoke suite and refresh pinned verification evidence."
+  ]
+}

@@ -979,3 +979,51 @@ R-9 [AUTO CR-1 cr:smell] defer — Spec: R-3 드레인의 red 증거가 동작 �
 R-10 [AUTO CR-1 cr:smell] defer — Spec: `verifySnapshotDeleteComplete`의 두 번째 검사가 C-7 문언 밖이다; -/-; src/core/backup.ts:432; res:none; C-7은 "읽은 시점에 있던 다른 스냅샷이 쓰기 뒤에 없으면 성공으로 접지 않는다"만 요구하는데 구현은 "읽기 뒤에 나타난 청크 중 소유자가 매니페스트에 없는 것"이라는 규칙을 하나 더 얹었다. CR-1에 scope-creep 규칙이 없으므로 잔여 규칙으로 cr:smell이다. 리뷰어가 "load-bearing rather than gratuitous"라고 스스로 한정했고(경합하는 스냅샷이 `before`에 없어 어댑터 테스트가 이것으로 green이 된다), 게다가 Tier 2가 `bk:manifest` writer를 하나로 만든 뒤에는 리뷰어가 걱정한 "동시 `bk:` writer"가 프로덕션에 존재하지 않아 넓어진 실패면이 사실상 방어적이다. follow-up docs/reviews/wide-ui-redesign/followups.md#T15-R-10
 R-11 [AUTO CR-1 cr:defect] accept — Spec: C-3이 요구한 무조건 재예약이 중단 깊이와 섞이면 떨어진다; -/-; src/runtime/background-bootstrap.ts:270; res:none; blocking. 기준은 "**재개는 무조건 다시 예약한다** … 스냅샷 삭제는 `storage.local.state`를 건드리지 않아 그 복구가 없다 — 재개가 되살리지 않으면 그 백업은 영구히 사라진다"인데 `resumeBackupWrites`는 `suspendDepth === 0 && reschedule`일 때만 재예약한다. 삭제와 **실패한** 전체 초기화가 겹치고 초기화 쪽 재개(`reschedule: snapshot === false`)가 마지막에 풀리면 삭제가 요구한 재예약이 삼켜지고 뒤따르는 `onStateChanged`도 없다. 이것은 C-2가 경고한 "중단자 둘이 서로 간섭한다"가 **플래그에서 재예약 비트로 자리만 옮긴 것**이며, 깊이 카운터는 도입됐으나 `reschedule` 비트는 깊이를 모른다. 재진입 테스트(:487-540)는 삭제 둘만 겹쳐 둘 다 `reschedule: true`라 이 혼합 쌍을 보지 못한다. 잘못된 동작이자 기준이 명문으로 요구한 불변식의 파괴이므로 cr:defect다 — 그리고 이 티켓이 고치러 온 것과 정확히 같은 부류(테스트가 비껴가는 경합)라는 점에서 defer는 부적절하다; applied e55fa19 (2 files, 76 lines); suite green 390/390 · smoke 129/129 (수정 전 389/389 → 픽스가 혼합 쌍 케이스 하나를 더했다); 픽스 서브에이전트가 재개 로직만 되돌려 red-first를 두 번 확인했다고 저널에 남겼다 (`expected 0 to be greater than 0`, 15/16 통과 → 복구 시 16/16)
 R-12 [AUTO CR-1 cr:smell] defer — Spec: `Promise<unknown>`이 C-9가 기대는 타입을 떨어뜨린다; -/-; src/runtime/background-bootstrap.ts:70; res:none; C-9의 "잔여 개수가 렌더러까지 그대로 도착"이 이제 메시지 홉 양끝의 캐스트로만 강제된다. **R-1과 같은 결함을 다른 축에서 본 것**이며 CR-1이 "두 보고서의 모든 finding은 정확히 한 행씩"을 요구하므로 별도 행으로 남긴다. 두 축이 독립으로 같은 지점을 짚었다는 사실은 실재성을 높이지만 등급을 올리지는 않는다 — 양쪽 다 동작이 아니라 타입 안전성의 약화로 기술했고, Standards 축은 명시적으로 비하드로 매겼다. follow-up docs/reviews/wide-ui-redesign/followups.md#T15-R-1 (R-1과 동일 항목)
+
+### release r3 — auto-triage
+_policy AT-1 · review-gate/policies/auto-triage-v1.md · sha256 e7c15be62c42c6a9 · launcher ack=auto-triage · decided 2026-07-28T10:23:14Z · artifact docs/reviews/wide-ui-redesign/release-r3.json_
+_ROUND NOT APPLIED — guard:zero-accepts — the round accepted nothing while carrying 3 critical/high finding(s) (R-1 critical/0.99, R-2 critical/0.99, R-3 critical/0.99); AT-1 §3 rounds: "zero accepts WITH a critical or high escalates immediately" — a further round returns the same finding for the same reason on an unchanged tree; per AT-1 guard:two-phase no accept from this round was applied. Loop STOPPED. See .scratch/wide-ui-redesign/ESCALATION.md_
+
+R-1 [AUTO AT-1 reserved:security] escalate — R-1 still open: a path token makes a broad grouped branch look narrow; critical/0.99; src/core/url-scope.ts:38; res:security; reserved class — human decision required: the failure mode of a wrong security fix is silent and unbounded, and it is exactly the class where a wrong fix looks correct
+R-2 [AUTO AT-1 reserved:migration] escalate — R-2 still open: the migration guard is not an atomic CAS; critical/0.99; src/platform/stateStore.ts:106; res:migration; reserved class — human decision required: irreversible in a way code is not, and the real decision — backfill window, downtime, ordering vs deploy — lives outside the diff
+R-3 [AUTO AT-1 reserved:contract?+terminal-gate] escalate — R-3 still open: service-worker ownership does not serialize manifest writers; critical/0.99; src/runtime/background-bootstrap.ts:294; res:contract?; AT-1 terminal-gate rule — no critical or high may close the release gate unaccepted
+
+### ESCALATION guard:zero-accepts 2026-07-28T10:25:33Z
+
+릴리스 게이트 **라운드 3**(사람이 사전 승인한 종단·검증 전용 라운드)이 `ok:true` /
+`verdict: needs-attention` 으로 **critical 3건**을 돌려줬고, `AT-1` Phase A 가
+**`guard:zero-accepts`** 로 라운드를 세웠다. Codex 요약 그대로: *"NO-SHIP. R-1, R-2, and R-3
+are all still open under reproducible inputs or interleavings."*
+
+**세 건 모두 릴리스 r2 가 지목했던 바로 그 critical 이고, 티켓 15 가 닫지 못했다.**
+
+| 행 | 규칙 | 처분 | 남은 결함 |
+|---|---|---|---|
+| R-1 | `reserved:security` | escalate | `src/core/url-scope.ts:38` — 확장 후에도 `isHostBound` 가 경로에 있는 도메인 모양 토큰을 host 결속으로 받는다. `^(https://ads\.example\.net/\|https://.*\.com/path\.example\.net/)` 가 `narrow` 로 판정되면서 `https://www.google.com/path.example.net/` 에 매치한다 |
+| R-2 | `reserved:migration` | escalate | `src/platform/stateStore.ts:106` — 술어 직후의 `set` 은 원자적이지 않다. `G(mig) G(cmd) G(guard) S(cmd) S(mig)` 순서에서 최신 커맨드 상태가 낡은 `Legacy` 로 덮인다 |
+| R-3 | `reserved:contract?+terminal-gate` | escalate | `src/runtime/background-bootstrap.ts:294` — 삭제 요청들이 큐에 서지 않아 동시 삭제 둘이 역방향 손상을 재현했고, `clearCloudBackups` (`backup-panel.tsx:85`) 가 여전히 렌더러 쪽 writer 다. 단일 writer 는 성립하지 않는다 |
+
+**적용된 것은 없다.** accept 0 · defer 0 · reject 0 · escalate 3 · `gate_commits 0` ·
+`ledger_shas 0`. 트리는 `a736598` 에서 한 바이트도 움직이지 않았다.
+
+**정지는 주장이 아니라 검증됐다.** `verify-ledger` exit 0, 위반 0 — rowCount 3, rederived 3,
+resolutions_checked 0, judgement_rows [], human_rows [], round_not_applied true,
+round_guards_derived [guard:zero-accepts] 가 커밋된 섹션과 양방향 일치.
+`rederived + resolutions_checked = 3 = rowCount` 이므로 **세 행 전부 엔진이 재계산했고 이
+컨덕터의 판단에 기대는 행은 없다.** R-3 은 needsJudgement 로 왔으나 세 가지 합법 resolution
+(`res:contract` / `res:contract?` / `res:none`) 이 **전부 escalate 로 수렴**해 선택이
+처분을 바꾸지 않는다.
+
+**리뷰어가 세 건 모두에서 "테스트가 그 경합을 비껴간다"를 함께 지목했다** — R-1 은
+`url-scope.test.ts:139` 가 경로 토큰 모양을 빠뜨렸고, R-2 는 `stateStore.test.ts:117-123` 이
+마이그레이션을 놓기 전에 `persistState` 를 완료해 그 순서를 피하며, R-3 은
+`background-bootstrap.test.ts:484` 의 fake 가 매니페스트를 아예 건드리지 않고
+`backupStore.test.ts:123` 의 픽스처가 `{at, bytes}` 로 무효라 실제 매니페스트 쓰기 분기를 타지
+않는다. 그리고 **N43 은 `scripts/smoke.mjs:4300-4308` 에서 여전히 동시성을 명시적으로 피해
+간다** — 릴리스 r2 가 문제 삼은 바로 그 성질이 주석만 정정된 채 남아 있다.
+
+**면책 하나는 정확히 기록한다:** 라운드 3 focus 의 task (2) 가 "픽스가 테스트를 약화시켰는지"를
+직접 물었고, 답은 **아니오** 다 — 사람이 사전 승인한 N43 주석 편집 외에 약화된 단언은 없다.
+`diff-guard` 가 독립적으로 같은 답을 냈다(`test_weakening:false`, 테스트 순증 +524).
+
+미적용 행: R-1 · R-2 · R-3 (전부). 적용 행: 없음.
