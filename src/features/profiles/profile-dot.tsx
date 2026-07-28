@@ -4,6 +4,7 @@ import { GripVertical, Pause } from 'lucide-react';
 import { format, type MessageKey, type Translator } from '@/core/i18n';
 import type { Profile } from '@/core/schema';
 import type { ProfileRowState, ProfileRowStatus } from '@/core/summary';
+import { useT } from '@/ui/i18n-context';
 import { SwitcherChip } from '@/ui/switcher-chip';
 import { ToggleSwitch } from '@/ui/toggle-switch';
 import { focusRing } from '@/ui/tokens';
@@ -119,6 +120,15 @@ export function profileToggleLabel(profile: Pick<Profile, 'name'>, t: Translator
  * 토글이 **목록 안에** 있는 이유: 켜고 끄려고 프로필을 먼저 골라 본문 편집기를 열 필요가
  * 없어야 한다(스펙 story 22). 그래서 이 스위치가 프로필 on/off의 단 하나의 컨트롤이다 —
  * 편집기 헤더에도 같은 이름의 스위치를 두면 같은 일을 하는 컨트롤이 화면에 둘이 된다.
+ *
+ * **정지의 텍스트 채널** (fix R-4, 티켓 AC2): 아이콘(형태)과 muted(색)만으로는 9px 글리프의
+ * 관용을 아는 사람에게만 정지가 읽힌다. 그래서 정지 중에만 낱말이 하나 함께 선다. 값은 행
+ * 접근성 이름이 쓰는 그 값(`ariaStatePaused`)이라 — 이름이 `(paused)`로 끝난다 — 보이는
+ * 라벨이 접근성 이름에 그대로 담겨 label-in-name(WCAG 2.5.3)도 함께 맞는다.
+ *
+ * 자리는 **이름 뒤·표식 앞**이다. 표식은 `ml-auto`로 붙는 한 덩어리라 그 안에 넣으면 수와
+ * 붙어 읽히고, 스와치는 칩의 첫 요소로 남아야 한다. 행이 넓어지지 않는 것(AC6)은 낱말이
+ * `shrink-0`이고 이름만 `min-w-0 truncate`라 성립한다 — 좁아지면 이름만 줄고 열 폭은 그대로다.
  */
 export function ProfileSelectRow({
   profile,
@@ -137,12 +147,18 @@ export function ProfileSelectRow({
   label: string;
   toggleLabel: string;
 }) {
+  const t = useT();
   return (
     <>
       <div className="min-w-0 flex-1">
         <SwitcherChip selected={selected} aria-label={label} onClick={onSelect}>
           <ProfileDot profile={profile} />
           <span className="min-w-0 truncate">{profile.name}</span>
+          {status.state === 'paused' && (
+            <span aria-hidden className="shrink-0 text-[10px] text-muted-foreground">
+              {t('ariaStatePaused')}
+            </span>
+          )}
           <ProfileRowMark status={status} />
         </SwitcherChip>
       </div>
@@ -162,6 +178,8 @@ export function ProfileSelectRow({
  * **정지는 색이 아니라 형태로 말한다.** 일시정지 아이콘(‖)이 수 앞에 서고 수는 muted로
  * 내려간다 — 그레이스케일에서도 "이 프로필의 N개가 지금 안 걸린다"가 읽힌다(story 38).
  * 수 자체는 깎지 않는다: 규칙이 사라진 게 아니라 멈춘 것이고, 재개하면 그대로 돌아온다.
+ * 형태 옆의 **텍스트** 채널은 `ProfileSelectRow`가 따로 세운다(fix R-4) — 여기 넣으면
+ * 낱말이 수와 한 덩어리로 붙어 읽힌다.
  *
  * `aria-hidden`인 이유: 이 표식은 `aria-label`을 가진 버튼 **안**이라 어차피 낭독되지
  * 않는다. 상태는 그 이름(`profileSelectLabel`)이 문자열로 따로 나른다 — 표식과 이름이

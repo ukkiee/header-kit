@@ -3896,6 +3896,50 @@ try {
       `재개=${JSON.stringify(rowsResumed)}`);
 
   /*
+   * N41f: 정지의 **보이는 텍스트** 채널 (fix R-4, 티켓 13 AC2).
+   *
+   * N41e는 정지를 **형태**(svg 글리프)와 **접근성 이름**으로만 본다 — 둘 다 통과하면서도
+   * 화면에 정지라고 적힌 낱말은 하나도 없는 구현이 그 단언을 빠져나간다. 9px 글리프의 뜻은
+   * 그 관용을 아는 사람에게만 읽히고, 접근성 이름은 스크린리더 밖에서 **결코 보이지 않는다**.
+   * 여기서 보이는 낱말을 따로 본다.
+   *
+   * 렌더된 크기까지 재는 이유: 낱말을 sr-only로 숨겨도 `textContent`만 보는 단언은 통과한다.
+   * 폭·높이가 0이 아님을 함께 요구해야 "보이는" 채널이 실제로 선 것이 된다.
+   * 오버플로 0을 같이 보는 것은 이 낱말이 행을 넓히지 않는다는 AC6 쪽 경계다.
+   */
+  const pausedWord = () => popup.evaluate(() => ({
+    rows: [...document.querySelectorAll('[aria-label^="Select profile"]')].map((r) => {
+      const el = [...r.querySelectorAll('span')].find((s) => s.textContent?.trim() === 'paused');
+      if (!el) return null;
+      const box = el.getBoundingClientRect();
+      return { w: Math.round(box.width), h: Math.round(box.height) };
+    }),
+    overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  }));
+  const wordRunning = await pausedWord();
+  await popup.getByRole('button', { name: 'Pause' }).click();
+  const wordPaused = await pollUntil(
+    pausedWord,
+    (v) => v.rows.length === 2 && v.rows.every((p) => p && p.w > 0 && p.h > 0),
+    5000,
+    100,
+  );
+  await popup.getByRole('button', { name: 'Resume' }).click();
+  const wordResumed = await pollUntil(
+    pausedWord,
+    (v) => v.rows.length === 2 && v.rows.every((p) => p === null),
+    5000,
+    100,
+  );
+  record('N41f: 정지 — 보이는 낱말이 행에 서고(형태·색 말고 텍스트), 재개하면 사라진다',
+    wordRunning.rows.length === 2 && wordRunning.rows.every((p) => p === null) &&
+      wordPaused.rows.length === 2 && wordPaused.rows.every((p) => p && p.w > 0 && p.h > 0) &&
+      wordPaused.overflow === 0 &&
+      wordResumed.rows.length === 2 && wordResumed.rows.every((p) => p === null),
+    `실행=${JSON.stringify(wordRunning)}, 정지=${JSON.stringify(wordPaused)}, ` +
+      `재개=${JSON.stringify(wordResumed)}`);
+
+  /*
    * N41b: 아코디언 편집 (티켓 10, 스펙 story 4·5) — 두 번째 규칙의 수정 아이콘을 누르면
    * 그 규칙이 **맨 위로** 올라오며 폼이 인라인으로 펼쳐지고, 저장하면 접혀 두 줄 요약으로
    * 돌아온다. 순서는 목록 상태가 아니라 렌더만 바꾸므로 편집이 끝나면 원래대로 돌아온다.
