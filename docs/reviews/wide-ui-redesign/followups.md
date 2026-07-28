@@ -467,3 +467,76 @@ T12-R-2와 함께 다루는 것이 맞다.
 T11-R-7(인과에만 기댄 (d) 케이스), 그리고 이것. 셋 다 개별로는 "지금은 맞다"로 통과했다.
 **권고**: 개별 수정보다, 스모크에 "음성 단언 앞에는 값을 직접 읽는 폴링을 둔다"는 규율을
 `audit-smoke-barriers.mjs`가 기계적으로 강제하도록 확장하는 편이 값이 크다.
+## 티켓 13 /code-review r1 이월
+
+라운드 1의 7행 중 4행이 defer로 처분됐다(`decisions.md` `### ticket 13 code-review r1 — auto-triage`).
+나머지 3행 중 R-1·R-4는 accept로 이 브랜치에서 고쳤고, 이 절에는 defer만 있다.
+
+### T13-R-2 — 프로필 행의 규칙 수가 보조기술에 전혀 노출되지 않는다
+
+`src/features/profiles/profile-dot.tsx:172` · `:174`
+
+두 축이 **각각 독립으로** 같은 결함에 닿았고(Standards R-2 medium, Spec R-5 low) 원장에는 CR-1의
+"모든 finding은 정확히 한 행" 규칙에 따라 두 행으로 남아 있다. 실체는 하나다.
+
+`ProfileRowMark`가 `aria-hidden`이고 `profileSelectLabel`은 `Select profile {name} ({state})` 형식으로
+**상태만** 나른다. 그래서 스크린리더 사용자는 프로필이 정지 중인지는 알지만 그 프로필에 규칙이 몇 개
+켜져 있는지는 어떤 경로로도 알 수 없다.
+
+**defer로 처분한 근거.** 티켓이 접근 가능한 이름에 요구한 것은 정지 상태뿐이고, Spec 축이 이를
+"문언 안이며 story 38 의도에 대한 간극으로 표시할 뿐 위반이 아니다"라고 스스로 한정했다. 두 축이
+티켓의 문언 안이라는 데 일치하므로 기준이 함의하는 미처리 케이스가 아니다.
+
+**고칠 때 주의.** `profileSelectLabel`의 형식 문자열에 값을 더하면 기존 스모크의 부분 문자열 단언이
+깨진다(구현자가 저널에 남긴 제약). 수를 넣으려면 형식을 바꾸는 것이 아니라 별도 `aria-label`이나
+`sr-only` 텍스트를 얹는 쪽을 먼저 검토하라.
+
+### T13-R-3 — 일시정지 muted 틴트가 선택되지 않은 행에서는 무효과다
+
+`src/features/profiles/profile-dot.tsx:176`
+
+```tsx
+paused ? 'text-muted-foreground' : ''
+```
+
+`SwitcherChip`의 비선택 상태가 이미 `text-muted-foreground`라, 이 틴트가 실제로 무언가를 바꾸는 것은
+선택된 행 하나뿐이다. 주석 "수는 muted로 내려간다"는 많아야 한 행에서만 참이다. 실제로 정지를
+구분하는 것은 글리프뿐이다. Standards 축이 스스로 low·판단 호출로 표시했다.
+
+### T13-R-6 — "active 불변" core 단언이 공허하다
+
+`src/core/summary.test.ts:135`
+
+```ts
+expect(target.active).toBe(true);
+```
+
+`profileRowStatus`는 순수·비변이 함수이므로 그 호출 뒤에 입력의 `active`를 다시 읽는 이 단언은
+**결코 실패할 수 없다.** 티켓의 테스트 항목("일시정지가 표시를 정지로 바꾸되 `active`는 불변")이
+core 시임에서 이름만 서 있는 셈이다.
+
+**defer로 처분한 근거.** `cr:missing-seam-test`를 검토했으나 그 규칙의 문언은 "스펙이 지명한 시임에
+이 diff의 테스트가 **없다**"이고, 여기서는 그 시임에 4개 케이스가 실제로 있다. 규칙을 확장 적용하는
+대신 CR-1의 잔여 규칙을 따라 판단 호출로 처분했다. 요구 자체는 스모크의 `activeWhilePaused === true`가
+하중을 받아 전체적으로 덮여 있다 — 비어 있는 것은 core 쪽 한 줄이다.
+
+### T13-R-7 — ui-diag first-paint 수치가 재기준선 없이는 판정 불가다
+
+`docs/reviews/ui-polish/perf-baseline.md`
+
+**코드 쪽은 오탐으로 확인됐다.** Standards 축이 직접 확인한 바: `src/core/summary.ts:1-3`이 전부
+`import type`이라 eager한 `profile-sidebar.tsx`에서 런타임 import로 바뀌어도 의존성 없는 모듈을 끌
+뿐이고, `Pause`는 이미 lucide를 import하는 파일에 얹히며, 행당 추가 작업은 `.filter().length` 한 번이다.
+이 diff에서 first paint를 지불할 만한 것은 없다.
+
+**남은 것은 절차다.** `perf-baseline.md`의 caveat는 실재하고 내용도 맞다 — "이 수치는 기기 의존적이다…
+유효한 비교는 같은 기기에서 이 기준선 대비뿐이다"(기준선 `darwin/arm64 · Apple M5 Pro · 48GB`, 현재
+실행 `Intel i7-10700K / x86_64 / 96GB`). 그러나 **그 문서는 면제가 아니라 처방을 적는다**:
+"기기가 바뀌면 변경 전 빌드로 되돌려 다시 떠야 한다." 아무도 재기준선을 뜨지 않았다. 그러므로 276 ms는
+*설명된* 값이 아니라 *무의미한* 값이고, 구현자와 기준 감사자가 쓴 "기기 차이"는 문서가 재측정을
+요구하는 자리에서의 단정이다. (부수적으로: 그 문서는 "기기 의존적"이라고만 쓰지 "cross-architecture"
+라고는 쓰지 않는다 — 감사자의 표현은 문서보다 좁게 특정했다. arm64→x86_64가 그 안에 들기는 한다.)
+
+**할 일:** 이 기기에서 변경 전 빌드로 `ui-diag`를 다시 떠 기준선을 갱신하거나, `ui-diag`를 기기
+비의존 지표로 바꾸거나, 최소한 그 수치를 판정에 쓰지 않는다고 문서에 명시하라. 지금 상태는 게이트가
+있는 것처럼 보이지만 아무것도 판정하지 못한다.
