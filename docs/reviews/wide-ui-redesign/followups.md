@@ -386,6 +386,53 @@ persist 뒤에 온다는 인과(`saveItem`은 `result.ok`에서만 폼을 닫고
 **권고**: 청크 삭제 실패 시 배너 문구를 "행은 목록에서 지웠지만 저장소에 잔여가 있다"로 나누거나,
 재시도 버튼을 제공한다.
 
+### T12-R-3 — 존재하지 않는 청크 키가 잔여 개수에 합성된다
+
+> **먼저 읽을 것:** 이 항목은 리뷰 원문 R-3("매니페스트 키가 섞인다")이 **아니다.** R-3은
+> `decisions.md`에서 **reject(오탐)** 로 처분됐다 — 매니페스트 키는 설계된 실패 근거이고
+> **빼면 안 된다.** 그 조사 중에 드러난 **다른** 결함이 이것이다.
+
+`src/core/backup.ts:382`
+
+```ts
+if (entry) for (const key of chunkKeysOf(entry)) keys.add(key);
+```
+
+`chunkKeysOf`(`:169-171`)는 `entry.chunkCount`에서 키를 **합성**할 뿐 KV에 실제로 있는지 보지
+않는다. 바로 위 `:381`의 접두 스윕은 존재하는 키만 걸러오는데, 그 결과에 합성 키가 무조건
+더해진다. 그 배열이 `verifySnapshotDeleted`의 `remaining`으로 나가고
+(`src/core/backup.ts:403`), `src/platform/backupStore.ts:129`가 `.length`로 접어
+`src/core/i18n.ts:130` `'{count} key(s) of this backup are still stored.'` 에 꽂는다.
+
+**재현.** `src/core/backup.test.ts:347-348`의 픽스처(행은 매니페스트에 살아 있고 유일한 청크
+`bk:sa:0`은 KV에서 지워진 상태)에서 `remaining = ['bk:manifest', 'bk:sa:0']` → 사용자에게 **2**.
+실제로 존재하는 키는 `bk:manifest` 하나뿐이다.
+
+**범위와 심각도.** 실패 경로 전용이다. 정상적으로 성공한 삭제에서는 `plan.found`가 false라
+매니페스트 키가 붙지 않고 접두 스윕도 비어 `{ok:true}`가 되며 배너 자체가 뜨지 않는다
+(`src/core/backup.test.ts:336`이 이 명제를 고정, 배너 조건은
+`src/features/backup/backup-panel.tsx:185`). 오도의 방향도 "실제보다 더 남았다"는 안전한 쪽이고,
+같은 배너의 `snapshotDeleteFailed` 제목이 실패 사실 자체는 정확히 전한다. 그래서 blocking이 아니다.
+
+**고칠 때 지켜야 할 것 — 이 문단이 이 항목의 핵심이다.**
+
+- **`src/core/backup.ts:403`의 `BACKUP_MANIFEST_KEY`를 빼지 마라.** 그것은 "행이 아직 살아 있다"는
+  실패 근거이고, 빼면 `isManifestEntry`(`:150-158`)가 통과시키는 `chunkCount: 0` 외래 매니페스트
+  항목에서 `remaining=[]` → **행이 살아 있는데 `{ok:true}`** 가 된다. 티켓 12 기준 4행
+  ("지우지 못한 것이 지워진 것처럼 보이지 않는다") 위반이다.
+- **`src/core/backup.test.ts:352`의 `toContain(BACKUP_MANIFEST_KEY)`를 재기준화하지 마라.**
+  의도된 계약이다(같은 `it`에서 순수 키 목록 경로는 정확한 `toEqual`, 근거 경로만 `toContain`).
+- 고칠 지점은 **`:382` 하나**다. 합성 청크 키를 KV 존재 확인으로 좁혀라. 단,
+  `planSnapshotDelete`의 `removeKeys`는 삭제 계획이므로 없는 키를 지우려 해도 무해하다 —
+  **계획(removeKeys)과 근거(remaining)를 같은 배열로 재사용하는 것**이 진짜 설계 문제다.
+  둘을 가를지, `:382`만 좁힐지는 고치는 사람이 정한다.
+- **필수 회귀 테스트(신규 추가, 기존 수정 아님):** `chunkCount: 0`인 외래 매니페스트 항목에서
+  `verifySnapshotDeleted`가 `{ok:true}`로 접히지 **않을 것**. 이 테스트는 매니페스트 키를
+  **지키는** 테스트다.
+
+문구 계열(`i18n.ts:130`/`:332`가 "of this backup"으로 범위를 소유격으로 못박는 문제)은 같은 배너의
+T12-R-2와 함께 다루는 것이 맞다.
+
 ### T12-R-4 — 주석이 실제보다 강한 안전 성질을 주장한다
 `src/features/backup/backup-panel.tsx:72`. "다른 파괴적 동작을 켜는 것이 앞의 확인을 그대로
 취소한다"는 **행 사이에서만** 참이다. `confirmingClear`와 `confirmingReset`은 별개 불리언이라
