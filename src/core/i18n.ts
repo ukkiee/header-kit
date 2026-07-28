@@ -66,6 +66,11 @@ const en = {
   cancel: 'Cancel',
   save: 'Save',
   saving: 'Saving…',
+  /**
+   * 규칙 폼의 활성화 선택 (티켓 11, story 17) — 저장이 규칙을 켠 채로 남길지 꺼진 채로
+   * 남길지. 라벨은 저장 **버튼이 할 일**을 말한다: 토글이 켜져 있으면 저장이 곧 활성화다.
+   */
+  enableOnSave: 'Enable after saving',
   restore: 'Restore',
   confirmReplaceAll: 'Replace all?',
   confirmDelete: 'Delete?',
@@ -264,6 +269,7 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     cancel: '취소',
     save: '저장',
     saving: '저장 중…',
+    enableOnSave: '저장 후 바로 활성화',
     restore: '복원',
     confirmReplaceAll: '전체 교체?',
     confirmDelete: '삭제?',

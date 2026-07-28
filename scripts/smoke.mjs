@@ -4036,6 +4036,113 @@ try {
       `단축키 열기=${shortcutOpenShown}, 일시정지=${shortcutPauseShown}, 읽기전용=${shortcutReadOnly}`);
 
   /*
+   * N42: "저장 후 바로 활성화" 토글 (티켓 11, story 17).
+   *
+   * 지금까지 새 규칙은 언제나 켜진 채로 태어났다 — 만들어 두고 나중에 켜는 길이 없었다.
+   * 토글 하나가 그 선택을 돌려주되, **만지지 않은 저장은 이전과 완전히 같아야** 한다.
+   * 그래서 넷을 함께 본다 — (a) 끄고 저장한 규칙이 꺼진 채 저장되고 목록에도 꺼진 행으로
+   * 남는다, (b) 토글을 만지지 않은 저장은 켜진 채로 남는다(기본 켜짐 회귀 방지), (c) 꺼진
+   * 규칙은 브라우저에 걸리지 않는다(compile의 `m.enabled` 필터), (d) 기존 규칙을 편집하려
+   * 열면 토글이 그 규칙의 현재 값을 비추고 손대지 않은 저장이 상태를 뒤집지 않는다.
+   * (b)가 빠지면 이 티켓 자체가 조용한 회귀가 되고, (d)가 빠지면 편집이 꺼 둔 규칙을
+   * 되살린다.
+   *
+   * **순서가 증거다** — 꺼진 규칙을 먼저 저장하고 켜진 규칙을 나중에 저장한다. 꺼진 규칙은
+   * 아무것도 방출하지 않아 규칙 세트에 관측 가능한 변화를 남기지 않으므로, 그 저장 직후의
+   * 배리어는 이전 세트로 즉시 만족돼 (c)가 헛돈다. 뒤이은 켜진 규칙의 방출을 배리어로
+   * 삼으면 그때 관측한 세트는 두 저장을 모두 반영한 것이라 (c)가 진짜 단언이 된다.
+   */
+  await seedProfiles([
+    baseProfile('p-activate', 'Activate', [
+      hdr({ id: 'm-live', name: 'X-Act-Live', value: 'live' }),
+      hdr({ id: 'm-seeded-off', name: 'X-Act-Seeded', value: 'seeded', enabled: false }),
+    ]),
+  ]);
+  await popup.reload();
+  // 준비 배리어는 관측이다 — 시드가 실제로 컴파일돼 걸린 뒤에 폼을 만진다.
+  await pollSessionRuleMatch(sw, headerOpLive('X-Act-Live'), 'X-Act-Live 시드 방출');
+
+  const activateSwitch = () =>
+    popup.getByRole('switch', { name: 'Enable after saving', exact: true });
+  const readMod = (name) => () =>
+    sw.evaluate(async (n) => {
+      const { state } = await chrome.storage.local.get('state');
+      return state.profiles[0].modifications.find((m) => m.name === n) ?? null;
+    }, name);
+
+  // (a) 끄고 저장 — 폼을 열면 켜져 있고(기본값), 끄면 그 선택이 저장에 실린다.
+  await popup.getByRole('button', { name: 'Add rule' }).click();
+  await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
+  const defaultOn = (await activateSwitch().getAttribute('aria-checked')) === 'true';
+  await popup.getByLabel('Header name', { exact: true }).fill('X-Act-Dark');
+  await closeSuggestions(popup);
+  await popup.getByLabel('Value', { exact: true }).fill('dark');
+  await activateSwitch().click();
+  const offBeforeSave = (await activateSwitch().getAttribute('aria-checked')) === 'false';
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  await waitFormClosed();
+  const darkMod = await pollUntil(readMod('X-Act-Dark'), (m) => m !== null);
+  const savedOff = darkMod?.enabled === false;
+
+  // (b) 토글을 만지지 않은 저장 — 이전과 같이 켜진 채다.
+  await popup.getByRole('button', { name: 'Add rule' }).click();
+  await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
+  await popup.getByLabel('Header name', { exact: true }).fill('X-Act-Default');
+  await closeSuggestions(popup);
+  await popup.getByLabel('Value', { exact: true }).fill('default');
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  await waitFormClosed();
+  const defaultMod = await pollUntil(readMod('X-Act-Default'), (m) => m !== null);
+  const savedOn = defaultMod?.enabled === true;
+
+  // (c) 켜진 규칙의 방출을 배리어로 삼아, 같은 세트에서 꺼진 규칙의 부재를 단언한다.
+  const activateRules = await pollSessionRuleMatch(
+    sw,
+    headerOpLive('X-Act-Default'),
+    'X-Act-Default 방출',
+  );
+  const darkNotEmitted = !headerOps(activateRules).some(
+    (h) => h.header?.toLowerCase() === 'x-act-dark',
+  );
+  const darkRow = popup
+    .locator('.group')
+    .filter({ has: popup.getByRole('button', { name: 'Edit', exact: true }) })
+    .filter({ hasText: 'X-Act-Dark' })
+    .first();
+  const darkRowOff =
+    (await darkRow.getByRole('checkbox').getAttribute('aria-checked')) === 'false';
+
+  // (d) 편집 — 꺼 둔 시드 규칙을 열면 토글도 꺼져 있고, 그대로 저장해도 켜지지 않는다.
+  const seededRow = popup
+    .locator('.group')
+    .filter({ has: popup.getByRole('button', { name: 'Edit', exact: true }) })
+    .filter({ hasText: 'X-Act-Seeded' })
+    .first();
+  await seededRow.getByRole('button', { name: 'Edit', exact: true }).click();
+  await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
+  const editReflectsOff = (await activateSwitch().getAttribute('aria-checked')) === 'false';
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  await waitFormClosed();
+  const seededAfterEdit = await pollUntil(readMod('X-Act-Seeded'), (m) => m !== null);
+  const editKeptOff = seededAfterEdit?.enabled === false;
+
+  // (e) 종류를 바꿔도 선택이 남는다 — 초안 전환이 enabled를 승계한다.
+  await popup.getByRole('button', { name: 'Add rule' }).click();
+  await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
+  await activateSwitch().click();
+  await pickOption(popup, 'Type', 'Block request');
+  const keptAcrossKind = (await activateSwitch().getAttribute('aria-checked')) === 'false';
+  await popup.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await waitFormClosed();
+
+  record('N42: 저장 후 바로 활성화 — 기본 켜짐·끄면 꺼진 채 저장·미방출, 편집은 뒤집지 않고 종류 전환에도 유지',
+    defaultOn && offBeforeSave && savedOff && savedOn && darkNotEmitted && darkRowOff &&
+      editReflectsOff && editKeptOff && keptAcrossKind,
+    `기본켜짐=${defaultOn}, 끈뒤=${offBeforeSave}, 꺼진채저장=${savedOff}(enabled=${darkMod?.enabled}), ` +
+      `미조작저장=${savedOn}(enabled=${defaultMod?.enabled}), 미방출=${darkNotEmitted}, 행꺼짐=${darkRowOff}, ` +
+      `편집반영=${editReflectsOff}, 편집유지=${editKeptOff}(enabled=${seededAfterEdit?.enabled}), 종류전환유지=${keptAcrossKind}`);
+
+  /*
    * N39: 2단계 전체 초기화 (티켓 08, R-3).
    *
    * 초기화는 되돌릴 수 없으므로 **한 번 더 눌러 확인**하기 전에는 아무것도 지워지면 안 된다.

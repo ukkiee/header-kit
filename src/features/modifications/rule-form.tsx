@@ -20,6 +20,7 @@ import { NoteText } from '@/ui/note-text';
 import { FieldLabeled, fieldCaption, InlineFieldError } from '@/ui/field-labeled';
 import { AnimatePresence, MotionRow } from '@/ui/motion-row';
 import { SelectOptions } from '@/ui/select-options';
+import { ToggleSwitch } from '@/ui/toggle-switch';
 import { useT } from '@/ui/i18n-context';
 import { HeaderNameInput } from './header-name-input';
 
@@ -475,6 +476,26 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
           onChange={(e) => setDraft({ ...draft, comment: e.target.value } as Modification)}
         />
       </FieldLabeled>
+
+      {/*
+        저장 후 바로 활성화 (티켓 11, story 17) — 초안의 `enabled`를 그대로 편집한다.
+
+        새 커맨드도 스키마 변경도 없다: 저장 경로(add/update-modification)가 이미
+        `Modification` 전체를 나르므로, 폼이 이 필드를 만질 수 있게 되는 것이 전부다.
+        기본값은 `createModification`의 `enabled: true`라, 토글을 만지지 않은 사용자에게는
+        이전과 완전히 같은 결과다 — 그 기본을 여기서 다시 정하면 두 곳이 갈린다.
+
+        편집일 때는 `initial`이 초안이라 그 규칙의 현재 값을 그대로 비춘다. 종류 전환도
+        `switchKind`가 `enabled`를 승계하므로(위) 선택이 살아남는다.
+      */}
+      <div className="flex items-center justify-between gap-2">
+        <span className={fieldCaption}>{t('enableOnSave')}</span>
+        <ToggleSwitch
+          checked={draft.enabled}
+          onCheckedChange={(enabled) => setDraft({ ...draft, enabled } as Modification)}
+          aria-label={t('enableOnSave')}
+        />
+      </div>
 
       {saveError && (
         <AlertBanner severity="danger" role="alert">
