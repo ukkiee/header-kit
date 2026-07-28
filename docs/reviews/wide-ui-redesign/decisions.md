@@ -616,3 +616,20 @@ R-13 [AUTO CR-1 cr:smell] defer — Spec(c, 잔여): pollStable이 전이 이전
 
 라운드 판정: blocking 1건(R-1, R-2가 같은 결함) → accept 2행, defer 11행, reject 0행, escalate 0행.
 픽스 1회 통과(예산: 티켓당 1회)로 R-1·R-2를 닫고, 나머지는 followups.md로 이월한다.
+
+### ticket 11 code-review r1 — auto-triage
+_policy CR-1 · feature-loop/policies/ticket-review-cr1.md · sha256 27ad2f0313d78a9b · decided 2026-07-28T04:13:26Z · fixed point c003920efbf42f3733412531ee6f86f857d77095 · ticket .scratch/wide-ui-redesign/issues/11-save-then-activate.md_
+
+R-1 [AUTO CR-1 cr:smell] defer — Standards: 새 주석이 CONTEXT.md가 Modification의 _Avoid_로 지정한 "규칙/rule" 용어를 쓴다; -/-; src/core/i18n.ts:73; res:none; 리뷰어가 "하드 위반 없음"으로 명시하고 레포 전반에 선재하는 관용(rule-form.tsx·RULE_KINDS·ruleKind·"Add rule" 버튼)이라 이 diff가 도입한 것이 아니라 상속한 것이다 → cr:standard의 "hard breach"에 해당하지 않는다. follow-up docs/reviews/wide-ui-redesign/followups.md#T11-R-1
+R-2 [AUTO CR-1 cr:smell] defer — Standards(smell, Duplicated Code): darkRow·seededRow가 hasText만 다른 동일 4단 체인이고 같은 locator 형태가 1896·2199·3838행에도 반복된다; -/-; scripts/smoke.mjs:4106; res:none; follow-up …#T11-R-2
+R-3 [AUTO CR-1 cr:smell] defer — Standards(smell, Duplicated Code): 케이스 (a)와 (b)가 "Add rule→Type 대기→Header name→closeSuggestions→Value→Save→waitFormClosed"를 리터럴 둘만 빼고 그대로 반복한다; -/-; scripts/smoke.mjs:4079; res:none; follow-up …#T11-R-3
+R-4 [AUTO CR-1 cr:smell] defer — Standards(smell): 블록 헤더가 "그래서 넷을 함께 본다"며 (a)-(d)를 열거하는데 아래 코드는 다섯 케이스를 단언한다 — (e)와 keptAcrossKind가 근거 문단에 없다; -/-; scripts/smoke.mjs:4038; res:none; 낡은 주석이지 동작 결함이 아니고 리뷰어도 판단 호출로 분류했다. follow-up …#T11-R-4
+R-5 [AUTO CR-1 cr:smell] defer — Standards(smell, Mysterious Name): 키 enableOnSave와 문구 "Enable after saving"이 수정 모드에서 어색하다 — 그 모드의 스위치는 규칙의 현재 enabled를 비추므로 "after saving"이 이미 살아 있는 규칙에 맞지 않는다; -/-; src/core/i18n.ts:73; res:none; JSDoc이 "라벨은 Save 버튼의 효과를 서술한다"고 변호하고 리뷰어도 defensible로 인정. follow-up …#T11-R-5
+R-6 [AUTO CR-1 cr:smell] defer — Standards: rule-form.tsx:495의 `as Modification` 캐스트는 공통 필드에 불필요하다; -/-; src/features/modifications/rule-form.tsx:495; res:none; 리뷰어 자신이 "tooling/precedent로 건너뜀"(선례 14건)으로 분류했다 — 잔여 없음 조항(CR-1 28-30행)을 지키려 행으로만 남긴다. follow-up …#T11-R-6
+R-7 [AUTO CR-1 cr:smell] defer — Spec(잠복 취약성): 하위 케이스 (d)의 pollUntil(readMod('X-Act-Seeded'))은 배리어 역할을 하지 않는다 — 그 규칙은 수정 이전에 이미 존재한다. 단언이 지금 안전한 이유는 오직 waitFormClosed가 persist 뒤에 오는 인과 때문이고, 폼이 낙관적으로 닫히게 바뀌면 editKeptOff는 공허하게 통과한다; -/-; scripts/smoke.mjs:4138; res:none; 현재는 올바르므로 결함이 아니라 잠복 취약성. follow-up …#T11-R-7
+
+라운드 판정: **blocking 0건** → accept 0행, defer 7행, reject 0행, escalate 0행. 픽스 패스를
+쓰지 않고 라운드 1이 그대로 닫힌다. Spec 축에 티켓 14가 겪은 배리어 공허화를 특정해 검사시켰고,
+"X-Act-Dark가 먼저 저장·저장소 확인되고 부재 단언은 그 뒤 저장된 X-Act-Default로 관측한 규칙
+세트에서 읽히며 executor.execute가 load-apply-save를 직렬화하므로 관측된 상태가 default를 포함하면
+반드시 dark도 포함한다"는 인과로 **공허하지 않음**을 확인받았다.

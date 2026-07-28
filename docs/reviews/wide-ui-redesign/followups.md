@@ -322,3 +322,53 @@ scope-creep 항목이 없어 CR-1 §28-30의 "잔여 없음" 조항에 따라 �
 일탈이 아니라 기록"이라고 명시했다. **바꾸는 것은 티켓 처방을 뒤집는 결정**이라 픽스가 아니라
 후속이다. **권고**: `pollStable`에 최소 관측 창(첫 판독 전 1틱 대기)을 넣을지, `converge()`를
 `commitMigration()`과 독립적으로 스케줄할지를 사람이 정한다.
+
+## 티켓 11 `/code-review` r1 이월 (CR-1 defer, 2026-07-28)
+
+라운드 1은 **blocking 0건**으로 픽스 패스 없이 닫혔다. 아래 7행은
+`docs/reviews/wide-ui-redesign/decisions.md`의 `### ticket 11 code-review r1 — auto-triage`
+섹션에서 defer로 판정된 것이고 전부 판단 호출이다.
+
+### T11-R-1 — 새 주석이 `_Avoid_` 용어 "규칙/rule"을 쓴다
+`src/core/i18n.ts:73`, `src/features/modifications/rule-form.tsx`. `CONTEXT.md`는 Modification의
+`_Avoid_`로 "규칙/rule"을 지정한다. 다만 레포 전반에 선재하는 관용(`rule-form.tsx` 파일명 자체,
+`RULE_KINDS`, `ruleKind`, "Add rule" 버튼)이라 이 diff가 도입한 것이 아니라 상속한 것이고,
+리뷰어도 하드 위반이 아니라고 판정했다. **권고**: 용어 정리는 이 티켓이 아니라 레포 전역
+리네이밍으로 한 번에 한다 — 부분적으로 고치면 두 용어가 공존해 더 나빠진다.
+
+### T11-R-2 — `darkRow`·`seededRow`의 중복 (Duplicated Code)
+`scripts/smoke.mjs:4106`. `hasText`만 다른 동일한 4단 체인이고, 같은
+`.locator('.group').filter({ has: … 'Edit' … })` 형태가 `1896` `2199` `3838`행에도 있다.
+**권고**: `ruleRowByText(popup, text)` 헬퍼 하나로 접는다.
+
+### T11-R-3 — 케이스 (a)·(b)의 폼 조작 시퀀스 중복 (Duplicated Code)
+`scripts/smoke.mjs:4079`. "Add rule → Type 콤보박스 대기 → Header name 입력 → `closeSuggestions`
+→ Value 입력 → Save → `waitFormClosed`"가 리터럴 둘만 빼고 그대로 두 번 나온다.
+**권고**: `addHeaderRule(popup, {name, value})` 헬퍼.
+
+### T11-R-4 — 근거 문단이 다섯 케이스 중 넷만 열거한다
+`scripts/smoke.mjs:4038`. 블록 헤더가 "그래서 넷을 함께 본다"며 (a)-(d)를 열거하는데 아래 코드는
+다섯 케이스를 단언한다 — `(e) 종류를 바꿔도 선택이 남는다`와 `keptAcrossKind`가 근거에 없다.
+동작 결함이 아니라 낡은 주석이다. **권고**: (e)를 헤더에 추가하고 "넷"을 "다섯"으로 고친다.
+낡은 주석은 다음 사람이 근거를 신뢰하지 못하게 만드는 비용을 계속 물린다.
+
+### T11-R-5 — `enableOnSave` 라벨이 수정 모드에서 어색하다 (Mysterious Name)
+`src/core/i18n.ts:73`. 키 `enableOnSave` / 문구 "Enable after saving". 수정 모드의 스위치는
+규칙의 **현재** `enabled`를 비추므로 이미 살아 있는 규칙에 "after saving"은 맞지 않는다.
+JSDoc은 "라벨이 Save 버튼의 효과를 서술한다"고 변호하고 리뷰어도 defensible로 인정했다.
+**권고**: 수정 모드에서만 다른 문구를 쓸지, 아니면 "활성 상태로 저장"처럼 두 모드에 다 맞는
+문구로 바꿀지 결정한다.
+
+### T11-R-6 — `as Modification` 캐스트
+`src/features/modifications/rule-form.tsx:495`. 공통 필드에는 불필요하다. 리뷰어 자신이
+"tooling/precedent로 건너뜀"(같은 파일에 선례 14건)으로 분류했으므로 단독으로 고칠 일이 아니다.
+**권고**: 그 파일의 캐스트 15건을 함께 걷어내는 별도 작업.
+
+### T11-R-7 — 하위 케이스 (d)의 배리어가 배리어가 아니다
+`scripts/smoke.mjs:4138`. `pollUntil(readMod('X-Act-Seeded'), m => m !== null)`은 그 규칙이 수정
+이전에 이미 존재하므로 아무것도 막지 않는다. 단언이 **지금** 안전한 이유는 오직 `waitFormClosed`가
+persist 뒤에 온다는 인과(`saveItem`은 `result.ok`에서만 폼을 닫고 `executor`는 응답 전에 저장한다)
+때문이다. **폼이 낙관적으로 닫히도록 바뀌는 순간 `editKeptOff`는 공허하게 통과한다.**
+현재는 올바르므로 결함이 아니라 잠복 취약성이다. **권고**: 수정 후의 `enabled=false`를 저장소에서
+읽는 폴링(값 자체를 보는 것)으로 바꿔 인과에 기대지 않게 한다. 티켓 14의 T14-R-11과 같은 계열의
+"한 줄 옆에 남은 잠복 flake"다.
