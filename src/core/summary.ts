@@ -49,8 +49,8 @@ export interface SummaryContext {
 export type ProfileRowState = 'on' | 'off' | 'paused';
 
 export interface ProfileRowStatus {
-  /** 그 프로필에 들어 있는 **켜진** 규칙 수. */
-  ruleCount: number;
+  /** 그 프로필에 들어 있는 **켜진** Modification 수. */
+  enabledModificationCount: number;
   state: ProfileRowState;
 }
 
@@ -73,7 +73,7 @@ export function profileRowStatus(
   paused: boolean,
 ): ProfileRowStatus {
   return {
-    ruleCount: profile.modifications.filter((m) => m.enabled).length,
+    enabledModificationCount: profile.modifications.filter((m) => m.enabled).length,
     state: paused ? 'paused' : profile.active ? 'on' : 'off',
   };
 }

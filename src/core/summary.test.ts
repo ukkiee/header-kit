@@ -97,19 +97,19 @@ describe('profileRowStatus', () => {
   const disabled = (id: string, name: string): Modification => ({ ...mod(id, name), enabled: false });
 
   it('켜진 규칙만 센다 — 0개·일부만 켜짐·전부 켜짐', () => {
-    expect(profileRowStatus(profile({ modifications: [] }), false).ruleCount).toBe(0);
+    expect(profileRowStatus(profile({ modifications: [] }), false).enabledModificationCount).toBe(0);
     expect(
       profileRowStatus(profile({ modifications: [disabled('d1', 'X-A'), disabled('d2', 'X-B')] }), false)
-        .ruleCount,
+        .enabledModificationCount,
     ).toBe(0);
     expect(
       profileRowStatus(
         profile({ modifications: [mod('a1', 'X-A'), disabled('d1', 'X-B'), mod('a2', 'X-C')] }),
         false,
-      ).ruleCount,
+      ).enabledModificationCount,
     ).toBe(2);
     expect(
-      profileRowStatus(profile({ modifications: [mod('a1', 'X-A'), mod('a2', 'X-B')] }), false).ruleCount,
+      profileRowStatus(profile({ modifications: [mod('a1', 'X-A'), mod('a2', 'X-B')] }), false).enabledModificationCount,
     ).toBe(2);
   });
 
@@ -130,7 +130,7 @@ describe('profileRowStatus', () => {
     const paused = profileRowStatus(target, true);
 
     // 재개하면 직전 상태가 그대로 다시 보인다 — 정지는 그 위에 덮이기만 한다.
-    expect(paused.ruleCount).toBe(running.ruleCount);
+    expect(paused.enabledModificationCount).toBe(running.enabledModificationCount);
     expect(profileRowStatus(target, false)).toEqual(running);
     expect(target.active).toBe(true);
     expect(target.modifications).toHaveLength(2);

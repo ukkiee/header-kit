@@ -177,7 +177,7 @@ function ProfileRowMark({ status }: { status: ProfileRowStatus }) {
       }`}
     >
       {paused && <Pause size={9} strokeWidth={2} fill="currentColor" />}
-      {status.ruleCount}
+      {status.enabledModificationCount}
     </span>
   );
 }
