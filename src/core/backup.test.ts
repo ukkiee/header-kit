@@ -310,6 +310,25 @@ describe('planSnapshotDelete / verifySnapshotDeleted (티켓 12)', () => {
     expect(planSnapshotDelete({}, 'never-existed').removeKeys).toEqual([]);
   });
 
+  /**
+   * 빈 id는 접두를 `bk:`로 무너뜨려 매니페스트 키와 다른 스냅샷의 청크까지 계획에 담는다 —
+   * 매니페스트는 다른 기기·다른 버전이 쓴 저장 데이터라 그런 항목이 실제로 들어올 수 있다.
+   * 한 행을 지우려던 손이 백업 네임스페이스를 통째로 비우지 않게 계획 단계에서 막는다.
+   */
+  it('빈 id·`:`가 든 id는 아무것도 지우지 않는다 — 스윕이 백업 전체로 번지지 않는다', () => {
+    let kv = committedBackup({}, 'payload-A', 'sa', 1);
+    kv = committedBackup(kv, 'payload-B', 'sb', 2);
+    const before = backupKeys(kv);
+
+    for (const id of ['', 'bk:', 'sa:0']) {
+      const plan = planSnapshotDelete(kv, id);
+      expect(plan.found).toBe(false);
+      expect(plan.removeKeys).toEqual([]);
+      expect(plan.manifest).toEqual(readManifest(kv)); // 매니페스트도 그대로다
+      expect(backupKeys(appliedDelete(kv, id))).toEqual(before);
+    }
+  });
+
   it('삭제 검증은 다시 읽은 KV로 한다 — 잔재가 남으면 성공으로 접지 않는다', () => {
     let kv = committedBackup({}, 'payload-A', 'sa', 1);
     kv = committedBackup(kv, 'payload-B', 'sb', 2);

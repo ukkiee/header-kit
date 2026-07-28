@@ -176,6 +176,9 @@ export function BackupPanel({
       return;
     }
     setConfirming(null);
+    // 앞선 일괄 삭제·초기화의 성공 문구를 먼저 지운다 — 남겨 두면 이번 실패 배너 옆에
+    // "삭제했습니다"가 그대로 서서, 지우지 못한 것이 지워진 것처럼 읽힌다.
+    setNotice(null);
 
     const result = await deleteSnapshot(entry, target);
     setError(

@@ -349,6 +349,19 @@ export interface SnapshotDeletePlan {
 }
 
 /**
+ * 접두 스윕에 써도 되는 id인가.
+ *
+ * 빈 id는 접두를 `bk:`로 무너뜨려 매니페스트 키와 **다른 모든 스냅샷의 청크**까지 계획에
+ * 담고, `:`가 든 id는 다른 스냅샷의 청크 구역과 겹친다. 매니페스트는 다른 기기·다른 버전이
+ * 쓴 저장 데이터이고 `readManifest`는 `id: ''`도 항목으로 받으므로, 이 둘은 실제로 들어올 수
+ * 있다. 넓은 계획보다 빈 계획이 안전하다 — 여기서 막지 않으면 한 행을 지우려던 손이 백업
+ * 네임스페이스를 통째로 비운다.
+ */
+function isSweepableSnapshotId(id: string): boolean {
+  return id.length > 0 && !id.includes(':');
+}
+
+/**
  * 히스토리 한 행을 지우는 **가장 좁은** 계획 (티켓 12).
  *
  * 일괄 클라우드 삭제(R-1)·전체 초기화(R-3)와 다른 동작이다: 지우는 것은 그 스냅샷의
@@ -358,7 +371,11 @@ export interface SnapshotDeletePlan {
  * 그것을 두고 오면 "지웠는데 quota는 그대로"가 된다.
  */
 export function planSnapshotDelete(kv: SyncKV, snapshotId: string): SnapshotDeletePlan {
-  const { snapshots } = readManifest(kv);
+  const manifest = readManifest(kv);
+  // 경계 밖의 id는 아무것도 지우지 않는 계획으로 답한다 (위 `isSweepableSnapshotId`).
+  if (!isSweepableSnapshotId(snapshotId)) return { found: false, removeKeys: [], manifest };
+
+  const { snapshots } = manifest;
   const entry = snapshots.find((s) => s.id === snapshotId);
   const prefix = `bk:${snapshotId}:`;
   const keys = new Set(Object.keys(kv).filter((key) => key.startsWith(prefix)));
