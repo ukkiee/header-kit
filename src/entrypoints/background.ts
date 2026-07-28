@@ -3,13 +3,19 @@ import type { Command } from '@/core/commands';
 import { nextExpiry } from '@/core/expiry';
 import type { NetRule } from '@/core/rules';
 import type { StoredState } from '@/core/schema';
-import { performBackup, readBackupKV, removeBackupKeys } from '@/platform/backupStore';
+import {
+  deleteBackupSnapshot,
+  performBackup,
+  readBackupKV,
+  removeBackupKeys,
+} from '@/platform/backupStore';
 import {
   clearSummary,
   commitMigration,
   loadState,
   readState,
   onCommand,
+  onSnapshotDeleteRequest,
   onStateChanged,
   persistState,
   publishSummary,
@@ -102,6 +108,7 @@ export default defineBackground(() => {
     performBackup,
     readBackupKV,
     removeBackupKeys,
+    deleteBackupSnapshot,
     clearSummary,
     replaceSessionRules,
     applyBadge,
@@ -113,6 +120,7 @@ export default defineBackground(() => {
     },
     onStateChanged,
     onCommand,
+    onSnapshotDeleteRequest,
     onTabsChanged,
     onStartup: (callback) => browser.runtime.onStartup.addListener(callback),
     onInstalled: (callback) => browser.runtime.onInstalled.addListener(callback),

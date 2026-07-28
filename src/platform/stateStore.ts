@@ -1,11 +1,14 @@
+import type { BackupTarget } from '@/core/backup';
 import type { Command } from '@/core/commands';
 import {
+  canCommitMigrationOver,
   isBlockedFromOverwrite,
   readStoredState,
   type StoredState,
   type StoredStateRead,
 } from '@/core/schema';
 import type { StatusSummary } from '@/core/summary';
+import type { DeleteSnapshotResult } from '@/platform/backupStore';
 
 const STATE_KEY = 'state';
 const COMMAND_MESSAGE = 'headerkit:command';
@@ -38,14 +41,18 @@ export async function loadState(): Promise<StoredState> {
  *
  * 호출부는 background 컴포지션 루트 하나뿐이고, **재조정 바깥에서 한 번만** 돈다(티켓 14).
  * 실패는 삼키지 않고 호출자에게 전파한다 — 저장소가 v1로 남은 사실이 조용히 묻히지 않게.
+ *
+ * 이 함수는 저장소를 두 번 읽지만, **판정하는 읽기는 아래 `persistMigrated`의 것 하나**다
+ * (release R2-2). 여기 읽기는 마이그레이션할 스냅샷을 만들 뿐이고, 그 결과를 굳혀도
+ * 되는지는 쓰기 직전 값으로 판단한다 — 그 사이 커맨드가 편집된 v2를 저장했으면 쓰지
+ * 않고 `false`로 물러난다. 물러남은 오류가 아니므로 던지지 않는다.
  */
 export async function commitMigration(): Promise<boolean> {
   const read = await readState();
   if (read.status === 'blocked') throw new StateLoadError(read.reason, read.storedVersion);
   if (read.status !== 'migrated') return false;
-  // 덮어쓰기 가드를 다시 지나도록 persistState로 쓴다 — 새 쓰기 경로를 열지 않는다.
-  await persistState(read.state);
-  return true;
+  // 덮어쓰기 가드와 커밋 가드를 함께 지나는 CAS로 쓴다 — 새 쓰기 경로를 열지 않는다.
+  return persistMigrated(read.state);
 }
 
 /**
@@ -69,13 +76,46 @@ export async function readState(): Promise<StoredStateRead> {
  * 로컬이라 이 비용보다 프로필을 잃는 쪽이 훨씬 비싸다.
  */
 export async function persistState(state: StoredState): Promise<void> {
+  await guardedWrite(state, () => true);
+}
+
+/**
+ * 마이그레이션 커밋 전용 compare-and-swap (release R2-2) — 읽은 값이 **아직 v1일 때만**
+ * 쓴다. 그 사이 편집된 v2가 착지했으면 쓰지 않고 `false`로 물러난다(오류가 아니다).
+ *
+ * `persistState`의 시그니처는 건드리지 않는다 — `BackgroundDeps.persistState`가
+ * `(state) => Promise<void>`이고 `Promise<boolean>`은 거기에 **대입되지 않는다**
+ * (`error TS2322`). 그래서 CAS는 같은 몸통을 공유하는 **별도 함수**로 선다.
+ *
+ * **남는 가정**: 이 픽스가 닫는 것은 `storage.local`이 발행 순서대로 get/set을 처리한다는
+ * 가정 위에서의 창이다 — `persistState`의 기존 덮어쓰기 가드가 이미 하는 가정과 같다.
+ * `StoredState`에 리비전 카운터를 넣는 일반 CAS(followups T14-1)는 스키마 범프를 부르는
+ * 별건이다.
+ */
+export async function persistMigrated(state: StoredState): Promise<boolean> {
+  return guardedWrite(state, canCommitMigrationOver);
+}
+
+/**
+ * `persistState`와 `persistMigrated`가 공유하는 몸통 — 읽기 → 가드 → 판정 → 쓰기.
+ *
+ * 판정은 **위에서 읽은 그 값**으로 하고, 판정과 `set` 사이에는 **await가 없다**. 창을
+ * 닫는 것은 재읽기가 아니라 그 사실이다 — 커밋이 따로 한 번 더 읽어 판정하면 그 사이
+ * await 둘이 창을 다시 연다(release R2-2).
+ */
+async function guardedWrite(
+  state: StoredState,
+  accept: (existing: unknown) => boolean,
+): Promise<boolean> {
   const existing = await browser.storage.local.get(STATE_KEY);
   if (isBlockedFromOverwrite(existing[STATE_KEY])) {
     throw new Error(
       'Refusing to overwrite stored state this version cannot read (newer or unmigratable format). Your data is left intact.',
     );
   }
+  if (!accept(existing[STATE_KEY])) return false;
   await browser.storage.local.set({ [STATE_KEY]: state });
+  return true;
 }
 
 export function onStateChanged(listener: () => void): void {
@@ -123,6 +163,55 @@ export async function sendCommand(command: Command): Promise<CommandResult> {
     type: COMMAND_MESSAGE,
     command,
   })) as CommandResult;
+}
+
+const DELETE_SNAPSHOT_MESSAGE = 'headerkit:delete-snapshot';
+
+/**
+ * 스냅샷 한 행 삭제를 **서비스워커에 요청한다** (release R2-3).
+ *
+ * 렌더러가 직접 지우지 않는 이유는 `bk:manifest`의 writer를 하나로 세우기 위해서다.
+ * 자동 Backup은 서비스워커에 살고 삭제는 팝업·탭 렌더러에 살았다 — 서로 다른 JS
+ * 컨텍스트라 인프로세스 락으로는 원리적으로 못 맞춘다(`browser.storage`에 CAS가 없다).
+ * 삭제를 서비스워커로 옮기면 그쪽이 자동 Backup을 중단·드레인한 뒤 지울 수 있다.
+ *
+ * 전이 명령(`sendCommand`)과 채널을 가르는 이유: 삭제는 권위 상태를 바꾸지 않고
+ * 결과가 `CommandResult`가 아니라 잔여 개수를 든 `DeleteSnapshotResult`다.
+ */
+export async function requestSnapshotDelete(
+  snapshotId: string,
+  target: BackupTarget,
+): Promise<DeleteSnapshotResult> {
+  return (await browser.runtime.sendMessage({
+    type: DELETE_SNAPSHOT_MESSAGE,
+    snapshotId,
+    target,
+  })) as DeleteSnapshotResult;
+}
+
+/** background에서 삭제 요청을 구독한다 — 실패도 결과 객체로 돌려준다(던지지 않는다). */
+export function onSnapshotDeleteRequest(
+  handler: (snapshotId: string, target: BackupTarget) => Promise<unknown>,
+): void {
+  browser.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (
+      typeof message === 'object' &&
+      message !== null &&
+      (message as { type?: unknown }).type === DELETE_SNAPSHOT_MESSAGE
+    ) {
+      const { snapshotId, target } = message as { snapshotId: string; target: BackupTarget };
+      void handler(snapshotId, target)
+        .then((result) => sendResponse(result))
+        .catch((error: unknown) =>
+          sendResponse({
+            ok: false,
+            error: error instanceof Error ? error.message : String(error),
+          } satisfies DeleteSnapshotResult),
+        );
+      return true; // 비동기 응답
+    }
+    return undefined;
+  });
 }
 
 /** background에서 명령 메시지를 구독한다. 거부·실패는 오류 응답으로 돌려준다. */

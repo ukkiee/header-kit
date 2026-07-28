@@ -60,6 +60,18 @@ export interface BackgroundDeps {
   /** 백업 네임스페이스(`bk:`)만 읽는다 — 전체 초기화가 같은 구역의 권위 상태를 넘보지 않게. */
   readBackupKV(target: BackupTarget): Promise<SyncKV>;
   removeBackupKeys(target: BackupTarget, keys: string[]): Promise<void>;
+  /**
+   * 스냅샷 한 행을 지운다 (release R2-3) — 결과는 잔여 개수를 든 객체로 돌아온다.
+   *
+   * 이 효과가 여기 있는 이유는 삭제가 **서비스워커 한 곳**에서만 일어나야 하기 때문이다.
+   * `bk:manifest`의 writer가 자동 Backup(서비스워커)과 삭제(렌더러)로 갈리면, 읽기와
+   * 통째 쓰기 사이에 착지한 커밋이 조용히 사라진다.
+   */
+  deleteBackupSnapshot(snapshotId: string, target: BackupTarget): Promise<unknown>;
+  /** 렌더러의 삭제 요청을 받는다 — 핸들러의 결과가 그대로 응답이 된다. */
+  onSnapshotDeleteRequest(
+    handler: (snapshotId: string, target: BackupTarget) => Promise<unknown>,
+  ): void;
   /** 세션 요약을 지운다 (전체 초기화) — 다음 재조정이 새 요약을 발행한다. */
   clearSummary(): Promise<void>;
   replaceSessionRules(rules: NetRule[]): Promise<void>;
@@ -91,8 +103,13 @@ export interface BackgroundDeps {
  * browser 효과를 채워 이 함수를 호출하기만 한다.
  */
 export function bootstrap(deps: BackgroundDeps): void {
-  // 상태 전이의 단일 권위 실행자 — 모든 쓰기는 이 큐를 거친다. reconciler.apply의
+  // 상태 전이의 단일 권위 실행자 — 모든 **명령**의 쓰기는 이 큐를 거친다. reconciler.apply의
   // 만료 재전이가 이 실행자를 참조하므로 먼저 선언한다.
+  //
+  // 마이그레이션 커밋(아래 `deps.commitMigration`)은 이 큐 **밖**이다 (release R2-2).
+  // 리스너는 커밋보다 먼저 등록되므로 커밋이 도는 동안 커맨드가 착지할 수 있고, 커밋은
+  // 쓰기 직전에 읽은 값이 아직 v1일 때만 쓰는 CAS로 그 창을 닫는다 — 충돌하면 쓰지 않고
+  // `false`로 물러난다(오류가 아니라 정상 동작이다).
   const executor = createCommandExecutor({
     load: deps.loadState,
     save: deps.persistState,
@@ -151,8 +168,15 @@ export function bootstrap(deps: BackgroundDeps): void {
   // 않기 위한 의도적 예외. 타이머 코얼레싱 + 최소 30초 간격으로 sync quota 안쪽 유지.
   let backupScheduled = false;
   let lastBackupAt = 0;
-  /** 전체 초기화가 저장소를 비우는 동안 켜진다 (R-3) — 그 창에서는 스냅샷을 쓰지 않는다. */
-  let backupSuspended = false;
+  /**
+   * `bk:`를 건드리는 작업이 진행 중인 **깊이** (R-3, release R2-3) — 0보다 크면 스냅샷을
+   * 쓰지 않는다.
+   *
+   * boolean이 아니라 카운터인 이유: 사용자가 둘이다(전체 초기화·스냅샷 삭제). 겹쳐
+   * 들어왔을 때 먼저 끝난 쪽이 플래그를 되돌리면 다른 쪽의 창이 열린 채 남아, 이 중단이
+   * 막으려던 그 실패를 새로 만든다.
+   */
+  let suspendDepth = 0;
   /** 진행 중인 백업 — 중단은 이것을 기다려야 가드를 이미 지난 스냅샷이 뒤늦게 착지하지 않는다. */
   let inFlightBackup: Promise<void> = Promise.resolve();
   /**
@@ -172,7 +196,7 @@ export function bootstrap(deps: BackgroundDeps): void {
      * 가드를 지난 이 실행은 막히지 않는다. 그래서 performBackup 직전에 다시 보고,
      * 중단하는 쪽은 진행 중인 이 promise를 기다린다.
      */
-    if (backupSuspended) return;
+    if (suspendDepth > 0) return;
     lastBackupAt = deps.now();
     try {
       /*
@@ -196,7 +220,7 @@ export function bootstrap(deps: BackgroundDeps): void {
       }
       // 재검사: 여기 도달하기까지 지나온 await 동안 초기화가 시작됐을 수 있다. 이 스냅샷은
       // 옛 payload를 들고 있어, 삭제·검증이 끝난 뒤에 착지하면 그대로 남는다.
-      if (backupSuspended) return;
+      if (suspendDepth > 0) return;
       const state = read.state;
       await deps.performBackup(backupPayload(state), state.profiles.length, backupTarget(state));
     } catch (error) {
@@ -217,6 +241,56 @@ export function bootstrap(deps: BackgroundDeps): void {
   };
 
   /**
+   * `bk:`를 건드리기 직전에 자동 Backup을 멈추고 **드레인**한다 (R-3, release R2-3).
+   *
+   * 세 가지를 함께 한다:
+   * 1. 깊이를 올린다 — 겹친 작업이 서로의 창을 열지 않는다.
+   * 2. 세대를 올리고 예약 자리를 비운다 — `setTimer`는 취소할 수 없으므로 이미 걸린
+   *    타이머는 발화해도 쓰지 않는다.
+   * 3. 진행 중인 백업을 **기다린다** — 플래그만 세우고 돌아오면 이미 가드를 지난 그
+   *    백업이 읽기와 쓰기 사이에 그대로 착지한다. 재검사 앞이었다면 거기서 멈추고,
+   *    이미 재검사를 지났다면 커밋까지 끝난 뒤에야 우리가 읽는다 — 어느 쪽이든 그
+   *    쓰기가 우리 읽기 **앞에** 놓인다는 것이 이 await가 사는 이유다.
+   */
+  const suspendBackupWrites = async (): Promise<void> => {
+    suspendDepth += 1;
+    backupGeneration += 1;
+    backupScheduled = false;
+    await inFlightBackup;
+  };
+
+  /**
+   * 중단을 푼다. `reschedule`이면 마지막 한 겹이 풀릴 때 **반드시** 다시 예약한다.
+   *
+   * 중단이 예약 자리를 비웠으므로 여기서 되살리지 않으면 다음 `onStateChanged`까지
+   * 백업이 없다. 전체 초기화는 상태가 바뀌어 그 이벤트가 뒤따르지만, **스냅샷 삭제는
+   * `storage.local.state`를 건드리지 않아 그 복구가 없다** — 되살리지 않으면 그 백업은
+   * 영구히 사라진다.
+   */
+  const resumeBackupWrites = ({ reschedule }: { reschedule: boolean }): void => {
+    suspendDepth = Math.max(0, suspendDepth - 1);
+    if (suspendDepth === 0 && reschedule) scheduleBackup();
+  };
+
+  /**
+   * 스냅샷 한 행 삭제 — **서비스워커가 집행한다** (release R2-3).
+   *
+   * 렌더러가 직접 지우면 `bk:manifest`의 writer가 두 JS 컨텍스트에 서고, 삭제의 읽기와
+   * 통째 쓰기 사이에 자동 Backup의 커밋이 착지해 조용히 사라진다. `browser.storage`에
+   * CAS가 없으므로 인프로세스 락으로는 원리적으로 못 고친다 — writer를 하나로 세우는
+   * 것이 유일한 답이다. 삭제는 실패해도 던지지 않고 결과 객체로 돌려준다.
+   */
+  const deleteSnapshot = async (snapshotId: string, target: BackupTarget): Promise<unknown> => {
+    await suspendBackupWrites();
+    try {
+      return await deps.deleteBackupSnapshot(snapshotId, target);
+    } finally {
+      // 삭제는 상태를 바꾸지 않아 onStateChanged가 뒤따르지 않는다 — 무조건 다시 예약한다.
+      resumeBackupWrites({ reschedule: true });
+    }
+  };
+
+  /**
    * 전체 초기화 (R-3) — 순서·검증은 core/reset이 정하고, 여기서는 그 효과를 채운다.
    * 상태 리셋만은 다른 전이와 같은 단일 writer 큐를 지나, 초기화 도중 도착한 명령과
    * 마지막 쓰기를 다투지 않는다.
@@ -224,24 +298,13 @@ export function bootstrap(deps: BackgroundDeps): void {
   const fullReset = async (): Promise<StoredState> => {
     const applied: { state?: StoredState } = {};
     const result = await performFullReset({
-      suspendAutoBackup: async () => {
-        backupSuspended = true;
-        // 아직 발화하지 않은 예약은 취소할 수 없다 — 세대를 올려 무효화하고 예약 자리를
-        // 비운다. 플래그만 풀리는 실패 경로에서 옛 타이머가 뒤늦게 발화해도 쓰지 않고,
-        // 재개는 이 빈 자리에 새 예약을 건다.
-        backupGeneration += 1;
-        backupScheduled = false;
-        // 플래그만으로는 이미 가드를 지나 진행 중인 백업을 막을 수 없다 — 그것이 끝나기를
-        // 기다린 뒤에 삭제를 시작한다(그 실행은 performBackup 직전 재검사에서 멈춘다).
-        await inFlightBackup;
-      },
+      suspendAutoBackup: suspendBackupWrites,
       resumeAutoBackup: ({ snapshot }) => {
-        backupSuspended = false;
         // 끝까지 간 초기화만 곧바로 다시 예약한다 — 중단 창에서 눌러 버린 예약이 사라진
         // 자리를 메우고, 그때 스냅샷되는 것은 깨끗한 default다. 실패했다면 상태가 아직
         // 옛 프로필이라 지금 예약하면 방금 지운 백업이 되살아난다. 그 경우는 예약 없이
-        // 플래그만 풀고, 다음 상태 변경이 정상적으로 다시 예약하게 둔다.
-        if (snapshot) scheduleBackup();
+        // 깊이만 풀고, 다음 상태 변경이 정상적으로 다시 예약하게 둔다(삭제와 다른 점).
+        resumeBackupWrites({ reschedule: snapshot });
       },
       readBackupKV: deps.readBackupKV,
       removeBackupKeys: deps.removeBackupKeys,
@@ -262,6 +325,7 @@ export function bootstrap(deps: BackgroundDeps): void {
   deps.onCommand((command) =>
     command.type === 'full-reset' ? fullReset() : executor.execute(command),
   );
+  deps.onSnapshotDeleteRequest(deleteSnapshot);
 
   deps.onStateChanged(() => {
     converge();

@@ -404,6 +404,48 @@ export function verifySnapshotDeleted(
   return remaining.length === 0 ? { ok: true } : { ok: false, remaining };
 }
 
+/**
+ * 삭제가 **자기 것만** 지웠는지 확인한다 — 읽은 뒤에 착지한 커밋까지 삼키지 않았는지
+ * 함께 본다 (release R2-3).
+ *
+ * `verifySnapshotDeleted`는 **지운 id의 부재만** 묻는다. 삭제는 매니페스트를 **통째로**
+ * 교체하므로, 읽기와 쓰기 사이에 커밋된 스냅샷은 그 교체에 조용히 지워지는데 부분 술어는
+ * 그것을 보지 못하고 `{ok:true}`를 낸다 — 전량 쓰기를 부분 술어로 검사하는 이 비대칭이
+ * 손실을 조용하게 만드는 전부다. 그 함수를 **그 자리에서 바꾸지 않고**(그 계약은 다른
+ * 곳에서 못 박혀 있다) 여기서 읽은 시점의 KV를 함께 받아 넓힌다.
+ *
+ * 두 가지를 더 본다:
+ * 1. 읽은 시점 매니페스트에 있던 **다른** 스냅샷이 쓰기 뒤에 없다 → 우리가 지웠다.
+ * 2. 읽은 **뒤에** 새로 생긴 청크의 주인이 매니페스트에 없다 → 그 사이 커밋된 스냅샷의
+ *    항목을 우리 쓰기가 덮었다. 읽기 전부터 있던 고아 청크(손상 스냅샷의 잔해)는 세지
+ *    않는다 — 그것을 세면 정상 삭제가 매번 실패로 보고된다.
+ *
+ * 이 검증은 마지막 그물이지 경합의 해법이 아니다. 경합 자체는 `bk:`를 건드리는 작업을
+ * 서비스워커 한 writer로 세워 닫는다.
+ */
+export function verifySnapshotDeleteComplete(
+  before: SyncKV,
+  after: SyncKV,
+  snapshotId: string,
+): { ok: true } | { ok: false; remaining: string[] } {
+  const target = verifySnapshotDeleted(after, snapshotId);
+  const kept = new Set(readManifest(after).snapshots.map((entry) => entry.id));
+  const lostSiblings = readManifest(before)
+    .snapshots.map((entry) => entry.id)
+    .filter((id) => id !== snapshotId && !kept.has(id));
+  const landedAfterRead = new Set(
+    backupKeys(after)
+      .filter((key) => key !== BACKUP_MANIFEST_KEY && !(key in before))
+      .map((key) => key.split(':')[1] ?? ''),
+  );
+  const orphanedCommits = [...landedAfterRead].filter(
+    (id) => id !== '' && id !== snapshotId && !kept.has(id),
+  );
+  const lost = [...new Set([...lostSiblings, ...orphanedCommits])].map((id) => `bk:${id}`);
+  const remaining = [...(target.ok ? [] : target.remaining), ...lost];
+  return remaining.length === 0 ? { ok: true } : { ok: false, remaining };
+}
+
 /** 복원 목록 — 손상 스냅샷도 사유와 함께 표시한다 (조용히 숨기지 않는다). */
 export function listSnapshots(kv: SyncKV): SnapshotStatus[] {
   return readManifest(kv).snapshots.map((entry) => {

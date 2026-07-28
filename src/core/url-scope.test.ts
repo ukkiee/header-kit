@@ -126,6 +126,47 @@ describe('대안이 여럿이면 전부 호스트에 묶여야 좁다 (release R
   });
 });
 
+describe('그룹 안에 숨은 갈래도 전부 호스트에 묶여야 좁다 (release R2-1)', () => {
+  /*
+   * 최상위 `|`만 자르면 그룹이 통째로 조각 하나가 되어, 그 안의 호스트꼴 토큰 하나가
+   * **다른 갈래까지** 대신 증명한다. 아래 넷은 하나같이 `.invalid` 탐침 둘을 피하면서
+   * 모든 HTTPS `.com`을 삼키는데, 그룹 밖에서 보면 `ads.example.net`만 보인다.
+   *
+   * 판정은 **문맥을 분배해 전개**한다 — 그룹 앞뒤가 각 갈래에 복사되므로
+   * `^(a/|b/)`는 `^a/`·`^b/`가 되고, 아래 회귀 방지 행처럼 문맥이 호스트를 완성하는
+   * 모양(`^https://(ads|cdn)\.example\.com/`)은 여전히 좁다.
+   */
+  it.each([
+    // 리뷰 반례 — 그룹이 최상위 전체를 감싼다.
+    ['^(https://ads\\.example\\.net/|https://.*\\.com/)', 'regex'],
+    // 스킴 뒤 그룹 — 문맥(`^https://`)이 그룹 앞에 있다.
+    ['^https://(ads\\.example\\.net/|.*\\.com/)', 'regex'],
+    // 비캡처 그룹도 같다.
+    ['^(?:https://ads\\.example\\.net/|https://.*\\.com/)', 'regex'],
+    // 중첩 이중 괄호 — 갈래마다 다시 괄호가 씌워져 있다.
+    ['^((https://ads\\.example\\.net/)|(https://.*\\.com/))', 'regex'],
+  ] as const)('%s (%s) → wide', (pattern, matchType) => {
+    expect(urlScopeBreadth(pattern, matchType)).toBe('wide');
+  });
+
+  it('전개는 문맥을 분배한다 — 그냥 자르면 뒤집히는 회귀 방지 행', () => {
+    // 순진한 분할은 이것을 `^https://(ads`와 `cdn)\.example\.com/`로 찢는다.
+    expect(urlScopeBreadth('^https://(ads|cdn)\\.example\\.com/', 'regex')).toBe('narrow');
+  });
+
+  it('포기 경로는 전부 넓음으로 떨어진다 — 갈래 상한과 빈 매칭이 되는 수량자', () => {
+    // 갈래 2^7 = 128 > 상한. 하나하나는 전부 호스트에 묶이지만 세지 않고 물러난다.
+    expect(
+      urlScopeBreadth(
+        '^https://(a|b)(c|d)(e|f)(g|h)(i|j)(k|l)(m|n)\\.example\\.com/',
+        'regex',
+      ),
+    ).toBe('wide');
+    // 대안 그룹 바로 뒤의 `?`는 그룹이 통째로 빠진 문자열도 매칭시킨다 — 전개가 표현하지 못한다.
+    expect(urlScopeBreadth('^https://(ads|cdn)?\\.example\\.com/', 'regex')).toBe('wide');
+  });
+});
+
 describe('규칙이 만들어지지 않는 패턴은 거부한다', () => {
   it.each([
     // 컴파일 자체가 안 되는 패턴.

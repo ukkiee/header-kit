@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { SCHEMA_VERSION } from '@/core/schema';
-import { commitMigration, loadState, StateLoadError } from '@/platform/stateStore';
+import { createDefaultState, SCHEMA_VERSION } from '@/core/schema';
+import { commitMigration, loadState, persistState, StateLoadError } from '@/platform/stateStore';
 
 /** 배선 테스트 (R-3) — 순수 분류기가 보지 못하는 storage.local 커밋·무쓰기를 못 박는다. */
 const V1 = {
@@ -61,6 +61,83 @@ describe('commitMigration — v1 마이그레이션 커밋 (storage.local)', () 
     expect(await commitMigration()).toBe(true);
     expect(writes).toBe(1);
     expect(await commitMigration()).toBe(false);
+    expect(writes).toBe(1);
+  });
+});
+
+/*
+ * 마이그레이션 커밋이 **더 새 상태를 덮는** 창 (release R2-2).
+ *
+ * 커맨드 리스너는 마이그레이션보다 먼저 등록되고, 커맨드의 `persistState`는 이 커밋만
+ * 지나지 않는다 — 즉 커밋이 v1을 읽은 뒤 쓰기까지 가는 사이에 편집된 v2가 착지할 수
+ * 있다. 즉시 resolve하는 `seedLocal`은 그 인터리빙을 **표현할 수 없다**(순차 실행만
+ * 돈다). 그래서 `get`의 해결을 지연시키는 변형을 따로 세워 손으로 순서를 짠다 —
+ * 어댑터 시임의 본령이다(spec.md Testing Decisions, 2026-07-28 개정).
+ */
+function seedDeferredLocal(state: unknown) {
+  const kv: Record<string, unknown> = { state: structuredClone(state) };
+  writes = 0;
+  let holdNextGet = false;
+  let release = () => {};
+  const local = {
+    get: async () => {
+      // **호출 시점의** 값을 집는다 — 실제 storage.local도 나중에 착지한 쓰기를
+      // 소급해 보여주지 않는다. 이 스냅샷이 "읽기는 먼저, 전달은 나중"을 만든다.
+      const snapshot = { ...kv };
+      if (holdNextGet) {
+        holdNextGet = false;
+        await new Promise<void>((resolve) => void (release = resolve));
+      }
+      return snapshot;
+    },
+    set: async (items: Record<string, unknown>) => {
+      writes += 1;
+      Object.assign(kv, items);
+    },
+  };
+  (globalThis as unknown as { browser: unknown }).browser = { storage: { local } };
+  return {
+    kv,
+    holdNextGet: () => {
+      holdNextGet = true;
+    },
+    release: () => release(),
+  };
+}
+
+describe('commitMigration — 두 writer 인터리빙 (release R2-2)', () => {
+  it('첫 읽기 뒤 착지한 편집본 위에는 굳히지 않고 물러난다 — 편집본이 최종값이다', async () => {
+    const store = seedDeferredLocal(V1);
+
+    // 마이그레이션의 첫 읽기를 공중에 띄운다 — v1을 이미 집었지만 아직 전달되지 않았다.
+    store.holdNextGet();
+    const commit = commitMigration();
+    await Promise.resolve();
+
+    // 그 사이 커맨드가 편집된 v2를 착지시킨다 (커맨드 큐는 이 커밋을 지나지 않는다).
+    const edited = { ...createDefaultState(), paused: true };
+    await persistState(edited);
+    expect(store.kv.state).toMatchObject({ schemaVersion: SCHEMA_VERSION, paused: true });
+
+    // 이제 마이그레이션을 푼다.
+    store.release();
+
+    // 물러남은 오류가 아니다 — false를 돌려주고 던지지 않는다(‘migration commit failed’ 없음).
+    await expect(commit).resolves.toBe(false);
+    // 최종 저장값은 편집본 그대로 — v1에서 올라온 스냅샷이 아니다.
+    expect(store.kv.state).toMatchObject({ schemaVersion: SCHEMA_VERSION, paused: true });
+    expect((store.kv.state as { profiles: unknown[] }).profiles).toEqual(edited.profiles);
+    expect(writes).toBe(1); // 커맨드의 쓰기 하나뿐
+  });
+
+  it('아무도 끼어들지 않으면 지연되어도 정상적으로 굳힌다', async () => {
+    const store = seedDeferredLocal(V1);
+    store.holdNextGet();
+    const commit = commitMigration();
+    await Promise.resolve();
+    store.release();
+    await expect(commit).resolves.toBe(true);
+    expect(store.kv.state).toMatchObject({ schemaVersion: SCHEMA_VERSION });
     expect(writes).toBe(1);
   });
 });

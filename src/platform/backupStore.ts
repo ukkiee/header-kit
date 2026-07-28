@@ -7,7 +7,7 @@ import {
   planBackup,
   planSnapshotDelete,
   verifyBackupsCleared,
-  verifySnapshotDeleted,
+  verifySnapshotDeleteComplete,
   type BackupPlan,
   type BackupTarget,
   type SnapshotStatus,
@@ -118,14 +118,19 @@ export async function deleteBackupSnapshot(
   target: BackupTarget,
 ): Promise<DeleteSnapshotResult> {
   try {
-    const plan = planSnapshotDelete(await readBackupKV(target), snapshotId);
+    const before = await readBackupKV(target);
+    const plan = planSnapshotDelete(before, snapshotId);
     // 매니페스트에 없으면 커밋할 것이 없다 — 이미 지운 행을 다시 지워도 무해하다(멱등).
     // 잔여 청크는 그 경우에도 정리한다.
     if (plan.found) {
       await area(target).set({ [BACKUP_MANIFEST_KEY]: plan.manifest });
     }
     await removeBackupKeys(target, plan.removeKeys);
-    const verified = verifySnapshotDeleted(await readBackupKV(target), snapshotId);
+    // 검증은 **읽은 시점의 KV와 함께** 본다 (release R2-3) — 매니페스트를 통째로 쓰는
+    // 동작을 "지운 id가 없다"는 부분 술어로만 검사하면, 그 사이 커밋된 스냅샷이 우리
+    // 쓰기에 지워진 것을 성공으로 접는다. 경합 자체는 이 호출을 서비스워커 한 곳으로
+    // 세워 닫고(배선은 runtime/background-bootstrap), 이 검증은 마지막 그물이다.
+    const verified = verifySnapshotDeleteComplete(before, await readBackupKV(target), snapshotId);
     return verified.ok ? { ok: true } : { ok: false, remaining: verified.remaining.length };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };

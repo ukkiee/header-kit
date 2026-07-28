@@ -5,13 +5,13 @@ import { parseImport } from '@/core/transfer';
 import { format, MESSAGES, type MessageKey, type Translator } from '@/core/i18n';
 import {
   clearCloudBackups,
-  deleteBackupSnapshot,
   hasCloudBackups,
   listBackupSnapshots,
   readBackupKV,
   type ClearCloudResult,
   type DeleteSnapshotResult,
 } from '@/platform/backupStore';
+import { requestSnapshotDelete } from '@/platform/stateStore';
 import { RotateCcw, Trash2 } from 'lucide-react';
 import { AlertBanner } from '@/ui/alert-banner';
 import { Button } from '@/ui/press-button';
@@ -83,7 +83,10 @@ export function BackupPanel({
   loadSnapshotText = defaultLoadSnapshotText,
   loadCloudPresence = hasCloudBackups,
   clearCloud = clearCloudBackups,
-  deleteSnapshot = (entry, target) => deleteBackupSnapshot(entry.id, target),
+  // 삭제는 **서비스워커에 요청한다** (release R2-3) — 렌더러가 직접 지우면 `bk:manifest`의
+  // writer가 두 컨텍스트에 서고, 동시 자동 Backup의 커밋이 우리 통째 쓰기에 사라진다.
+  // prop 시그니처는 그대로라 잔여 개수가 여기까지 그대로 도착한다.
+  deleteSnapshot = (entry, target) => requestSnapshotDelete(entry.id, target),
 }: BackupPanelProps) {
   const t = useT();
   // 처음부터 펼쳐 둔다 — 환경설정 패널과 같은 이유(레일에서 이 화면으로 온 사람은

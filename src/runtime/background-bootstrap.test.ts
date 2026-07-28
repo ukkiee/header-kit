@@ -15,6 +15,8 @@ function fakeDeps(overrides: Partial<BackgroundDeps> = {}): BackgroundDeps {
     performBackup: async () => undefined,
     readBackupKV: async () => ({}),
     removeBackupKeys: async () => {},
+    deleteBackupSnapshot: async () => ({ ok: true }),
+    onSnapshotDeleteRequest: () => {},
     clearSummary: async () => {},
     replaceSessionRules: async () => {},
     applyBadge: async () => {},
@@ -387,6 +389,194 @@ describe('background bootstrap', () => {
 
     expect(backups).toBe(0);
     expect(Object.keys(areas.sync!)).toEqual([]); // 지운 스냅샷이 그대로 비어 있다
+  });
+
+  /*
+   * 스냅샷 삭제 ↔ 자동 Backup (release R2-3).
+   *
+   * `bk:manifest`의 writer를 서비스워커 하나로 세운 뒤에도, 중단이 **플래그만 세우고**
+   * 돌아오면 이미 가드를 지난 자동 Backup이 삭제의 읽기와 쓰기 사이에 그대로 착지한다.
+   * 그래서 중단은 드레인까지 간다 — 그 커밋이 삭제의 읽기 **앞으로** 밀려나, 삭제 계획이
+   * 그것을 보고 매니페스트에 남긴다.
+   *
+   * 이 하네스의 자동 Backup 틱은 **읽기와 쓰기가 분리 가능**하다(읽기는 삭제 전, 커밋은
+   * 게이트를 푼 뒤). 원자적 틱이나 중단에서 조기 반환하는 틱은 모든 설계에서 통과하므로
+   * 이 기준을 채우지 못한다.
+   */
+  it('삭제는 진행 중인 자동 Backup을 드레인한 뒤에야 매니페스트를 읽는다 — 그 스냅샷이 남는다', async () => {
+    const sync: Record<string, unknown> = {
+      'bk:manifest': { version: 1, snapshots: [{ id: 's1', at: 1, profileCount: 1, chunkCount: 1, bytes: 4 }] },
+      'bk:s1:0': 'chunk-s1',
+    };
+    const order: string[] = [];
+    const timers: (() => void)[] = [];
+    let deleteHandler:
+      | ((snapshotId: string, target: 'sync' | 'local') => Promise<unknown>)
+      | undefined;
+    let releaseBackup = () => {};
+    const backupGate = new Promise<void>((resolve) => void (releaseBackup = resolve));
+
+    bootstrap(
+      fakeDeps({
+        // 자동 Backup 틱: 읽기는 지금(삭제 전), 커밋은 게이트를 푼 뒤(삭제 후가 될 뻔한 자리).
+        performBackup: async (payload) => {
+          order.push('backup:read');
+          const manifest = sync['bk:manifest'] as { version: number; snapshots: unknown[] };
+          const snapshots = [...manifest.snapshots];
+          await backupGate;
+          order.push('backup:commit');
+          sync['bk:late:0'] = payload;
+          sync['bk:manifest'] = {
+            version: 1,
+            snapshots: [...snapshots, { id: 'late', at: 2, profileCount: 1, chunkCount: 1, bytes: 4 }],
+          };
+        },
+        // 삭제는 어댑터가 하는 일을 그대로 흉내 낸다 — 읽고, 그 항목만 뺀 매니페스트를 통째로 쓴다.
+        deleteBackupSnapshot: async (snapshotId) => {
+          order.push('delete:read');
+          const manifest = sync['bk:manifest'] as {
+            version: number;
+            snapshots: { id: string }[];
+          };
+          sync['bk:manifest'] = {
+            version: 1,
+            snapshots: manifest.snapshots.filter((entry) => entry.id !== snapshotId),
+          };
+          delete sync[`bk:${snapshotId}:0`];
+          return { ok: true };
+        },
+        onSnapshotDeleteRequest: (handler) => {
+          deleteHandler = handler;
+        },
+        setTimer: (cb) => {
+          timers.push(cb);
+        },
+      }),
+    );
+    await flush();
+    for (const fire of timers.splice(0)) fire(); // 자동 Backup 시작 — 가드를 지나 커밋 직전에 선다
+    await flush();
+    expect(order).toEqual(['backup:read']);
+
+    const deleting = deleteHandler!('s1', 'sync');
+    await flush();
+    // 드레인 중이라 아직 읽지 않았다 — 플래그만 세우고 돌아왔다면 여기서 이미 읽었다.
+    expect(order).toEqual(['backup:read']);
+
+    releaseBackup();
+    expect(await deleting).toEqual({ ok: true });
+
+    // 커밋이 삭제의 읽기 앞에 놓였다.
+    expect(order).toEqual(['backup:read', 'backup:commit', 'delete:read']);
+    // 삭제 도중 착지한 자동 Backup의 스냅샷 항목과 청크가 남는다 (정방향).
+    expect(sync['bk:late:0']).toBeDefined();
+    expect((sync['bk:manifest'] as { snapshots: { id: string }[] }).snapshots.map((e) => e.id)).toEqual([
+      'late',
+    ]);
+    // 지운 행은 되살아나지 않는다 — 그 커밋이 우리 읽기 앞으로 밀려 계획이 그것을 봤다 (역방향).
+    expect(sync['bk:s1:0']).toBeUndefined();
+  });
+
+  /*
+   * 중단은 **카운팅**이어야 한다. boolean이면 먼저 끝난 쪽이 플래그를 되돌려 다른 쪽의
+   * 창이 열린 채 남는다 — 이 중단이 막으려던 그 실패를 새로 만든다.
+   */
+  it('겹친 중단은 재진입 안전하다 — 먼저 끝난 쪽이 다른 쪽의 창을 열지 않는다', async () => {
+    const timers: (() => void)[] = [];
+    let deleteHandler:
+      | ((snapshotId: string, target: 'sync' | 'local') => Promise<unknown>)
+      | undefined;
+    let stateChanged = () => {};
+    let backups = 0;
+    const gates = new Map<string, () => void>();
+
+    bootstrap(
+      fakeDeps({
+        performBackup: async () => {
+          backups += 1;
+        },
+        deleteBackupSnapshot: async (snapshotId) =>
+          new Promise((resolve) => gates.set(snapshotId, () => resolve({ ok: true }))),
+        onSnapshotDeleteRequest: (handler) => {
+          deleteHandler = handler;
+        },
+        onStateChanged: (cb) => {
+          stateChanged = cb;
+        },
+        setTimer: (cb) => {
+          timers.push(cb);
+        },
+      }),
+    );
+    await flush();
+    timers.splice(0);
+
+    const first = deleteHandler!('a', 'sync');
+    const second = deleteHandler!('b', 'sync');
+    await flush();
+
+    // 먼저 시작한 쪽을 끝낸다 — 다른 쪽은 아직 지우는 중이다.
+    gates.get('a')!();
+    expect(await first).toEqual({ ok: true });
+    await flush();
+
+    // 그 사이 도착한 상태 변경이 예약한 백업은 **여전히** 막혀 있어야 한다.
+    stateChanged();
+    await flush();
+    for (const fire of timers.splice(0)) fire();
+    await flush();
+    expect(backups).toBe(0);
+
+    gates.get('b')!();
+    expect(await second).toEqual({ ok: true });
+    await flush();
+
+    // 마지막 한 겹이 풀린 뒤에야 백업이 다시 돈다.
+    expect(timers.length).toBeGreaterThan(0);
+    for (const fire of timers.splice(0)) fire();
+    await flush();
+    expect(backups).toBeGreaterThan(0);
+  });
+
+  /*
+   * 삭제는 `storage.local.state`를 건드리지 않아 `onStateChanged` → `scheduleBackup`이
+   * 뒤따르지 않는다. 전체 초기화가 중단을 복구하는 경로가 삭제에는 없으므로, 재개가
+   * 무조건 다시 예약하지 않으면 그 백업은 영구히 사라진다.
+   */
+  it('삭제 실패 뒤에도 재개는 다시 예약한다 — 상태 변경이 뒤따르지 않는 경로다', async () => {
+    const timers: (() => void)[] = [];
+    let deleteHandler:
+      | ((snapshotId: string, target: 'sync' | 'local') => Promise<unknown>)
+      | undefined;
+    let backups = 0;
+
+    bootstrap(
+      fakeDeps({
+        performBackup: async () => {
+          backups += 1;
+        },
+        deleteBackupSnapshot: async () => {
+          throw new Error('storage unavailable');
+        },
+        onSnapshotDeleteRequest: (handler) => {
+          deleteHandler = handler;
+        },
+        setTimer: (cb) => {
+          timers.push(cb);
+        },
+      }),
+    );
+    await flush();
+    timers.splice(0);
+
+    await expect(deleteHandler!('s1', 'sync')).rejects.toThrow('storage unavailable');
+    await flush();
+
+    // 실패해도 중단은 풀리고 예약은 되살아난다 — 상태 변경을 기다릴 수 없는 경로이므로.
+    expect(timers.length).toBeGreaterThan(0);
+    for (const fire of timers.splice(0)) fire();
+    await flush();
+    expect(backups).toBeGreaterThan(0);
   });
 
   it('onExpiryAlarm이 실행자를 지나 만료 전이를 태운다 (persist)', async () => {

@@ -392,6 +392,27 @@ export function isBlockedFromOverwrite(existing: unknown): boolean {
 }
 
 /**
+ * 이 저장된 값 위에 **마이그레이션 결과를 굳혀도 되는가**. `false`면 커밋은 물러난다.
+ *
+ * `isBlockedFromOverwrite`보다 좁은 질문이다 (release R2-2). 그쪽은 "이 버전이 이 값을
+ * 읽을 수 있는가"만 물으므로 **읽을 수 있는 두 v2 사이에서는 항상 통과**한다 — 커밋이
+ * v1을 읽고 쓰기까지 가는 사이에 커맨드가 편집된 v2를 저장하면, 그 편집본을 v1발
+ * 스냅샷이 덮는다. 커밋이 물어야 하는 것은 "지금 저장된 것이 **내가 올린 바로 그
+ * v1**인가"이고, 그 답은 `'migrated'` 하나뿐이다:
+ *
+ * - `'migrated'`(아직 v1) → 굳힌다.
+ * - `'ok'`(이미 v2) → 누군가 이미 v2를 썼다. 그 위에 굳히면 그 쓰기를 잃는다.
+ * - `'reset'`(빈 저장소·우리 모양 아님) → 올릴 v1이 없다.
+ * - `'blocked'`(더 새 버전·올릴 수 없는 v1) → 쓰기 가드와 같은 답.
+ *
+ * 이 술어를 **읽기와 `set` 사이에 await 없이** 부르는 것이 창을 닫는다. 재읽기 자체가
+ * 아니라 그 사실이 닫는다 — 호출부는 `platform/stateStore.ts`의 `persistMigrated`다.
+ */
+export function canCommitMigrationOver(existing: unknown): boolean {
+  return readStoredState(existing).status === 'migrated';
+}
+
+/**
  * 저장소에서 읽은 알 수 없는 값을 StoredState로 검증한다.
  *
  * `readStoredState`의 얇은 래퍼 — 상태 하나만 필요한 호출부를 위한 것이다. **blocked도

@@ -2133,6 +2133,33 @@ try {
     sneakyWarned && sneakyNotSaved,
     `warned=${sneakyWarned}, not-saved=${sneakyNotSaved}`);
 
+  /*
+   * N18k: **그룹 안에** 숨은 갈래도 확인을 요구한다 (릴리스 R2-1).
+   *
+   * N18j를 통과시킨 픽스는 최상위 `|`만 잘랐다. 그래서 `^(https://ads\.example\.net/|
+   * https://.*\.com/)`는 조각이 하나뿐이고, 그 안의 호스트꼴 토큰 하나가 모든 HTTPS
+   * `.com`을 삼키는 둘째 갈래까지 '좁음'으로 증명한다 — 파괴적 Block이 확인 없이 첫
+   * Save에서 켜지는 경로다. N18h/N18j와 같은 눈으로 **둘 다** 본다: 확인 UI의 존재와
+   * 저장된 개수의 불변. 개수만 보면 확인이 사라지고 그냥 실패한 경우와 구분되지 않는다.
+   */
+  await popup.getByRole('button', { name: 'Add rule' }).click();
+  await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
+  await pickOption(popup, 'Type', 'Block request');
+  await pickOption(popup, 'URL match type', 'Regex (advanced)');
+  await popup.getByLabel('URL filter').fill('^(https://ads\\.example\\.net/|https://.*\\.com/)');
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  const groupWarned = await popup
+    .getByRole('button', { name: 'Block anyway', exact: true })
+    .waitFor({ timeout: 5000 })
+    .then(() => true, () => false);
+  const groupNotSaved = (await blockRuleCount()) === 2;
+  // 취소로 닫는다 — 저장하면 뒤따르는 개수 단언이 흔들린다.
+  await popup.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await waitFormClosed();
+  record('N18k: 그룹 안에 갈래를 숨긴 정규식 Block도 첫 Save는 저장하지 않는다',
+    groupWarned && groupNotSaved,
+    `warned=${groupWarned}, not-saved=${groupNotSaved}`);
+
   // 아래 c~e는 열린 폼을 이어서 굴린다 — Block 저장으로 닫혔으니 다시 연다.
   await popup.getByRole('button', { name: 'Add rule' }).click();
   await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
@@ -4270,10 +4297,15 @@ try {
    * 것을 못 잡는다. 손상 행에도 삭제가 서는지 함께 본다 — 복원이 막힌 스냅샷을 치울 길은
    * 그것뿐이다.
    *
-   * **픽스처가 배리어를 겸한다** — 시드가 부른 자동 백업이 착지한 것을 스냅샷 안의 표식으로
-   * 관측한 뒤, 그 스냅샷을 복제해 매니페스트 맨 앞에 놓는다. 맨 앞 항목의 체크섬이 지금
-   * 상태의 페이로드와 같아지므로, 이 시나리오 도중 뒤늦게 발화하는 자동 백업은 planBackup의
-   * skip 경로로 빠져 매니페스트를 건드리지 않는다(개수 단언이 경합하지 않는 이유다).
+   * **픽스처는 결정론을 위해 늦은 자동 백업을 재우는 장치다** — 시드가 부른 자동 백업이
+   * 착지한 것을 스냅샷 안의 표식으로 관측한 뒤, 그 스냅샷을 복제해 매니페스트 맨 앞에
+   * 놓는다. 맨 앞 항목의 체크섬이 지금 상태의 페이로드와 같아지므로, 이 시나리오 도중
+   * 뒤늦게 발화하는 자동 백업은 planBackup의 skip 경로로 빠져 매니페스트를 건드리지
+   * 않는다. 즉 이 시나리오는 개수 단언을 흔들지 않으려고 경합을 **재운다** — 그러므로
+   * 이 시나리오의 green은 삭제 ↔ 자동 백업 경합에 대해 아무것도 말하지 않는다.
+   * **그 경합의 증거는 어댑터·런타임 시임에 있다** (`src/platform/backupStore.test.ts`의
+   * 지연 storage fake, `src/runtime/background-bootstrap.test.ts`의 드레인·재진입 테스트,
+   * release R2-3). 여기서 확인하는 것은 사용자가 보는 확인 흐름과 삭제의 범위뿐이다.
    */
   const SNAP_MARKER = 'SnapDelete';
   await seedProfiles([
