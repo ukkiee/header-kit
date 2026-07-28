@@ -596,3 +596,23 @@ A8은 base를 `4f4b0a6`으로 고정한 워킹트리 전체 diff라 컨덕터 �
 
 재개 경로: 티켓 14 기준 재감사 → 14 종결 → 11 → 12 → 13 → 스위트 재실행·`verification.md`
 재작성·커밋 → 릴리스 라운드 2(검증 전용, accept 불가). **loop.start 6/7 — 다음이 마지막.**
+
+### ticket 14 code-review r1 — auto-triage
+_policy CR-1 · feature-loop/policies/ticket-review-cr1.md · sha256 27ad2f0313d78a9b · decided 2026-07-28T03:21:21Z · fixed point 6ea9fcf8292206153d1b6ff6f2f8d4facd800823 · ticket .scratch/wide-ui-redesign/issues/14-reconcile-readiness-flake.md_
+
+R-1 [AUTO CR-1 cr:defect] accept — Standards(blocking): activeAccent 배리어가 조용히 통과한다 — pollUntil은 타임아웃에 마지막 값을 반환하고 그 결과는 버려진다; -/-; scripts/smoke.mjs:2470; res:none; 티켓 44행 "타임아웃이면 오류로 실패시킨다"가 함의하는 미처리 케이스이고, 같은 hunk의 형제 헬퍼 pollSessionRuleMatch·pollStable은 둘 다 타임아웃에 throw한다
+R-2 [AUTO CR-1 cr:defect] accept — Spec(c): 새 data-theme 준비 배리어가 실패하지 않고 마지막 값으로 통과한다; -/-; scripts/smoke.mjs:2470-2475; res:none; R-1과 동일 결함에 두 축이 독립 수렴 — Spec 축은 티켓 44·53행을 인용해 "다른 모든 배리어는 크게 실패한다"고 대조했다. 한 번의 픽스가 두 행을 함께 닫는다
+R-3 [AUTO CR-1 cr:smell] defer — Standards(non-blocking): 음성 절반이 효과가 아니라 설치만 확인한다 (K2·E6·M2c·M2e·E5); -/-; scripts/smoke.mjs:-; res:none; 티켓이 처방한 설계의 잔여 약점이지 구현 결함이 아니다 — 구현자 자신이 K1 주석에 한계를 적었다. follow-up docs/reviews/wide-ui-redesign/followups.md#T14-R-3
+R-4 [AUTO CR-1 cr:smell] defer — Standards(non-blocking): 테스트가 관측 가능한 행동이 아니라 메커니즘에 걸린다 (expect(order[0]).toBe('commit')); -/-; src/runtime/background-bootstrap.test.ts:418; res:none; 티켓 기준 A3이 "메커니즘 단위 테스트"를 명시적으로 요구했고 같은 파일에 persistCalls 선례가 있다 — 리뷰어도 soft로 표시. 문서화된 레포 표준의 hard breach가 아니므로 cr:standard가 아니다. follow-up …#T14-R-4
+R-5 [AUTO CR-1 cr:smell] defer — Standards(smell, Duplicated Code): readState→blocked→StateLoadError 절이 loadState와 commitMigration에 바이트 동일하게 중복; -/-; src/platform/stateStore.ts:29; res:none; follow-up …#T14-R-5
+R-6 [AUTO CR-1 cr:smell] defer — Standards(smell, Duplicated Code): pollSessionRuleCount→pollSessionRuleMatch→효과 pollUntil 3연속이 약 10회 반복; -/-; scripts/smoke.mjs:-; res:none; follow-up …#T14-R-6
+R-7 [AUTO CR-1 cr:smell] defer — Standards(smell, Mysterious Name): headerOpLive·initiatorLive가 불리언처럼 읽히지만 술어 팩토리다; -/-; scripts/smoke.mjs:-; res:none; follow-up …#T14-R-7
+R-8 [AUTO CR-1 cr:smell] defer — Standards(smell, Speculative Generality): audit-smoke-barriers.mjs의 argv[2] 타깃 오버라이드 · commitMigration의 boolean 반환은 테스트만 소비 · isSeedCall의 (?:await\s+)? 그룹은 죽은 코드; -/-; scripts/audit-smoke-barriers.mjs:-; res:none; follow-up …#T14-R-8
+R-9 [AUTO CR-1 cr:smell] defer — Standards(smell): SEED_GATED·STABLE_GATED가 손으로 열거돼 있어 헤더가 지키겠다는 새 시나리오를 정확히 놓치고, loop.md의 config_guard 정책상 등록되지 않아 스위트에서 돌지 않는다; -/-; scripts/audit-smoke-barriers.mjs:-; res:none; 가드 자신의 커버리지 한계 — 티켓 기준 A6이 요구한 것은 이 스크립트의 존재와 red 기준선 대조이고 그건 met. follow-up …#T14-R-9
+R-10 [AUTO CR-1 cr:smell] defer — Standards(minor): commitMigration이 SW 기동마다 세 번째 readState()를 추가하고 converge()를 그 뒤로 미룬다; -/-; src/runtime/background-bootstrap.ts:294; res:none; Spec R-13과 같은 사실을 다른 축에서 본 것. follow-up …#T14-R-10
+R-11 [AUTO CR-1 cr:out-of-diff] defer — Spec(a): 형제 paletteProbe가 동일한 matchMedia→data-theme 왕복을 여전히 맨 waitForTimeout(150)으로 막고 있다; -/-; scripts/smoke.mjs:2425; res:none; 이 티켓이 건드리지 않은 코드이고 구현자가 의도적 범위 밖 보존으로 기록했다 — 티켓 56행이 요구한 것은 "같은 폴링이 흡수하는지 확인한다"이고 확인 결과는 흡수함. 잠복 flake는 한 줄 옆에 남는다. follow-up …#T14-R-11
+R-12 [AUTO CR-1 cr:smell] defer — Spec(b): commitMigration()이 blocked에서 StateLoadError를 던지는 것은 티켓 27행이 명세하지 않은 동작; -/-; src/platform/stateStore.ts:43; res:none; 규칙 표에 scope-creep 항목이 없으므로 판단 호출 → cr:smell(정책 28-30행의 잔여 없음 조항). 효과는 읽기 불가 저장소에서 SW 기동당 logError 1건. follow-up …#T14-R-12
+R-13 [AUTO CR-1 cr:smell] defer — Spec(c, 잔여): pollStable이 전이 이전 표본을 돌려줄 수 있고, converge()·scheduleBackup()이 commitMigration().finally() 안에서만 돌아 저장소 읽기가 멈추면 재조정 전체가 막힌다; -/-; src/runtime/background-bootstrap.ts:294; res:none; 리뷰어가 "티켓 32-35·53행이 처방한 것 그대로 — 일탈이 아니라 기록"이라고 명시. 이를 바꾸는 것은 티켓 처방을 뒤집는 결정이라 픽스가 아니라 후속. follow-up …#T14-R-13
+
+라운드 판정: blocking 1건(R-1, R-2가 같은 결함) → accept 2행, defer 11행, reject 0행, escalate 0행.
+픽스 1회 통과(예산: 티켓당 1회)로 R-1·R-2를 닫고, 나머지는 followups.md로 이월한다.
