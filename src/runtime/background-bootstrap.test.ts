@@ -579,6 +579,67 @@ describe('background bootstrap', () => {
     expect(backups).toBeGreaterThan(0);
   });
 
+  /*
+   * 재예약 요구는 **깊이 해제를 살아남아야** 한다 (release R2 R-11). 삭제(요구함)와 실패한
+   * 초기화(요구 안 함)가 겹쳐 초기화의 재개가 마지막에 풀리면, 깊이만 보는 판단은 삭제가
+   * 명령한 재예약을 삼킨다 — 삭제는 상태를 바꾸지 않아 `onStateChanged`가 뒤따르지 않으므로
+   * 그 백업은 영구히 사라진다. 위 재진입 테스트는 요구가 같은 삭제 둘만 겹쳐 이 쌍을 못 본다.
+   */
+  it('요구가 엇갈린 겹침에서도 삭제의 재예약은 살아남는다 — 실패한 초기화가 마지막에 풀려도', async () => {
+    const timers: (() => void)[] = [];
+    let deleteHandler: ((id: string, target: 'sync' | 'local') => Promise<unknown>) | undefined;
+    let handler: ((command: Command) => Promise<StoredState>) | undefined;
+    let backups = 0;
+    let releaseDelete = () => {};
+    let releaseReset = () => {};
+    const deleteGate = new Promise<void>((resolve) => void (releaseDelete = resolve));
+    const resetGate = new Promise<void>((resolve) => void (releaseReset = resolve));
+
+    bootstrap(
+      fakeDeps({
+        performBackup: async () => {
+          backups += 1;
+        },
+        deleteBackupSnapshot: async () => {
+          await deleteGate;
+          return { ok: true };
+        },
+        readBackupKV: async () => {
+          await resetGate;
+          return {};
+        },
+        // 상태 리셋에서 실패한다 — 초기화의 재개는 `snapshot: false`로 풀린다.
+        persistState: async () => {
+          throw new Error('storage write failed');
+        },
+        onSnapshotDeleteRequest: (h) => void (deleteHandler = h),
+        onCommand: (h) => void (handler = h),
+        setTimer: (cb) => void timers.push(cb),
+      }),
+    );
+    await flush();
+    timers.splice(0);
+
+    const deleting = deleteHandler!('s1', 'sync'); // 깊이 1 — 재예약을 요구한다
+    const resetting = handler!({ type: 'full-reset' }); // 깊이 2 — 요구하지 않는다
+    await flush();
+
+    releaseDelete(); // 삭제가 먼저 풀린다 — 아직 한 겹 남아 예약은 살아나지 않는다
+    expect(await deleting).toEqual({ ok: true });
+    await flush();
+    expect(timers).toHaveLength(0);
+
+    releaseReset(); // 실패한 초기화가 마지막 겹을 푼다
+    await expect(resetting).rejects.toThrow();
+    await flush();
+
+    // 삭제가 명령한 재예약이 살아남았다 — 삼켜졌다면 여기서 타이머가 하나도 없다.
+    expect(timers.length).toBeGreaterThan(0);
+    for (const fire of timers.splice(0)) fire();
+    await flush();
+    expect(backups).toBeGreaterThan(0);
+  });
+
   it('onExpiryAlarm이 실행자를 지나 만료 전이를 태운다 (persist)', async () => {
     let expiryAlarm = () => {};
     let persistCalls = 0;

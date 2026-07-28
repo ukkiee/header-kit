@@ -259,17 +259,28 @@ export function bootstrap(deps: BackgroundDeps): void {
     await inFlightBackup;
   };
 
+  /** 재예약을 요구한 겹이 하나라도 있었는가 — 요구는 깊이 해제를 살아남는다 (release R2 R-11). */
+  let rescheduleOnResume = false;
   /**
-   * 중단을 푼다. `reschedule`이면 마지막 한 겹이 풀릴 때 **반드시** 다시 예약한다.
+   * 중단을 푼다. `reschedule`을 요구한 겹이 있었으면 마지막 한 겹이 풀릴 때 **반드시**
+   * 다시 예약한다.
    *
    * 중단이 예약 자리를 비웠으므로 여기서 되살리지 않으면 다음 `onStateChanged`까지
    * 백업이 없다. 전체 초기화는 상태가 바뀌어 그 이벤트가 뒤따르지만, **스냅샷 삭제는
    * `storage.local.state`를 건드리지 않아 그 복구가 없다** — 되살리지 않으면 그 백업은
    * 영구히 사라진다.
+   *
+   * 그래서 요구를 이 호출의 인자로만 보면 안 된다 (R-11): 삭제와 **실패한** 초기화가 겹쳐
+   * 요구하지 않은 쪽(`reschedule: snapshot === false`)이 마지막에 풀리면, 깊이만 보는 판단은
+   * 삭제가 명령한 재예약을 삼킨다 — 두 중단이 서로 간섭한다는 그 실패가 플래그에서 재예약
+   * 비트로 옮겨 온 것뿐이다.
    */
   const resumeBackupWrites = ({ reschedule }: { reschedule: boolean }): void => {
+    rescheduleOnResume ||= reschedule;
     suspendDepth = Math.max(0, suspendDepth - 1);
-    if (suspendDepth === 0 && reschedule) scheduleBackup();
+    if (suspendDepth > 0) return;
+    if (rescheduleOnResume) scheduleBackup();
+    rescheduleOnResume = false;
   };
 
   /**
