@@ -372,3 +372,51 @@ persist 뒤에 온다는 인과(`saveItem`은 `result.ok`에서만 폼을 닫고
 현재는 올바르므로 결함이 아니라 잠복 취약성이다. **권고**: 수정 후의 `enabled=false`를 저장소에서
 읽는 폴링(값 자체를 보는 것)으로 바꿔 인과에 기대지 않게 한다. 티켓 14의 T14-R-11과 같은 계열의
 "한 줄 옆에 남은 잠복 flake"다.
+
+## 티켓 12 `/code-review` r1 이월 (CR-1 defer, 2026-07-28)
+
+라운드 1은 blocking 1건(R-1, 경계되지 않은 삭제 스윕)을 accept해 픽스로 닫았다. 아래 6행은
+`decisions.md`의 `### ticket 12 code-review r1 — auto-triage` 섹션에서 defer로 판정된 것이다.
+
+### T12-R-2 — 반쯤 지워진 상태의 보고가 거꾸로다
+`src/platform/backupStore.ts:116`. 매니페스트가 먼저 커밋되므로 `removeBackupKeys`가 던지면
+행은 이미 목록에서 사라졌는데 배너는 "삭제하지 못했다"고 말한다. **데이터 순서 자체는 옳다** —
+`planBackup`의 `preRemoves` 루프(`backup.ts:263-269`)가 고아 청크를 수거하고, `found:false`여도
+고아 `removeKeys`를 돌려주므로 재시도가 멱등하게 동작한다. UI 메시지의 혼선이다.
+**권고**: 청크 삭제 실패 시 배너 문구를 "행은 목록에서 지웠지만 저장소에 잔여가 있다"로 나누거나,
+재시도 버튼을 제공한다.
+
+### T12-R-4 — 주석이 실제보다 강한 안전 성질을 주장한다
+`src/features/backup/backup-panel.tsx:72`. "다른 파괴적 동작을 켜는 것이 앞의 확인을 그대로
+취소한다"는 **행 사이에서만** 참이다. `confirmingClear`와 `confirmingReset`은 별개 불리언이라
+파괴적 확인 셋이 동시에 무장될 수 있다. 동작 결함이 아니라 주석의 과장이지만, 안전 성질을
+주장하는 주석은 다음 사람이 그것을 믿고 설계하게 만든다. **권고**: 주석을 실제 범위로 좁히거나,
+세 확인을 하나의 `Confirming` 유니온으로 합쳐 주장을 참으로 만든다(T12-R-5와 같이 처리하면 좋다).
+
+### T12-R-5 — `removeSnapshot`·`restore`의 arm-then-run 중복 (Duplicated Code)
+`src/features/backup/backup-panel.tsx:173`. 바이트 동일한 서두를 공유하고, 파일이 확인 메커니즘을
+셋 이고 있다. **권고**: `armThenRun(entry, action, run)` 하나로 셋을 다 태운다.
+
+### T12-R-7 — `DeleteSnapshotResult` 별칭 (Middle Man)
+`src/platform/backupStore.ts:105`. `DeleteSnapshotResult = ClearCloudResult`는 타입이 아니라
+이름만 더한다. 더 나쁜 것은 순서 근거(왜 매니페스트를 먼저 커밋하는가)가 그 **별칭**에 docblock돼
+있어 정작 그것이 규율하는 `deleteBackupSnapshot`에서는 보이지 않는다는 점이다.
+**권고**: 별칭을 지우고 근거 주석을 `deleteBackupSnapshot` 본문 위로 옮긴다.
+
+### T12-R-8 — 티켓이 울타리 친 R-1 경로를 개명이 건드렸다
+`src/features/backup/backup-panel.tsx:134`. 티켓 16행은 "일괄 '클라우드 백업 삭제'(스펙 R-1)…는
+이 티켓에서 바꾸지 않는다"고 했는데 `clearFailureDetail`이 `verifiedDeleteDetail`로 개명·재서명되고
+`deleteCloud` 호출부가 수정됐다. **동작은 동일**(같은 키 전달)하고 기준 감사도 R-1/R-3 경로 코드가
+기준선과 바이트 동일함을 확인했으므로 결함은 아니다. 기록으로만 남긴다 — 울타리 친 경로는 이름도
+건드리지 않는 편이 릴리스 게이트에서 설명하기 쉽다.
+
+### T12-R-10 — 첫 삭제 클릭 뒤 정착 창 없는 음성 단언
+`scripts/smoke.mjs`. `armed = await bkView(snapArea)`를 첫 클릭 직후 정착 창 없이 읽는다(같은
+가드에 대해 N39는 `waitForTimeout(1000)`을 쓴다). 클릭이 실제로 지웠다면 비동기 쓰기가 아직
+안 내려앉아 `armedNothingRemoved`가 그냥 통과한다. `deleteArmed`가 그 시나리오에서 실패하므로
+**단독 가드가 아니라 중복 가드**여서 defer했다.
+
+**이 루프에서 "공허해질 수 있는 단언"이 세 번째다** — T14-R-11(형제 `paletteProbe`의 고정 대기),
+T11-R-7(인과에만 기댄 (d) 케이스), 그리고 이것. 셋 다 개별로는 "지금은 맞다"로 통과했다.
+**권고**: 개별 수정보다, 스모크에 "음성 단언 앞에는 값을 직접 읽는 폴링을 둔다"는 규율을
+`audit-smoke-barriers.mjs`가 기계적으로 강제하도록 확장하는 편이 값이 크다.

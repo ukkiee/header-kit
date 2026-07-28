@@ -633,3 +633,30 @@ R-7 [AUTO CR-1 cr:smell] defer — Spec(잠복 취약성): 하위 케이스 (d)�
 "X-Act-Dark가 먼저 저장·저장소 확인되고 부재 단언은 그 뒤 저장된 X-Act-Default로 관측한 규칙
 세트에서 읽히며 executor.execute가 load-apply-save를 직렬화하므로 관측된 상태가 default를 포함하면
 반드시 dark도 포함한다"는 인과로 **공허하지 않음**을 확인받았다.
+
+### ticket 12 code-review r1 — auto-triage
+_policy CR-1 · feature-loop/policies/ticket-review-cr1.md · sha256 27ad2f0313d78a9b · decided 2026-07-28T04:46:32Z · fixed point 3aadd42fdc963c3687da05bd21fae738b4a77025 · ticket .scratch/wide-ui-redesign/issues/12-snapshot-delete.md_
+
+**두 축이 갈렸고, 그 불일치가 이 라운드의 값어치다.** Spec 축은 "경계된 삭제"를 sound로 통과시켰다 —
+정상 스냅샷 id를 전제한 추론이다. Standards 축은 `snapshotId === ''`이면 접두사가 `bk:`로 붕괴해
+`BACKUP_MANIFEST_KEY`와 **다른 모든 스냅샷의 청크**까지 매치된다는 것을 짚었다. 매니페스트는
+`storage.sync`로 다른 기기·버전에서 들어오고 `isManifestEntry`는 `typeof === 'string'`만 본다.
+`backup.ts:345`가 바로 그 불변식을 주석으로 **선언**하지만 코드가 강제하지 않는다. 기준 감사도
+Spec 축과 같은 정상 경로 추론으로 기준 3을 met으로 통과시켰다 — 축을 분리해 두고 재순위화하지
+않는 이유가 이것이다.
+
+R-1 [AUTO CR-1 cr:defect] accept — Standards(blocking): 스윕이 경계되지 않는다 — snapshotId가 빈 문자열이면 접두사가 bk:로 붕괴해 매니페스트 키와 다른 모든 스냅샷 청크를 한 번에 지운다; -/-; src/core/backup.ts:360; res:none; 사용자 데이터 손실 경로이고, 주석이 선언한 불변식을 코드가 강제하지 않는 전형이다. 빈 id 및 ':'를 품은 id에 빈 plan을 돌려주는 가드가 필요하다
+R-2 [AUTO CR-1 cr:smell] defer — Standards: 반쯤 지워진 상태의 보고가 거꾸로다 — 매니페스트가 먼저 커밋되므로 removeBackupKeys가 던지면 행은 이미 목록에서 사라졌는데 배너는 "삭제하지 못했다"고 말한다; -/-; src/platform/backupStore.ts:116; res:none; 리뷰어가 데이터 순서 자체는 옳고 planBackup의 preRemoves가 고아 청크를 수거함을 확인했다 — UI 메시지의 혼선이지 데이터 결함이 아니다. follow-up docs/reviews/wide-ui-redesign/followups.md#T12-R-2
+R-3 [AUTO CR-1 cr:defect] accept — Standards: remaining이 공유 매니페스트 키를 이 백업의 잔여 키 수에 포함시킨다; -/-; src/core/backup.ts:386; res:none; snapshotDeleteRemaining이 "{count} key(s) of this backup are still stored"로 노출하는 숫자가 틀린다 — 공유 키는 그 백업의 키가 아니다
+R-4 [AUTO CR-1 cr:smell] defer — Standards: 주석이 실제보다 강한 안전 성질을 주장한다 — "다른 파괴적 동작을 켜는 것이 앞의 확인을 그대로 취소한다"는 행 사이에서만 참이고 confirmingClear·confirmingReset은 별개 불리언이라 파괴적 확인 셋이 동시에 무장될 수 있다; -/-; src/features/backup/backup-panel.tsx:72; res:none; 동작 결함이 아니라 주석의 과장이다. follow-up …#T12-R-4
+R-5 [AUTO CR-1 cr:smell] defer — Standards(smell, Duplicated Code): removeSnapshot과 restore가 바이트 동일한 arm-then-run 서두를 공유하고 파일이 확인 메커니즘 셋을 이고 있다; -/-; src/features/backup/backup-panel.tsx:173; res:none; follow-up …#T12-R-5
+R-6 [AUTO CR-1 cr:defect] accept — Standards: removeSnapshot만 setNotice(null)을 부르지 않아 "Cloud backups deleted." 성공 알림이 새 삭제 실패 배너 아래 남는다; -/-; src/features/backup/backup-panel.tsx:180; res:none; R-9와 같은 결함을 Standards 축에서 본 것 — 한 번의 픽스가 두 행을 닫는다
+R-7 [AUTO CR-1 cr:smell] defer — Standards(smell, Middle Man): DeleteSnapshotResult = ClearCloudResult는 타입이 아니라 이름만 더하고, 순서 근거가 그 별칭에 docblock돼 있어 정작 그것이 규율하는 deleteBackupSnapshot에서는 보이지 않는다; -/-; src/platform/backupStore.ts:105; res:none; follow-up …#T12-R-7
+R-8 [AUTO CR-1 cr:smell] defer — Spec(b, 범위 이탈): 티켓 16행이 "일괄 클라우드 백업 삭제(스펙 R-1)는 이 티켓에서 바꾸지 않는다"고 울타리를 쳤는데 clearFailureDetail이 verifiedDeleteDetail로 개명·재서명되고 deleteCloud 호출부가 수정됐다; -/-; src/features/backup/backup-panel.tsx:134; res:none; 동작은 동일(같은 키 전달)하고 기준 감사도 R-1/R-3 경로 코드가 기준선과 바이트 동일함을 확인했다. 규칙 표에 scope-creep 항목이 없어 판단 호출(CR-1 28-30행). follow-up …#T12-R-8
+R-9 [AUTO CR-1 cr:defect] accept — Spec(c1): 티켓 14행 "지우지 못한 것이 지워진 것처럼 보이지 않는다"를 위반한다 — 일괄 삭제 후 남은 성공 알림이 스냅샷 삭제 실패 배너 옆에 그대로 있다; -/-; src/features/backup/backup-panel.tsx:173; res:none; 티켓이 명시적으로 요구한 조항이라 판단 호출이 아니라 결함이다. R-6과 동일 결함, 한 번의 픽스가 둘을 닫는다
+R-10 [AUTO CR-1 cr:smell] defer — Spec(c2): 첫 삭제 클릭 직후 정착 창 없이 armed = await bkView(snapArea)를 읽어, 클릭이 실제로 지웠다면 비동기 쓰기가 안 내려앉아 armedNothingRemoved가 그냥 통과한다; -/-; scripts/smoke.mjs:-; res:none; deleteArmed가 그 시나리오에서 실패하므로 단독 가드가 아니라 중복 가드다. **이 루프에서 같은 계열(공허해질 수 있는 단언)이 세 번째다** — T14-R-11·T11-R-7과 함께 읽을 것. follow-up …#T12-R-10
+
+라운드 판정: blocking 1건(R-1) → accept 4행(R-1·R-3·R-6·R-9, 이 중 R-6·R-9는 같은 결함), defer 6행,
+reject 0행, escalate 0행. 픽스 1회 통과로 accept를 닫는다. 픽스는 `src/core/backup.ts`,
+`src/core/backup.test.ts`, `src/features/backup/backup-panel.tsx` 셋으로 가드 상한(≤3파일)을 정확히
+소진하므로 네 번째 파일이 필요해지면 `guard-would-trip`으로 멈춰야 한다.
