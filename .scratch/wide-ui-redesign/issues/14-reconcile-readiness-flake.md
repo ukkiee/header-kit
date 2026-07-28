@@ -97,7 +97,7 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** done
 
 티켓 11·12·13은 이 티켓을 기다린다 — 스위트가 red인 동안 그 셋의 스위트 검증이 무의미하기 때문이다. 그 대기는 각 티켓의 Blocked by 줄에 배선돼 있다.
 

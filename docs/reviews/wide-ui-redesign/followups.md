@@ -243,3 +243,82 @@ overflow, 팝업 치수, 시작 지표를 커밋된 검증 증거에 추가한�
 대상 11곳(`K1` `K2` `K3` `M1` `M2` `M2b` `M2c` `M2d` `M2e` `M4` `N34b`)에 대해 마지막
 `seedProfiles(`와 `record(` 사이의 배리어 존재를 검사하고 없으면 exit 1. `package.json`은
 설정 가드라 등록하지 않았다. 새 시나리오는 이 스크립트를 직접 돌려 확인한다.
+
+## 티켓 14 `/code-review` r1 이월 (CR-1 defer, 2026-07-28)
+
+라운드 1의 13행 중 accept 2행(R-1·R-2, 동일 결함)은 커밋 `568da70`으로 닫혔다. 아래 11행은
+`docs/reviews/wide-ui-redesign/decisions.md`의 `### ticket 14 code-review r1 — auto-triage`
+섹션에서 defer로 판정된 것이고, 전부 **판단 호출**이다(blocking 0건).
+
+### T14-R-3 — 음성 절반이 효과가 아니라 설치만 확인한다
+`K2` `E6` `M2c` `M2e` `E5`에서 `setTimeout(300)`을 `pollSessionRuleMatch(...)`로 바꿨는데,
+이는 규칙이 **설치**됐음만 증명한다. 구현자 자신이 `K1` 주석에 "설치와 네트워크 반영 사이에도
+지연이 있다"고 적었다. 음성 단언은 여전히 틀린 이유로 통과할 수 있고, 대체한 매직 넘버보다
+여유가 적다. **권고**: 음성 자리에도 효과 폴링(요청을 실제로 한 번 태우고 헤더 부재를 읽는)
+을 넣거나, 최소한 설치→반영 지연의 상한을 한 곳에 문서화한다. 티켓이 처방한 설계의 잔여
+약점이지 구현 결함이 아니라 defer.
+
+### T14-R-4 — 테스트가 관측 가능한 행동이 아니라 메커니즘에 걸린다
+`src/runtime/background-bootstrap.test.ts:418`의 `expect(order[0]).toBe('commit')`. 테스트
+주석 자신이 "메커니즘 잠금"이라 부른다. `review-brief.md`는 "테스트는 외부 관측 가능한
+행동만 본다"를 요구한다. 다만 티켓 기준 **A3이 메커니즘 단위 테스트를 명시적으로 요구**했고
+같은 파일에 `persistCalls` 선례가 있으며 리뷰어도 soft로 표시했으므로 문서화된 표준의 hard
+breach가 아니다. 같은 테스트의 `X-Migrated` 규칙 형태 단언이 준수하는 쪽이다.
+**권고**: A3의 잠금 의도를 유지하면서 순서 단언을 관측 가능한 결과(마이그레이션 커밋 전에는
+재조정 결과가 관찰되지 않는다)로 바꿀 수 있는지 검토한다.
+
+### T14-R-5 — `readState`→`blocked`→`StateLoadError` 절의 중복 (Duplicated Code)
+`src/platform/stateStore.ts:29`. `loadState`와 `commitMigration`에 바이트 동일한 절이 있다.
+**권고**: `readOrThrow()` 한 개로 뽑고 양쪽에서 부른다.
+
+### T14-R-6 — 폴링 3연속 패턴의 반복 (Duplicated Code)
+`scripts/smoke.mjs`. `pollSessionRuleCount(sw, 1)` → `pollSessionRuleMatch(...)` → 효과
+`pollUntil(...)` 3연속이 약 10회 반복된다. 또 `pollSessionRuleCount`는 `pollSessionRuleMatch`
+에 `r => r.length === n`을 준 것과 같고, 둘 다 poll→recheck→throw를 되풀이한다.
+**권고**: `awaitSeedEffect(sw, {match, effect})` 한 개로 접는다.
+
+### T14-R-7 — `headerOpLive`·`initiatorLive` 이름 (Mysterious Name)
+`scripts/smoke.mjs`. 불리언처럼 읽히지만 **술어 팩토리**다.
+**권고**: `headerOpMatcher` / `initiatorMatcher` 처럼 반환 종류가 드러나는 이름.
+
+### T14-R-8 — 요구되지 않은 일반성 (Speculative Generality)
+세 가지. `scripts/audit-smoke-barriers.mjs`의 `process.argv[2]` 타깃 오버라이드 — 호출부가
+없다. `commitMigration`의 `boolean` 반환 — 테스트만 소비한다. `isSeedCall`의
+`(?:await\s+)?` 그룹 — 정규식이 앵커되지 않아 추가로 매치하는 것이 없는 죽은 코드.
+**권고**: 셋 다 지운다. 필요해지면 그때 되살린다.
+
+### T14-R-9 — 가드가 지키지 못하는 범위
+`scripts/audit-smoke-barriers.mjs`의 `SEED_GATED`·`STABLE_GATED`가 **손으로 열거**돼 있어,
+헤더가 지키겠다고 선언한 "새 시나리오"가 정확히 이 가드가 놓치는 것이다. 또 `loop.md`의
+설정 가드 정책상 `package.json`에 등록하지 않았으므로 스위트에서 자동으로 돌지 않는다.
+티켓 기준 A6이 요구한 것은 스크립트의 존재와 red 기준선 대조이고 그것은 met — 여기 적는 것은
+가드 **자신의 커버리지 한계**다. **권고**: 열거 대신 `record(` 앞의 마지막 `seedProfiles(`를
+전수 스캔하는 방식으로 바꾸고, 스위트에 등록하는 문제는 설정 가드를 푸는 사람이 함께 정한다.
+
+### T14-R-10 — SW 기동마다 늘어난 세 번째 `readState()`
+`src/runtime/background-bootstrap.ts:294`. `commitMigration`이 읽기를 하나 더 추가하고
+`converge()`를 그 뒤로 미룬다. T14-R-13과 같은 사실을 성능 쪽에서 본 것.
+
+### T14-R-11 — 형제 `paletteProbe`가 여전히 맨 `waitForTimeout(150)`이다
+`scripts/smoke.mjs:2425`. `activeAccent`와 **동일한** `matchMedia`→`data-theme` 왕복을 막고
+있는데 폴링이 아니라 고정 대기다. 이 티켓이 건드리지 않은 코드라 `cr:out-of-diff`로 defer했고,
+구현자도 의도적 범위 밖 보존으로 기록했다. 티켓 56행이 요구한 것은 "같은 폴링이 흡수하는지
+확인한다"였고 확인 결과 `activeAccent` 배리어가 흡수한다. **그래도 잠복 flake는 한 줄 옆에
+그대로 남아 있다** — 이번 라운드에서 `activeAccent`가 조용히 통과하던 결함(R-1)이 실제로
+있었다는 점을 감안하면, 이건 다음에 터질 가장 유력한 자리다. **권고**: 다음 스모크 작업에서
+`paletteProbe`도 같은 배리어로 바꾸고 `audit-smoke-barriers.mjs`의 대상에 넣는다.
+
+### T14-R-12 — `commitMigration()`의 `blocked` 시 `StateLoadError` 던지기는 티켓이 명세하지 않았다
+`src/platform/stateStore.ts:43`. 티켓 27행은 migrated→persist / already-v2→쓰기 없음 /
+전파만 명세한다. 효과는 읽기 불가 저장소에서 SW 기동당 `logError` 1건 추가. 규칙 표에
+scope-creep 항목이 없어 CR-1 §28-30의 "잔여 없음" 조항에 따라 판단 호출로 처리했다.
+**권고**: 의도된 동작이면 티켓/스펙 문언에 반영하고, 아니면 조용히 무시하도록 되돌린다.
+
+### T14-R-13 — `pollStable`의 전이 이전 표본과 `converge()`의 결합
+두 가지. `pollStable`("연속 2회 동일", 티켓 53행)은 두 판독이 모두 전이 시작 전에 떨어지면
+**전이 이전 표본**을 돌려줄 수 있다. 그리고 `converge()`·`scheduleBackup()`이
+`commitMigration().finally()` 안에서만 돌기 때문에(`src/runtime/background-bootstrap.ts:294`)
+저장소 읽기가 멈추면 재조정 전체가 막힌다. 리뷰어가 "티켓 32-35·53행이 처방한 것 그대로 —
+일탈이 아니라 기록"이라고 명시했다. **바꾸는 것은 티켓 처방을 뒤집는 결정**이라 픽스가 아니라
+후속이다. **권고**: `pollStable`에 최소 관측 창(첫 판독 전 1틱 대기)을 넣을지, `converge()`를
+`commitMigration()`과 독립적으로 스케줄할지를 사람이 정한다.
