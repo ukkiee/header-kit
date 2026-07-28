@@ -10,7 +10,7 @@
 
 **Blocked by:** None — 필요한 사람 결정 셋(시임 지명·Tier 2 승인·`guard:test-touch` 승인)은 모두 2026-07-28에 내려졌고 `docs/reviews/wide-ui-redesign/decisions.md`에 기록돼 있다. 즉시 시작 가능.
 
-**Status:** ready-for-agent
+**Status:** done
 
 ## 공통
 
