@@ -1,5 +1,6 @@
 import { lazy, Suspense, useState } from 'react';
 import type { Profile } from '@/core/schema';
+import { profileRowStatus } from '@/core/summary';
 import { Input } from '@/ui/text-field';
 import { useT } from '@/ui/i18n-context';
 import {
@@ -19,6 +20,8 @@ const SortableProfileList = lazy(() => import('./sortable-profile-list'));
 export interface ProfileSidebarProps {
   profiles: readonly Profile[];
   selectedId: string | null;
+  /** 전역 일시정지 — 행 표시만 정지로 덮는다(저장된 active는 불변, 티켓 13). */
+  paused: boolean;
   onSelect: (id: string) => void;
   onCreate: () => void;
   /** 순서 변경 — 드롭이 move-profile 명령으로 귀결된다 (상태 전이는 앱 레이어). */
@@ -31,12 +34,14 @@ export interface ProfileSidebarProps {
 function StaticList({
   profiles,
   selectedId,
+  paused,
   onSelect,
   onToggleActive,
   withGrip,
 }: {
   profiles: readonly Profile[];
   selectedId: string | null;
+  paused: boolean;
   onSelect: (id: string) => void;
   onToggleActive: (profileId: string, active: boolean) => void;
   withGrip: boolean;
@@ -44,19 +49,25 @@ function StaticList({
   const t = useT();
   return (
     <ul className={sidebarListClass}>
-      {profiles.map((profile) => (
-        <li key={profile.id} className={sidebarRowClass}>
-          {withGrip && <ProfileGrip label={profileReorderLabel(profile, t)} />}
-          <ProfileSelectRow
-            profile={profile}
-            selected={profile.id === selectedId}
-            onSelect={() => onSelect(profile.id)}
-            onToggleActive={(active) => onToggleActive(profile.id, active)}
-            label={profileSelectLabel(profile, t)}
-            toggleLabel={profileToggleLabel(profile, t)}
-          />
-        </li>
-      ))}
+      {profiles.map((profile) => {
+        // 드래그 목록과 **같은 파생**을 쓴다 — 한쪽만 다르면 lazy 로드 순간 수·정지 표식이
+        // 튄다(sidebarRowClass가 지키는 no-jump 계약의 값 쪽).
+        const status = profileRowStatus(profile, paused);
+        return (
+          <li key={profile.id} className={sidebarRowClass}>
+            {withGrip && <ProfileGrip label={profileReorderLabel(profile, t)} />}
+            <ProfileSelectRow
+              profile={profile}
+              status={status}
+              selected={profile.id === selectedId}
+              onSelect={() => onSelect(profile.id)}
+              onToggleActive={(active) => onToggleActive(profile.id, active)}
+              label={profileSelectLabel(profile, t, status.state)}
+              toggleLabel={profileToggleLabel(profile, t)}
+            />
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -71,6 +82,7 @@ function StaticList({
 export function ProfileSidebar({
   profiles,
   selectedId,
+  paused,
   onSelect,
   onCreate,
   onReorder,
@@ -96,6 +108,7 @@ export function ProfileSidebar({
         <StaticList
           profiles={visible}
           selectedId={selectedId}
+          paused={paused}
           onSelect={onSelect}
           onToggleActive={onToggleActive}
           withGrip={false}
@@ -106,6 +119,7 @@ export function ProfileSidebar({
             <StaticList
               profiles={profiles}
               selectedId={selectedId}
+              paused={paused}
               onSelect={onSelect}
               onToggleActive={onToggleActive}
               withGrip
@@ -115,6 +129,7 @@ export function ProfileSidebar({
           <SortableProfileList
             profiles={profiles}
             selectedId={selectedId}
+            paused={paused}
             onSelect={onSelect}
             onReorder={onReorder}
             onToggleActive={onToggleActive}

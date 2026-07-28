@@ -211,6 +211,11 @@ const en = {
   ariaSelectProfile: 'Select profile {name} ({state})',
   ariaStateOn: 'on',
   ariaStateOff: 'off',
+  /**
+   * 전역 일시정지 중 프로필 행이 읽히는 상태 (티켓 13, 스펙 story 25/38). 켬/끔을 덮어쓰는
+   * 세 번째 값이라 같은 자리에 들어간다 — 저장된 active는 그대로이고 표시만 정지다.
+   */
+  ariaStatePaused: 'paused',
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -404,6 +409,7 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     ariaSelectProfile: '{name} 프로필 선택 ({state})',
     ariaStateOn: '켬',
     ariaStateOff: '끔',
+    ariaStatePaused: '정지',
   },
 };
 

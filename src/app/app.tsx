@@ -294,6 +294,7 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
           <ProfileSidebar
             profiles={state.profiles}
             selectedId={effectiveSelectedId}
+            paused={state.paused}
             onSelect={selectProfile}
             onCreate={createAndSelectProfile}
             onReorder={(profileId, toIndex) =>

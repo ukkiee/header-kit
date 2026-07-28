@@ -15,6 +15,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { Profile } from '@/core/schema';
+import { profileRowStatus, type ProfileRowStatus } from '@/core/summary';
 import { useT } from '@/ui/i18n-context';
 import {
   ProfileGrip,
@@ -34,6 +35,8 @@ import {
 export interface SortableProfileListProps {
   profiles: readonly Profile[];
   selectedId: string | null;
+  /** 전역 일시정지 — 정적 목록과 같은 값을 같은 자리에 낸다(로드 후 시각 점프 방지). */
+  paused: boolean;
   onSelect: (id: string) => void;
   onReorder: (profileId: string, toIndex: number) => void;
   /** 인라인 on/off — 정적 목록과 같은 컨트롤을 드래그 목록도 갖는다 (티켓 10). */
@@ -42,12 +45,14 @@ export interface SortableProfileListProps {
 
 function SortableItem({
   profile,
+  status,
   selected,
   onSelect,
   onToggleActive,
   dragLabel,
 }: {
   profile: Profile;
+  status: ProfileRowStatus;
   selected: boolean;
   onSelect: () => void;
   onToggleActive: (active: boolean) => void;
@@ -66,10 +71,11 @@ function SortableItem({
       <ProfileGrip label={dragLabel} attributes={attributes} listeners={listeners} />
       <ProfileSelectRow
         profile={profile}
+        status={status}
         selected={selected}
         onSelect={onSelect}
         onToggleActive={onToggleActive}
-        label={profileSelectLabel(profile, t)}
+        label={profileSelectLabel(profile, t, status.state)}
         toggleLabel={profileToggleLabel(profile, t)}
       />
     </li>
@@ -79,6 +85,7 @@ function SortableItem({
 export default function SortableProfileList({
   profiles,
   selectedId,
+  paused,
   onSelect,
   onReorder,
   onToggleActive,
@@ -104,6 +111,7 @@ export default function SortableProfileList({
             <SortableItem
               key={profile.id}
               profile={profile}
+              status={profileRowStatus(profile, paused)}
               selected={profile.id === selectedId}
               onSelect={() => onSelect(profile.id)}
               onToggleActive={(active) => onToggleActive(profile.id, active)}

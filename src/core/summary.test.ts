@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { compile, type CompileEnv } from './compile';
-import { summarizeCompile } from './summary';
+import { profileRowStatus, summarizeCompile } from './summary';
 import type { Modification, Profile } from './schema';
 
 function mod(id: string, name: string, value = 'v'): Modification {
@@ -83,5 +83,56 @@ describe('summarizeCompile', () => {
 
     expect(summary.warnings).toEqual([]);
     expect(summary.hasProblems).toBe(false);
+  });
+});
+
+/**
+ * 프로필 행이 목록에서 말하는 것 (티켓 13, 스펙 story 22/25/38).
+ *
+ * 행의 표시값은 **저장 상태에서만** 파생된다 — 컴파일 결과를 프로필별로 귀속시키지 않는다.
+ * 그래서 규칙 수는 "그 프로필에 들어 있는 켜진 규칙 수"이지 "컴파일이 실제로 낸 수"가
+ * 아니고, 일시정지는 그 수를 깎지 않고 **행이 읽히는 상태**만 정지로 돌린다.
+ */
+describe('profileRowStatus', () => {
+  const disabled = (id: string, name: string): Modification => ({ ...mod(id, name), enabled: false });
+
+  it('켜진 규칙만 센다 — 0개·일부만 켜짐·전부 켜짐', () => {
+    expect(profileRowStatus(profile({ modifications: [] }), false).ruleCount).toBe(0);
+    expect(
+      profileRowStatus(profile({ modifications: [disabled('d1', 'X-A'), disabled('d2', 'X-B')] }), false)
+        .ruleCount,
+    ).toBe(0);
+    expect(
+      profileRowStatus(
+        profile({ modifications: [mod('a1', 'X-A'), disabled('d1', 'X-B'), mod('a2', 'X-C')] }),
+        false,
+      ).ruleCount,
+    ).toBe(2);
+    expect(
+      profileRowStatus(profile({ modifications: [mod('a1', 'X-A'), mod('a2', 'X-B')] }), false).ruleCount,
+    ).toBe(2);
+  });
+
+  it('일시정지가 아니면 저장된 active가 곧 행 상태다', () => {
+    expect(profileRowStatus(profile({ active: true }), false).state).toBe('on');
+    expect(profileRowStatus(profile({ active: false }), false).state).toBe('off');
+  });
+
+  it('일시정지는 켜짐·꺼짐을 가리지 않고 모든 행을 정지로 읽게 한다', () => {
+    expect(profileRowStatus(profile({ active: true }), true).state).toBe('paused');
+    expect(profileRowStatus(profile({ active: false }), true).state).toBe('paused');
+  });
+
+  it('일시정지는 표시만 바꾼다 — 저장된 active도 규칙 수도 건드리지 않는다', () => {
+    const target = profile({ active: true, modifications: [mod('a1', 'X-A'), disabled('d1', 'X-B')] });
+
+    const running = profileRowStatus(target, false);
+    const paused = profileRowStatus(target, true);
+
+    // 재개하면 직전 상태가 그대로 다시 보인다 — 정지는 그 위에 덮이기만 한다.
+    expect(paused.ruleCount).toBe(running.ruleCount);
+    expect(profileRowStatus(target, false)).toEqual(running);
+    expect(target.active).toBe(true);
+    expect(target.modifications).toHaveLength(2);
   });
 });

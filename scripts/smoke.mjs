@@ -3824,6 +3824,78 @@ try {
     `popup cols=${JSON.stringify(popupShell.cols)}`);
 
   /*
+   * N41e: 프로필 행의 규칙 수·전역 정지 (티켓 13, 스펙 story 22·25·38).
+   *
+   * N41은 행이 스와치와 인라인 토글을 갖는지까지만 본다 — 행이 **무엇을 말하는지**는 보지
+   * 않는다. 여기서 셋을 함께 본다: (a) 행이 그 프로필의 **켜진** 규칙 수를 보이고(꺼진
+   * 규칙은 세지 않는다), (b) 헤더 일시정지를 누르면 같은 행이 색이 아니라 **아이콘(형태) +
+   * 접근성 이름**으로 정지를 말하며, (c) 그 정지가 **표시만** 바꾼다 — 정지 중에도 인라인
+   * 토글이 먹고, 재개하면 방금 고른 상태가 그대로 다시 보인다.
+   *
+   * (c)가 빠지면 "정지 = 전부 끔"으로 구현해도 통과한다 — 재개했을 때 사용자가 켜 둔
+   * 프로필이 꺼져 돌아오는 손실이 스위트 밖으로 빠져나간다.
+   */
+  await seedProfiles([
+    baseProfile('pc-a', 'CountA', [
+      hdr({ id: 'c1', name: 'X-C1', value: '1' }),
+      hdr({ id: 'c2', name: 'X-C2', value: '2' }),
+      { ...hdr({ id: 'c3', name: 'X-C3', value: '3' }), enabled: false },
+    ]),
+    { ...baseProfile('pc-b', 'CountB', []), active: false },
+  ]);
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Show profiles', exact: true }).waitFor({ timeout: 5000 });
+  // 행 표식은 이름 칩 **안**의 마지막 요소다 — 밖에 붙으면 열이 넓어진다(티켓 10 R-5).
+  const profileRows = () => popup.evaluate(() =>
+    [...document.querySelectorAll('[aria-label^="Select profile"]')].map((r) => ({
+      aria: r.getAttribute('aria-label'),
+      mark: r.lastElementChild?.textContent?.trim() ?? '',
+      glyph: !!r.lastElementChild?.querySelector('svg'),
+    })));
+  const rowsRunning = await pollUntil(profileRows, (rows) => rows.length === 2, 5000, 100);
+
+  await popup.getByRole('button', { name: 'Pause' }).click();
+  const rowsPaused = await pollUntil(
+    profileRows,
+    (rows) => rows.length === 2 && rows.every((r) => r.aria?.endsWith('(paused)')),
+    5000,
+    100,
+  );
+  // 정지 중에도 목록에서 바로 켠다 — 정지는 저장된 active를 건드리지 않으므로 지금도 고른다.
+  await popup.getByRole('switch', { name: 'Toggle CountB' }).click();
+  const activeWhilePaused = await pollUntil(
+    () => sw.evaluate(async () => {
+      const { state } = await chrome.storage.local.get('state');
+      return state.profiles.find((p) => p.id === 'pc-b')?.active;
+    }),
+    (v) => v === true,
+  );
+  const rowsStillPaused = await pollUntil(
+    profileRows,
+    (rows) => rows.length === 2 && rows.every((r) => r.aria?.endsWith('(paused)')),
+    3000,
+    100,
+  );
+
+  await popup.getByRole('button', { name: 'Resume' }).click();
+  const rowsResumed = await pollUntil(
+    profileRows,
+    (rows) => rows.length === 2 && rows.every((r) => !r.aria?.endsWith('(paused)')),
+    5000,
+    100,
+  );
+  record('N41e: 프로필 행 — 켜진 규칙 수 + 정지 표시(형태·접근성 이름), 정지는 표시만',
+    rowsRunning[0]?.aria === 'Select profile CountA (on)' && rowsRunning[0]?.mark === '2' &&
+      rowsRunning[1]?.aria === 'Select profile CountB (off)' && rowsRunning[1]?.mark === '0' &&
+      rowsPaused.every((r) => r.glyph) && rowsPaused[0]?.mark === '2' && rowsPaused[1]?.mark === '0' &&
+      activeWhilePaused === true && rowsStillPaused.every((r) => r.aria?.endsWith('(paused)')) &&
+      rowsResumed[0]?.aria === 'Select profile CountA (on)' && rowsResumed[0]?.mark === '2' &&
+      rowsResumed[1]?.aria === 'Select profile CountB (on)' && rowsResumed[1]?.mark === '0',
+    `실행=${JSON.stringify(rowsRunning)}, 정지=${JSON.stringify(rowsPaused)}, ` +
+      `정지 중 토글 active=${activeWhilePaused} (여전히 정지=${rowsStillPaused.every((r) => r.aria?.endsWith('(paused)'))}), ` +
+      `재개=${JSON.stringify(rowsResumed)}`);
+
+  /*
    * N41b: 아코디언 편집 (티켓 10, 스펙 story 4·5) — 두 번째 규칙의 수정 아이콘을 누르면
    * 그 규칙이 **맨 위로** 올라오며 폼이 인라인으로 펼쳐지고, 저장하면 접혀 두 줄 요약으로
    * 돌아온다. 순서는 목록 상태가 아니라 렌더만 바꾸므로 편집이 끝나면 원래대로 돌아온다.

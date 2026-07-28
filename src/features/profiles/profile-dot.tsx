@@ -1,20 +1,39 @@
 import type { DraggableAttributes } from '@dnd-kit/core';
 import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities';
-import { GripVertical } from 'lucide-react';
-import { format, type Translator } from '@/core/i18n';
+import { GripVertical, Pause } from 'lucide-react';
+import { format, type MessageKey, type Translator } from '@/core/i18n';
 import type { Profile } from '@/core/schema';
+import type { ProfileRowState, ProfileRowStatus } from '@/core/summary';
 import { SwitcherChip } from '@/ui/switcher-chip';
 import { ToggleSwitch } from '@/ui/toggle-switch';
 import { focusRing } from '@/ui/tokens';
 
-/** 프로필 선택 컨트롤의 접근성 이름 — 양 표면 사이드바가 같은 규약을 공유한다. */
+/**
+ * 행 상태를 나르는 카탈로그 키 — 정지는 켬/끔을 덮어쓰는 **세 번째 값**이라 같은 자리에
+ * 들어간다. 이름 형식(`Select profile {name} ({state})`)은 그대로라, 이 규약을 읽는
+ * 호출부·단언이 상태 하나가 늘었다고 달라지지 않는다.
+ */
+const STATE_KEY: Record<ProfileRowState, MessageKey> = {
+  on: 'ariaStateOn',
+  off: 'ariaStateOff',
+  paused: 'ariaStatePaused',
+};
+
+/**
+ * 프로필 선택 컨트롤의 접근성 이름 — 양 표면 사이드바가 같은 규약을 공유한다.
+ *
+ * 상태를 프로필이 아니라 **행 상태**에서 받는 이유: 전역 일시정지는 저장된 `active`를
+ * 바꾸지 않으므로(티켓 13), profile만 보면 정지 중에도 "on"이라고 말하게 된다 — 화면은
+ * 정지인데 접근성 이름만 켜짐인 어긋남이 색각·저시력 사용자에게만 생긴다(스펙 story 38).
+ */
 export function profileSelectLabel(
-  profile: Pick<Profile, 'name' | 'active'>,
+  profile: Pick<Profile, 'name'>,
   t: Translator,
+  state: ProfileRowState,
 ): string {
   return format(t('ariaSelectProfile'), {
     name: profile.name,
-    state: t(profile.active ? 'ariaStateOn' : 'ariaStateOff'),
+    state: t(STATE_KEY[state]),
   });
 }
 
@@ -103,6 +122,7 @@ export function profileToggleLabel(profile: Pick<Profile, 'name'>, t: Translator
  */
 export function ProfileSelectRow({
   profile,
+  status,
   selected,
   onSelect,
   onToggleActive,
@@ -110,6 +130,7 @@ export function ProfileSelectRow({
   toggleLabel,
 }: {
   profile: Profile;
+  status: ProfileRowStatus;
   selected: boolean;
   onSelect: () => void;
   onToggleActive: (active: boolean) => void;
@@ -122,9 +143,41 @@ export function ProfileSelectRow({
         <SwitcherChip selected={selected} aria-label={label} onClick={onSelect}>
           <ProfileDot profile={profile} />
           <span className="min-w-0 truncate">{profile.name}</span>
+          <ProfileRowMark status={status} />
         </SwitcherChip>
       </div>
+      {/* 정지 중에도 토글은 살아 있다 — 정지는 표시만 덮으므로 저장된 on/off는 지금도 고른다. */}
       <ToggleSwitch checked={profile.active} onCheckedChange={onToggleActive} aria-label={toggleLabel} />
     </>
+  );
+}
+
+/**
+ * 행 오른쪽 끝의 상태 표식 — 켜진 규칙 수(스펙 story 22)와 전역 정지(story 25).
+ *
+ * **자리는 이름 칩 안이다.** 열 폭은 팝업 14rem·탭 16rem으로 못박혀 있으므로(ADR 0005,
+ * 티켓 10 code-review R-5) 수를 행 바깥에 붙이면 열이 넓어지거나 이름 칩이 눌린다. 칩
+ * 안에서 `ml-auto`로 오른쪽에 붙이면 좁아질 때 **이름만** truncate되고 행 폭은 그대로다.
+ *
+ * **정지는 색이 아니라 형태로 말한다.** 일시정지 아이콘(‖)이 수 앞에 서고 수는 muted로
+ * 내려간다 — 그레이스케일에서도 "이 프로필의 N개가 지금 안 걸린다"가 읽힌다(story 38).
+ * 수 자체는 깎지 않는다: 규칙이 사라진 게 아니라 멈춘 것이고, 재개하면 그대로 돌아온다.
+ *
+ * `aria-hidden`인 이유: 이 표식은 `aria-label`을 가진 버튼 **안**이라 어차피 낭독되지
+ * 않는다. 상태는 그 이름(`profileSelectLabel`)이 문자열로 따로 나른다 — 표식과 이름이
+ * 같은 사실을 두 번 말하면 낭독이 겹친다.
+ */
+function ProfileRowMark({ status }: { status: ProfileRowStatus }) {
+  const paused = status.state === 'paused';
+  return (
+    <span
+      aria-hidden
+      className={`ml-auto flex shrink-0 items-center gap-0.5 font-mono text-[10px] tabular-nums ${
+        paused ? 'text-muted-foreground' : ''
+      }`}
+    >
+      {paused && <Pause size={9} strokeWidth={2} fill="currentColor" />}
+      {status.ruleCount}
+    </span>
   );
 }
