@@ -1,0 +1,62 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "release",
+  "ack": "auto-triage",
+  "triageMode": "unattended",
+  "verdict": "needs-attention",
+  "summary": "NO-SHIP. R-1 is resolved. R-2 remains open. R-3’s original migration/error wiring and R-4’s three UI stories are present, but their fixes introduce two reproducible data-loss races. The ticket-13 test edit is an exact 1:1 rename with no weakened assertion. Focused tests (96/96), typecheck, and barrier audit pass but miss these failures.",
+  "planFile": "docs/reviews/wide-ui-redesign/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 103,
+  "target": "branch diff against main",
+  "reviewedSha": "82e957b859b90e1cdb3dcd535fae64aa524fa791",
+  "reviewedTree": "7c826da9b5ce7ffc68e27466c589f1ffbebb5392",
+  "reviewedPlanSha256": "15c23c01429652244a16c047351c96fe2e4c71a24178a9b21ef9faa64bf3d207",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 3,
+  "planFindingCount": 0,
+  "triage": "review-gate SKILL.md § Unattended triage governs: do NOT triage by hand — run your conductor's policy tool, which applies the policy and computes its hash itself; decide the whole round before applying anything; apply NOTHING if any row escalates; one recorded row per finding index with none missing; the final round is verification-only; max 2 rounds; no waiver; verify the ledger against this artifact, then COMMIT decisions.md with it.",
+  "findings": [
+    {
+      "severity": "critical",
+      "title": "R-2 fix still lets grouped broad regexes bypass confirmation",
+      "body": "`topLevelAlternatives` ignores `|` inside groups. Direct evaluation of `^(https://ads\\.example\\.net/|https://.*\\.com/)` returns `narrow`, although its second branch matches every HTTPS `.com` URL and avoids both `.invalid` probes. RuleForm only requests confirmation for `wide`, so this destructive Block is enabled on the first save. The added tests cover top-level alternatives, allowing all focused tests to pass against the wrong risk surface.",
+      "file": "src/core/url-scope.ts",
+      "line_start": 109,
+      "line_end": 146,
+      "confidence": 0.99,
+      "recommendation": "Return `narrow` only when every alternative at every nesting level is proven host-bound; otherwise default to `wide`. Add the grouped counterexample to the pure-function table and an end-to-end first-save confirmation test.",
+      "isPlanFinding": false
+    },
+    {
+      "severity": "critical",
+      "title": "R-3 migration fix can overwrite a newer user command",
+      "body": "`commitMigration` retains a migrated v1 snapshot and later persists it outside the command executor’s FIFO queue. The command listener is already active before startup migration begins (`background-bootstrap.ts:262-295`), so a command can persist edited v2 state before the stale migration write finishes. `persistState` only checks readability, not snapshot identity, and therefore accepts the stale overwrite. A controlled execution saved `Changed` and then finished with `Legacy`. Existing tests exercise only sequential commits.",
+      "file": "src/platform/stateStore.ts",
+      "line_start": 42,
+      "line_end": 48,
+      "confidence": 0.98,
+      "recommendation": "Put migration and commands behind the same background write barrier or queue. Add a deferred-storage regression test where a command persists v2 while migration is pending and assert that the command’s state remains authoritative.",
+      "isPlanFinding": false
+    },
+    {
+      "severity": "critical",
+      "title": "Snapshot deletion can silently erase a concurrent automatic backup",
+      "body": "`deleteBackupSnapshot` reads and later replaces the entire manifest without serialization against `performBackup`, which independently writes that manifest from the automatic-backup path. If backup commits between deletion’s read and manifest write, deletion overwrites the new entry; verification checks only that the deleted ID is absent and returns success. A controlled interleaving produced `{ok:true}`, an empty manifest, and the new backup’s orphaned chunk. Smoke N43 explicitly makes late automatic backup take the skip path (`scripts/smoke.mjs:4273-4276`), so committed evidence avoids this production race.",
+      "file": "src/platform/backupStore.ts",
+      "line_start": 116,
+      "line_end": 129,
+      "confidence": 0.99,
+      "recommendation": "Route deletion and automatic backup through one background writer per target, then add a deterministic test interleaving their manifest commits. For sync updates, preserve unrelated entries through revision/conflict-aware retry.",
+      "isPlanFinding": false
+    }
+  ],
+  "next_steps": [
+    "Block merge until all three critical paths have regression tests and fixes.",
+    "Re-run the full build, unit, smoke, and typecheck suite after fixing the write-ordering paths."
+  ]
+}

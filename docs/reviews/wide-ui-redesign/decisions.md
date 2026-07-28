@@ -865,3 +865,74 @@ R-4: 2파일 62줄, `test_net_lines +44`(순수 추가), 같은 네 플래그 �
 **이 두 행은 기계 검증 대상이 아니다.** `verify-ledger` 는 `### <kind> r<n>` 게이트 섹션만
 게이트 아티팩트에 대해 재도출하며, `/code-review` 는 아티팩트를 만들지 않는다. 티켓 단위 CR-1
 행은 **감사 가능하되 재계산되지 않는다** — 최종 보고서에서 "전량 기계 검증"으로 묶지 말 것.
+
+### release r2 — auto-triage
+_policy AT-1 · review-gate/policies/auto-triage-v1.md · sha256 e7c15be62c42c6a9 · launcher ack=auto-triage · decided 2026-07-28T07:49:31Z · artifact docs/reviews/wide-ui-redesign/release-r2.json_
+_ROUND NOT APPLIED — guard:zero-accepts — the round accepted nothing while carrying 3 critical/high finding(s) (R-1 critical/0.99, R-2 critical/0.98, R-3 critical/0.99); AT-1 §3 rounds: "zero accepts WITH a critical or high escalates immediately" — a further round returns the same finding for the same reason on an unchanged tree; per AT-1 guard:two-phase no accept from this round was applied. Loop STOPPED. See .scratch/wide-ui-redesign/ESCALATION.md_
+
+R-1 [AUTO AT-1 reserved:migration] escalate — R-2 fix still lets grouped broad regexes bypass confirmation; critical/0.99; src/core/url-scope.ts:109; res:migration; reserved class — human decision required: irreversible in a way code is not, and the real decision — backfill window, downtime, ordering vs deploy — lives outside the diff
+R-2 [AUTO AT-1 reserved:migration] escalate — R-3 migration fix can overwrite a newer user command; critical/0.98; src/platform/stateStore.ts:42; res:migration; reserved class — human decision required: irreversible in a way code is not, and the real decision — backfill window, downtime, ordering vs deploy — lives outside the diff
+R-3 [AUTO AT-1 reserved:contract?+terminal-gate] escalate — Snapshot deletion can silently erase a concurrent automatic backup; critical/0.99; src/platform/backupStore.ts:116; res:contract?; AT-1 terminal-gate rule — no critical or high may close the release gate unaccepted
+
+### ESCALATION guard:zero-accepts 2026-07-28T07:50Z
+
+릴리스 게이트 **라운드 2**(종단·검증 전용)가 **critical 3건**을 돌려주고 `AT-1` Phase A가
+`guard:zero-accepts`로 라운드를 세웠다. **이 라운드의 어떤 행도 적용되지 않았다** — accept 0,
+escalate 3, `gate_commits 0`, `ledger_shas 0`. 라운드 2에는 accept 자체가 없다(`AT-1`
+terminal-gate: 검증할 라운드 3이 없으므로 여기서의 픽스는 아무도 못 본 채 출시된다).
+
+**재도출 검증은 통과했다** — `verify-ledger` exit 0, 위반 0.
+`rowCount 3 · rederived 3 · judgement_rows [] · resolutions_checked 0 · human_rows [] ·
+gate_commits 0 · ledger_shas 0 · round_not_applied true ·
+round_guards_derived [guard:zero-accepts]`.
+**`rederived + resolutions_checked = 3 = rowCount`** — 세 행 전부를 기계가 재계산했고 이
+컨덕터의 판단만으로 결정된 행은 **없다**. (릴리스 r1은 6행 중 3행이 사람 결정이었다.)
+
+**미해결 finding 3건 — 전부 미적용, 사람의 콜드 트리아지 필요.**
+
+- **R-1 escalate** `[AUTO AT-1 reserved:migration]` `res:migration` — critical/0.99,
+  `src/core/url-scope.ts:109`. **라운드 1의 R-2 픽스(`a711d57`)가 불완전하다.**
+  `topLevelAlternatives`가 그룹 안의 `|`를 무시해
+  `^(https://ads\.example\.net/|https://.*\.com/)`가 `narrow`로 판정된다 — 둘째 분기가 모든
+  HTTPS `.com` URL에 걸리는데도 그렇다. RuleForm은 `wide`에만 확인을 요구하므로 이 파괴적
+  Block이 **첫 저장에 그대로 켜진다**. 추가된 테스트는 최상위 대안만 덮어 잘못된 위험 표면
+  위에서 전부 통과한다.
+  권고: 모든 중첩 수준의 모든 대안이 host-bound임이 증명될 때만 `narrow`를 반환하고, 그렇지
+  않으면 `wide`로 기본값을 잡는다. 그룹 반례를 순수 함수 표에 넣고 첫 저장 확인 e2e 테스트를
+  추가한다.
+- **R-2 escalate** `[AUTO AT-1 reserved:migration]` `res:migration` — critical/0.98,
+  `src/platform/stateStore.ts:42`. **라운드 1의 R-3 마이그레이션 픽스(`4e4d024`)가 새 경합을
+  만들었다.** `commitMigration`이 마이그레이션된 v1 스냅샷을 쥐고 있다가 커맨드 실행기의 FIFO
+  큐 **밖에서** 나중에 persist한다. 커맨드 리스너는 startup 마이그레이션 시작 전에 이미
+  살아 있으므로(`background-bootstrap.ts:262-295`) 커맨드가 편집된 v2 상태를 먼저 저장할 수
+  있고, `persistState`는 스냅샷 동일성이 아니라 가독성만 검사하므로 그 낡은 덮어쓰기를
+  받아들인다. 통제 실행에서 `Changed` 저장 후 `Legacy`로 끝났다. 기존 테스트는 순차 커밋만
+  돌린다.
+  권고: 마이그레이션과 커맨드를 같은 백그라운드 쓰기 배리어/큐 뒤에 둔다. 마이그레이션 대기 중
+  커맨드가 v2를 persist하는 지연 저장 회귀 테스트를 추가해 커맨드 상태가 권위로 남는지 단언한다.
+- **R-3 escalate** `[AUTO AT-1 reserved:contract?+terminal-gate]` `res:contract?` — critical/0.99,
+  `src/platform/backupStore.ts:116`. **스냅샷 삭제가 동시 자동 백업을 조용히 지운다.**
+  `deleteBackupSnapshot`이 매니페스트 전체를 읽고 나중에 통째로 교체하는데, 자동 백업 경로의
+  `performBackup`이 같은 매니페스트를 독립적으로 쓴다. 삭제의 read와 write 사이에 백업이
+  커밋되면 삭제가 새 항목을 덮어쓰고, 검증은 **삭제된 ID의 부재만** 확인하므로 성공을 반환한다.
+  통제 인터리빙에서 `{ok:true}` + 빈 매니페스트 + 새 백업의 고아 청크가 나왔다.
+  **그리고 이 항목이 이 정지에서 가장 무거운 것이다** — 리뷰어는 스모크 **N43이 늦은 자동
+  백업을 일부러 skip 경로로 보낸다**고 지목했다(`scripts/smoke.mjs:4273-4276`). 즉 **커밋된
+  증거가 이 프로덕션 경합을 피해 가도록 쓰여 있다.** 기계 에이전트가 쓴 테스트가 결함을 우회하는
+  것은 이 설계가 가장 두려워하는 실패 형태다.
+  권고: 삭제와 자동 백업을 target당 하나의 백그라운드 writer로 보내고, 두 매니페스트 커밋을
+  결정론적으로 인터리빙하는 테스트를 추가한다. sync 갱신은 revision/conflict 인지 재시도로
+  무관한 항목을 보존한다.
+
+**적용된 행: 없음.** 이 라운드는 커밋을 하나도 만들지 않았다.
+
+**분류에 관한 주의 하나, 숨기지 않고 적는다.** R-1과 R-2에 붙은 예약 클래스는 `reserved:migration`
+이다. R-2는 실제로 마이그레이션 코드의 결함이라 적절하지만, **R-1은 정규식 폭 판정 결함이지
+스키마 마이그레이션이 아니다** — `AT-1`의 매처가 기계적으로 문 것이다. 결과는 어느 쪽이든
+escalate로 같으므로 처분은 바뀌지 않지만, 원장을 콜드로 읽는 사람이 "마이그레이션 문제 둘"로
+읽지 않도록 여기 적어 둔다. `verify-ledger`가 이 클래스를 재도출해 동의했다는 사실도 함께 적는다 —
+즉 이것은 원장의 오기가 아니라 정책 엔진의 판정이다.
+
+**릴리스 게이트는 통과하지 않았다**(`ok:true`, `verdict: needs-attention`, `passed:false`).
+auto-triage에는 waiver가 없고, 라운드 3은 이 스킬이 금지한다. critical 3건은 **고쳐지거나
+사람이 보거나** 둘 중 하나여야 한다.
