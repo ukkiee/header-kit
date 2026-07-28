@@ -551,3 +551,123 @@ core 시임에서 이름만 서 있는 셈이다.
 > critical R-2가 그것을 잡았고, 처분은 티켓 15의 기준 B군이다. **T14-1 자체(일반 CAS —
 > 리비전 카운터로 신원을 검사)는 여전히 열려 있다** — 티켓 15는 마이그레이션 커밋 한 자리만
 > 닫고, 스키마 범프를 부르는 일반화는 하지 않는다.
+
+### T15-R-1 — 삭제 시임이 `Promise<unknown>`이라 결과 타입이 경계에서 지워진다
+
+*(R-12와 동일 항목 — Standards 축과 Spec 축이 독립으로 같은 지점을 짚었다.)*
+
+`BackgroundDeps.deleteBackupSnapshot(snapshotId, target): Promise<unknown>`
+(`src/runtime/background-bootstrap.ts:63,70`)이 `DeleteSnapshotResult`를 경계에서 지우고,
+`requestSnapshotDelete`(`src/platform/stateStore.ts:196`)가 미검사 캐스트로 되살린다. 이 시임이
+흉내 낸 `onCommand` 선례는 `StoredState`를 deps 타입에 그대로 둔다 — 즉 기존 패턴에서 한 칸
+내려온 것이다. Spec 축은 여기에 C-9("잔여 개수가 렌더러까지 그대로 도착")가 기댄다는 점을 덧붙였다:
+지금 그 보장은 메시지 홉 양끝의 캐스트뿐이다.
+
+**왜 defer인가.** 두 축 모두 동작이 아니라 타입 안전성의 약화로 기술했고 Standards 축은 명시적으로
+"judgement, not hard"로 매겼다. bootstrap이 그 값을 실제로 들여다보지 않는다는 것이 연성 판정의
+근거다. 브랜치 규율 "종류·상태가 늘면 타입이 먼저 깨지게 한다"는 `review-brief.md`에 적혀 있는데,
+그 파일은 gitignore된 루프 작업파일이지 저장소가 문서화한 표준이 아니라 `cr:standard`(하드 위반
+전용)를 쓸 수 없다.
+
+**할 일:** `BackgroundDeps`의 두 시그니처를 `Promise<DeleteSnapshotResult>`로 좁히고 양끝 캐스트를
+지운다. `onCommand`가 `StoredState`를 두는 방식이 그대로 선례다.
+
+### T15-R-2 — `onSnapshotDeleteRequest`가 `onCommand`의 리스너 봉투를 그대로 재생산한다
+
+`src/platform/stateStore.ts`. 타입가드, `void handler(...).then(sendResponse).catch(...)`,
+`return true; // 비동기 응답`, `return undefined` — 네 조각이 문자 그대로 겹친다. 메시지 채널은
+둘인데 모양은 하나다.
+
+**할 일:** 공유 `onTypedMessage(type, handler)` 하나가 둘을 다 나르게 한다. 지금 겹치는 것은 봉투일
+뿐이라 추출 비용이 낮다.
+
+### T15-R-3 — `MAX_EXPANDED_BRANCHES`가 세 자리에서 각각 강제된다
+
+`src/core/url-scope.ts`의 `concatBranches`와 `done.length > MAX_EXPANDED_BRANCHES` 두 자리.
+한도가 바뀌면 세 자리를 같이 고쳐야 하고, 하나를 빠뜨리면 확장이 조용히 한도를 넘는다.
+
+테스트 쪽에도 같은 모양이 둘 있다 — `installDeferredStorage`(`backupStore.test.ts`)와
+`seedDeferredLocal`(`stateStore.test.ts`)는 **다음 `get`을 붙잡는 동일한 fake**다. 구현자 저널이
+남긴 교훈("저장소 fake의 `get`은 호출 시점 값을 집어야 경합이 표현된다")이 붙는 자리도 여기다.
+
+**할 일:** 한도 검사를 한 자리로 모으고, 지연 저장소 fake를 테스트 헬퍼 하나로 합친다.
+
+### T15-R-4 — `verifySnapshotDeleteComplete`가 어느 쪽이 넓은 술어인지 이름으로 못 알린다
+
+`src/core/backup.ts`. 기존 `verifySnapshotDeleted` 옆에 서면서 의미 구분을 doc 주석이 전부 지고
+있다. 주석은 이름과 달리 호출부에서 보이지 않는다.
+
+**할 일:** 넓은 쪽을 `verifySnapshotDeletedNothingElseLost` 류로 개명한다.
+
+### T15-R-5 — `literal(text)`가 `[text]` 위에 아무것도 얹지 않는다
+
+`src/core/url-scope.ts`. 호출부 넷 전부 배열 리터럴로 족하다 (Middle Man).
+
+**할 일:** 인라인하고 함수를 지운다.
+
+### T15-R-6 — `platform/stateStore.ts`가 백업 스냅샷 사유로도 바뀌게 됐다
+
+`requestSnapshotDelete`/`onSnapshotDeleteRequest`가 `BackupTarget`·`DeleteSnapshotResult`를 끌어와
+상태 저장소에 **두 번째 무관한 변경 사유**가 생겼다 (Divergent Change). `backupStore` 쪽 메시징 쌍이면
+갈라 둘 수 있다.
+
+**T15-R-1·R-12와 같은 설계 지점을 다른 각도에서 본 것이므로 함께 판단해야 한다** — 메시징 쌍을
+`backupStore`로 옮기면 `Promise<unknown>` 문제도 같이 사라질 가능성이 높다. 따로 고치면 두 번 고친다.
+
+### T15-R-7 — `url-scope.ts`에 포기 채널이 둘이다
+
+`concatBranches`는 `GIVE_UP`/`Branches`로, `expandAlternatives`는 맨 `null`로 포기한다. 리뷰어가
+스스로 minor로 표시했다.
+
+**할 일:** 포기 표현을 하나로 통일한다.
+
+### T15-R-8 — C-8의 정착 대기 실측에 아티팩트가 없다
+
+기준 C-8은 "삭제가 메시지 왕복을 하나 더 타므로 정착 대기(`smoke.mjs`의 `8000`)가 충분한지 **실측**하고
+모자라면 그 값만 올린다"고 요구한다. 주석 재작성은 착지했으나 `8000`(현재 `:4423`)은 그대로이고 실측
+흔적이 diff에 없다. 구현자 저널도 시인한다 — "실측 자체는 diff에 흔적이 남지 않아 값 불변만 확인함".
+
+**반대 방향 증거(기록에 남긴다).** 스모크가 서로 독립된 두 실행에서 129/129로 통과했다 — 구현자의
+실행과, 그 뒤 컨덕터가 HEAD `ede178c`에서 직접 돌린 실행
+(`.scratch/wide-ui-redesign/evidence/15-attempt1-suite.txt`). `8000`이 모자랐다면 그 자리가
+흔들렸을 것이다. 그래서 이것은 결함이 아니라 증거 공백이고 defer다.
+
+**그럼에도 리뷰어의 지적은 절차로서 옳다:** "증명하지 못하는 green을 이미 한 번 출하했기 때문에 이
+티켓이 존재한다." 실측을 남기지 않으면 다음 사람은 `8000`이 검토된 값인지 물려받은 값인지 구분할 수 없다.
+
+**할 일:** 삭제 왕복의 실제 정착 시간을 한 번 재서 그 수치를 `smoke.mjs` 주석이나
+`docs/reviews/`에 남긴다. 값 자체는 바꿀 필요가 없어 보인다.
+
+### T15-R-9 — R-3 드레인의 red 증거가 동작 실패가 아니라 새 표면이다
+
+`src/runtime/background-bootstrap.test.ts:394-580`의 새 테스트 셋은 `deps.deleteBackupSnapshot`·
+`deps.onSnapshotDeleteRequest`를 모는데, 둘 다 `37b3c49`에 없던 심볼이다 — **컴파일에 실패할 뿐
+동작에 실패하지 않는다.** "이 테스트는 HEAD의 삭제 경로에 대해 실패한다"는 기준 1의 문언을 문자 그대로
+만족시키지는 못한다.
+
+**왜 미충족이 아닌가.** 리뷰어 스스로 "partial, not absent"로 한정했다. R-3의 진짜 red는
+`src/platform/backupStore.test.ts:112-145`가 실제로 뒤집히는 것으로 서 있고, 이는 기준 감사자가
+독립적으로 지목한 위치(`backupStore.test.ts:126`)와 같다. 기준 1은 그 어댑터 시임으로 충족되고
+런타임 셋은 추가 피복이다.
+
+**할 일:** 새 시임을 도입하는 티켓에서 "HEAD에서 실패한다"를 어떻게 증명할지 스펙 차원의 규약을 정한다
+— 새 심볼을 모는 테스트는 원리적으로 컴파일 실패밖에 못 하므로, 그런 티켓은 red 증거를 기존 표면
+(어댑터·core)에 두어야 한다는 것이 이번 사례의 교훈이다.
+
+### T15-R-10 — `verifySnapshotDeleteComplete`의 두 번째 검사가 C-7 문언 밖이다
+
+C-7은 "읽은 시점에 있던 다른 스냅샷이 쓰기 뒤에 없으면 성공으로 접지 않는다"만 요구하는데, 구현
+(`src/core/backup.ts:432-441`)은 "읽기 뒤에 나타난 청크 중 소유자가 매니페스트에 없는 것"이라는
+규칙을 하나 더 얹었다. 어떤 동시 `bk:` writer가 삭제 중 청크를 착지시키면 `ok:false`가 된다.
+
+**왜 defer인가.** 리뷰어가 "load-bearing rather than gratuitous"라고 스스로 한정했다 — 경합하는
+스냅샷이 `before`에 없어 어댑터 테스트가 바로 이것으로 green이 된다. 더구나 Tier 2가 `bk:manifest`
+writer를 하나로 만든 뒤에는 리뷰어가 걱정한 "동시 `bk:` writer"가 프로덕션에 존재하지 않으므로,
+넓어진 실패면은 사실상 방어적이다.
+
+**할 일:** 두 번째 규칙을 C-7 문언에 맞춰 좁히거나, 아니면 기준 쪽을 개정해 그 규칙을 정식화한다.
+지금은 코드가 기준보다 넓다.
+
+### T15-R-12 — (T15-R-1과 동일 항목)
+
+Spec 축이 본 같은 결함. 위 **T15-R-1**을 보라.
