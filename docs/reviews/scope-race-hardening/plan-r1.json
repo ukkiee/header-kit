@@ -1,0 +1,74 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "plan",
+  "ack": "human-triage",
+  "triageMode": "human",
+  "verdict": "needs-attention",
+  "summary": "Do not ship this plan yet. Its central serialization contract omits critical entry points and failure recovery, while two stated safety invariants are contradicted by the repository’s actual scope and Backup semantics.",
+  "planFile": "docs/reviews/scope-race-hardening/spec.md",
+  "planInDiff": true,
+  "reviewedFileCount": 2,
+  "target": "working tree diff",
+  "reviewedSha": "d9276b2658ad85533825ff63ba1e2e1d4c9734fe",
+  "reviewedTree": "6fb54e43a4749a6369f397de13445cafad00b4a9",
+  "reviewedPlanSha256": "6f081c59becc7b517c6771ce6dceb477f6124a19a404a7f8b50bfce6d9d7d9b6",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 4,
+  "planFindingCount": 4,
+  "triage": "review-gate SKILL.md rules govern: render EVERY finding as a full table row, the human decides each row (accept/reject/defer/question — free text), echo back before applying, max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "Open question: Where do migration and non-message transitions enter the Writer Lane?",
+      "body": "D2 says the lane is acquired only at command receipt, Backup-mutation receipt, and automatic Backup, but this list omits bootstrap migration. The current runtime starts `commitMigration()` independently (`src/runtime/background-bootstrap.ts:369-375`), while D5 removes its CAS on the assumption that migration is already serialized. Reconciliation, toggle, and expiry callbacks also invoke the executor outside the listed boundaries (`background-bootstrap.ts:155-159, 348-358`). Following the plan literally can therefore leave writers outside the lane and recreate the migration lost update it is meant to fix.",
+      "file": "docs/reviews/scope-race-hardening/spec.md",
+      "line_start": 173,
+      "line_end": 175,
+      "confidence": 0.99,
+      "recommendation": "Enumerate every lane entry point, including bootstrap migration and non-message transitions. Require migration read-through-commit to use one lane token, define enqueue ordering against commands, and test both migration-first and command-first orders.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "high",
+      "title": "Open question: How does the Writer Lane recover from a rejected job?",
+      "body": "The proposed `lane()` contract defines serialization but not rejection handling. D4 removes the executor tail whose current implementation explicitly uses `run.catch(() => undefined)` so one rejected command cannot poison later work (`src/runtime/executor.ts:45-46`). Migration, validation, and storage operations can legitimately reject; a straightforward rejected-promise tail would then prevent every later command or Backup from running until the worker restarts. S3 specifies no reject-then-success acceptance case.",
+      "file": "docs/reviews/scope-race-hardening/spec.md",
+      "line_start": 182,
+      "line_end": 190,
+      "confidence": 0.96,
+      "recommendation": "Specify that each caller receives its own failure while the lane always advances. Add a test where the first queued job rejects or throws and a second job still executes and persists successfully.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "medium",
+      "title": "The direct-read consistency invariant is false during Backup eviction",
+      "body": "D7 claims manifest ordering prevents torn renderer reads. In the current protocol, however, `planBackup` places chunks from evicted non-latest manifest entries in `preRemoves` (`src/core/backup.ts:261-271`), and `applyBackupPlan` deletes them before committing the replacement manifest (`src/platform/backupStore.ts:52-63`). A renderer reading in that interval receives the old manifest with missing chunks and displays a valid Backup as corrupt, directly violating story 26.",
+      "file": "docs/reviews/scope-race-hardening/spec.md",
+      "line_start": 237,
+      "line_end": 240,
+      "confidence": 0.99,
+      "recommendation": "Either route coherent Backup reads through the Writer Lane, redesign eviction so manifest-referenced chunks are removed only after commit, or define a stable-read retry protocol. Add an interleaving test that reads between pre-removal and manifest commit.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "high",
+      "title": "Unanchored contains scopes can still bypass Block confirmation",
+      "body": "D1 treats the substring before the first slash as an authority even for `contains`. ADR 0008 defines `contains` as an unanchored URL substring, so `ads.example.com/path` can be classified `narrow` while also matching `https://victim.test/ads.example.com/path`. The plan later acknowledges this unanchored hole at lines 333-335, contradicting the Solution’s host-position-only promise and leaving a page-breaking Block path without confirmation.",
+      "file": "docs/reviews/scope-race-hardening/spec.md",
+      "line_start": 149,
+      "line_end": 150,
+      "confidence": 0.98,
+      "recommendation": "Define match-type-specific proof of host binding: keep `domain` narrow, require a real scheme/authority anchor for prefix and regex, and treat unanchored contains values as wide unless the underlying URL-filter syntax supplies a provable domain anchor. Update acceptance tables accordingly.",
+      "isPlanFinding": true
+    }
+  ],
+  "next_steps": [
+    "Resolve the complete Writer Lane entry-point and rejection contracts before ticket slicing.",
+    "Revise D7 and its tests around the actual Backup eviction ordering.",
+    "Reconcile D1 with the canonical host-binding definition or explicitly narrow the promised safety guarantee."
+  ]
+}

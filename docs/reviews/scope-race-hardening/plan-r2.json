@@ -1,0 +1,39 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "plan",
+  "ack": "human-triage",
+  "triageMode": "human",
+  "verdict": "needs-attention",
+  "summary": "Do not ship yet. R-1 is resolved by the exhaustive entry-point table, single-token migration, FIFO ordering, and corresponding tests (lines 205-227, 383-389). R-2 is resolved by explicit failure-isolation and lane-progress contracts plus reject-then-success coverage (lines 255-268, 390-393). R-3 remains open. No separate new critical/high issue was found in the fix.",
+  "planFile": "docs/reviews/scope-race-hardening/spec.md",
+  "planInDiff": true,
+  "reviewedFileCount": 4,
+  "target": "working tree diff",
+  "reviewedSha": "d9276b2658ad85533825ff63ba1e2e1d4c9734fe",
+  "reviewedTree": "6fb54e43a4749a6369f397de13445cafad00b4a9",
+  "reviewedPlanSha256": "fd4cd0d6d057076f3ed3ce30c3dc6806f533f56dc22991338430053377780771",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 1,
+  "planFindingCount": 1,
+  "triage": "review-gate SKILL.md rules govern: render EVERY finding as a full table row, the human decides each row (accept/reject/defer/question — free text), echo back before applying, max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "medium",
+      "title": "R-3 still open: one retry does not establish a stable read",
+      "body": "The plan assumes one retry will naturally outlast eviction. A valid interleaving remains: pre-removal finishes, both reads occur while the writer is paused before manifest commit, and both therefore see the old manifest referencing removed chunks. The second read then falsely marks a healthy snapshot corrupt, violating story 38. S3's exhaustive scheduler should expose this, leaving an engineer unable to satisfy the stated acceptance criteria with the prescribed protocol.",
+      "file": "docs/reviews/scope-race-hardening/spec.md",
+      "line_start": 320,
+      "line_end": 323,
+      "confidence": 0.99,
+      "recommendation": "Define an actual completion fence, such as waiting for a manifest-change/writer-completion signal with a bounded timeout before rereading, or route the read through the lane. Test retries that occur before commit, eventual commit, and writer termination after pre-removal.",
+      "isPlanFinding": true
+    }
+  ],
+  "next_steps": [
+    "Replace the single-retry decision with a protocol that distinguishes an in-progress eviction from persistent corruption, then rerun the plan gate."
+  ]
+}
