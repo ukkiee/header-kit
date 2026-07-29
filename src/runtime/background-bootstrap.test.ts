@@ -173,7 +173,7 @@ describe('background bootstrap', () => {
         onCommand: (h) => {
           handler = h;
         },
-        persistState: async (state) => {
+        persistState: async (_held, state) => {
           persisted = state;
         },
       }),
@@ -195,7 +195,7 @@ describe('background bootstrap', () => {
         onTogglePause: (cb) => {
           togglePause = cb;
         },
-        persistState: async (state) => {
+        persistState: async (_held, state) => {
           persisted = state;
         },
       }),

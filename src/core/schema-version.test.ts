@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  canCommitMigrationOver,
   createDefaultState,
   isBlockedFromOverwrite,
   readStoredState,
@@ -188,31 +187,3 @@ describe('isBlockedFromOverwrite — 쓰기 가드', () => {
   });
 });
 
-/*
- * 마이그레이션 커밋은 "쓸 수 있는가"보다 좁은 질문을 한다 (release R2-2).
- *
- * `isBlockedFromOverwrite`는 "이 버전이 이 값을 읽을 수 있는가"만 묻는다 — 읽을 수 있는
- * 두 v2 사이에서는 항상 통과하므로, 커밋이 자기가 읽은 v1이 아니라 그 사이 누가 저장한
- * **더 새 v2** 위에 v1발 스냅샷을 굳혀도 막지 못한다. 커밋이 물어야 하는 것은 "지금
- * 저장된 것이 **내가 올린 바로 그 v1**인가"다.
- */
-describe('canCommitMigrationOver — 마이그레이션 커밋 가드', () => {
-  it('아직 v1인 저장소 위에만 굳힌다', () => {
-    expect(canCommitMigrationOver(v1State())).toBe(true);
-  });
-
-  it('이미 v2면 굳히지 않는다 — 그 사이 누가 쓴 v2를 v1발 스냅샷이 덮지 않게', () => {
-    expect(canCommitMigrationOver(createDefaultState())).toBe(false);
-  });
-
-  it('빈 저장소·우리 모양이 아닌 값 위에도 굳히지 않는다', () => {
-    expect(canCommitMigrationOver(undefined)).toBe(false);
-    expect(canCommitMigrationOver({ schemaVersion: SCHEMA_VERSION, profiles: 'broken' })).toBe(false);
-  });
-
-  it('더 새 버전 위에는 굳히지 않는다 — 쓰기 가드와 같은 답', () => {
-    expect(
-      canCommitMigrationOver({ ...createDefaultState(), schemaVersion: SCHEMA_VERSION + 1 }),
-    ).toBe(false);
-  });
-});

@@ -8,6 +8,7 @@ import { hasExpiredRules } from '@/core/expiry';
 import type { NetRule } from '@/core/rules';
 import type { StoredState, StoredStateRead } from '@/core/schema';
 import { summarizeCompile, type StatusSummary } from '@/core/summary';
+import { createWriterLane, type Held } from '@/core/writer-lane';
 import { createCommandExecutor } from './executor';
 import { createReconciler } from './reconciler';
 
@@ -43,7 +44,8 @@ export interface BackgroundDeps {
    * 보임"을 구분할 수 없고 그 차이가 백업을 오염시킨다(티켓 02 코드리뷰).
    */
   readState(): Promise<StoredStateRead>;
-  persistState(state: StoredState): Promise<void>;
+  /** 권위 상태를 쓴다 — 레인을 쥔 증표를 요구한다 (ADR 0016). */
+  persistState(held: Held, state: StoredState): Promise<void>;
   /**
    * 검증을 통과한 v1→v2를 권위 저장소에 굳힌다 (R-3). 이미 v2면 아무것도 쓰지 않고 `false`.
    *
@@ -51,8 +53,11 @@ export interface BackgroundDeps {
    * (`loadState` = `loadSnapshot`) 안에 있으면 그 `storage.local` 쓰기가 `onStateChanged`를
    * 때려 새 세대를 만들고, 쓰기를 수행한 그 세대 자신이 post-loadSnapshot 가드에서 물러나
    * `apply`(=`replaceSessionRules`)를 부르지 못한다 — 규칙이 저장소 왕복 한 번 뒤로 밀린다.
+   *
+   * 읽기부터 커밋까지가 **증표 하나 안에서** 돈다 (D2) — 그것이 성립해야 D5가 걷어낸 CAS가
+   * 항상 참이다.
    */
-  commitMigration(): Promise<boolean>;
+  commitMigration(held: Held): Promise<boolean>;
   publishSummary(summary: StatusSummary): Promise<void>;
   queryTabInfos(): Promise<TabInfo[]>;
   /** 대상 저장소는 상태의 sync 스위치가 정한다 — 어댑터는 받은 곳에 쓴다 (티켓 07). */
@@ -103,18 +108,39 @@ export interface BackgroundDeps {
  * browser 효과를 채워 이 함수를 호출하기만 한다.
  */
 export function bootstrap(deps: BackgroundDeps): void {
-  // 상태 전이의 단일 권위 실행자 — 모든 **명령**의 쓰기는 이 큐를 거친다. reconciler.apply의
-  // 만료 재전이가 이 실행자를 참조하므로 먼저 선언한다.
-  //
-  // 마이그레이션 커밋(아래 `deps.commitMigration`)은 이 큐 **밖**이다 (release R2-2).
-  // 리스너는 커밋보다 먼저 등록되므로 커밋이 도는 동안 커맨드가 착지할 수 있고, 커밋은
-  // 쓰기 직전에 읽은 값이 아직 v1일 때만 쓰는 CAS로 그 창을 닫는다 — 충돌하면 쓰지 않고
-  // `false`로 물러난다(오류가 아니라 정상 동작이다).
+  /*
+   * 영속 저장소를 고치는 단 하나의 줄 (ADR 0016). 컴포지션 루트인 여기서 **한 번만** 만들고
+   * 진입점들이 나눠 쓴다 — 모듈 최상단에 두지 않는 이유는 저장소 어댑터 모듈이 화면과
+   * 서비스워커 양쪽에 실려, 모듈 스코프 락이 컨텍스트마다 하나씩 생겨 서로를 전혀 막지
+   * 않으면서 안전해 보이기 때문이다.
+   *
+   * 레인을 잡는 자리는 **요청 경계 한 층**뿐이고, 이 파일에서 `lane.run(`을 부르는 곳은
+   * 셋이다 — 명령 수신, 실행자를 직접 부르던 셋이 공유하는 `runCommand`, 부트스트랩의
+   * 마이그레이션 커밋. 안쪽 어댑터는 절대 잡지 않는다 — 전체 초기화가 내부에서 명령 실행자를
+   * 다시 부르므로(`fullReset` → `executor.execute`) 어댑터가 잡으면 자기 자신을 기다린다.
+   */
+  const lane = createWriterLane();
+
+  // 상태 전이의 단일 권위 실행자. 직렬화는 레인이 하고 실행자는 read-modify-write만 한다
+  // (D4) — reconciler.apply의 만료 재전이가 이 실행자를 참조하므로 먼저 선언한다.
   const executor = createCommandExecutor({
     load: deps.loadState,
     save: deps.persistState,
     validate: deps.validateCommand,
   });
+
+  /**
+   * 명령 채널을 거치지 않고 실행자를 **직접** 부르던 경로들이 공유하는 진입점 — 레인을 잡고,
+   * 실패는 요청한 쪽이 없으므로 맥락과 함께 로그로만 남긴다.
+   *
+   * 이 셋(전역 Pause 토글 · 만료 알람 · 재조정 중 발견된 지난 만료)이 레인 진입점 목록에서
+   * 빠졌던 것이 플랜 게이트 r1의 R-1이다. 한 자리로 모아 두면 다음에 같은 모양이 하나 더
+   * 생겨도 레인 밖으로 새지 않는다.
+   */
+  const runCommand = (context: string, command: Command): void => {
+    const running = lane.run((held) => executor.execute(held, command));
+    void running.catch((error) => deps.logError(context, error));
+  };
 
   const reconciler = createReconciler<Snapshot>({
     loadSnapshot: async () => ({
@@ -152,11 +178,10 @@ export function bootstrap(deps: BackgroundDeps): void {
       }
       await deps.scheduleExpiryAlarm(snapshot.state, snapshot.now);
       await deps.publishSummary(summary);
-      // 이미 지난 만료는 알람을 기다리지 않고 즉시 만료 전이를 태운다.
+      // 이미 지난 만료는 알람을 기다리지 않고 즉시 만료 전이를 태운다 — 재조정은 레인 밖에서
+      // 도는 읽기 경로이므로, 이 전이는 여기서 레인을 새로 잡아 올린다(진입점).
       if (hasExpiredRules(snapshot.state, snapshot.now)) {
-        void executor
-          .execute({ type: 'expire-rules', now: snapshot.now })
-          .catch((error) => deps.logError('expiry failed', error));
+        runCommand('expiry failed', { type: 'expire-rules', now: snapshot.now });
       }
     },
     onError: (error) => deps.logError('reconcile failed', error),
@@ -303,10 +328,12 @@ export function bootstrap(deps: BackgroundDeps): void {
 
   /**
    * 전체 초기화 (R-3) — 순서·검증은 core/reset이 정하고, 여기서는 그 효과를 채운다.
-   * 상태 리셋만은 다른 전이와 같은 단일 writer 큐를 지나, 초기화 도중 도착한 명령과
-   * 마지막 쓰기를 다투지 않는다.
+   *
+   * 레인은 **호출자가 이미 잡았다.** 이 한 연산이 로컬 백업·클라우드 백업·권위 상태를 다
+   * 만지므로 그 전체가 한 번의 획득 안에 있어야 하고, 안쪽 상태 리셋은 받은 증표를 그대로
+   * 넘긴다 — 그래서 초기화 도중 도착한 명령과 마지막 쓰기를 다투지 않는다.
    */
-  const fullReset = async (): Promise<StoredState> => {
+  const fullReset = async (held: Held): Promise<StoredState> => {
     const applied: { state?: StoredState } = {};
     const result = await performFullReset({
       suspendAutoBackup: suspendBackupWrites,
@@ -319,8 +346,10 @@ export function bootstrap(deps: BackgroundDeps): void {
       },
       readBackupKV: deps.readBackupKV,
       removeBackupKeys: deps.removeBackupKeys,
+      // 안에서 실행자를 다시 부르지만 레인을 **다시 잡지 않는다** — 받은 증표를 그대로
+      // 넘긴다. 여기서 잡으면 자기 자신을 기다려 교착한다 (ADR 0016).
       resetState: async () => {
-        applied.state = await executor.execute({ type: 'full-reset' });
+        applied.state = await executor.execute(held, { type: 'full-reset' });
       },
       clearSummary: deps.clearSummary,
     });
@@ -333,8 +362,12 @@ export function bootstrap(deps: BackgroundDeps): void {
     return applied.state ?? (await deps.loadState());
   };
 
+  // ── 레인 진입점 (ADR 0016 D2의 표) — 권위 상태를 쓰는 경로는 여기가 전부다 ──
+
   deps.onCommand((command) =>
-    command.type === 'full-reset' ? fullReset() : executor.execute(command),
+    lane.run((held) =>
+      command.type === 'full-reset' ? fullReset(held) : executor.execute(held, command),
+    ),
   );
   deps.onSnapshotDeleteRequest(deleteSnapshot);
 
@@ -345,18 +378,13 @@ export function bootstrap(deps: BackgroundDeps): void {
   deps.onTabsChanged(converge);
   deps.onStartup(converge);
   deps.onInstalled(converge);
-  // Pause 토글은 권위 상태 기준으로 뒤집는 단일 writer 명령을 지난다 — 연타 안전.
-  deps.onTogglePause(() => {
-    void executor
-      .execute({ type: 'toggle-pause' })
-      .catch((error) => deps.logError('toggle-pause failed', error));
-  });
-  deps.onExpiryAlarm(() => {
-    // 만료 전이도 단일 writer 경로를 지난다 — 저장 변경이 재컴파일·배지를 촉발한다.
-    void executor
-      .execute({ type: 'expire-rules', now: deps.now() })
-      .catch((error) => deps.logError('expiry failed', error));
-  });
+  // Pause 토글은 명령 채널이 아니라 브라우저 커맨드로 들어온다 — 권위 상태 기준으로 뒤집는
+  // 전이를 레인에 태우므로 연타 안전.
+  deps.onTogglePause(() => runCommand('toggle-pause failed', { type: 'toggle-pause' }));
+  // 만료 알람도 명령 채널을 거치지 않는다 — 같은 진입점을 지난다.
+  deps.onExpiryAlarm(() =>
+    runCommand('expiry failed', { type: 'expire-rules', now: deps.now() }),
+  );
 
   // SW가 깨어날 때마다 저장소 기준으로 수렴 + 디바운스 중 유실된 백업 catch-up.
   //
@@ -365,9 +393,12 @@ export function bootstrap(deps: BackgroundDeps): void {
   // 드러내되 수렴은 계속한다 — 저장소가 v1로 남아도 규칙은 걸려야 한다.
   //
   // MV3: 이벤트 리스너는 위에서 이미 서비스워커 첫 턴에 동기 등록됐다. 커밋은 그 뒤에
-  // 돌므로 `bootstrap()` 자체를 await 뒤로 미루지 않는다.
-  void deps
-    .commitMigration()
+  // 돌므로 `bootstrap()` 자체를 await 뒤로 미루지 않는다. 그래서 커밋과 명령은 **양쪽 순서
+  // 모두** 가능하고, 레인이 그 둘을 도착 순서대로 세운다: 명령이 먼저면 저장소가 이미 새
+  // 버전이라 커밋이 "할 일 없음"으로 물러나고, 커밋이 먼저면 명령이 올라간 상태 위에서
+  // 계산된다. 어느 쪽에서도 사용자 편집이 사라지지 않는다 (D2).
+  const migrating = lane.run((held) => deps.commitMigration(held));
+  void migrating
     .catch((error: unknown) => deps.logError('migration commit failed', error))
     .finally(() => {
       converge();
