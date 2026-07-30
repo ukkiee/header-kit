@@ -2,14 +2,13 @@ import { computeBadge, drawsBadge, type BadgeSpec } from '@/core/badge';
 import { backupPayload, backupTarget, type BackupTarget, type SyncKV } from '@/core/backup';
 import type { Command } from '@/core/commands';
 import type { MessageKey } from '@/core/i18n';
-import { performFullReset, type ResetStep } from '@/core/reset';
+import type { ResetStep } from '@/core/reset';
 import { compile, type TabInfo } from '@/core/compile';
 import { hasExpiredRules } from '@/core/expiry';
 import type { NetRule } from '@/core/rules';
 import type { StoredState, StoredStateRead } from '@/core/schema';
 import { summarizeCompile, type StatusSummary } from '@/core/summary';
-import { createWriterLane, type Held } from '@/core/writer-lane';
-import { createCommandExecutor } from './executor';
+import type { StateWriter } from '@/core/state-writer';
 import { createReconciler } from './reconciler';
 
 /**
@@ -44,20 +43,16 @@ export interface BackgroundDeps {
    * 보임"을 구분할 수 없고 그 차이가 백업을 오염시킨다(티켓 02 코드리뷰).
    */
   readState(): Promise<StoredStateRead>;
-  /** 권위 상태를 쓴다 — 레인을 쥔 증표를 요구한다 (ADR 0016). */
-  persistState(held: Held, state: StoredState): Promise<void>;
   /**
-   * 검증을 통과한 v1→v2를 권위 저장소에 굳힌다 (R-3). 이미 v2면 아무것도 쓰지 않고 `false`.
+   * 영속 저장소를 고치는 **유일한 문** (ADR 0016) — 구현은 `platform/state-writer`가 주고,
+   * 이 컴포지션 루트는 그 매소드만 부른다.
    *
-   * **재조정 바깥**에서 한 번만 도는 것이 이 dep의 존재 이유다(티켓 14). 커밋이 읽기 경로
-   * (`loadState` = `loadSnapshot`) 안에 있으면 그 `storage.local` 쓰기가 `onStateChanged`를
-   * 때려 새 세대를 만들고, 쓰기를 수행한 그 세대 자신이 post-loadSnapshot 가드에서 물러나
-   * `apply`(=`replaceSessionRules`)를 부르지 못한다 — 규칙이 저장소 왕복 한 번 뒤로 밀린다.
-   *
-   * 읽기부터 커밋까지가 **증표 하나 안에서** 돈다 (D2) — 그것이 성립해야 D5가 걷어낸 CAS가
-   * 항상 참이다.
+   * 쓰기 허가가 이 인터페이스에 **나타나지 않는 것**이 요점이다. 허가가 dep 파라미터였을 때는
+   * 그 슬롯에 들어가는 래퍼가 작업 도중 살아 있는 허가를 쥐고 fan-out할 수 있었고, 그러면
+   * 릴리스 r3의 R-2가 그대로 되살아났다(structure r1 뒤 적대적 검증에서 실증). 지금은 겹쳐
+   * 불러도 각 호출이 자기 레인 작업이 되어 정상적으로 직렬화된다.
    */
-  commitMigration(held: Held): Promise<boolean>;
+  stateWriter: StateWriter;
   publishSummary(summary: StatusSummary): Promise<void>;
   queryTabInfos(): Promise<TabInfo[]>;
   /** 대상 저장소는 상태의 sync 스위치가 정한다 — 어댑터는 받은 곳에 쓴다 (티켓 07). */
@@ -88,7 +83,6 @@ export interface BackgroundDeps {
    */
   applyBadge(badge: BadgeSpec): Promise<void>;
   scheduleExpiryAlarm(state: StoredState, now: number): Promise<void>;
-  validateCommand(command: Command): Promise<string | null>;
   now(): number;
   /** 백업 디바운스 타이머 — fire-and-forget(코얼레싱은 부트스트랩이 관리). */
   setTimer(callback: () => void, delayMs: number): void;
@@ -109,37 +103,22 @@ export interface BackgroundDeps {
  */
 export function bootstrap(deps: BackgroundDeps): void {
   /*
-   * 영속 저장소를 고치는 단 하나의 줄 (ADR 0016). 컴포지션 루트인 여기서 **한 번만** 만들고
-   * 진입점들이 나눠 쓴다 — 모듈 최상단에 두지 않는 이유는 저장소 어댑터 모듈이 화면과
-   * 서비스워커 양쪽에 실려, 모듈 스코프 락이 컨텍스트마다 하나씩 생겨 서로를 전혀 막지
-   * 않으면서 안전해 보이기 때문이다.
-   *
-   * 레인을 잡는 자리는 **요청 경계 한 층**뿐이고, 이 파일에서 `lane.run(`을 부르는 곳은
-   * 셋이다 — 명령 수신, 실행자를 직접 부르던 셋이 공유하는 `runCommand`, 부트스트랩의
-   * 마이그레이션 커밋. 안쪽 어댑터는 절대 잡지 않는다 — 전체 초기화가 내부에서 명령 실행자를
-   * 다시 부르므로(`fullReset` → `executor.execute`) 어댑터가 잡으면 자기 자신을 기다린다.
+   * 영속 저장소를 고치는 단 하나의 문 (ADR 0016) — 주입받는다. 이 파일에는 쓰기 허가가
+   * 한 번도 등장하지 않고, 등장할 수 없다: `StateWriter`의 어느 매소드도 허가를 받지 않는다.
+   * 그것이 이 설계의 핵이다 (structure 게이트 r1과 그 뒤 적대적 검증 두 라운드).
    */
-  const lane = createWriterLane();
-
-  // 상태 전이의 단일 권위 실행자. 직렬화는 레인이 하고 실행자는 read-modify-write만 한다
-  // (D4) — reconciler.apply의 만료 재전이가 이 실행자를 참조하므로 먼저 선언한다.
-  const executor = createCommandExecutor({
-    load: deps.loadState,
-    save: deps.persistState,
-    validate: deps.validateCommand,
-  });
+  const writer = deps.stateWriter;
 
   /**
-   * 명령 채널을 거치지 않고 실행자를 **직접** 부르던 경로들이 공유하는 진입점 — 레인을 잡고,
-   * 실패는 요청한 쪽이 없으므로 맥락과 함께 로그로만 남긴다.
+   * 명령 채널을 거치지 않고 실행자를 **직접** 부르던 경로들이 공유하는 진입점 — 실패는
+   * 요청한 쪽이 없으므로 맥락과 함께 로그로만 남긴다.
    *
    * 이 셋(전역 Pause 토글 · 만료 알람 · 재조정 중 발견된 지난 만료)이 레인 진입점 목록에서
    * 빠졌던 것이 플랜 게이트 r1의 R-1이다. 한 자리로 모아 두면 다음에 같은 모양이 하나 더
-   * 생겨도 레인 밖으로 새지 않는다.
+   * 생겨도 문 밖으로 새지 않는다.
    */
   const runCommand = (context: string, command: Command): void => {
-    const running = lane.run((held) => executor.execute(held, command));
-    void running.catch((error) => deps.logError(context, error));
+    void writer.execute(command).catch((error) => deps.logError(context, error));
   };
 
   const reconciler = createReconciler<Snapshot>({
@@ -327,15 +306,14 @@ export function bootstrap(deps: BackgroundDeps): void {
   };
 
   /**
-   * 전체 초기화 (R-3) — 순서·검증은 core/reset이 정하고, 여기서는 그 효과를 채운다.
+   * 전체 초기화 (R-3) — 순서·검증은 core/reset이 정하고, 여기서는 상태 밖 효과를 채운다.
    *
-   * 레인은 **호출자가 이미 잡았다.** 이 한 연산이 로컬 백업·클라우드 백업·권위 상태를 다
-   * 만지므로 그 전체가 한 번의 획득 안에 있어야 하고, 안쪽 상태 리셋은 받은 증표를 그대로
-   * 넘긴다 — 그래서 초기화 도중 도착한 명령과 마지막 쓰기를 다투지 않는다.
+   * 이 한 연산이 로컬 백업·클라우드 백업·권위 상태를 다 만지므로 **전체가 한 번의 획득 안**에
+   * 있어야 한다. 그 획득은 쓰기 서비스가 하고, 안쪽 상태 리셋도 그 안에서 순차로 돈다 —
+   * 그래서 초기화 도중 도착한 명령과 마지막 쓰기를 다투지 않는다.
    */
-  const fullReset = async (held: Held): Promise<StoredState> => {
-    const applied: { state?: StoredState } = {};
-    const result = await performFullReset({
+  const fullReset = async (): Promise<StoredState> => {
+    const { result, state } = await writer.fullReset({
       suspendAutoBackup: suspendBackupWrites,
       resumeAutoBackup: ({ snapshot }) => {
         // 끝까지 간 초기화만 곧바로 다시 예약한다 — 중단 창에서 눌러 버린 예약이 사라진
@@ -346,11 +324,6 @@ export function bootstrap(deps: BackgroundDeps): void {
       },
       readBackupKV: deps.readBackupKV,
       removeBackupKeys: deps.removeBackupKeys,
-      // 안에서 실행자를 다시 부르지만 레인을 **다시 잡지 않는다** — 받은 증표를 그대로
-      // 넘긴다. 여기서 잡으면 자기 자신을 기다려 교착한다 (ADR 0016).
-      resetState: async () => {
-        applied.state = await executor.execute(held, { type: 'full-reset' });
-      },
       clearSummary: deps.clearSummary,
     });
     // 실패는 삼키지 않는다 — 어디서 멈췄는지 그대로 올려 보내 사용자가 다시 누를 수 있게 한다.
@@ -359,15 +332,13 @@ export function bootstrap(deps: BackgroundDeps): void {
       deps.logError('full reset failed', new Error(`${result.step}: ${result.reason}`));
       throw new Error(RESET_STOP_MESSAGE[result.step]);
     }
-    return applied.state ?? (await deps.loadState());
+    return state ?? (await deps.loadState());
   };
 
   // ── 레인 진입점 (ADR 0016 D2의 표) — 권위 상태를 쓰는 경로는 여기가 전부다 ──
 
   deps.onCommand((command) =>
-    lane.run((held) =>
-      command.type === 'full-reset' ? fullReset(held) : executor.execute(held, command),
-    ),
+    command.type === 'full-reset' ? fullReset() : writer.execute(command),
   );
   deps.onSnapshotDeleteRequest(deleteSnapshot);
 
@@ -397,8 +368,8 @@ export function bootstrap(deps: BackgroundDeps): void {
   // 모두** 가능하고, 레인이 그 둘을 도착 순서대로 세운다: 명령이 먼저면 저장소가 이미 새
   // 버전이라 커밋이 "할 일 없음"으로 물러나고, 커밋이 먼저면 명령이 올라간 상태 위에서
   // 계산된다. 어느 쪽에서도 사용자 편집이 사라지지 않는다 (D2).
-  const migrating = lane.run((held) => deps.commitMigration(held));
-  void migrating
+  void writer
+    .commitMigration()
     .catch((error: unknown) => deps.logError('migration commit failed', error))
     .finally(() => {
       converge();

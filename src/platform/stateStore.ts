@@ -6,7 +6,7 @@ import {
   type StoredState,
   type StoredStateRead,
 } from '@/core/schema';
-import type { Held } from '@/core/writer-lane';
+import type { WritePermit } from '@/core/writer-lane';
 import type { StatusSummary } from '@/core/summary';
 import type { DeleteSnapshotResult } from '@/platform/backupStore';
 
@@ -51,11 +51,12 @@ export async function loadState(): Promise<StoredState> {
  * 물러나는 정상 경로와, 이 버전이 읽을 수 없는 상태 위에는 쓰지 않는 Schema Version 호환성
  * 계약(`persistState`의 가드)이다.
  */
-export async function commitMigration(held: Held): Promise<boolean> {
+export async function commitMigration(permit: WritePermit): Promise<boolean> {
+  permit.assertLive();
   const read = await readState();
   if (read.status === 'blocked') throw new StateLoadError(read.reason, read.storedVersion);
   if (read.status !== 'migrated') return false;
-  await persistState(held, read.state);
+  await persistState(permit, read.state);
   return true;
 }
 
@@ -75,6 +76,12 @@ export async function readState(): Promise<StoredStateRead> {
  * 이 함수를 부를 방법이 아예 없고 서비스워커 안에서도 레인 밖 호출은 컴파일 오류다.
  * 이 모듈은 화면과 서비스워커 **양쪽에 실린다** — 그래서 규약이 아니라 타입이어야 한다.
  *
+ * 그리고 **타입만으로는 부족하다** (structure 게이트 r1 R-1). 인자 자리는 "증표를 가졌다"까지만
+ * 강제하므로, 증표를 밖으로 빼내거나 지연 콜백이 붙잡아 두면 레인 밖 쓰기가 성립했다. 그래서
+ * 쓰기 직전에 증표가 아직 살아 있는지 확인한다 — 죽은 증표는 조용한 손상 대신 오류가 된다.
+ * 이 확인은 경합을 **해결하는** 기제가 아니다(직렬화는 레인이 한다). 배선이 틀렸을 때 소리를
+ * 내게 하는 단언이다.
+ *
  * **쓰기 전에 저장된 값을 다시 읽어 덮어써도 되는지 확인한다** (티켓 02, ADR 0015).
  * 이 가드가 없으면 데이터 손실 경로가 열린다: 이 버전이 이해 못 하는 상태(더 새 포맷,
  * 또는 마이그레이션이 실패한 구 포맷)를 만나면 로드가 기본 상태로 접히고, 그 기본 상태가
@@ -84,13 +91,19 @@ export async function readState(): Promise<StoredStateRead> {
  * 매 저장마다 읽기가 한 번 더 들지만, 저장은 사용자 조작에서만 일어나고 storage.local은
  * 로컬이라 이 비용보다 프로필을 잃는 쪽이 훨씬 비싸다.
  */
-export async function persistState(_held: Held, state: StoredState): Promise<void> {
+export async function persistState(permit: WritePermit, state: StoredState): Promise<void> {
+  permit.assertLive();
   const existing = await browser.storage.local.get(STATE_KEY);
   if (isBlockedFromOverwrite(existing[STATE_KEY])) {
     throw new Error(
       'Refusing to overwrite stored state this version cannot read (newer or unmigratable format). Your data is left intact.',
     );
   }
+  // 진입 검사만으로는 부족하다 (structure r1 뒤 적대적 검증에서 실측됨). 위 읽기를 기다리는
+  // 동안 이 허가의 작업이 끝날 수 있고, 그러면 이 쓰기는 레인이 이미 다음 작업으로 넘어간
+  // **뒤에** 착지한다. 그래서 실제로 쓰기 직전에 한 번 더 본다 — 이 검사와 `set` 사이에는
+  // await가 없다.
+  permit.assertLive();
   await browser.storage.local.set({ [STATE_KEY]: state });
 }
 

@@ -6,7 +6,7 @@ import {
   SCHEMA_VERSION,
   type StoredState,
 } from '@/core/schema';
-import { createWriterLane } from '@/core/writer-lane';
+import { createWriterLane, type WritePermit } from '@/core/writer-lane';
 import {
   clearSummary,
   commitMigration,
@@ -16,7 +16,9 @@ import {
   readState,
 } from '@/platform/stateStore';
 import { readBackupKV, removeBackupKeys } from '@/platform/backupStore';
+import { createStateWriter } from '@/platform/state-writer';
 import { bootstrap, type BackgroundDeps } from './background-bootstrap';
+
 
 /**
  * S3 — 서비스워커 통합 시임 (ADR 0016, spec.md Testing Decisions).
@@ -67,6 +69,13 @@ class Scheduler {
     this.optionCounts.push(this.parked.length);
     this.picks.push(pick);
     this.parked.splice(pick, 1)[0]?.release();
+  }
+}
+
+/** 순서를 세울 필요가 없는 계약 확인용 — 모든 저장소 작업이 즉시 진행한다. */
+class ImmediateScheduler extends Scheduler {
+  override park(): Promise<void> {
+    return Promise.resolve();
   }
 }
 
@@ -237,8 +246,8 @@ async function runOnce(scenario: Scenario, prefix: readonly number[]): Promise<S
     // ── 진짜 저장소 어댑터 (S3의 본령) ──
     loadState,
     readState,
-    persistState,
-    commitMigration,
+    // 쓰기 문도 **진짜**다 — 레인·허가·직렬화가 프로덕션과 같은 코드로 돈다.
+    stateWriter: createStateWriter({ validateCommand: async () => null }),
     publishSummary,
     clearSummary,
     readBackupKV,
@@ -251,7 +260,6 @@ async function runOnce(scenario: Scenario, prefix: readonly number[]): Promise<S
     replaceSessionRules: async () => {},
     applyBadge: async () => {},
     scheduleExpiryAlarm: async () => {},
-    validateCommand: async () => null,
     now: () => scenario.now ?? 1000,
     // 백업 타이머는 걸리기만 하고 발화하지 않는다 — 자동 Backup은 티켓 02가 레인에 넣는다.
     setTimer: () => {},
@@ -760,20 +768,171 @@ describe('S3 — 서비스워커 통합 시임', () => {
   });
 });
 
+/*
+ * 쓰기 허가는 콜러에게 나가지 않는다 (structure 게이트 r1 + 그 뒤 적대적 검증).
+ *
+ * 처음 만든 것은 허가를 진입점들에 나눠 주는 시임이었고, 그래서 **한 획득 안에서 fan-out하면
+ * 릴리스 r3의 R-2가 되살아났다** — 두 `execute`가 서로 겹쳐 앞 전이가 조용히 사라졌다.
+ * 지금은 저장소를 고치려는 쪽이 쓰기 서비스의 매소드를 부르고, 매소드마다 자기 레인 작업이
+ * 되므로 겹쳐 불러도 정상적으로 직렬화된다. 그것이 여기서 세우는 첫 단언이다.
+ *
+ * 허가 자체의 유효 기간 계약도 함께 세운다 — 허가가 이 모듈 밖으로 나가지 않는 것이 1차
+ * 방어이고, 유효 기간은 그 방어가 뚫렸을 때 조용한 손상 대신 오류가 나게 하는 2차 방어다.
+ */
+describe('쓰기 서비스가 저장소를 고치는 유일한 문이다', () => {
+  const seeded = (seed: StoredState): { local: Kv; stateWrites: () => number } =>
+    installStorageFake({ [STATE_KEY]: seed }, new ImmediateScheduler([]), [], {});
+
+  const writerOn = (): ReturnType<typeof createStateWriter> =>
+    createStateWriter({ validateCommand: async () => null });
+
+  it('겹쳐 부른 매소드는 직렬화된다 — 두 전이가 모두 최종 상태에 남는다', async () => {
+    const store = seeded({ ...twoProfiles(), paused: false, badgeVisible: true });
+    const writer = writerOn();
+
+    // 이 모양이 앞선 시임에서 lost update였다: 한 획득 안의 `Promise.all`.
+    // 이제는 두 레인 작업이 되어 서로 겹치지 않는다.
+    const [first, second] = await Promise.all([
+      writer.execute({ type: 'set-paused', paused: true }),
+      writer.execute({ type: 'set-badge-visible', visible: false }),
+    ]);
+
+    expect(first.paused).toBe(true);
+    expect(second.badgeVisible).toBe(false);
+    const stored = store.local[STATE_KEY] as StoredState;
+    // 둘 다 남아야 한다 — 앞 전이가 사라지면 그것이 R-2다.
+    expect(stored.paused).toBe(true);
+    expect(stored.badgeVisible).toBe(false);
+    expect(store.stateWrites()).toBe(2);
+  });
+
+  it('겹쳐 부른 매소드가 셋이어도 전부 남는다', async () => {
+    const store = seeded({ ...twoProfiles(), paused: false, badgeVisible: true, theme: 'system' });
+    const writer = writerOn();
+
+    await Promise.all([
+      writer.execute({ type: 'set-paused', paused: true }),
+      writer.execute({ type: 'set-badge-visible', visible: false }),
+      writer.execute({ type: 'set-theme', theme: 'dark' }),
+    ]);
+
+    const stored = store.local[STATE_KEY] as StoredState;
+    expect({ paused: stored.paused, badge: stored.badgeVisible, theme: stored.theme }).toEqual({
+      paused: true,
+      badge: false,
+      theme: 'dark',
+    });
+  });
+
+  /** 작업 안에서 허가를 빼내 온다 — 지연 콜백이 붙잡아 두는 그 모양. */
+  const capturePermit = async (): Promise<WritePermit> => {
+    let captured: WritePermit | undefined;
+    await createWriterLane().run(async (permit) => {
+      captured = permit;
+    });
+    if (captured === undefined) throw new Error('허가를 잡지 못했다');
+    return captured;
+  };
+
+  it('작업이 끝난 뒤 붙잡아 둔 허가로는 권위 상태를 쓸 수 없다', async () => {
+    const store = seeded(twoProfiles());
+    const stale = await capturePermit();
+
+    await expect(persistState(stale, createDefaultState())).rejects.toThrow('no longer held');
+
+    expect(store.stateWrites()).toBe(0);
+    expect((store.local[STATE_KEY] as StoredState).profiles.map((p) => p.id)).toEqual(['p1', 'p2']);
+  });
+
+  it('붙잡아 둔 허가로는 마이그레이션 커밋도 할 수 없다', async () => {
+    const store = seeded(twoProfiles());
+    const stale = await capturePermit();
+
+    await expect(commitMigration(stale)).rejects.toThrow('no longer held');
+    expect(store.stateWrites()).toBe(0);
+  });
+
+  it('허가는 동결되어 검사기를 갈아끼울 수 없다', async () => {
+    const store = seeded(twoProfiles());
+    const stale = await capturePermit();
+
+    // 얼리지 않았다면 이 한 줄이 캐스트 없이 검사기를 무력화했다.
+    expect(() => {
+      (stale as unknown as { assertLive: () => void }).assertLive = () => {};
+    }).toThrow();
+    await expect(persistState(stale, createDefaultState())).rejects.toThrow('no longer held');
+    expect(store.stateWrites()).toBe(0);
+  });
+
+  /*
+   * `runtime/executor.test.ts:60`의 `validate가 거부한 명령은 상태를 바꾸지 않는다`가 여기로
+   * 옮겨 왔다 — 그 모듈은 쓰기 문에 흡수되어 사라졌다(D4가 이미 10줄로 줄여 둔 것을 폐기합).
+   * 경합과 무관한 단위 성질이지만 겨눌 자리가 이제 이 문뿐이다.
+   */
+  it('검증이 거부한 명령은 상태를 바꾸지 않는다', async () => {
+    const store = seeded(twoProfiles());
+    const writer = createStateWriter({
+      validateCommand: async (command) =>
+        command.type === 'add-modification' ? 'Invalid regex' : null,
+    });
+
+    await expect(
+      writer.execute({
+        type: 'add-modification',
+        profileId: 'p1',
+        modification: {
+          kind: 'redirect',
+          id: 'm1',
+          pattern: '(',
+          substitution: '',
+          comment: '',
+          enabled: true,
+        },
+      }),
+    ).rejects.toThrow('Invalid regex');
+
+    expect(store.stateWrites()).toBe(0);
+    // 거부 뒤에도 문은 전진한다 — 다음 명령이 저장까지 끝난다.
+    await writer.execute({ type: 'toggle-profile', profileId: 'p1', active: true });
+    expect(activeIds(store.local[STATE_KEY])).toEqual(['p1']);
+  });
+
+  it('작업이 도는 동안에는 그 허가로 쓸 수 있다 — 검사가 정상 경로를 막지 않는다', async () => {
+    const store = seeded(twoProfiles());
+
+    await createWriterLane().run(async (permit) => {
+      await persistState(permit, { ...twoProfiles(), paused: true });
+    });
+
+    expect(store.stateWrites()).toBe(1);
+    expect((store.local[STATE_KEY] as StoredState).paused).toBe(true);
+  });
+});
+
 /**
  * 레인 획득이 **타입으로 강제된다** (D3).
  *
  * 이 함수는 실행되지 않는다 — `tsc --noEmit`(`bun run check`)만이 읽는다. 아래 호출이 언젠가
  * 유효해지면 `@ts-expect-error`가 쓸모없어져 **타입 검사가 실패한다.** 즉 이 블록이 green인
- * 동안에는 레인 밖에서 권위 상태를 쓸 방법이 없다는 뜻이다.
+ * 동안에는 여기 적힌 우회들이 컴파일되지 않는다는 뜻이다.
+ *
+ * **타입이 막는 것과 막지 못하는 것을 함께 적는다.** 타입은 증표 없는 호출, 지어낸 모양,
+ * 반환값을 통한 탈출을 막는다. 막지 못하는 것은 (1) 클로저로 붙잡아 두는 것 — 위
+ * `증표는 레인 밖에서 쓸 수 없다`가 런타임에서 잡는다 — 과 (2) `as unknown as Held`로 이중
+ * 캐스트하며 `assertLive`를 스텁으로 지어내는 것이다. (2)는 어떤 리팩터링에서도 우연히
+ * 나오지 않는 의도적 행위이고(캐스트 둘 + 가짜 검사기), 화면이 **유효한** 증표를 얻는 경로는
+ * `scripts/writer-lane-gate.mjs`가 번들에서 막는다. 두 기제가 서로 다른 구멍을 맡는다.
  */
-export function _laneAcquisitionIsTypeEnforced(): void {
-  // @ts-expect-error 토큰 없이는 권위 상태를 쓸 수 없다
+export async function _laneAcquisitionIsTypeEnforced(): Promise<void> {
+  // @ts-expect-error 허가 없이는 권위 상태를 쓸 수 없다
   void persistState(createDefaultState());
-  // @ts-expect-error 레인 밖에서 지어낸 객체는 토큰이 아니다
-  void persistState({}, createDefaultState());
-  // @ts-expect-error 마이그레이션 커밋도 토큰을 요구한다
+  // @ts-expect-error 지어낸 객체는 허가가 아니다
+  void persistState({ assertLive: () => {} }, createDefaultState());
+  // @ts-expect-error 마이그레이션 커밋도 허가를 요구한다
   void commitMigration();
-  // 레인 안에서는 통과한다.
-  void createWriterLane().run((held) => persistState(held, createDefaultState()));
+  // @ts-expect-error 허가는 작업의 반환값으로 레인을 빠져나갈 수 없다 (structure r1 R-1)
+  const escaped: WritePermit = await createWriterLane().run(async (permit) => permit);
+  void escaped;
+  // 레인 안에서는 통과한다 — 그리고 이 자리가 `runtime/state-writer.ts` 하나뿐이다.
+  void createWriterLane().run((permit) => persistState(permit, createDefaultState()));
 }

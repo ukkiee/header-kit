@@ -9,15 +9,14 @@ import {
   readBackupKV,
   removeBackupKeys,
 } from '@/platform/backupStore';
+import { createStateWriter } from '@/platform/state-writer';
 import {
   clearSummary,
-  commitMigration,
   loadState,
   readState,
   onCommand,
   onSnapshotDeleteRequest,
   onStateChanged,
-  persistState,
   publishSummary,
 } from '@/platform/stateStore';
 import { onTabsChanged, queryTabInfos } from '@/platform/tabs';
@@ -101,8 +100,9 @@ export default defineBackground(() => {
   bootstrap({
     loadState,
     readState,
-    persistState,
-    commitMigration,
+    // 쓰기 문은 여기서 **한 번** 만들어진다 — 어댑터를 직수입하므로 허가가 이 배선에
+    // 등장하지 않는다 (ADR 0016).
+    stateWriter: createStateWriter({ validateCommand }),
     publishSummary,
     queryTabInfos,
     performBackup,
@@ -113,7 +113,6 @@ export default defineBackground(() => {
     replaceSessionRules,
     applyBadge,
     scheduleExpiryAlarm,
-    validateCommand,
     now: () => Date.now(),
     setTimer: (callback, delayMs) => {
       setTimeout(callback, delayMs);

@@ -1,15 +1,52 @@
 import { describe, expect, it } from 'vitest';
-import type { Command } from '@/core/commands';
+import { applyCommand, type Command } from '@/core/commands';
 import { createDefaultState, type StoredState } from '@/core/schema';
+import { performFullReset } from '@/core/reset';
+import type { StateWriter } from '@/core/state-writer';
 import { bootstrap, type BackgroundDeps } from './background-bootstrap';
+
+/**
+ * 쓰기 문의 테스트 대역 — **초기화 순서는 흉내내지 않고 진짜 `core/reset`을 돌린다.**
+ *
+ * 이 테스트들이 보는 것은 백업 중단·드레인·재예약이 `core/reset`이 정한 순서를 지키는가이므로,
+ * 그 순서를 대역이 손으로 재현하면 계약이 아니라 재현물을 검사하게 된다. 대역이 대신하는 것은
+ * **상태 쓰기 한 걸음**뿐이다. 레인 직렬화·허가 계약은 S3
+ * (`service-worker.integration.test.ts`)가 진짜 어댑터 위에서 본다.
+ */
+function fakeWriter(overrides: Partial<StateWriter> = {}): StateWriter {
+  return {
+    execute: async () => createDefaultState(),
+    commitMigration: async () => false,
+    fullReset: async (effects) => {
+      const applied: { state?: StoredState } = {};
+      const result = await performFullReset({
+        ...effects,
+        resetState: async () => {
+          applied.state = createDefaultState();
+        },
+      });
+      return { result, state: applied.state };
+    },
+    ...overrides,
+  };
+}
+
+/** 상태 리셋 단계에서 멈추는 초기화 — 삭제는 이미 끝난 뒤다(멱등이라 되돌리지 않는다). */
+const failingReset: StateWriter['fullReset'] = async (effects) => ({
+  result: await performFullReset({
+    ...effects,
+    resetState: async () => {
+      throw new Error('storage write failed');
+    },
+  }),
+});
 
 /** 모든 효과·리스너를 no-op으로 채운 기본 deps — 테스트가 필요한 것만 덮어쓴다. */
 function fakeDeps(overrides: Partial<BackgroundDeps> = {}): BackgroundDeps {
   return {
     loadState: async () => createDefaultState(),
     readState: async () => ({ status: 'ok', state: createDefaultState() }),
-    persistState: async () => {},
-    commitMigration: async () => false,
+    stateWriter: fakeWriter(),
     publishSummary: async () => {},
     queryTabInfos: async () => [],
     performBackup: async () => undefined,
@@ -21,7 +58,6 @@ function fakeDeps(overrides: Partial<BackgroundDeps> = {}): BackgroundDeps {
     replaceSessionRules: async () => {},
     applyBadge: async () => {},
     scheduleExpiryAlarm: async () => {},
-    validateCommand: async () => null,
     now: () => 1000,
     setTimer: () => {},
     onStateChanged: () => {},
@@ -173,9 +209,12 @@ describe('background bootstrap', () => {
         onCommand: (h) => {
           handler = h;
         },
-        persistState: async (_held, state) => {
-          persisted = state;
-        },
+        stateWriter: fakeWriter({
+          execute: async (command) => {
+            persisted = applyCommand(base, command);
+            return persisted;
+          },
+        }),
       }),
     );
     await flush();
@@ -195,9 +234,12 @@ describe('background bootstrap', () => {
         onTogglePause: (cb) => {
           togglePause = cb;
         },
-        persistState: async (_held, state) => {
-          persisted = state;
-        },
+        stateWriter: fakeWriter({
+          execute: async (command) => {
+            persisted = applyCommand(base, command);
+            return persisted;
+          },
+        }),
       }),
     );
     await flush();
@@ -359,9 +401,7 @@ describe('background bootstrap', () => {
         loadState: async () => populated,
         readState: async () => ({ status: 'ok', state: populated }),
         // 상태 리셋만 실패한다 — 삭제는 이미 끝난 뒤다(멱등이라 되돌리지 않는다).
-        persistState: async () => {
-          throw new Error('storage write failed');
-        },
+        stateWriter: fakeWriter({ fullReset: failingReset }),
         readBackupKV: async (target) => ({ ...areas[target] }),
         removeBackupKeys: async (target, keys) => {
           for (const key of keys) delete areas[target]![key];
@@ -609,9 +649,7 @@ describe('background bootstrap', () => {
           return {};
         },
         // 상태 리셋에서 실패한다 — 초기화의 재개는 `snapshot: false`로 풀린다.
-        persistState: async () => {
-          throw new Error('storage write failed');
-        },
+        stateWriter: fakeWriter({ fullReset: failingReset }),
         onSnapshotDeleteRequest: (h) => void (deleteHandler = h),
         onCommand: (h) => void (handler = h),
         setTimer: (cb) => void timers.push(cb),
@@ -648,9 +686,12 @@ describe('background bootstrap', () => {
         onExpiryAlarm: (cb) => {
           expiryAlarm = cb;
         },
-        persistState: async () => {
-          persistCalls += 1;
-        },
+        stateWriter: fakeWriter({
+          execute: async () => {
+            persistCalls += 1;
+            return createDefaultState();
+          },
+        }),
       }),
     );
     await flush();
@@ -702,17 +743,20 @@ describe('background bootstrap', () => {
     bootstrap(
       fakeDeps({
         loadState: async () => seeded,
-        // 실제 커밋은 storage.local.set이라 onStateChanged가 뒤따른다 — 그 왕복을 그대로 흉낸다.
-        commitMigration: async () => {
-          order.push('commit');
-          stateChanged();
-          return true;
-        },
+        stateWriter: fakeWriter({
+          // 실제 커밋은 storage.local.set이라 onStateChanged가 뒤따른다 — 그 왕복을 흉낸다.
+          commitMigration: async () => {
+            order.push('commit');
+            stateChanged();
+            return true;
+          },
+          execute: async () => {
+            persistCalls += 1;
+            return createDefaultState();
+          },
+        }),
         onStateChanged: (cb) => {
           stateChanged = cb;
-        },
-        persistState: async () => {
-          persistCalls += 1;
         },
         replaceSessionRules: async (rules) => {
           order.push('apply');

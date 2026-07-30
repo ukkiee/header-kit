@@ -1,0 +1,39 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "structure",
+  "ack": "human-triage",
+  "triageMode": "human",
+  "verdict": "needs-attention",
+  "summary": "Do not ship this walking skeleton yet: the central single-Writer-Lane invariant is not enforced by its public interface, and later Backup increments would spread that unsound contract.",
+  "planFile": "docs/reviews/scope-race-hardening/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 122,
+  "target": "branch diff against main",
+  "reviewedSha": "ffff03bbac75092c8910485544f55850b078e149",
+  "reviewedTree": "402a3765954aacaf5723936300b26c6fd6759661",
+  "reviewedPlanSha256": "ee1570ca401dd8e7e5bd7a7bcc3a12e21fdc11ccb7f77adf7691308883a9a1a1",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 1,
+  "planFindingCount": 0,
+  "triage": "review-gate SKILL.md rules govern: render EVERY finding as a full table row, the human decides each row (accept/reject/defer/question — free text), echo back before applying, max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "`Held` is an escapable, independently mintable token—not proof of active ownership",
+      "body": "`run<T>` can return its `Held` value, so `const held = await createWriterLane().run(async h => h); await persistState(held, state)` type-checks while writing outside the lane. The public factory also creates unlimited independent tails. `persistState` merely accepts and ignores the token (`src/platform/stateStore.ts:87-95`). The renderer guard does not close this: its regex only follows static imports and hard-codes two entrypoints (`src/runtime/renderer-boundary.test.ts:28-72`), while this repository already uses renderer-side `import()`. A renderer or later timer refactor can therefore obtain/reuse a valid token, establish another lane, and restore the lost-update corruption while typecheck and the structural test remain green. Tickets 02–03 would propagate this signature to every Backup mutation, making correction substantially costlier.",
+      "file": "src/core/writer-lane.ts",
+      "line_start": 27,
+      "line_end": 65,
+      "confidence": 0.98,
+      "recommendation": "Replace the bearer-token seam before extending it: keep raw storage writers private to a worker-owned mutation service and expose methods that always enqueue on its single lane, with a private scoped interface only for nested reset work. At minimum, make lane creation worker-private, validate lane identity and active lifetime at runtime, and replace the regex guard with an AST/bundler graph covering dynamic imports and all renderer entrypoints.",
+      "isPlanFinding": false
+    }
+  ],
+  "next_steps": [
+    "Redesign the Writer Lane capability boundary, then rerun the structure gate before beginning tickets 02–03."
+  ]
+}
