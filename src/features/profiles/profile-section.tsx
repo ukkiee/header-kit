@@ -8,7 +8,12 @@ import { Input } from '@/ui/text-field';
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from '@/ui/menu';
 import { MotionSwap } from '@/ui/motion-swap';
 import { AnimatePresence, MotionRow } from '@/ui/motion-row';
-import { RuleForm } from '@/features/modifications/rule-form';
+import {
+  loadRuleForm,
+  ruleFormIntentProps,
+  RuleFormSlot,
+  useRuleForm,
+} from '@/features/modifications/lazy-rule-form';
 import { RuleRow } from '@/features/modifications/rule-row';
 import { useT } from '@/ui/i18n-context';
 
@@ -31,8 +36,22 @@ export function ProfileSection({
   onCommandWithResult,
 }: ProfileSectionProps) {
   const t = useT();
+  /*
+   * 폼은 동적 청크에 있다 (티켓 07) — 도착 전에는 `null`이고 그 자리를 `RuleFormSlot`이 잡는다.
+   * 상자 높이는 근사치라 정확히 맞지 않는다(근거는 그 컴포넌트 주석). 그래서 본선은 **상자가
+   * 보이는 일 자체를 없애는 것**이다: 폼으로 가는 길목 셋에 `ruleFormIntentProps`를 붙여
+   * 포인터가 닿거나 포커스가 들어오는 시점에 받기 시작한다. 실측으로 그 경로에서는 상자가
+   * 한 프레임도 그려지지 않는다.
+   */
+  const RuleForm = useRuleForm();
   // 규칙 폼 상태 — 'new' = 생성, id = 편집, null = 목록만 (ADR 0006, 의도적 로컬)
   const [editingRule, setEditingRule] = useState<'new' | string | null>(null);
+  /* 폼을 여는 유일한 문 — 여는 즉시 청크를 부른다. 트리거의 hover·focus가 이미 시작해 두었으면
+     `loadRuleForm`이 같은 약속을 돌려주므로 두 번 받지 않는다. */
+  const openRuleForm = (target: 'new' | string) => {
+    void loadRuleForm();
+    setEditingRule(target);
+  };
   // 신규 폼이 화면에 남아 있는 동안(퇴장 애니메이션 포함) '규칙 추가' 버튼을 감춘다.
   // editingRule만 보면 폼이 아직 접히는 중인데 버튼이 그 밑에서 튀어나온다.
   // 진입점이 여럿(하단 버튼·빈 상태 CTA)이라 editingRule에서 파생시켜 하나도 빠뜨리지 않는다.
@@ -139,7 +158,7 @@ export function ProfileSection({
       {profile.modifications.length === 0 && editingRule === null && (
         <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border py-6 text-center">
           <p className="text-xs text-muted-foreground">{t('noRulesYet')}</p>
-          <Button size="sm" onClick={() => setEditingRule('new')}>
+          <Button size="sm" {...ruleFormIntentProps} onClick={() => openRuleForm('new')}>
             <Plus size={14} strokeWidth={1.75} className="mr-1" />
             {t('addRule')}
           </Button>
@@ -158,18 +177,25 @@ export function ProfileSection({
             editingRule === modification.id ? (
               <MotionRow key={`${modification.id}-form`}>
                 <div className="rounded-lg border border-border p-2">
-                  <RuleForm
-                    initial={modification}
-                    userHeaders={userHeaders}
-                    onCancel={() => setEditingRule(null)}
-                    onSave={(next) => saveItem(next, 'update')}
-                  />
+                  {RuleForm ? (
+                    <RuleForm
+                      initial={modification}
+                      userHeaders={userHeaders}
+                      onCancel={() => setEditingRule(null)}
+                      onSave={(next) => saveItem(next, 'update')}
+                    />
+                  ) : (
+                    <RuleFormSlot />
+                  )}
                 </div>
               </MotionRow>
             ) : (
               // 규칙 행 추가/삭제 시 fade+height enter/exit (ui-refine 08) — reduced-motion 존중.
               <MotionRow key={modification.id}>
-                <div className="rounded-lg border border-border px-2.5">
+                {/* 폼으로 가는 길목 셋째 — 행 어디에 포인터가 닿거나 포커스가 들어오면 청크를
+                    받기 시작한다. 연필 아이콘까지 두 층(RuleRow·ItemRow)을 뚫는 대신 여기에
+                    두면 배선이 한 곳이고, 행에 닿는 것 자체가 이미 편집 의도에 가깝다. */}
+                <div className="rounded-lg border border-border px-2.5" {...ruleFormIntentProps}>
                   <RuleRow
                     modification={modification}
                     onToggleEnabled={(enabled) =>
@@ -179,7 +205,7 @@ export function ProfileSection({
                         modification: { ...modification, enabled } as Modification,
                       })
                     }
-                    onEdit={() => setEditingRule(modification.id)}
+                    onEdit={() => openRuleForm(modification.id)}
                     onRemove={() => onDeleteRule(profile.id, modification.id)}
                   />
                 </div>
@@ -195,11 +221,15 @@ export function ProfileSection({
       <AnimatePresence initial={false} onExitComplete={() => setNewFormPresent(false)}>
         {editingRule === 'new' && (
           <MotionRow key="new-rule-form">
-            <RuleForm
-              userHeaders={userHeaders}
-              onCancel={() => setEditingRule(null)}
-              onSave={(next) => saveItem(next, 'add')}
-            />
+            {RuleForm ? (
+              <RuleForm
+                userHeaders={userHeaders}
+                onCancel={() => setEditingRule(null)}
+                onSave={(next) => saveItem(next, 'add')}
+              />
+            ) : (
+              <RuleFormSlot />
+            )}
           </MotionRow>
         )}
       </AnimatePresence>
@@ -209,7 +239,8 @@ export function ProfileSection({
           variant="ghost"
           size="sm"
           className="self-start"
-          onClick={() => setEditingRule('new')}
+           {...ruleFormIntentProps}
+          onClick={() => openRuleForm('new')}
         >
           <Plus size={14} strokeWidth={1.75} className="mr-1" />
           {t('addRule')}

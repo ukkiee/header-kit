@@ -15,10 +15,18 @@
 // 두었으므로 게이트는 오히려 더 촘촘해졌다. **마지막 둘(175·190KB)은 완화가 맞다** —
 // shadcn/ui 소스와 그것이 전제하는 tailwind-merge를 받아들이며 사다리를 밟고 승인받았다.
 //
-// 측정치와 경위의 정본은 두 파일이다 — 숫자를 여기 옮겨 적지 않는다(여러 곳에 베껴 두면
+// **여섯 번째 칸은 밟지 않았다** (scope-race-hardening 07). `wide-ui-redesign`이 한도를
+// 14.8KB 넘겼을 때 상향 대신 규칙 폼을 지연 청크로 옮겼다 — 모듈 단위 실측이 초과분의
+// 출처가 의존성이 아니라 1차 기능 코드임을 보였고(의존성 델타 순 +1.6KB), 폼은 목록을 보는
+// 동안 그려지지 않는데도 첫 페인트 컴포넌트가 정적으로 import하고 있었다. 올리지 않고
+// 통과했으므로 한도는 190 그대로다.
+//
+// 측정치와 경위의 정본은 세 파일이다 — 숫자를 여기 옮겨 적지 않는다(여러 곳에 베껴 두면
 // 곧 서로 어긋난다):
 //   - .scratch/ui-polish/issues/02-scroll-area.md (135KB까지의 경위)
 //   - .scratch/ui-stack-migration/issues/02-shadcn-infra.md (175KB 재트리아지)
+//   - .scratch/scope-race-hardening/issues/07-bundle-gate-overrun.md
+//     (main 대비 모듈 단위 증감표 · 항목별 지연 가능성 판정 · 상향 대신 줄인 경위)
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -49,7 +57,16 @@ const ENTRY_HTML = join(OUT_DIR, 'popup.html');
  * 이 목록은 그 결과에 거는 단언일 뿐이다. 청크가 사라지면(이름 변경·번들러 병합)
  * 그것도 실패로 잡아, 이름만 바뀌어 단언이 조용히 무력해지는 일을 막는다.
  */
-const MUST_BE_DEFERRED = ['sortable-profile-list', 'motion', 'header-name-autocomplete'];
+const MUST_BE_DEFERRED = [
+  'sortable-profile-list',
+  'motion',
+  'header-name-autocomplete',
+  // 규칙 폼 (scope-race-hardening 07). 목록을 보는 동안에는 그려지지 않는 UI인데 첫 페인트
+  // 컴포넌트가 정적으로 import해 폼 전용 프리미티브까지 즉시 내려받고 있었다 — 실측 59.9KB.
+  // 이 줄이 없으면 누군가 `rule-form`을 다시 정적 import해도 크기 한도 안에 들어오는 한
+  // 조용히 통과한다.
+  'rule-form',
+];
 
 if (!existsSync(ENTRY_HTML)) {
   console.error(`FAIL: ${ENTRY_HTML}를 찾을 수 없습니다 — 먼저 \`bun run build\`를 실행하세요.`);
