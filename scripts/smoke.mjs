@@ -4336,9 +4336,14 @@ try {
    * 뒤늦게 발화하는 자동 백업은 planBackup의 skip 경로로 빠져 매니페스트를 건드리지
    * 않는다. 즉 이 시나리오는 개수 단언을 흔들지 않으려고 경합을 **재운다** — 그러므로
    * 이 시나리오의 green은 삭제 ↔ 자동 백업 경합에 대해 아무것도 말하지 않는다.
-   * **그 경합의 증거는 어댑터·런타임 시임에 있다** (`src/platform/backupStore.test.ts`의
-   * 지연 storage fake, `src/runtime/background-bootstrap.test.ts`의 드레인·재진입 테스트,
-   * release R2-3). 여기서 확인하는 것은 사용자가 보는 확인 흐름과 삭제의 범위뿐이다.
+   * **그 경합의 증거는 S3 통합 시임에 있다** — `src/runtime/service-worker.integration.test.ts`가
+   * `bootstrap()` + 진짜 저장소 어댑터 + 제어형 fake로 인터리빙을 소진한다. 끝단간 쪽은 아래
+   * **N44**가 겹친 삭제를 진짜 채널·진짜 저장소로 본다.
+   *
+   * (전에 가리켰던 `backupStore.test.ts`·`background-bootstrap.test.ts`의 테스트들은 실제로는
+   * 증거가 아니었다 — 근거는 스펙의 `기존 경합 테스트의 처분` 절. 티켓 02가 S3로 옮기며 고쳤다.)
+   *
+   * 여기서 확인하는 것은 사용자가 보는 확인 흐름과 삭제의 범위뿐이다.
    */
   const SNAP_MARKER = 'SnapDelete';
   await seedProfiles([
@@ -4480,6 +4485,216 @@ try {
       `매니페스트(${snapArea}) ${snapBefore.ids.length}→${snapAfter.ids.length}, 남은 행=${rowsLeft}, ` +
       `그 청크 잔재=${snapAfter.keys.some((k) => k.startsWith('bk:del-row:'))}, 나머지 보존=${othersKept}, ` +
       `반대쪽(${snapOther}) 키 ${otherBefore.keys.length}→${otherAfter.keys.length} 동일=${otherIntact}`);
+
+  /*
+   * N44: 겹친 스냅샷 삭제의 끝단간 정합 (티켓 06, 스펙 S4).
+   *
+   * 이 시나리오가 따로 있는 이유는 **규모가 아니라 배선**이다. S3(`service-worker.integration.test.ts`)
+   * 의 인터리빙 소진은 제어형 fake 위에서 돌므로 "Writer Lane이 실제로 배선됐는가"를 증명하지
+   * 못한다 — 새 요청 핸들러를 레인 밖에 달아도 단위는 전부 green이다. 여기서는 진짜 서비스워커·
+   * 진짜 메시지 채널·진짜 `chrome.storage`를 지난다.
+   *
+   * 겹치게 만드는 방법이 UI 클릭이 아닌 이유: 패널은 **확인 중인 행·동작을 한 번에 하나만**
+   * 허용하므로(N43의 (b)) 두 행을 동시에 확인 상태로 둘 수 없다. 그래서 패널이 쓰는 것과 같은
+   * 변이 채널로 두 요청을 보내되 **어느 것도 await하지 않고 둘 다 출발시킨 뒤 함께 기다린다** —
+   * 두 요청이 실제로 함께 떠 있는 것은 그 구성이 보장한다.
+   *
+   * 메시지 `type` 문자열을 여기 적어 두는 것은 결합이지만 **닫힌 결합**이다: 상수가 바뀌면
+   * 구독자가 응답하지 않아 응답이 `undefined`가 되고 삭제가 일어나지 않아, 아래 단언이 조용히
+   * 통과하는 대신 큰 소리로 깨진다.
+   *
+   * 단언은 전부 **결과 불변식**이라 타이밍에 흔들리지 않는다 — 레인이 서면 결과가 결정론적이다.
+   * 특히 `noOrphanRows`는 레인이 없을 때의 실패 모양을 정면으로 겨눈다: 삭제마다 매니페스트를
+   * 통째로 다시 쓰므로 나중 것이 앞 것의 결과를 지워, **목록에는 있는데 청크는 없는 행**이
+   * 남는다(사용자에게는 지운 적 없는 백업이 '손상됨'으로 보인다).
+   *
+   * `bothAccepted`도 장식이 아니다. 삭제는 쓰기 뒤에 `verifySnapshotDeleteComplete`로 자기
+   * 결과를 되읽는데, 그 술어가 **읽은 시점 매니페스트에 있던 다른 스냅샷이 쓰기 뒤에 사라졌는지**
+   * (`lostSiblings`)를 함께 본다. 두 삭제의 읽기·쓰기가 엇갈리면 나중 것이 앞 것이 지운 형제를
+   * 손실로 보고 **스스로 `{ok:false, remaining}`을 낸다** — 프로덕션 코드에 이미 있는 경합
+   * 탐지기를 그대로 단언에 쓰는 것이다.
+   *
+   * 다만 그 함의는 **한쪽으로만 흐른다**: `ok:false`가 나오면 엇갈렸다는 뜻이지만, 둘 다
+   * `ok:true`라고 해서 엇갈리지 않았다는 것이 따라오지는 않는다. A가 쓰고·검증하고, 그 뒤 B가
+   * **낡은 읽기**로 쓰고·검증하는 순서에서는 B의 검증이 자기 id도 형제 손실도 발견하지 못해
+   * 둘 다 `ok:true`가 나오는데, 최종 상태에는 A가 지웠던 행이 매니페스트에 되살아나 있고 그
+   * 청크는 없다. 그 경우를 잡는 것은 `bothRowsGone`·`noOrphanRows`다. 그러므로 이 단언들을
+   * 줄이면 안 된다 — `bothAccepted` 하나로는 부족하다.
+   *
+   * **N43처럼 늦은 자동 백업을 재운다** — 매니페스트 맨 앞에 놓는 유지 행의 체크섬이 지금 상태의
+   * 페이로드와 같으므로 뒤늦게 발화하는 자동 백업은 planBackup의 skip 경로로 빠진다. 그러므로 이
+   * 시나리오의 green은 **삭제 ↔ 자동 백업** 경합에 대해서는 아무것도 말하지 않는다(그쪽은 S3가
+   * 본다). 여기서 보는 것은 **삭제 ↔ 삭제**이고, 그것이 릴리스 r3의 R-3이 나던 자리다.
+   */
+  // 이 시나리오가 스위트에 더하는 비용을 숫자로 남긴다 (티켓 06 수용 기준). 시드도 저장소를
+  // 전량 읽고 다시 쓰므로 **시드 앞에서** 재기 시작한다 — 시드를 뺀 숫자는 실제 추가 비용이
+  // 아니다. 폴러들의 타임아웃은 8초지만 조건이 서면 즉시 빠지므로 행복 경로의 비용은 훨씬 작다.
+  const raceT0 = Date.now();
+  const raceSeed = await sw.evaluate(async (area) => {
+    const kv = await chrome.storage[area].get(null);
+    const manifest = kv['bk:manifest'];
+    // 청크가 실제로 있는 정상 항목 — 복제본들이 이것의 청크·체크섬을 그대로 쓴다.
+    const real = (manifest?.snapshots ?? []).find((s) => typeof kv[`bk:${s.id}:0`] === 'string');
+    if (!real) return { ok: false, why: '청크가 있는 정상 스냅샷이 없다' };
+
+    const chunks = [];
+    for (let i = 0; i < real.chunkCount; i += 1) chunks.push(kv[`bk:${real.id}:${i}`]);
+
+    // `bk:` 구역을 비우고 정확히 셋만 세운다 — 잔재 단언이 옛 항목에 흐려지지 않게.
+    await chrome.storage[area].remove(Object.keys(kv).filter((k) => k.startsWith('bk:')));
+
+    const writes = {};
+    const clone = (id, profileCount, createdAt) => {
+      chunks.forEach((part, i) => {
+        writes[`bk:${id}:${i}`] = part;
+      });
+      return { ...real, id, profileCount, createdAt };
+    };
+    // 유지 행을 **배열 맨 앞**에 둔다 — planBackup은 `existing[0]`의 체크섬을 보므로, 그것이
+    // 지금 페이로드와 같아 늦은 자동 백업이 skip으로 빠진다. 순서를 정하는 것은 아래 배열이고
+    // `createdAt`은 목록에 그려질 날짜일 뿐이다.
+    const keep = clone('race-keep', 13, Date.UTC(2021, 0, 3, 5, 6));
+    const a = clone('race-a', 11, Date.UTC(2021, 0, 2, 5, 6));
+    const b = clone('race-b', 12, Date.UTC(2021, 0, 1, 5, 6));
+    writes['bk:manifest'] = { ...manifest, snapshots: [keep, a, b] };
+    await chrome.storage[area].set(writes);
+    return { ok: true, chunkCount: real.chunkCount };
+  }, snapArea);
+  if (!raceSeed.ok) {
+    throw new Error(`N44 준비 실패: ${raceSeed.why}`);
+  }
+
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Show backups' }).click();
+  await ensurePanelOpen(popup, 'Toggle backups');
+  const keepRow = popup.locator('li').filter({ hasText: '13 active profiles' }).first();
+  await keepRow.waitFor({ timeout: 5000 });
+  const raceBefore = await bkView(snapArea);
+  /*
+   * 시드가 착지했는지 **관측한다** — 가정하지 않는다. 지울 두 행이 전송 시점 매니페스트에
+   * 없으면 없는 스냅샷을 지우는 것은 멱등이라 `{ok:true}`가 나오고, 결과 불변식들도 전부
+   * 성립해 이 시나리오가 **겹친 삭제를 한 번도 성립시키지 못한 채** 통과한다. 그 퇴화 경로가
+   * 지금 도달 가능한지는 리뷰에서 반박됐지만(`keptListed`가 매니페스트 덮어쓰기 계열을 잡는다),
+   * 준비 상태를 관측하는 것은 이 파일의 규율이고 N43도 같은 자리에 배리어를 둔다.
+   */
+  if (raceBefore.ids.join(',') !== 'race-keep,race-a,race-b') {
+    throw new Error(`N44 준비 실패: 매니페스트가 [${raceBefore.ids.join(',')}]`);
+  }
+
+  // 두 삭제를 **동시에** 띄운다 — 패널이 쓰는 것과 같은 채널이다.
+  const raceResults = await popup.evaluate(
+    async ([type, area, ids]) =>
+      Promise.all(
+        ids.map((snapshotId) =>
+          chrome.runtime.sendMessage({
+            type,
+            mutation: { op: 'delete-snapshot', snapshotId, target: area },
+          }),
+        ),
+      ),
+    ['headerkit:backup-mutation', snapArea, ['race-a', 'race-b']],
+  );
+  const bothAccepted = raceResults.every((r) => r?.ok === true);
+
+  const raceAfter = await pollUntil(
+    () => bkView(snapArea),
+    (v) => !v.ids.includes('race-a') && !v.ids.includes('race-b'),
+    8000,
+    200,
+  );
+
+  const bothRowsGone = !raceAfter.ids.includes('race-a') && !raceAfter.ids.includes('race-b');
+  const bothDataGone = !raceAfter.keys.some(
+    (k) => k.startsWith('bk:race-a:') || k.startsWith('bk:race-b:'),
+  );
+  const keptListed = raceAfter.ids.includes('race-keep');
+  const keptDataWhole = Array.from(
+    { length: raceSeed.chunkCount },
+    (_, i) => `bk:race-keep:${i}`,
+  ).every((k) => raceAfter.keys.includes(k));
+  // 레인이 없으면 정확히 이 단언이 깨진다 — 목록에는 있는데 청크가 없는 행이 남는다.
+  const noOrphanRows = await sw.evaluate(async (area) => {
+    const kv = await chrome.storage[area].get(null);
+    return (kv['bk:manifest']?.snapshots ?? []).every((s) =>
+      Array.from({ length: s.chunkCount }, (_, i) => `bk:${s.id}:${i}`).every(
+        (k) => typeof kv[k] === 'string',
+      ),
+    );
+  }, snapArea);
+
+  /*
+   * 세 번째는 목록에 있을 뿐 아니라 **손상이 아니다**. 사용자가 보는 목록으로 확인한다.
+   *
+   * **목록을 다시 읽는 것이 핵심이다.** 삭제를 원시 채널로 보냈으므로 패널의 목록 effect
+   * (`backup-panel.tsx`의 deps `[open, loadSnapshots, target]` — 셋 다 이 구간에서 고정)는 다시
+   * 돌지 않는다. 재조회 없이 DOM을 읽으면 **경합 전에 렌더된 목록**을 보게 되고, 그것은 시드가
+   * 참으로 만들어 둔 것이지 경합 결과가 아니다 — 즉 시나리오를 지워도 참인 단언이 된다.
+   * 다시 읽으면 프로덕션 `listSnapshots`가 경합 **후** 저장소를 실제로 디코드해(청크 전부 +
+   * 체크섬 대조) 낸 판정을 보게 된다.
+   *
+   * 손상 여부는 별도 텍스트 검사를 두지 않는다. 손상 행은 복원 버튼 **대신** 손상 표식이
+   * 그려지므로(`backup-panel.tsx`), 아래 복원이 성립한 것 자체가 `status !== 'corrupt'`의
+   * 증거다 — 표식 문자열을 부정 검사하는 것보다 강하고, 카탈로그 언어에 걸리지도 않는다.
+   *
+   * 복원은 그대로 두면 공허해진다: 지금 상태와 스냅샷 내용이 같아서(그래서 자동 백업이
+   * 재워졌다) 복원해도 관측되는 변화가 없어 **복원하지 않아도 참인 단언**이 된다. 그래서 먼저
+   * 상태를 더럽힌다 — 스냅샷에 없는 프로필을 넣고 복원이 그것을 **치우는지** 본다. 저장소
+   * 단언은 이미 끝났으므로 여기서 자동 백업이 깨어나도 무해하다.
+   */
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Show backups' }).click();
+  await ensurePanelOpen(popup, 'Toggle backups');
+  const snapRows = popup.locator('li').filter({ hasText: /active profiles?/ });
+  const keepRowAfter = snapRows.filter({ hasText: '13 active profiles' }).first();
+  const keptRowVisible = await keepRowAfter
+    .waitFor({ timeout: 5000 })
+    .then(() => true, () => false);
+  // 지운 둘이 사용자가 보는 목록에서도 사라졌다 — 저장소만이 아니라 화면까지 본다.
+  const deletedRowsUnlisted =
+    (await snapRows.filter({ hasText: '11 active profiles' }).count()) === 0 &&
+    (await snapRows.filter({ hasText: '12 active profiles' }).count()) === 0;
+
+  const DIRTY_MARKER = 'RaceDirty';
+  let restored = false;
+  // 유지 행이 없으면 복원 클릭이 던져 `record`에 닿지 못한다 — 크래시 대신 FAIL로 남긴다.
+  if (keptRowVisible) {
+    await sw.evaluate(async (marker) => {
+      const { state } = await chrome.storage.local.get('state');
+      state.profiles = [
+        ...state.profiles,
+        { id: 'race-dirty', name: marker, active: false, shortLabel: 'D', color: '#16a34a', modifications: [] },
+      ];
+      await chrome.storage.local.set({ state });
+    }, DIRTY_MARKER);
+
+    await keepRowAfter.getByRole('button', { name: 'Restore backup', exact: true }).click();
+    await keepRowAfter.getByRole('button', { name: 'Confirm restore', exact: true }).click();
+    restored =
+      (await pollUntil(
+        () =>
+          sw.evaluate(async ([keptName, dirtyName]) => {
+            const { state } = await chrome.storage.local.get('state');
+            const names = (state?.profiles ?? []).map((p) => p.name);
+            return names.includes(keptName) && !names.includes(dirtyName);
+          }, [SNAP_MARKER, DIRTY_MARKER]),
+        (ok) => ok === true,
+        8000,
+        200,
+      )) === true;
+  }
+
+  const twoFewer = raceAfter.ids.length === raceBefore.ids.length - 2;
+
+  record('N44: 겹친 스냅샷 삭제 — 둘 다 사라지고 그 데이터도 남지 않으며 세 번째는 온전히 복원된다',
+    bothAccepted && bothRowsGone && bothDataGone && twoFewer && keptListed && keptDataWhole &&
+      noOrphanRows && keptRowVisible && deletedRowsUnlisted && restored,
+    `동시 요청 둘 수락=${bothAccepted}(${JSON.stringify(raceResults)}), ` +
+      `매니페스트(${snapArea}) ${raceBefore.ids.length}→${raceAfter.ids.length} ` +
+      `[${raceAfter.ids.join(',')}] 둘 줄었나=${twoFewer}, 둘 다 없음=${bothRowsGone}, ` +
+      `그 청크 잔재=${!bothDataGone}, 고아 행 없음=${noOrphanRows}, ` +
+      `유지 행 목록=${keptListed}·청크 온전=${keptDataWhole}, ` +
+      `경합 후 목록 재조회: 유지 행=${keptRowVisible}·지운 둘 부재=${deletedRowsUnlisted}, ` +
+      `복원=${restored}, ${Date.now() - raceT0}ms`);
 
   /*
    * N39: 2단계 전체 초기화 (티켓 08, R-3).
