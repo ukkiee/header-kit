@@ -28,33 +28,56 @@ const FILE_EXTENSIONS = new Set([
 const LOCAL_HOSTS = new Set(['localhost']);
 
 /**
- * 패턴 문자열의 **authority 구간** — 스킴 구분자 뒤부터 첫 경로 구분자 앞까지,
- * 구분자가 없으면 첫 경로 구분자 앞 전체 (릴리스 R-1, 티켓 05).
- *
- * 정규식 조각일 수 있으므로 두 가지를 넘어간다: **문자 클래스 안쪽**의 `/`는 경로 구분자가
- * 아니고(`^https://[^/]+/…`의 첫 `/`는 클래스 안이다), **이스케이프**는 한 단위로 건너뛴다.
- * 다만 `\/`는 리터럴 경로 구분자이므로 거기서 끊는다.
- *
- * 이 구간만 보는 이유는 경로에 있는 도메인꼴 조각이 호스트 노릇을 하지 못하게 하는 것이다 —
- * 그것이 릴리스 r3의 R-1이었다.
+ * 값을 어느 문법으로 읽을지 — ADR 0008의 컴파일 매핑이 정한다. `regex`만 `regexFilter`로
+ * 내려가고 `contains`·`prefix`는 DNR의 **비정규식** `urlFilter`로 내려가므로, 후자에서
+ * `[`·`\`는 특수문자가 아니라 평범한 글자다.
  */
-function authoritySpan(text: string): string {
-  const scheme = text.indexOf('://');
-  const from = scheme === -1 ? 0 : scheme + 3;
-  for (let i = from; i < text.length; i += 1) {
-    const ch = text[i];
-    if (ch === '\\') {
-      if (text[i + 1] === '/') return text.slice(from, i); // 이스케이프된 경로 구분자
-      i += 1;
+type Reading = 'literal' | 'regex';
+
+/**
+ * 패턴 문자열의 **authority 구간** — 스킴 구분자 뒤부터 첫 구분자(`/`·`?`·`#`) 앞까지,
+ * 스킴 구분자가 없으면 첫 구분자 앞 전체 (릴리스 R-1, 티켓 05).
+ *
+ * 이 구간만 보는 이유는 경로·쿼리에 있는 도메인꼴 조각이 호스트 노릇을 하지 못하게 하는
+ * 것이다 — 그것이 릴리스 r3의 R-1이었다.
+ *
+ * **스킴 구분자를 문자열 어디서나 찾으면 안 된다.** 리다이렉트를 막는 흔한 모양
+ * (`^https?:\/\/[^\/]+\/u=https://ads\.example\.com\/`)에는 `://`가 **쿼리 안에** 있고, 그것을
+ * 집으면 쿼리의 도메인이 호스트로 세어져 모든 호스트에 걸리는 패턴이 '좁음'으로 통과한다.
+ * 그래서 왼쪽부터 한 번만 훑는다 — 구분자를 먼저 만나면 거기서 끝나므로 구분자 뒤의 `://`에는
+ * 애초에 닿지 못한다.
+ *
+ * **두 독법으로 갈리는 이유.** 리터럴 값에서 `[`를 문자 클래스로 읽으면 그 안쪽의 `/`를
+ * 구분자로 세지 않게 되어, 경로 조각만 든 부분 문자열이 '좁음'으로 통과한다. 반대로 정규식에서
+ * 맨 `?`를 쿼리 구분자로 읽으면 그것이 수량자인 패턴(`(ads\.)?example\.com`)이 확인을 받는다.
+ * 한 잣대로 둘을 재면 어느 쪽이든 한 방향이 틀린다.
+ */
+function authoritySpan(text: string, reading: Reading): string {
+  let from = 0;
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i]!;
+    // 정규식에서 이스케이프는 한 단위다. `\/`·`\?`·`\#`는 리터럴 구분자라 거기서 끊고, 그 밖의
+    // 이스케이프는 통째로 건너뛴다 — 건너뛰지 않으면 `\\?`(리터럴 역슬래시 + 수량자)의 `?`를
+    // 이스케이프된 구분자로 잘못 읽는다.
+    if (reading === 'regex' && ch === '\\') {
+      const escaped = text[i + 1];
+      if (escaped === '/' || escaped === '?' || escaped === '#') return text.slice(from, i);
+      i += 2;
       continue;
     }
-    if (ch === '[') {
-      const close = endOfClass(text, i);
-      if (close === -1) return text.slice(from); // 닫히지 않은 클래스 — 끝까지가 authority다
-      i = close;
+    // `from === 0`은 "아직 스킴 구분자를 만나지 못했다"를 겸한다 — 만나면 `from`이 최소 3이
+    // 되므로 0으로 돌아오는 길이 없고, 그래서 두 번째 `://`는 구분자로 세어지지 않는다.
+    if (from === 0 && text.startsWith('://', i)) {
+      i += 3;
+      from = i;
       continue;
     }
-    if (ch === '/') return text.slice(from, i);
+    // 맨 `?`는 정규식에서 수량자다. 리터럴에서만 쿼리 구분자로 센다.
+    if (ch === '/' || ch === '#' || (reading === 'literal' && ch === '?')) {
+      return text.slice(from, i);
+    }
+    i += 1;
   }
   return text.slice(from);
 }
@@ -70,7 +93,10 @@ function authoritySpan(text: string): string {
  *
  * **남는 한계** (스펙 D1). 이 판정이 증명하는 것은 **패턴 문자열 안에서의 위치**이지 실제 URL
  * 안에서의 위치가 아니다. 앵커 없는 부분 문자열 스코프 `ads.example.com/path`는 좁음으로
- * 판정되지만 `https://victim.test/ads.example.com/path`에도 매칭된다. 플랜 게이트 r1이 이
+ * 판정되지만 `https://victim.test/ads.example.com/path`에도 매칭된다. 같은 이유로 `&d=…`처럼
+ * 쿼리 파라미터 구분자로 시작하는 값도 좁음이다 — `?`·`#`은 RFC 3986의 구분자라 자리를
+ * 증명하지만 `&`는 userinfo의 sub-delim으로도 허용되어 증명하지 못하고, 이 값들에는 스킴
+ * 구분자가 없어 위치를 고정할 근거가 문자열 안에 없다. 플랜 게이트 r1이 이
  * 구멍을 닫으라고 권고했고 처방 자체는 정확했지만, 어느 형태로 조여도 기존 판정 아홉 행이
  * 뒤집히고 그중 셋이 `contains`인데 ADR 0008이 폼 기본값을 `contains`로 정했다 — 확인이
  * 상시가 되면 사용자는 읽지 않고 누르고, 그러면 진짜 넓은 규칙에 대해서도 가드레일이 작동을
@@ -118,9 +144,9 @@ export function urlScopeBreadth(
     case 'prefix':
       return prefixBreadth(pattern);
     case 'contains':
-      // 부분 문자열은 authority 자리에 놓인 도메인을 품을 때만 묶인다 — 경로 조각만 든 값은
-      // 모든 호스트의 그 경로에 걸린다.
-      return isHostBound(authoritySpan(pattern)) ? 'narrow' : 'wide';
+      // 부분 문자열은 authority 자리에 놓인 도메인을 품을 때만 묶인다 — 경로·쿼리 조각만 든
+      // 값은 모든 호스트의 그 자리에 걸린다.
+      return isHostBound(authoritySpan(pattern, 'literal')) ? 'narrow' : 'wide';
     case 'regex':
       return regexBreadth(pattern);
   }
@@ -128,13 +154,14 @@ export function urlScopeBreadth(
 
 /** 접두 매치 — 스킴 뒤 호스트 자리까지 닿아야 좁다(`https://`만으로는 전부다). */
 function prefixBreadth(pattern: string): ScopeBreadth {
-  const separator = pattern.indexOf('://');
-  if (separator === -1) {
-    // 스킴 구분자에 닿지 못한 접두(`http`, `*`)는 호스트를 특정하지 못한다.
+  if (!pattern.includes('://')) {
+    // 스킴 구분자에 닿지 못한 접두(`http`, `*`)는 호스트를 특정하지 못한다. 접두는 URL 시작에
+    // 앵커되므로(ADR 0008: `|패턴`) 스킴 없이 시작하는 URL은 존재하지 않는다.
     return 'wide';
   }
-  const host = pattern.slice(separator + 3).split('/')[0] ?? '';
-  return isHostBound(host) ? 'narrow' : 'wide';
+  // `contains`와 **같은 리터럴 독법**을 쓴다 — ADR 0008이 둘을 같은 부류(비정규식 `urlFilter`)로
+  // 내려보내므로, authority를 재는 잣대가 갈리면 같은 문자열이 두 방식에서 반대로 판정된다.
+  return isHostBound(authoritySpan(pattern, 'literal')) ? 'narrow' : 'wide';
 }
 
 /**
@@ -313,7 +340,9 @@ function regexBreadth(pattern: string): ScopeBreadth {
   // 갈래마다 **자기 authority 구간**을 본다. 구간을 먼저 자르고 나서 `\.`를 리터럴 점으로
   // 되살리는 순서가 중요하다 — 자르는 동안에는 이스케이프가 온전해야 `\/`를 경로 구분자로,
   // `\.`를 구분자 아닌 것으로 읽을 수 있다.
-  return expanded.branches.every((alt) => isHostBound(authoritySpan(alt).replace(/\\\./g, '.')))
+  return expanded.branches.every((alt) =>
+    isHostBound(authoritySpan(alt, 'regex').replace(/\\\./g, '.')),
+  )
     ? 'narrow'
     : 'wide';
 }

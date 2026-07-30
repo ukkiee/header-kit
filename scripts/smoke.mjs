@@ -2183,12 +2183,14 @@ try {
     .waitFor({ timeout: 5000 })
     .then(() => true, () => false);
   const pathNotSaved = (await blockRuleCount()) === 2;
-  // 확인을 누르면 저장된다 — 넓은 스코프는 저장을 막지 않는다.
+  // 확인을 누르면 저장된다 — 넓은 스코프는 저장을 막지 않는다. 폼 닫힘은 저장 완료의 신호가
+  // 아니므로(`waitFormClosed`는 Cancel 버튼의 detach만 기다린다) 형제 단언들과 같이
+  // `pollUntil`로 저장을 기다린다 — 한 번만 읽으면 저장이 늦게 착지할 때 간헐 실패한다.
   await popup.getByRole('button', { name: 'Block anyway', exact: true }).click();
+  const pathSavedAfterConfirm = await pollUntil(blockRuleCount, (n) => n === 3);
   await waitFormClosed();
-  const pathSavedAfterConfirm = (await blockRuleCount()) === 3;
   record('N18l: 경로 자리에 도메인이 있는 정규식 Block도 첫 Save는 확인을 요구한다',
-    pathWarned && pathNotSaved && pathSavedAfterConfirm,
+    pathWarned && pathNotSaved && pathSavedAfterConfirm === 3,
     `warned=${pathWarned}, not-saved=${pathNotSaved}, saved-after-confirm=${pathSavedAfterConfirm}`);
 
   // 아래 c~e는 열린 폼을 이어서 굴린다 — Block 저장으로 닫혔으니 다시 연다.

@@ -211,6 +211,74 @@ describe('호스트 결합은 authority 자리에서만 센다 (release R-1, 티
   });
 });
 
+describe('스킴 구분자는 구분자 앞에서만 찾는다 (티켓 05 code-review)', () => {
+  /*
+   * 아래 넷은 `ff274b2`에서 올바르게 `wide`였는데 티켓 05의 첫 구현이 `narrow`로 **뒤집었다**.
+   * 원인은 스킴 구분자를 `indexOf('://')`로 찾은 것 하나다 — 리다이렉트·트래킹 엔드포인트를
+   * 막는 흔한 모양에는 `://`가 **쿼리 안에** 또 있고, 그것을 스킴 구분자로 집으면 구간이 쿼리
+   * 안에서 잘려 나와 거기 있는 도메인이 호스트로 세어진다. 즉 이 티켓이 닫으려던 결함을 이
+   * 티켓이 새로 열었다.
+   *
+   * 회귀가 조용히 통과한 이유는 51+6행 어디도 **경로·쿼리에 URL이 박힌 모양**을 밟지 않았기
+   * 때문이다. 그래서 여기에 행으로 못 박는다.
+   */
+  it.each([
+    ['^https?:\\/\\/[^\\/]+\\/u=https://ads\\.example\\.com\\/', 'regex'],
+    ['[^\\/]+\\/u=https://ads\\.example\\.com\\/', 'regex'],
+    ['.*\\/u=https://ads\\.example\\.com\\/', 'regex'],
+    ['^.*\\/track\\/https://ads\\.example\\.com\\/px\\.gif', 'regex'],
+  ] as const)('%s (%s) → wide', (pattern, matchType) => {
+    expect(urlScopeBreadth(pattern, matchType)).toBe('wide');
+  });
+});
+
+describe('authority는 쿼리·프래그먼트에서도 끊긴다 (티켓 05 code-review)', () => {
+  /*
+   * 구간이 `/`에서만 끊기면 **쿼리 자리**의 도메인이 호스트로 세어진다. 아래 클래스형 둘은
+   * `[^/]`가 `/`를 넘지 못하므로 도메인이 쿼리에 있다는 것이 패턴 문자열만으로 확정되는데도
+   * '좁음'으로 통과했고, 실제로는 `https://victim.test?r=ads.example.com` 꼴로 모든 호스트에
+   * 걸린다.
+   */
+  it.each([
+    ['^https?://.*\\?d=ads\\.example\\.com', 'regex'],
+    ['^https://[^/]*\\?r=ads\\.example\\.com', 'regex'],
+    ['^https://[^/]+\\?utm_src=ads\\.example\\.com', 'regex'],
+    ['^https?://.*#ads\\.example\\.com', 'regex'],
+    ['?ref=ads.example.com', 'contains'],
+  ] as const)('%s (%s) → wide', (pattern, matchType) => {
+    expect(urlScopeBreadth(pattern, matchType)).toBe('wide');
+  });
+
+  it('맨 `?`는 정규식에서 수량자다 — 구분자로 세면 호스트에 묶인 패턴이 확인을 받는다', () => {
+    // `https://example.com/`과 `https://ads.example.com/` 둘만 매칭한다 — 호스트에 묶여 있다.
+    expect(urlScopeBreadth('^https://(ads\\.)?example\\.com/', 'regex')).toBe('narrow');
+  });
+});
+
+describe('비정규식 매치 방식은 리터럴로 읽는다 (ADR 0008 컴파일 매핑, 티켓 05 code-review)', () => {
+  /*
+   * ADR 0008은 `contains`·`prefix`를 DNR의 **비정규식** `urlFilter`로 내려보낸다 — 그 값에서
+   * `[`·`\`는 특수문자가 아니라 평범한 글자다. 정규식 독법으로 읽으면 `[`가 문자 클래스가 되어
+   * 그 안쪽의 `/`를 구분자로 세지 않게 되고, 경로 조각만 든 부분 문자열이 '좁음'으로 통과한다 —
+   * 브래킷 하나가 가드레일을 끄는 셈이다. 브래킷만 뺀 쌍둥이는 이미 `wide`였다.
+   */
+  it.each([
+    ['[/ads.example.com/', 'contains'],
+    ['x[/ads.example.com/', 'contains'],
+    ['v1[/ads.example.com/beacon', 'contains'],
+    // 닫힌 클래스 꼴 — 클래스가 경로 구분자를 삼키는 경로.
+    ['x[a/b]ads.example.com/y', 'contains'],
+  ] as const)('%s (%s) → wide', (pattern, matchType) => {
+    expect(urlScopeBreadth(pattern, matchType)).toBe('wide');
+  });
+
+  it('같은 리터럴 문자열은 contains와 prefix에서 같은 판정을 받는다', () => {
+    // 잣대가 갈려 있을 때 이 문자열은 contains에서 narrow, prefix에서 wide였다.
+    const literal = 'https://[/ads.example.com/';
+    expect(urlScopeBreadth(literal, 'contains')).toBe(urlScopeBreadth(literal, 'prefix'));
+  });
+});
+
 describe('규칙이 만들어지지 않는 패턴은 거부한다', () => {
   it.each([
     // 컴파일 자체가 안 되는 패턴.
