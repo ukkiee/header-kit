@@ -8,7 +8,7 @@ import { hasExpiredRules } from '@/core/expiry';
 import type { NetRule } from '@/core/rules';
 import type { StoredState } from '@/core/schema';
 import { summarizeCompile, type StatusSummary } from '@/core/summary';
-import type { DeleteSnapshotResult, StateWriter } from '@/core/state-writer';
+import type { BackupMutation, BackupMutationResult, StateWriter } from '@/core/state-writer';
 import { createReconciler } from './reconciler';
 
 /**
@@ -47,9 +47,12 @@ export interface BackgroundDeps {
   stateWriter: StateWriter;
   publishSummary(summary: StatusSummary): Promise<void>;
   queryTabInfos(): Promise<TabInfo[]>;
-  /** 렌더러의 삭제 요청을 받는다 — 핸들러의 결과가 그대로 응답이 된다. */
-  onSnapshotDeleteRequest(
-    handler: (snapshotId: string, target: BackupTarget) => Promise<DeleteSnapshotResult>,
+  /**
+   * 렌더러가 시작한 백업 변이 요청을 받는다 — **문은 하나**이고 무슨 동작인지는 판별 유니온의
+   * 가지가 정한다 (D6, 티켓 03). 핸들러의 결과가 그대로 응답이 된다.
+   */
+  onBackupMutation(
+    handler: (mutation: BackupMutation) => Promise<BackupMutationResult>,
   ): void;
   replaceSessionRules(rules: NetRule[]): Promise<void>;
   /**
@@ -251,15 +254,13 @@ export function bootstrap(deps: BackgroundDeps): void {
     command.type === 'full-reset' ? fullReset() : writer.execute(command),
   );
   /*
-   * 스냅샷 한 행 삭제 — 쓰기 문이 그대로 받는다 (티켓 02).
+   * 백업 변이 요청 — 쓰기 문이 그대로 받는다. 부트스트랩이 더할 것이 없다.
    *
-   * 티켓 02 이전에는 여기에 삭제가 자동 Backup을 중단하고 드레인한 뒤 지우는 래퍼가 있었다.
-   * 그 둘이 필요했던 이유는 삭제의 읽기와 매니페스트 통째 쓰기 사이에 백업 커밋이 착지할 수
-   * 있었기 때문인데, 지금은 둘 다 레인 작업이라 겹칠 수 없다. 중단이 사라지니 그것이 비운
-   * 예약 자리를 되살릴 필요도 없어졌다 — 걸려 있던 타이머가 그대로 발화한다. 그래서 이 진입점에
-   * 부트스트랩이 더할 것이 없다.
+   * 티켓 02 이전에는 여기에 삭제가 자동 Backup을 중단·드레인한 뒤 지우는 래퍼가 있었다. 레인이
+   * 그 둘을 흡수했고(그 경위는 ADR 0016), 중단이 사라지니 그것이 비운 예약 자리를 되살릴
+   * 필요도 없어졌다 — 걸려 있던 타이머가 그대로 발화한다.
    */
-  deps.onSnapshotDeleteRequest((snapshotId, target) => writer.deleteSnapshot(snapshotId, target));
+  deps.onBackupMutation((mutation) => writer.mutateBackup(mutation));
 
   deps.onStateChanged(() => {
     converge();

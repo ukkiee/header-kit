@@ -42,11 +42,29 @@ export interface StateWriter {
    */
   snapshot(): Promise<SnapshotOutcome>;
   /**
-   * 히스토리 한 행 삭제 (티켓 02). 실패해도 던지지 않고 결과 객체로 돌려준다 — 화면이 잔여
-   * 개수를 보여 줘야 하기 때문이다. 이미 지운 행을 다시 지워도 무해하다(멱등).
+   * 화면이 시작한 백업 네임스페이스 변이 (티켓 02·03) — **문은 이것 하나다.**
+   *
+   * 무슨 동작인지는 판별 유니온의 가지가 정한다. 문을 하나로 두는 목적은 세 번째 변이를 더할
+   * 때 **가장 쉬운 길이 유니온에 가지를 추가하는 것**이 되게 하는 데 있다. 문이 여럿이면 가장
+   * 쉬운 길은 "화면에서 그냥 쓰기"이고, 그것이 릴리스 r3의 R-3이었다.
+   *
+   * 실패해도 던지지 않고 결과 객체로 돌려준다 — 화면이 잔여 개수를 보여 줘야 하기 때문이다.
+   * 이미 지운 행을 다시 지워도 무해하다(멱등).
    */
-  deleteSnapshot(snapshotId: string, target: BackupTarget): Promise<DeleteSnapshotResult>;
+  mutateBackup(mutation: BackupMutation): Promise<BackupMutationResult>;
 }
+
+/**
+ * 화면이 서비스워커에 요청하는 백업 네임스페이스 변이 (D6).
+ *
+ * 전이 명령과 채널을 가르는 기존 결정은 유지한다 — 백업 변이는 권위 상태를 바꾸지 않고 결과
+ * 형태도 다르다(잔여 개수를 든다).
+ */
+export type BackupMutation =
+  /** 히스토리 한 행 — 지우는 것은 그 스냅샷의 매니페스트 항목과 청크뿐이다. */
+  | { op: 'delete-snapshot'; snapshotId: string; target: BackupTarget }
+  /** 클라우드에 남은 백업 전부 — sync 스위치를 끄는 것과 **별개의** 명시적 동작이다. */
+  | { op: 'clear-cloud' };
 
 /**
  * `snapshot()`의 결과 — 실패가 아닌 것을 값으로 돌려준다.
@@ -64,13 +82,20 @@ export type SnapshotOutcome =
   | { status: 'skipped'; reason: string };
 
 /**
- * 삭제 결과 — 잔재가 남았으면 개수를, 던졌으면 사유를 든다. 어댑터의 `DeleteSnapshotResult`와
- * 같은 모양을 `core`에서 이름 붙인 것이다(화면이 이 값을 그린다).
+ * 백업 변이의 결과 — 잔재가 남았으면 개수를, 던졌으면 사유를 든다. 화면이 이 값을 그리므로
+ * 계약 층에 산다.
+ *
+ * **지웠다고 믿는 것과 지워진 것은 다르다**: 두 동작 모두 쓰기 뒤에 다시 읽어 검증하고, 남은
+ * 근거를 그대로 돌려준다. 잔재를 성공으로 접으면 사용자는 지웠다고 믿게 되고, 그것이 이
+ * 기능이 막으려는 유일한 거짓 표시다.
  */
-export type DeleteSnapshotResult =
+export type BackupMutationResult =
   | { ok: true }
   | { ok: false; remaining: number }
   | { ok: false; error: string };
+
+/** 기존 이름 — 화면 prop 시그니처가 이것을 쓰므로 유지한다 (티켓 03 수용 기준). */
+export type DeleteSnapshotResult = BackupMutationResult;
 
 /**
  * 전체 초기화가 건드리는 **예약 정책**만 (D8: 예약 정책은 레인이 대체하지 않는다).

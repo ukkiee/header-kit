@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { applyCommand, type Command } from '@/core/commands';
 import { createDefaultState, type StoredState } from '@/core/schema';
 import { performFullReset, type ResetEffects } from '@/core/reset';
-import type { StateWriter } from '@/core/state-writer';
+import type { BackupMutation, BackupMutationResult, StateWriter } from '@/core/state-writer';
 import { bootstrap, type BackgroundDeps } from './background-bootstrap';
 
 /**
@@ -35,7 +35,7 @@ function fakeWriter(
     execute: async () => createDefaultState(),
     commitMigration: async () => false,
     snapshot: async () => ({ status: 'written', kind: 'write' }),
-    deleteSnapshot: async () => ({ ok: true }),
+    mutateBackup: async () => ({ ok: true }),
     fullReset: async (policy) => {
       const applied: { state?: StoredState } = {};
       const result = await performFullReset({
@@ -72,7 +72,7 @@ function fakeDeps(overrides: Partial<BackgroundDeps> = {}): BackgroundDeps {
     stateWriter: fakeWriter(),
     publishSummary: async () => {},
     queryTabInfos: async () => [],
-    onSnapshotDeleteRequest: () => {},
+    onBackupMutation: () => {},
     replaceSessionRules: async () => {},
     applyBadge: async () => {},
     scheduleExpiryAlarm: async () => {},
@@ -421,9 +421,7 @@ describe('background bootstrap', () => {
    */
   it('삭제는 걸려 있던 백업 예약을 건드리지 않는다 — 상태 변경이 뒤따르지 않는 경로다', async () => {
     const timers: (() => void)[] = [];
-    let deleteHandler:
-      | ((snapshotId: string, target: 'sync' | 'local') => Promise<unknown>)
-      | undefined;
+    let mutate: ((mutation: BackupMutation) => Promise<BackupMutationResult>) | undefined;
     let snapshots = 0;
 
     bootstrap(
@@ -433,10 +431,10 @@ describe('background bootstrap', () => {
             snapshots += 1;
             return { status: 'written', kind: 'write' };
           },
-          deleteSnapshot: async () => ({ ok: false, error: 'storage unavailable' }),
+          mutateBackup: async () => ({ ok: false, error: 'storage unavailable' }),
         }),
-        onSnapshotDeleteRequest: (handler) => {
-          deleteHandler = handler;
+        onBackupMutation: (handler) => {
+          mutate = handler;
         },
         setTimer: (cb) => {
           timers.push(cb);
@@ -447,7 +445,9 @@ describe('background bootstrap', () => {
     expect(timers.length).toBeGreaterThan(0); // 초기 예약
 
     // 실패하는 삭제 — 결과는 오류 객체이고 던지지 않는다.
-    expect(await deleteHandler!('s1', 'sync')).toMatchObject({ ok: false });
+    expect(await mutate!({ op: 'delete-snapshot', snapshotId: 's1', target: 'sync' })).toMatchObject(
+      { ok: false },
+    );
     await flush();
 
     // 걸려 있던 예약이 그대로 살아 발화한다 — 무효화되지 않았다.

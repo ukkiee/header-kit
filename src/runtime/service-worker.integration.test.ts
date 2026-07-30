@@ -8,6 +8,7 @@ import {
   type ManifestEntry,
 } from '@/core/backup';
 import type { Command } from '@/core/commands';
+import type { BackupMutation, BackupMutationResult } from '@/core/state-writer';
 import {
   createDefaultState,
   isBlockedFromOverwrite,
@@ -112,13 +113,13 @@ interface FakeOptions {
  * 불변식 어디에도 들어오지 않는데, 세우면 순서 수만 배로 늘린다.
  */
 function installStorageFake(
-  seed: Kv,
+  seed: { local: Kv; sync: Kv },
   scheduler: Scheduler,
   violations: Violations,
   options: FakeOptions,
 ): { local: Kv; sync: Kv; stateWrites: () => number } {
-  const local: Kv = structuredClone(seed);
-  const sync: Kv = {};
+  const local: Kv = structuredClone(seed.local);
+  const sync: Kv = structuredClone(seed.sync);
   const session: Kv = {};
   let stateWrites = 0;
   let stateReads = 0;
@@ -195,8 +196,8 @@ interface Harness {
   stateChanged(): void;
   /** 자동 Backup 디바운스 타이머를 터뜨린다 — 걸려 있는 것 전부. */
   fireBackupTimers(): void;
-  /** 렌더러의 스냅샷 삭제 요청 (`onSnapshotDeleteRequest`). */
-  deleteSnapshot(snapshotId: string, target: BackupTarget): Promise<unknown>;
+  /** 렌더러가 시작한 백업 변이 요청 — 문은 하나다 (`onBackupMutation`). */
+  mutateBackup(mutation: BackupMutation): Promise<BackupMutationResult>;
   /** 저장소의 현재 내용 (local 구역 — 권위 상태와 `bk:`가 함께 산다) */
   local: Kv;
   /** 클라우드(sync) 구역 — 초기화가 `syncBackup`을 기본값으로 되돌리면 그 뒤 백업이 여기로 간다. */
@@ -208,8 +209,10 @@ interface Harness {
 }
 
 interface Scenario {
-  /** 매 순서마다 새로 깔리는 저장소 시드 */
+  /** 매 순서마다 새로 깔리는 local 구역 시드 (권위 상태와 `bk:`가 함께 산다) */
   seed: () => Kv;
+  /** 클라우드(sync) 구역 시드 — 클라우드 삭제를 세우려면 여기에 백업이 있어야 한다. */
+  seedSync?: () => Kv;
   /**
    * `onCommand` 리스너가 **등록되는 그 자리에서** 태우는 명령 — 부트스트랩이 마이그레이션
    * 커밋을 레인에 세우기 **전**이므로, 이 명령이 레인의 첫 작업이 된다.
@@ -245,10 +248,15 @@ const MAX_ORDERINGS = 400;
 async function runOnce(scenario: Scenario, prefix: readonly number[]): Promise<Scheduler> {
   const scheduler = new Scheduler(prefix);
   const violations: Violations = [];
-  const { local, sync, stateWrites } = installStorageFake(scenario.seed(), scheduler, violations, {
-    onStateWrite: scenario.onStateWrite,
-    afterStateRead: scenario.afterStateRead,
-  });
+  const { local, sync, stateWrites } = installStorageFake(
+    { local: scenario.seed(), sync: scenario.seedSync?.() ?? {} },
+    scheduler,
+    violations,
+    {
+      onStateWrite: scenario.onStateWrite,
+      afterStateRead: scenario.afterStateRead,
+    },
+  );
 
   let command: (c: Command) => Promise<StoredState> = async () => {
     throw new Error('onCommand 핸들러가 등록되지 않았다');
@@ -257,8 +265,8 @@ async function runOnce(scenario: Scenario, prefix: readonly number[]): Promise<S
   let expiryAlarm = (): void => {};
   let stateChanged = (): void => {};
   const backupTimers: (() => void)[] = [];
-  let deleteRequest: (id: string, target: BackupTarget) => Promise<unknown> = async () => {
-    throw new Error('onSnapshotDeleteRequest 핸들러가 등록되지 않았다');
+  let mutateRequest: (mutation: BackupMutation) => Promise<BackupMutationResult> = async () => {
+    throw new Error('onBackupMutation 핸들러가 등록되지 않았다');
   };
   let early: Promise<StoredState> | undefined;
   const errors: string[] = [];
@@ -271,8 +279,8 @@ async function runOnce(scenario: Scenario, prefix: readonly number[]): Promise<S
     publishSummary,
     // ── 저장소 밖 효과 — 이 티켓의 불변식과 무관하다 ──
     queryTabInfos: async () => [],
-    onSnapshotDeleteRequest: (handler) => {
-      deleteRequest = handler;
+    onBackupMutation: (handler) => {
+      mutateRequest = handler;
     },
     replaceSessionRules: async () => {},
     applyBadge: async () => {},
@@ -313,7 +321,7 @@ async function runOnce(scenario: Scenario, prefix: readonly number[]): Promise<S
     fireBackupTimers: () => {
       for (const fire of backupTimers.splice(0)) fire();
     },
-    deleteSnapshot: (id, target) => deleteRequest(id, target),
+    mutateBackup: (mutation) => mutateRequest(mutation),
     local,
     sync,
     stateWrites,
@@ -848,8 +856,8 @@ describe('S3 — 서비스워커 통합 시임', () => {
     const orderings = await forEachInterleaving({
       seed: () => ({ [STATE_KEY]: localBackupState(), ...seededBackups(['s1', 's2', 's3']) }),
       start: (harness) => ({
-        first: harness.deleteSnapshot('s1', 'local'),
-        second: harness.deleteSnapshot('s2', 'local'),
+        first: harness.mutateBackup({ op: 'delete-snapshot', snapshotId: 's1', target: 'local' }),
+        second: harness.mutateBackup({ op: 'delete-snapshot', snapshotId: 's2', target: 'local' }),
       }),
       check: (outcomes, harness) => {
         expect(outcomes.first).toMatchObject({ status: 'fulfilled', value: { ok: true } });
@@ -879,7 +887,7 @@ describe('S3 — 서비스워커 통합 시임', () => {
         // 검증하지 않는다 (티켓 02 코드리뷰가 잡은 것).
         harness.stateChanged();
         harness.fireBackupTimers(); // 디바운스된 자동 Backup이 삭제와 겹친다
-        return { deleting: harness.deleteSnapshot('s1', 'local') };
+        return { deleting: harness.mutateBackup({ op: 'delete-snapshot', snapshotId: 's1', target: 'local' }) };
       },
       check: (outcomes, harness) => {
         // **정방향**: 삭제가 성공을 보고한다. `verifySnapshotDeleteComplete`가 그 사이 커밋된
@@ -995,7 +1003,7 @@ describe('S3 — 서비스워커 통합 시임', () => {
       seed: () => ({ [STATE_KEY]: localBackupState(), ...seededBackups(['s1', 's2']) }),
       start: (harness) => ({
         resetting: harness.command({ type: 'full-reset' }),
-        deleting: harness.deleteSnapshot('s1', 'local'),
+        deleting: harness.mutateBackup({ op: 'delete-snapshot', snapshotId: 's1', target: 'local' }),
       }),
       check: (outcomes, harness) => {
         expect(outcomes.resetting?.status).toBe('fulfilled');
@@ -1009,12 +1017,70 @@ describe('S3 — 서비스워커 통합 시임', () => {
     expect(orderings).toBeGreaterThan(1);
   });
 
+  /*
+   * 클라우드 삭제 ↔ 자동 Backup (티켓 03).
+   *
+   * 티켓 03 이전에는 클라우드 삭제만 **화면에서** 직접 실행되어 `bk:` writer가 두 실행
+   * 컨텍스트에 서 있었다 — 서비스워커의 자동 Backup과 화면의 삭제가 서로를 모른 채 같은
+   * 네임스페이스를 고쳤다. 지금은 둘이 같은 레인 작업이라 겹칠 수 없다.
+   *
+   * 자동 Backup의 대상이 sync가 되도록 `syncBackup: true`(기본값)를 쓴다 — 삭제와 백업이
+   * **같은 구역**을 다투는 것이 이 조합의 요점이다.
+   */
+  it('클라우드 삭제와 자동 Backup이 겹쳐도 결과가 정합하다', async () => {
+    const orderings = await forEachInterleaving({
+      seed: () => ({ [STATE_KEY]: twoProfiles() }), // syncBackup 기본값 true → 백업은 sync로
+      seedSync: () => seededBackups(['c1', 'c2']),
+      start: (harness) => {
+        harness.stateChanged(); // 예약을 실제로 걸고
+        harness.fireBackupTimers(); // 그것을 삭제와 겹친다
+        return { clearing: harness.mutateBackup({ op: 'clear-cloud' }) };
+      },
+      check: (outcomes, harness) => {
+        // 레인이 작업 순서를 고정한다(백업 → 삭제). 그래서 결과는 한 가지다: 삭제가 마지막에
+        // 돌아 **정말로** 비운다. 잔재가 남는 갈래를 `if`로 열어 두면 도달하지 않는 가지가
+        // 검증하는 척하게 되므로, 여기서는 그 결정된 값을 그대로 단언한다.
+        expect(outcomes.clearing).toMatchObject({ status: 'fulfilled', value: { ok: true } });
+        expect(Object.keys(harness.sync).filter((key) => key.startsWith('bk:'))).toEqual([]);
+        // 그리고 어느 저장소 순서에서도 목록과 데이터가 어긋나지 않는다.
+        expect(manifestBacked(harness.sync)).toEqual([]);
+        expect(orphanChunks(harness.sync)).toEqual([]);
+      },
+    });
+    expect(orderings).toBeGreaterThan(1);
+  });
+
+  it('클라우드 삭제와 스냅샷 삭제가 겹쳐도 서로의 결과를 덮지 않는다', async () => {
+    const orderings = await forEachInterleaving({
+      seed: () => ({ [STATE_KEY]: twoProfiles() }),
+      seedSync: () => seededBackups(['c1', 'c2', 'c3']),
+      start: (harness) => ({
+        clearing: harness.mutateBackup({ op: 'clear-cloud' }),
+        deleting: harness.mutateBackup({
+          op: 'delete-snapshot',
+          snapshotId: 'c1',
+          target: 'sync',
+        }),
+      }),
+      check: (outcomes, harness) => {
+        expect(outcomes.clearing?.status).toBe('fulfilled');
+        expect(outcomes.deleting?.status).toBe('fulfilled');
+        // 두 동작이 같은 방향이므로 끝은 하나다: 클라우드가 비어 있다.
+        expect(Object.keys(harness.sync).filter((key) => key.startsWith('bk:'))).toEqual([]);
+        // 그리고 어느 쪽도 목록만 남기거나 데이터만 남기지 않았다.
+        expect(manifestBacked(harness.sync)).toEqual([]);
+        expect(orphanChunks(harness.sync)).toEqual([]);
+      },
+    });
+    expect(orderings).toBeGreaterThan(1);
+  });
+
   it('이미 지운 행을 다시 지워도 오류가 나지 않는다', async () => {
     const orderings = await forEachInterleaving({
       seed: () => ({ [STATE_KEY]: localBackupState(), ...seededBackups(['s1']) }),
       start: (harness) => ({
-        first: harness.deleteSnapshot('s1', 'local'),
-        again: harness.deleteSnapshot('s1', 'local'),
+        first: harness.mutateBackup({ op: 'delete-snapshot', snapshotId: 's1', target: 'local' }),
+        again: harness.mutateBackup({ op: 'delete-snapshot', snapshotId: 's1', target: 'local' }),
       }),
       check: (outcomes, harness) => {
         expect(outcomes.first).toMatchObject({ status: 'fulfilled', value: { ok: true } });
@@ -1076,7 +1142,7 @@ describe('S3 — 서비스워커 통합 시임', () => {
  */
 describe('쓰기 서비스가 저장소를 고치는 유일한 문이다', () => {
   const seeded = (seed: StoredState): { local: Kv; sync: Kv; stateWrites: () => number } =>
-    installStorageFake({ [STATE_KEY]: seed }, new ImmediateScheduler([]), [], {});
+    installStorageFake({ local: { [STATE_KEY]: seed }, sync: {} }, new ImmediateScheduler([]), [], {});
 
   const writerOn = (): ReturnType<typeof createStateWriter> =>
     createStateWriter({ validateCommand: async () => null });

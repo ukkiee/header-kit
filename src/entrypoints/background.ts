@@ -7,7 +7,7 @@ import { createStateWriter } from '@/platform/state-writer';
 import {
   loadState,
   onCommand,
-  onSnapshotDeleteRequest,
+  onBackupMutation,
   onStateChanged,
   publishSummary,
 } from '@/platform/stateStore';
@@ -105,7 +105,7 @@ export default defineBackground(() => {
     },
     onStateChanged,
     onCommand,
-    onSnapshotDeleteRequest,
+    onBackupMutation,
     onTabsChanged,
     onStartup: (callback) => browser.runtime.onStartup.addListener(callback),
     onInstalled: (callback) => browser.runtime.onInstalled.addListener(callback),

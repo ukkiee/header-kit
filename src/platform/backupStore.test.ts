@@ -42,11 +42,18 @@ afterEach(() => {
   delete (globalThis as unknown as { browser?: unknown }).browser;
 });
 
+/**
+ * 두 변이 모두 레인 안에서만 돈다 — 허가는 `lane.run` 밖에서 만들 수 없다 (ADR 0016).
+ * 티켓 03 이전에는 클라우드 삭제가 **화면에서** 직접 불렸고, 그래서 `bk:` writer가 두 실행
+ * 컨텍스트에 서 있었다.
+ */
+const clearCloudInLane = () => createWriterLane().run((permit) => clearCloudBackups(permit));
+
 describe('클라우드 백업 삭제 (어댑터)', () => {
   it('백업 네임스페이스만 지우고, 재조회 검증이 비었을 때 성공을 보고한다', async () => {
     const kv = installFakeStorage(SEED);
 
-    const result = await clearCloudBackups();
+    const result = await clearCloudInLane();
 
     expect(result).toEqual({ ok: true });
     expect(Object.keys(kv).filter((key) => key.startsWith('bk:'))).toEqual([]);
@@ -60,7 +67,7 @@ describe('클라우드 백업 삭제 (어댑터)', () => {
       delete store[BACKUP_MANIFEST_KEY];
     });
 
-    const result = await clearCloudBackups();
+    const result = await clearCloudInLane();
 
     expect(result.ok).toBe(false);
     expect(Object.keys(kv).filter((key) => key.startsWith('bk:'))).toEqual(['bk:s1:0', 'bk:s1:1']);
@@ -71,7 +78,7 @@ describe('클라우드 백업 삭제 (어댑터)', () => {
       throw new Error('QUOTA_BYTES quota exceeded');
     });
 
-    const result = await clearCloudBackups();
+    const result = await clearCloudInLane();
 
     expect(result).toEqual({ ok: false, error: 'QUOTA_BYTES quota exceeded' });
   });
@@ -144,6 +151,28 @@ describe('스냅샷 삭제 — 검증 실패 보고 (어댑터)', () => {
     // 지운 것만 사라지고 나머지와 잔해는 그대로다.
     expect(kv[chunkKey('s2', 0)]).toBe('text-s2');
     expect(kv['bk:ghost:0']).toBe('orphan');
+  });
+
+  /*
+   * 손상된 스냅샷도 지울 수 있어야 한다 (티켓 03 수용 기준) — 복원이 막힌 행을 치울 길은
+   * 그것뿐이다. 계획은 청크를 `chunkCount`만이 아니라 `bk:<id>:` 접두 전체에서 모으므로,
+   * 매니페스트가 세는 수와 실제 청크 수가 어긋난 행도 항목과 잔해가 함께 사라진다.
+   */
+  it('청크가 유실된 손상 스냅샷도 지워진다 — 항목과 잔해가 함께', async () => {
+    const kv = installFakeStorage({
+      // chunkCount는 2인데 청크는 하나뿐 — 복원이 막히는 손상 스냅샷.
+      [BACKUP_MANIFEST_KEY]: {
+        snapshots: [{ ...entry('broken', 'text'), chunkCount: 2 }, entry('ok', 'text-ok')],
+      },
+      [chunkKey('broken', 0)]: 'half',
+      [chunkKey('ok', 0)]: 'text-ok',
+    });
+
+    expect(await deleteInLane('broken', 'sync')).toEqual({ ok: true });
+
+    expect(kv[BACKUP_MANIFEST_KEY]).toMatchObject({ snapshots: [{ id: 'ok' }] });
+    expect(kv[chunkKey('broken', 0)]).toBeUndefined();
+    expect(kv[chunkKey('ok', 0)]).toBe('text-ok');
   });
 
   it('저장소가 던지면 사유와 함께 실패를 돌려준다 — 던지지 않는다', async () => {

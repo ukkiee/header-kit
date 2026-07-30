@@ -1,4 +1,3 @@
-import type { BackupTarget } from '@/core/backup';
 import type { Command } from '@/core/commands';
 import {
   isBlockedFromOverwrite,
@@ -8,7 +7,7 @@ import {
 } from '@/core/schema';
 import type { WritePermit } from '@/core/writer-lane';
 import type { StatusSummary } from '@/core/summary';
-import type { DeleteSnapshotResult } from '@/platform/backupStore';
+import type { BackupMutation, BackupMutationResult } from '@/core/state-writer';
 
 const STATE_KEY = 'state';
 const COMMAND_MESSAGE = 'headerkit:command';
@@ -154,49 +153,63 @@ export async function sendCommand(command: Command): Promise<CommandResult> {
   })) as CommandResult;
 }
 
-const DELETE_SNAPSHOT_MESSAGE = 'headerkit:delete-snapshot';
+const BACKUP_MUTATION_MESSAGE = 'headerkit:backup-mutation';
 
 /**
- * 스냅샷 한 행 삭제를 **서비스워커에 요청한다** (release R2-3).
+ * 백업 네임스페이스 변이를 **서비스워커에 요청한다** — 문은 이것 하나다 (D6, 티켓 03).
  *
- * 렌더러가 직접 지우지 않는 이유는 `bk:manifest`의 writer를 하나로 세우기 위해서다.
- * 자동 Backup은 서비스워커에 살고 삭제는 팝업·탭 렌더러에 살았다 — 서로 다른 JS
- * 컨텍스트라 인프로세스 락으로는 원리적으로 못 맞춘다(`browser.storage`에 CAS가 없다).
- * 삭제를 서비스워커로 옮기면 둘이 같은 Writer Lane 작업이 되어 겹칠 수 없다 (티켓 02).
- * 티켓 02 이전에는 삭제가 자동 Backup을 중단·드레인한 뒤 지웠는데, 레인이 그 둘을 흡수했다.
+ * 화면이 직접 지우지 않는 이유는 `bk:` writer를 하나로 세우기 위해서다. 자동 Backup은
+ * 서비스워커에 살고 삭제는 팝업·탭 렌더러에 살았다 — 서로 다른 JS 컨텍스트라 인프로세스 락으로는
+ * 원리적으로 못 맞춘다(`browser.storage`에 CAS가 없다). 서비스워커로 모으면 둘이 같은 Writer
+ * Lane 작업이 되어 겹칠 수 없다.
  *
- * 전이 명령(`sendCommand`)과 채널을 가르는 이유: 삭제는 권위 상태를 바꾸지 않고
- * 결과가 `CommandResult`가 아니라 잔여 개수를 든 `DeleteSnapshotResult`다.
+ * 문을 **하나로** 두는 목적은 세 번째 변이를 더할 때 가장 쉬운 길이 유니온에 가지를 추가하는
+ * 것이 되게 하는 데 있다. 문이 여럿이면 가장 쉬운 길은 "화면에서 그냥 쓰기"이고, 그것이
+ * 릴리스 r3의 R-3이었다 — 스냅샷 삭제는 이미 요청이었는데 클라우드 삭제만 화면에 남아 있었다.
+ *
+ * 전이 명령(`sendCommand`)과 채널을 가르는 이유: 백업 변이는 권위 상태를 바꾸지 않고 결과가
+ * `CommandResult`가 아니라 잔여 개수를 든 `BackupMutationResult`다.
  */
-export async function requestSnapshotDelete(
-  snapshotId: string,
-  target: BackupTarget,
-): Promise<DeleteSnapshotResult> {
-  return (await browser.runtime.sendMessage({
-    type: DELETE_SNAPSHOT_MESSAGE,
-    snapshotId,
-    target,
-  })) as DeleteSnapshotResult;
+export async function requestBackupMutation(
+  mutation: BackupMutation,
+): Promise<BackupMutationResult> {
+  try {
+    return (await browser.runtime.sendMessage({
+      type: BACKUP_MUTATION_MESSAGE,
+      mutation,
+    })) as BackupMutationResult;
+  } catch (error) {
+    /*
+     * 왕복 자체가 실패할 수 있다 (티켓 03 코드리뷰). 서비스워커가 교체되는 중이면
+     * `sendMessage`는 "Could not establish connection"으로 **던진다** — 화면에서 직접 지우던
+     * 때는 없던 실패 모양이다. 여기서 결과 객체로 바꾸지 않으면 그 거부가 패널의 `void`
+     * 호출에서 삼켜져, 확인 버튼만 되돌아오고 사용자는 아무 설명도 받지 못한다.
+     *
+     * 이 계약("실패도 결과 객체로 돌려준다")은 아래 `onBackupMutation`이 워커 쪽에서 이미
+     * 지키고 있던 것이다 — 채널의 양 끝이 같은 약속을 하게 맞춘다.
+     */
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
 }
 
-/** background에서 삭제 요청을 구독한다 — 실패도 결과 객체로 돌려준다(던지지 않는다). */
-export function onSnapshotDeleteRequest(
-  handler: (snapshotId: string, target: BackupTarget) => Promise<unknown>,
+/** background에서 백업 변이 요청을 구독한다 — 실패도 결과 객체로 돌려준다(던지지 않는다). */
+export function onBackupMutation(
+  handler: (mutation: BackupMutation) => Promise<BackupMutationResult>,
 ): void {
   browser.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (
       typeof message === 'object' &&
       message !== null &&
-      (message as { type?: unknown }).type === DELETE_SNAPSHOT_MESSAGE
+      (message as { type?: unknown }).type === BACKUP_MUTATION_MESSAGE
     ) {
-      const { snapshotId, target } = message as { snapshotId: string; target: BackupTarget };
-      void handler(snapshotId, target)
+      const { mutation } = message as { mutation: BackupMutation };
+      void handler(mutation)
         .then((result) => sendResponse(result))
         .catch((error: unknown) =>
           sendResponse({
             ok: false,
             error: error instanceof Error ? error.message : String(error),
-          } satisfies DeleteSnapshotResult),
+          } satisfies BackupMutationResult),
         );
       return true; // 비동기 응답
     }

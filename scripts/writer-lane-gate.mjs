@@ -105,8 +105,8 @@ for (const { symbol, total, perFile } of laneSites) {
 const PERMIT_ALLOWED = [
   'src/core/writer-lane.ts', // 허가를 만드는 곳
   'src/platform/stateStore.ts', // 허가를 요구하는 권위 상태 쓰기
-  // 백업 네임스페이스 쓰기 (티켓 02). `clearCloudBackups`는 아직 렌더러 writer이고 허가를
-  // 요구하지 않는다 — 티켓 03이 서비스워커로 옮긴다.
+  // 백업 네임스페이스 쓰기 — 자동 Backup·스냅샷 삭제(티켓 02)와 클라우드 삭제(티켓 03)가
+  // 전부 허가를 요구한다. 이 파일에 허가 없이 `bk:`를 고치는 함수가 남아 있으면 그것이 결함이다.
   'src/platform/backupStore.ts',
   'src/platform/state-writer.ts', // 허가를 쥐고 쓰기를 조율하는 유일한 문
 ];

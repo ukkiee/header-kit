@@ -13,7 +13,7 @@ import {
   type SnapshotStatus,
   type SyncKV,
 } from '@/core/backup';
-import type { DeleteSnapshotResult as CoreDeleteSnapshotResult } from '@/core/state-writer';
+import type { BackupMutationResult } from '@/core/state-writer';
 import type { WritePermit } from '@/core/writer-lane';
 
 /**
@@ -118,11 +118,7 @@ export async function hasCloudBackups(): Promise<boolean> {
  * 지웠다고 보고하기 전에 다시 읽어 검증한다. 실패를 성공처럼 표시하면 사용자는 클라우드에
  * 남은 백업을 지웠다고 믿게 되고, 그것이 이 기능이 막으려는 유일한 거짓 표시다.
  */
-export type ClearCloudResult =
-  | { ok: true }
-  /** 잔재가 남았다 — 개수는 **파라미터**로 넘긴다. 어댑터는 로케일을 모른다. */
-  | { ok: false; remaining: number }
-  | { ok: false; error: string };
+export type { BackupMutationResult as ClearCloudResult } from '@/core/state-writer';
 
 /**
  * 히스토리 한 행 삭제 (티켓 12) — 일괄 삭제(위)와 **다른 동작**이다. 지우는 것은 그
@@ -134,8 +130,9 @@ export type ClearCloudResult =
  * 되살아난다.
  */
 /**
- * 삭제 결과의 이름은 `core/state-writer`에 있다 — 화면이 그리는 값이므로 계약 층에 사는 것이
- * 맞고, 두 곳에 같은 모양을 따로 적어 두면 곧 어긋난다 (티켓 02 코드리뷰).
+ * 두 이름 다 계약 층(`core/state-writer`)의 `BackupMutationResult` 하나를 가리킨다 — 화면이
+ * 그리는 값이므로 계약 층에 살고, 같은 모양을 여기 따로 적어 두면 곧 어긋난다.
+ * 옛 이름을 남기는 이유는 백업 패널의 prop 시그니처가 그것을 쓰기 때문이다.
  */
 export type { DeleteSnapshotResult } from '@/core/state-writer';
 
@@ -143,7 +140,7 @@ export async function deleteBackupSnapshot(
   permit: WritePermit,
   snapshotId: string,
   target: BackupTarget,
-): Promise<CoreDeleteSnapshotResult> {
+): Promise<BackupMutationResult> {
   try {
     permit.assertLive();
     const before = await readBackupKV(target);
@@ -166,10 +163,20 @@ export async function deleteBackupSnapshot(
   }
 }
 
-export async function clearCloudBackups(): Promise<ClearCloudResult> {
+/**
+ * Writer Lane의 쓰기 허가를 요구한다 (티켓 03). 티켓 03 이전에는 이 함수가 **화면에서** 직접
+ * 불렸고, 그래서 `bk:` writer가 두 실행 컨텍스트에 서 있었다 — 서비스워커의 자동 Backup과
+ * 화면의 삭제가 서로를 모른 채 같은 네임스페이스를 고쳤다. 릴리스 r3의 R-3 중 남은 절반이 이것이고,
+ * 허가를 요구하는 것이 "서비스워커가 유일한 writer"를 규약에서 **배선의 사실**로 바꾼다.
+ */
+export async function clearCloudBackups(permit: WritePermit): Promise<BackupMutationResult> {
   try {
+    permit.assertLive();
     const keys = backupKeys(await readBackupKV('sync'));
     if (keys.length > 0) {
+      // 쓰기 직전에 다시 본다 (ADR 0016: 진입 시점 + 쓰기 직전) — 위 읽기를 기다리는 동안
+      // 이 작업이 끝났다면 이 삭제는 레인이 다음 작업으로 넘어간 뒤에 착지한다.
+      permit.assertLive();
       await browser.storage.sync.remove(keys);
     }
     const verified = verifyBackupsCleared(await readBackupKV('sync'));

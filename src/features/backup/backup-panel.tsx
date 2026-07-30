@@ -3,15 +3,9 @@ import { backupTarget, decodeSnapshotText, type BackupTarget, type SnapshotStatu
 import type { Command } from '@/core/commands';
 import { parseImport } from '@/core/transfer';
 import { format, MESSAGES, type MessageKey, type Translator } from '@/core/i18n';
-import {
-  clearCloudBackups,
-  hasCloudBackups,
-  listBackupSnapshots,
-  readBackupKV,
-  type ClearCloudResult,
-  type DeleteSnapshotResult,
-} from '@/platform/backupStore';
-import { requestSnapshotDelete } from '@/platform/stateStore';
+import { hasCloudBackups, listBackupSnapshots, readBackupKV } from '@/platform/backupStore';
+import type { BackupMutationResult } from '@/core/state-writer';
+import { requestBackupMutation } from '@/platform/stateStore';
 import { RotateCcw, Trash2 } from 'lucide-react';
 import { AlertBanner } from '@/ui/alert-banner';
 import { Button } from '@/ui/press-button';
@@ -33,9 +27,9 @@ export interface BackupPanelProps {
   ) => Promise<{ ok: true; text: string } | { ok: false; reason: string }>;
   /** 클라우드에 백업이 남아 있는지 — 스위치 상태와 **별개로** 조회한다. */
   loadCloudPresence?: () => Promise<boolean>;
-  clearCloud?: () => Promise<ClearCloudResult>;
+  clearCloud?: () => Promise<BackupMutationResult>;
   /** 히스토리 한 행 삭제 (티켓 12) — 일괄 삭제·전체 초기화와 **별개의** 좁은 동작이다. */
-  deleteSnapshot?: (entry: SnapshotStatus, target: BackupTarget) => Promise<DeleteSnapshotResult>;
+  deleteSnapshot?: (entry: SnapshotStatus, target: BackupTarget) => Promise<BackupMutationResult>;
 }
 
 async function defaultLoadSnapshotText(entry: SnapshotStatus, target: BackupTarget) {
@@ -47,11 +41,29 @@ function reasonText(reason: unknown): string {
 }
 
 /**
+ * 변이 요청의 **거부**를 결과 객체로 바꾼다 (티켓 03 코드리뷰).
+ *
+ * 기본값(`requestBackupMutation`)은 이미 던지지 않지만 이 둘은 주입 지점이다. 주입된 대역이나
+ * 나중에 바뀐 기본값이 던지면 `void` 호출에서 거부가 삼켜져, 확인 버튼만 되돌아오고 사용자는
+ * 아무 설명도 받지 못한다 — 읽기 경로가 이미 `reasonText`로 배너에 올리는 것과 같은 처리를
+ * 쓰기 경로에도 준다.
+ */
+async function settledMutation(
+  run: () => Promise<BackupMutationResult>,
+): Promise<BackupMutationResult> {
+  try {
+    return await run();
+  } catch (reason) {
+    return { ok: false, error: reasonText(reason) };
+  }
+}
+
+/**
  * 삭제 실패 사유도 카탈로그를 거친다 — 잔여 개수는 파라미터 키로 보간한다.
  * 일괄 삭제와 한 행 삭제는 남은 것이 가리키는 범위가 달라 문구 키를 갈라 받는다.
  */
 function verifiedDeleteDetail(
-  result: Extract<ClearCloudResult, { ok: false }>,
+  result: Extract<BackupMutationResult, { ok: false }>,
   remainingKey: MessageKey,
   t: Translator,
 ) {
@@ -82,11 +94,14 @@ export function BackupPanel({
   loadSnapshots = listBackupSnapshots,
   loadSnapshotText = defaultLoadSnapshotText,
   loadCloudPresence = hasCloudBackups,
-  clearCloud = clearCloudBackups,
-  // 삭제는 **서비스워커에 요청한다** (release R2-3) — 렌더러가 직접 지우면 `bk:manifest`의
-  // writer가 두 컨텍스트에 서고, 동시 자동 Backup의 커밋이 우리 통째 쓰기에 사라진다.
-  // prop 시그니처는 그대로라 잔여 개수가 여기까지 그대로 도착한다.
-  deleteSnapshot = (entry, target) => requestSnapshotDelete(entry.id, target),
+  // 두 변이 모두 **서비스워커에 요청한다** — 문은 하나이고, 근거는 `requestBackupMutation`에
+  // 있다. 읽기는 화면에 남는다(목록·잔존 여부·본문 로드) — D7.
+  //
+  // prop 시그니처는 바뀌지 않는다: 바뀐 것은 기본값이 요청 호출이 됐다는 것뿐이라, 잔여 개수가
+  // 여기까지 그대로 도착하고 테스트가 대역을 주입하는 방식도 그대로 성립한다.
+  clearCloud = () => requestBackupMutation({ op: 'clear-cloud' }),
+  deleteSnapshot = (entry, target) =>
+    requestBackupMutation({ op: 'delete-snapshot', snapshotId: entry.id, target }),
 }: BackupPanelProps) {
   const t = useT();
   // 처음부터 펼쳐 둔다 — 환경설정 패널과 같은 이유(레일에서 이 화면으로 온 사람은
@@ -132,7 +147,7 @@ export function BackupPanel({
     setConfirmingClear(false);
     setNotice(null);
 
-    const result = await clearCloud();
+    const result = await settledMutation(clearCloud);
     // 삭제는 성공을 **검증한** 결과만 성공으로 표시한다 — 실패는 배너로 드러난다.
     setError(
       result.ok
@@ -183,7 +198,7 @@ export function BackupPanel({
     // "삭제했습니다"가 그대로 서서, 지우지 못한 것이 지워진 것처럼 읽힌다.
     setNotice(null);
 
-    const result = await deleteSnapshot(entry, target);
+    const result = await settledMutation(() => deleteSnapshot(entry, target));
     setError(
       result.ok
         ? null

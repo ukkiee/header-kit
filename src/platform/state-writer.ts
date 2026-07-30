@@ -4,12 +4,19 @@ import { performFullReset, type ResetResult } from '@/core/reset';
 import type { StoredState } from '@/core/schema';
 import type {
   AutoBackupPolicy,
-  DeleteSnapshotResult,
+  BackupMutation,
+  BackupMutationResult,
   SnapshotOutcome,
   StateWriter,
 } from '@/core/state-writer';
 import { createWriterLane, type WritePermit } from '@/core/writer-lane';
-import { deleteBackupSnapshot, performBackup, readBackupKV, removeBackupKeys } from './backupStore';
+import {
+  clearCloudBackups,
+  deleteBackupSnapshot,
+  performBackup,
+  readBackupKV,
+  removeBackupKeys,
+} from './backupStore';
 import { clearSummary, commitMigration, loadState, persistState, readState } from './stateStore';
 
 /**
@@ -147,8 +154,20 @@ export function createStateWriter(deps: StateWriterDeps): StateWriter {
       });
     },
 
-    deleteSnapshot(snapshotId: string, target: BackupTarget): Promise<DeleteSnapshotResult> {
-      return lane.run((permit) => deleteBackupSnapshot(permit, snapshotId, target));
+    mutateBackup(mutation: BackupMutation): Promise<BackupMutationResult> {
+      return lane.run((permit) => {
+        // 문을 하나로 두는 근거는 `core/state-writer`의 `mutateBackup` 주석이 정본이다.
+        switch (mutation.op) {
+          case 'delete-snapshot':
+            return deleteBackupSnapshot(permit, mutation.snapshotId, mutation.target);
+          case 'clear-cloud':
+            return clearCloudBackups(permit);
+          default:
+            // 가지를 빠뜨리면 여기서 **어느 op이 남았는지 이름과 함께** 컴파일 오류가 난다.
+            // 반환형만으로도 막히지만, 그 진단은 빠진 가지를 짚어 주지 않는다.
+            return mutation satisfies never;
+        }
+      });
     },
   };
 }
