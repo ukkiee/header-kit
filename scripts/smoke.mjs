@@ -2160,6 +2160,37 @@ try {
     groupWarned && groupNotSaved,
     `warned=${groupWarned}, not-saved=${groupNotSaved}`);
 
+  /*
+   * N18l: 도메인이 **경로 자리**에 있는 정규식도 확인을 요구한다 (릴리스 R-1, 티켓 05).
+   *
+   * N18j·N18k를 통과시킨 판정은 패턴 문자열 **전체**를 훑어 호스트꼴 조각을 셌다. 그래서
+   * `^https://[^/]+/ads\.example\.com/`는 호스트 자리가 와일드카드인데도 경로의
+   * `ads.example.com`이 호스트 노릇을 해 '좁음'으로 통과했다 — 사용자는 광고 도메인 하나를
+   * 막았다고 믿지만 방문하는 **모든** 사이트의 그 경로에서 요청이 사라진다.
+   *
+   * 여기서는 확인 UI의 존재와 저장 개수의 불변만 보지 않고, **확인 뒤에 실제로 저장되는지**도
+   * 본다 — `wide`는 "금지"가 아니라 "확인이 필요하다"는 뜻이므로, 확인을 눌러도 저장되지
+   * 않으면 그것은 다른 결함이다.
+   */
+  await popup.getByRole('button', { name: 'Add rule' }).click();
+  await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
+  await pickOption(popup, 'Type', 'Block request');
+  await pickOption(popup, 'URL match type', 'Regex (advanced)');
+  await popup.getByLabel('URL filter').fill('^https://[^/]+/ads\\.example\\.com/');
+  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  const pathWarned = await popup
+    .getByRole('button', { name: 'Block anyway', exact: true })
+    .waitFor({ timeout: 5000 })
+    .then(() => true, () => false);
+  const pathNotSaved = (await blockRuleCount()) === 2;
+  // 확인을 누르면 저장된다 — 넓은 스코프는 저장을 막지 않는다.
+  await popup.getByRole('button', { name: 'Block anyway', exact: true }).click();
+  await waitFormClosed();
+  const pathSavedAfterConfirm = (await blockRuleCount()) === 3;
+  record('N18l: 경로 자리에 도메인이 있는 정규식 Block도 첫 Save는 확인을 요구한다',
+    pathWarned && pathNotSaved && pathSavedAfterConfirm,
+    `warned=${pathWarned}, not-saved=${pathNotSaved}, saved-after-confirm=${pathSavedAfterConfirm}`);
+
   // 아래 c~e는 열린 폼을 이어서 굴린다 — Block 저장으로 닫혔으니 다시 연다.
   await popup.getByRole('button', { name: 'Add rule' }).click();
   await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });

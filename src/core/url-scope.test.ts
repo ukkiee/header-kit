@@ -167,6 +167,50 @@ describe('그룹 안에 숨은 갈래도 전부 호스트에 묶여야 좁다 (r
   });
 });
 
+describe('호스트 결합은 authority 자리에서만 센다 (release R-1, 티켓 05)', () => {
+  /*
+   * 판정이 패턴 문자열 **전체**를 훑으면 경로에 있는 도메인꼴 조각이 호스트로 세어진다.
+   * 사용자는 광고 도메인 하나를 막았다고 믿고 나가지만, 실제로는 방문하는 모든 사이트의 그
+   * 경로에서 요청이 사라진다 — Block은 요청을 아예 없애는 유일한 종류라 그 오판이 페이지를
+   * 깨뜨린다. 그래서 호스트는 **authority 구간**에서만 센다: 스킴 구분자 뒤부터 첫 경로 구분자
+   * 앞까지, 구분자가 없으면 첫 경로 구분자 앞 전체.
+   *
+   * 아래 넷은 하나같이 `.invalid` 탐침 둘을 피하면서 모든 호스트에 걸린다. 전체 스캔에서는
+   * 경로의 `path.example.net`·`ads.example.com`이 호스트 노릇을 해 '좁음'으로 통과했다.
+   */
+  it.each([
+    // 그룹 안 갈래의 **경로** 토큰이 그 갈래를 대신 증명했다.
+    ['^(https://ads\\.example\\.net/|https://.*\\.com/path\\.example\\.net/)', 'regex'],
+    // 호스트 자리가 와일드카드이고 도메인은 경로에 있다.
+    ['^https://[^/]+/ads\\.example\\.com/', 'regex'],
+    // 스킴 뒤 호스트 자리가 전부 와일드카드다.
+    ['^https?://.*/ads\\.example\\.com', 'regex'],
+    // 부분 문자열 값이 경로 조각만 들었다.
+    ['/path.example.net/', 'contains'],
+  ] as const)('%s (%s) → wide', (pattern, matchType) => {
+    expect(urlScopeBreadth(pattern, matchType)).toBe('wide');
+  });
+
+  it('authority 자리의 호스트는 그대로 좁다 — 경로에 무엇이 있든', () => {
+    // 경로에 도메인꼴이 섞여 있어도 호스트가 묶여 있으면 좁다(기존 행과 같은 성질).
+    expect(urlScopeBreadth('^https://ads\\.example\\.com/path\\.example\\.net/', 'regex')).toBe(
+      'narrow',
+    );
+    // 스킴 뒤 authority에 로컬 호스트가 오면 좁다 — 기기 하나에 묶여 있다.
+    expect(urlScopeBreadth('^https?://localhost:3000/api', 'regex')).toBe('narrow');
+  });
+
+  /*
+   * **남는 한계** (스펙 D1, 플랜 게이트 r1 R-4에서 사람이 reject). 이 판정이 증명하는 것은
+   * 패턴 문자열 안에서의 위치이지 실제 URL 안에서의 위치가 아니다. 앵커 없는 부분 문자열은
+   * 여전히 쿼리·경로에 그 문자열이 들어간 URL에도 걸린다. 알고 남기는 것이라 판정을 여기에
+   * 못 박아 둔다 — 나중에 조일 때 무엇이 바뀌는지가 이 행에서 바로 읽힌다.
+   */
+  it('앵커 없는 부분 문자열은 여전히 좁음이다 — 알고 남긴 한계', () => {
+    expect(urlScopeBreadth('ads.example.com/path', 'contains')).toBe('narrow');
+  });
+});
+
 describe('규칙이 만들어지지 않는 패턴은 거부한다', () => {
   it.each([
     // 컴파일 자체가 안 되는 패턴.

@@ -28,12 +28,54 @@ const FILE_EXTENSIONS = new Set([
 const LOCAL_HOSTS = new Set(['localhost']);
 
 /**
+ * 패턴 문자열의 **authority 구간** — 스킴 구분자 뒤부터 첫 경로 구분자 앞까지,
+ * 구분자가 없으면 첫 경로 구분자 앞 전체 (릴리스 R-1, 티켓 05).
+ *
+ * 정규식 조각일 수 있으므로 두 가지를 넘어간다: **문자 클래스 안쪽**의 `/`는 경로 구분자가
+ * 아니고(`^https://[^/]+/…`의 첫 `/`는 클래스 안이다), **이스케이프**는 한 단위로 건너뛴다.
+ * 다만 `\/`는 리터럴 경로 구분자이므로 거기서 끊는다.
+ *
+ * 이 구간만 보는 이유는 경로에 있는 도메인꼴 조각이 호스트 노릇을 하지 못하게 하는 것이다 —
+ * 그것이 릴리스 r3의 R-1이었다.
+ */
+function authoritySpan(text: string): string {
+  const scheme = text.indexOf('://');
+  const from = scheme === -1 ? 0 : scheme + 3;
+  for (let i = from; i < text.length; i += 1) {
+    const ch = text[i];
+    if (ch === '\\') {
+      if (text[i + 1] === '/') return text.slice(from, i); // 이스케이프된 경로 구분자
+      i += 1;
+      continue;
+    }
+    if (ch === '[') {
+      const close = endOfClass(text, i);
+      if (close === -1) return text.slice(from); // 닫히지 않은 클래스 — 끝까지가 authority다
+      i = close;
+      continue;
+    }
+    if (ch === '/') return text.slice(from, i);
+  }
+  return text.slice(from);
+}
+
+/**
  * 이 문자열이 **어떤 호스트에 묶여 있는가**. 판정 전체가 이 질문 하나로 굴러간다.
  *
- * 도메인꼴 조각이 있는지만 보면 안 된다 — `tracker.js`도, 경로에 도메인이 섞인
- * `^https?://[^/]+/ads\.js`도 그 검사를 통과하지만 둘 다 모든 호스트에 걸린다.
- * 그래서 (1) `/`·`:`·`?`·끝으로 **닫히는** 자리에 있고, (2) 실제 라벨이 둘 이상이며,
- * (3) 마지막 라벨이 파일 확장자가 아닐 때만 호스트로 인정한다.
+ * 받는 것은 authority 구간이다 — 도메인꼴 조각이 있는지만 보면 안 되기 때문이다.
+ * `tracker.js`도, 경로에 도메인이 섞인 `^https?://[^/]+/ads\.js`도 문자열 전체를 훑으면
+ * 그 검사를 통과하지만 둘 다 모든 호스트에 걸린다. 구간을 좁힌 뒤에도 (1) `/`·`:`·`?`·끝으로
+ * **닫히는** 자리에 있고, (2) 실제 라벨이 둘 이상이며, (3) 마지막 라벨이 파일 확장자가
+ * 아닐 때만 호스트로 인정한다.
+ *
+ * **남는 한계** (스펙 D1). 이 판정이 증명하는 것은 **패턴 문자열 안에서의 위치**이지 실제 URL
+ * 안에서의 위치가 아니다. 앵커 없는 부분 문자열 스코프 `ads.example.com/path`는 좁음으로
+ * 판정되지만 `https://victim.test/ads.example.com/path`에도 매칭된다. 플랜 게이트 r1이 이
+ * 구멍을 닫으라고 권고했고 처방 자체는 정확했지만, 어느 형태로 조여도 기존 판정 아홉 행이
+ * 뒤집히고 그중 셋이 `contains`인데 ADR 0008이 폼 기본값을 `contains`로 정했다 — 확인이
+ * 상시가 되면 사용자는 읽지 않고 누르고, 그러면 진짜 넓은 규칙에 대해서도 가드레일이 작동을
+ * 멈춘다. 가드레일을 켜서 끄는 셈이라 사람이 reject했고, 이 판정이 순수 함수라 나중에 조이는
+ * 비용이 낮다는 점도 근거다.
  */
 function isHostBound(text: string): boolean {
   const head = text.split(/[/:?]/)[0] ?? '';
@@ -71,13 +113,14 @@ export function urlScopeBreadth(
   // 매치 방식 부재 = regex (ADR 0008의 하위 호환 규칙, compile과 같은 기본값).
   switch (matchType ?? 'regex') {
     case 'domain':
-      // 도메인 매치는 값 자체가 호스트다.
+      // 도메인 매치는 **값 자체가 호스트**다 — 값 전체를 authority로 본다.
       return isHostBound(pattern) ? 'narrow' : 'wide';
     case 'prefix':
       return prefixBreadth(pattern);
     case 'contains':
-      // 부분 문자열은 호스트 자리에 놓인 도메인을 품을 때만 묶인다.
-      return isHostBound(pattern) ? 'narrow' : 'wide';
+      // 부분 문자열은 authority 자리에 놓인 도메인을 품을 때만 묶인다 — 경로 조각만 든 값은
+      // 모든 호스트의 그 경로에 걸린다.
+      return isHostBound(authoritySpan(pattern)) ? 'narrow' : 'wide';
     case 'regex':
       return regexBreadth(pattern);
   }
@@ -267,7 +310,10 @@ function regexBreadth(pattern: string): ScopeBreadth {
   // `\.`는 리터럴 점이라 되살리고, `.`·`*` 같은 메타문자는 도메인 조각을 만들지 못하게 둔다.
   const expanded = expandAlternatives(pattern, 0, false);
   if (expanded === null) return 'wide'; // 포기 경로는 전부 넓음 — '좁음'으로 새지 않는다
-  return expanded.branches.every((alt) => isHostBound(alt.replace(/\\\./g, '.')))
+  // 갈래마다 **자기 authority 구간**을 본다. 구간을 먼저 자르고 나서 `\.`를 리터럴 점으로
+  // 되살리는 순서가 중요하다 — 자르는 동안에는 이스케이프가 온전해야 `\/`를 경로 구분자로,
+  // `\.`를 구분자 아닌 것으로 읽을 수 있다.
+  return expanded.branches.every((alt) => isHostBound(authoritySpan(alt).replace(/\\\./g, '.')))
     ? 'narrow'
     : 'wide';
 }
