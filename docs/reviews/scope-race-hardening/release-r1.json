@@ -1,0 +1,62 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "release",
+  "ack": "human-triage",
+  "triageMode": "human",
+  "verdict": "needs-attention",
+  "summary": "NO-SHIP: concurrent full resets violate the required clean-snapshot guarantee, and the destructive reset UI drops transport failures.",
+  "planFile": ".scratch/scope-race-hardening/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 131,
+  "target": "branch diff against main",
+  "reviewer": "codex",
+  "fallbackFrom": null,
+  "fallbackReason": null,
+  "effort": "xhigh",
+  "inputMode": "self-collect",
+  "reviewedSha": "2cdde500881b45b62dc1d8dfbdce362c87713b25",
+  "reviewedTree": "4e323de046029fbbe3558f4b469970d3934c9a9f",
+  "reviewedPlanSha256": "2225e8ad194089d61de0c369ace81308a1f3352a81ddc351bac2b26062fd7aaf",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "backendExitCode": 0,
+  "parseError": null,
+  "promptDelivery": {
+    "mechanism": "token-echo",
+    "enforcing": false,
+    "verified": true,
+    "echoed": "3be42498012e981e"
+  },
+  "findingCount": 2,
+  "planFindingCount": 0,
+  "triage": "review-gate SKILL.md § Triage governs: render EVERY finding as a full table row, never inside a dialog; then ask the ROUND before the rows — take every Proposed decision as it stands, or decide row by row — and `as proposed` ends the round in that ONE action; only if row-by-row was chosen, ask per finding with that row's Proposed decision as the first option, a reject or defer taking a free-text reason; echo back ONLY the rows that carried free text, and none if the round was decided by selection alone; max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "Spec fidelity: overlapping resets cancel the successful reset's clean snapshot",
+      "body": "Every reset increments `backupGeneration` and clears `backupScheduled`. A successful reset schedules its required clean snapshot, but when a second queued reset begins it invalidates that timer; if the second reset fails, `resumeBackupWrites({reschedule:false})` schedules nothing. Concurrent requests are reachable because both popup and tab surfaces expose the reset without global in-flight coalescing. The test comment at `src/runtime/background-bootstrap.test.ts:467-469` explicitly acknowledges the no-snapshot terminal state instead of asserting against it, contradicting `.scratch/scope-race-hardening/spec.md:123`.",
+      "file": "src/runtime/background-bootstrap.ts",
+      "line_start": 199,
+      "line_end": 210,
+      "confidence": 0.98,
+      "recommendation": "Coalesce concurrent full resets or preserve a monotonic clean-snapshot obligation until fulfilled. Add a regression test where one reset succeeds, an overlapping reset fails, timers fire, and exactly one default-state snapshot is written.",
+      "isPlanFinding": false
+    },
+    {
+      "severity": "medium",
+      "title": "Full reset transport rejection bypasses all failure feedback",
+      "body": "After destructive confirmation, `resetEverything` directly awaits `onCommand` without catching rejection. The traced path `dispatchWithResult`/`sendCommand` also leaves `browser.runtime.sendMessage` rejection unhandled, although the parallel backup-mutation channel explicitly documents and settles service-worker replacement failures at `src/platform/stateStore.ts:173-191`. Consequently a reset request whose message round trip fails produces neither the localized error banner nor retry guidance, leaving the user unable to distinguish an unstarted request from an interrupted operation.",
+      "file": "src/features/backup/backup-panel.tsx",
+      "line_start": 167,
+      "line_end": 176,
+      "confidence": 0.94,
+      "recommendation": "Catch command transport rejection and map it to the reset error banner while preserving retry confirmation. Add a test with a rejecting `onCommand` after confirmation.",
+      "isPlanFinding": false
+    }
+  ],
+  "next_steps": [
+    "Fix and test overlapping successful/failed reset scheduling before merge.",
+    "Add explicit reset transport-failure handling and verification."
+  ]
+}

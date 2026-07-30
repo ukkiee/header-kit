@@ -145,12 +145,28 @@ export type CommandResult =
   | { ok: true; state: StoredState }
   | { ok: false; error: string };
 
-/** UI가 단일 writer(background)로 전이 명령을 보낸다. */
+/**
+ * UI가 단일 writer(background)로 전이 명령을 보낸다.
+ *
+ * **왕복 자체가 실패해도 던지지 않는다** (릴리스 r1 R-2). 서비스워커가 교체되는 중이면
+ * `sendMessage`는 "Could not establish connection"으로 **던지고**, 그 거부는 이 함수를 부르는
+ * 화면까지 그대로 올라간다 — 전체 초기화 패널은 확인 상태를 await **전에** 이미 껐으므로,
+ * 사용자에게는 확인 버튼만 되돌아오고 아무 설명도 남지 않는다. 요청이 시작조차 안 된 것인지
+ * 도중에 끊긴 것인지 구분할 길이 없는 것이 그중 가장 나쁘다.
+ *
+ * 이 계약은 형제 채널인 아래 `requestBackupMutation`이 티켓 03에서 먼저 세운 것이다. 그때
+ * 백업 변이 쪽만 고치고 이쪽을 두어 **같은 문 둘이 다른 약속을 하고 있었다.** 채널의 양 끝이
+ * 같은 약속을 하게 맞춘다.
+ */
 export async function sendCommand(command: Command): Promise<CommandResult> {
-  return (await browser.runtime.sendMessage({
-    type: COMMAND_MESSAGE,
-    command,
-  })) as CommandResult;
+  try {
+    return (await browser.runtime.sendMessage({
+      type: COMMAND_MESSAGE,
+      command,
+    })) as CommandResult;
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 const BACKUP_MUTATION_MESSAGE = 'headerkit:backup-mutation';

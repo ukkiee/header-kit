@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { SCHEMA_VERSION } from '@/core/schema';
 import { createWriterLane } from '@/core/writer-lane';
-import { commitMigration, loadState, StateLoadError } from '@/platform/stateStore';
+import {
+  commitMigration,
+  loadState,
+  requestBackupMutation,
+  sendCommand,
+  StateLoadError,
+} from '@/platform/stateStore';
 
 /*
  * 두 writer 인터리빙을 보던 `commitMigration — 두 writer 인터리빙` 두 건은 S3
@@ -98,5 +104,47 @@ describe('loadState — 순수 읽기', () => {
     expect(writes).toBe(0);
     // 저장소는 손대지 않은 v1 그대로 — 커밋은 commitMigration만 한다.
     expect(kv.state).toMatchObject({ schemaVersion: 1 });
+  });
+});
+
+describe('전송 거부는 던지지 않고 결과 객체로 돌아온다 (릴리스 r1 R-2)', () => {
+  /*
+   * 서비스워커가 교체되는 중이면 `sendMessage`는 "Could not establish connection"으로 **던진다**.
+   * 화면이 그 거부를 받으면 배너도 재시도 안내도 뜨지 않는다 — 전체 초기화 패널은 확인 상태를
+   * await 전에 이미 껐으므로, 확인 버튼만 되돌아오고 사용자는 요청이 시작조차 안 된 것인지
+   * 도중에 끊긴 것인지 구분하지 못한다.
+   *
+   * **두 채널을 한 테스트에서 보는 것이 요점이다.** 티켓 03이 백업 변이 쪽에만 이 계약을
+   * 세웠고 전이 명령 쪽은 그대로 두어, 같은 문 둘이 다른 약속을 하고 있었다(릴리스 r1이 그
+   * 비대칭을 잡았다). 한쪽만 단언하면 그 비대칭이 다시 벌어져도 green이다.
+   */
+  const rejectingRuntime = (message: string) => {
+    (globalThis as unknown as { browser: unknown }).browser = {
+      runtime: { sendMessage: async () => { throw new Error(message); } },
+    };
+  };
+
+  it('전이 명령 — 왕복이 던져도 `{ok:false, error}`로 정착한다', async () => {
+    rejectingRuntime('Could not establish connection.');
+    const result = await sendCommand({ type: 'toggle-pause' });
+    expect(result.ok).toBe(false);
+    expect(result).toMatchObject({ error: expect.stringContaining('Could not establish connection') });
+  });
+
+  it('백업 변이 — 같은 약속을 한다', async () => {
+    rejectingRuntime('Could not establish connection.');
+    const result = await requestBackupMutation({ op: 'clear-cloud' });
+    expect(result.ok).toBe(false);
+    expect(result).toMatchObject({ error: expect.stringContaining('Could not establish connection') });
+  });
+
+  it('던진 것이 Error가 아니어도 문자열로 담아 돌려준다', async () => {
+    (globalThis as unknown as { browser: unknown }).browser = {
+      runtime: { sendMessage: async () => { throw 'raw string rejection'; } },
+    };
+    expect(await sendCommand({ type: 'toggle-pause' })).toMatchObject({
+      ok: false,
+      error: 'raw string rejection',
+    });
   });
 });
