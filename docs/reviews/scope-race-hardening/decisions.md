@@ -274,3 +274,27 @@ R-1 이월: 아래 `#### 이월 (release r1 R-1)`.
 가능한 방향 둘: (a) 동시 초기화를 합치기(coalescing) — 충돌 자체를 없앤다, (b) "깨끗한 스냅샷
 의무"를 단조롭게 들고 다니다 상태가 default임이 확인되는 시점에 이행. 게이트의 권고는 (b)에 가깝고
 회귀 테스트(성공 하나 + 겹친 실패 하나 → 타이머 발화 → default 스냅샷 정확히 하나)를 함께 요구했다.
+
+### release r2 (codex)
+
+발견 0건. `ok:true` · **`verdict: approve`** · reviewedSha `39eb897` · headMoved·planDrift false ·
+target `branch diff against main` (132 파일) · effort xhigh · triageMode human.
+
+r1의 R-2 픽스가 resolved로 확인됐고, 그 픽스가 만든 새 critical/high는 없다.
+트리아지할 행이 없으므로 결정도 없다.
+
+#### 게이트 종결 (release)
+
+**릴리스 게이트 통과 — waiver가 아니라 `approve`다.** 이 슬러그의 세 게이트 중 유일하게
+사람 면제 없이 닫혔다.
+
+| 게이트 | 라운드 | 결과 |
+|---|---|---|
+| plan | r2 | `ok:true` / needs-attention → 통과 **(waiver)** |
+| structure | r2 | `ok:true` / needs-attention → 통과 **(waiver)** |
+| release | r2 | `ok:true` / **approve** → 통과 |
+
+이 릴리스 게이트는 Stage 0 결정에 따라 `main`..HEAD 전체(131 커밋)를 보았으므로 **사실상
+`wide-ui-redesign`의 릴리스 라운드 4를 겸한다.** 그 슬러그가 2026-07-28에 정지된 사유였던
+critical 셋은 이 슬러그의 티켓 01·02·03·05가 닫았고, 라운드 4에 해당하는 이 검토가 approve로
+끝났다.
