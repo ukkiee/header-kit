@@ -1,9 +1,10 @@
 import { applyCommand, type Command } from '@/core/commands';
 import { performFullReset, type ResetResult } from '@/core/reset';
 import type { StoredState } from '@/core/schema';
-import type { FullResetEffects, StateWriter } from '@/core/state-writer';
+import type { AutoBackupPolicy, StateWriter } from '@/core/state-writer';
 import { createWriterLane, type WritePermit } from '@/core/writer-lane';
-import { commitMigration, loadState, persistState } from './stateStore';
+import { readBackupKV, removeBackupKeys } from './backupStore';
+import { clearSummary, commitMigration, loadState, persistState } from './stateStore';
 
 /**
  * 영속 저장소를 고치는 **유일한 문** — Writer Lane을 소유하고, 쓰기 허가가 이 파일 밖으로
@@ -74,11 +75,17 @@ export function createStateWriter(deps: StateWriterDeps): StateWriter {
       return lane.run((permit) => commitMigration(permit));
     },
 
-    fullReset(effects: FullResetEffects): Promise<{ result: ResetResult; state?: StoredState }> {
+    fullReset(policy: AutoBackupPolicy): Promise<{ result: ResetResult; state?: StoredState }> {
       return lane.run(async (permit) => {
         const applied: { state?: StoredState } = {};
         const result = await performFullReset({
-          ...effects,
+          // 저장소를 만지는 효과는 **여기서 직수입한 것**만 쓴다. 호출부가 건네주게 두면 그
+          // 콜백이 레인 작업 안에서 백업 read-modify-write를 fan-out할 수 있다 (r2 R-2).
+          readBackupKV,
+          removeBackupKeys,
+          clearSummary,
+          // 예약 정책 둘만 호출부의 것이다 (D8).
+          ...policy,
           // 안에서 상태 쓰기를 다시 하지만 레인을 **다시 잡지 않는다** — 받은 허가를 그대로
           // 쓴다. 여기서 잡으면 자기 자신을 기다려 교착한다 (ADR 0016).
           resetState: async () => {

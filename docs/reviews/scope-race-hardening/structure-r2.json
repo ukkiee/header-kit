@@ -1,0 +1,51 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "structure",
+  "ack": "human-triage",
+  "triageMode": "human",
+  "verdict": "needs-attention",
+  "summary": "Do not ship. R-1 remains partly open: permit escape/liveness is fixed, but independent Writer Lanes remain mintable without tripping the gate. The replacement also exposes persistent reset writers through a public callback boundary.",
+  "planFile": "docs/reviews/scope-race-hardening/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 126,
+  "target": "branch diff against main",
+  "reviewedSha": "f4e7b7e19e590fdb1bbbb928583523e1207c03df",
+  "reviewedTree": "7c2d349d33df33214caabe95a7329808164ec172",
+  "reviewedPlanSha256": "79fad5c2f7080d58e75087078be47110f7ba2427a32ad4cc4d52752d6ab018a4",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "codexStatus": 0,
+  "parseError": null,
+  "findingCount": 2,
+  "planFindingCount": 0,
+  "triage": "review-gate SKILL.md rules govern: render EVERY finding as a full table row, the human decides each row (accept/reject/defer/question — free text), echo back before applying, max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "R-1 still open: the gate counts files, not Writer Lane instances",
+      "body": "The bearer-token escape is fixed, but independent minting is not. The gate counts files containing `createWriterLane(` rather than call expressions or `createStateWriter` constructions. Because `createStateWriter` is an exported factory that creates a new lane on every call, two service-worker constructions—or two lane calls in the same permitted file—still produce `factoryCallers.length === 1`. The bundle check also passes because both markers remain worker-reachable. The resulting independent tails let later Backup increments overlap state/reset work and restore the lost-update class R-1 identified.",
+      "file": "scripts/writer-lane-gate.mjs",
+      "line_start": 60,
+      "line_end": 65,
+      "confidence": 0.99,
+      "recommendation": "Enforce exactly one production `createStateWriter` construction and exactly one `createWriterLane` call expression, not one containing file. Add mutations for a second construction and a second same-file lane call and require both to fail the gate.",
+      "isPlanFinding": false
+    },
+    {
+      "severity": "high",
+      "title": "`fullReset` reopens a caller-supplied persistent-write boundary inside the lane",
+      "body": "The new public door accepts `FullResetEffects`, which retains storage operations such as `removeBackupKeys`; the implementation spreads those caller-provided effects into `performFullReset` while holding the lane. This recreates the injected-dependency seam the fix says must disappear: a callback can fan out Backup read-modify-writes within one lane job, which the lane does not serialize internally. Ticket 02 must either preserve this bypass or break the load-bearing interface after callers and tests build on it.",
+      "file": "src/core/state-writer.ts",
+      "line_start": 31,
+      "line_end": 35,
+      "confidence": 0.97,
+      "recommendation": "Have `platform/state-writer.ts` directly import and own all storage adapters used by reset. Restrict the public reset argument to non-storage scheduling policy, such as suspend/resume callbacks, and test reset concurrency through the public StateWriter seam.",
+      "isPlanFinding": false
+    }
+  ],
+  "next_steps": [
+    "Close the remaining independent-lane path and rerun the structure gate.",
+    "Remove persistent storage callbacks from `StateWriter.fullReset` before beginning ticket 02."
+  ]
+}

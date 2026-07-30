@@ -29,8 +29,14 @@ const OUT_DIR = '.output/chrome-mv3';
 const SRC_DIR = 'src';
 /** `src/core/writer-lane.ts`의 표지와 **같은 문자열**이어야 한다. */
 const MARKER = 'writer-lane:service-worker-only';
-/** 레인을 만드는 함수 — 소스에서 부르는 자리가 하나여야 한다(테스트 제외). */
-const FACTORY = 'createWriterLane(';
+/**
+ * 레인을 낳는 함수들 — 소스에서 **부르는 자리**가 각각 하나여야 한다(테스트 제외).
+ *
+ * 둘을 함께 세는 이유 (structure 게이트 r2 R-1): `createStateWriter`는 부를 때마다 레인을 새로
+ * 만드는 팩토리다. 레인 팩토리만 세면 문을 두 번 구성해 레인 둘을 만드는 길이 열려 있고, 그러면
+ * 서로를 전혀 막지 않는 꼬리 둘이 생겨 lost update가 되살아난다.
+ */
+const LANE_FACTORIES = ['createWriterLane', 'createStateWriter'];
 
 const fail = (message) => {
   console.error(`FAIL: ${message}`);
@@ -57,17 +63,35 @@ const stripComments = (source) =>
 
 if (!existsSync(SRC_DIR)) fail(`${SRC_DIR}를 찾을 수 없습니다.`);
 const sourceFiles = walk(SRC_DIR).filter((f) => /\.tsx?$/.test(f) && !/\.(test|stories)\.tsx?$/.test(f));
-const factoryCallers = sourceFiles.filter((f) => {
-  const code = stripComments(readFileSync(f, 'utf8'));
-  // 선언 자체(`export function createWriterLane(`)는 호출이 아니다.
-  return code.includes(FACTORY) && !code.includes(`export function ${FACTORY}`);
-});
-if (factoryCallers.length !== 1) {
+
+/**
+ * 이 심볼을 **부르는 자리의 수**를 센다 — 담고 있는 **파일 수**가 아니다 (structure r2 R-1).
+ * 파일을 세면 한 파일 안에서 두 번 부르는 것이 통과한다. 선언(`function name(`)은 호출이 아니다.
+ */
+function countCalls(symbol) {
+  const call = new RegExp(String.raw`\b${symbol}\s*\(`, 'g');
+  const declaration = new RegExp(String.raw`\bfunction\s+${symbol}\s*\(`, 'g');
+  let total = 0;
+  const perFile = [];
+  for (const file of sourceFiles) {
+    const code = stripComments(readFileSync(file, 'utf8'));
+    const calls = (code.match(call) ?? []).length - (code.match(declaration) ?? []).length;
+    if (calls > 0) {
+      total += calls;
+      perFile.push(`${file}×${calls}`);
+    }
+  }
+  return { total, perFile };
+}
+
+const laneSites = LANE_FACTORIES.map((symbol) => ({ symbol, ...countCalls(symbol) }));
+for (const { symbol, total, perFile } of laneSites) {
+  if (total === 1) continue;
   fail(
-    `레인을 만드는 자리가 ${factoryCallers.length}개입니다 (${factoryCallers.join(', ') || '없음'}). ` +
-      `레인은 쓰기 서비스 하나가 소유해야 합니다 — 두 번째 레인은 첫 번째를 전혀 막지 않으면서 ` +
-      `안전해 보입니다(ADR 0016). 저장소를 고쳐야 한다면 \`platform/state-writer.ts\`의 매소드를 ` +
-      `부르거나, 그 문에 매소드를 더하세요.`,
+    `\`${symbol}\`를 부르는 자리가 ${total}개입니다 (${perFile.join(', ') || '없음'}). ` +
+      `레인은 쓰기 문 하나가 소유해야 하고, 그 문도 한 번만 구성되어야 합니다 — 두 번째 레인은 ` +
+      `첫 번째를 전혀 막지 않으면서 안전해 보입니다(ADR 0016). 저장소를 고쳐야 한다면 ` +
+      `\`platform/state-writer.ts\`의 \`StateWriter\` 매소드를 부르거나 그 문에 매소드를 더하세요.`,
   );
 }
 
@@ -159,7 +183,8 @@ const leaked = outsideWorker.filter((f) => readFileSync(join(OUT_DIR, f), 'utf8'
 const inWorker = [...workerReachable].some((f) => readFileSync(join(OUT_DIR, f), 'utf8').includes(MARKER));
 
 console.log(
-  `writer-lane gate: 레인 생성 1곳 (${factoryCallers[0]}) · 허가 노출 ${permitMentions.length}파일(전부 허용) · ` +
+  `writer-lane gate: ${laneSites.map((s) => `${s.symbol} ${s.total}회`).join(' · ')} · ` +
+    `허가 노출 ${permitMentions.length}파일(전부 허용) · ` +
     `산출물 ${allEmitted.length}개 중 워커 밖 ${outsideWorker.length}개 검사 — ` +
     `${leaked.length === 0 && inWorker ? 'PASS' : 'FAIL'}`,
 );

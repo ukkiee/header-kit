@@ -15,7 +15,6 @@ import {
   publishSummary,
   readState,
 } from '@/platform/stateStore';
-import { readBackupKV, removeBackupKeys } from '@/platform/backupStore';
 import { createStateWriter } from '@/platform/state-writer';
 import { bootstrap, type BackgroundDeps } from './background-bootstrap';
 
@@ -249,9 +248,6 @@ async function runOnce(scenario: Scenario, prefix: readonly number[]): Promise<S
     // 쓰기 문도 **진짜**다 — 레인·허가·직렬화가 프로덕션과 같은 코드로 돈다.
     stateWriter: createStateWriter({ validateCommand: async () => null }),
     publishSummary,
-    clearSummary,
-    readBackupKV,
-    removeBackupKeys,
     // ── 저장소 밖 효과 — 이 티켓의 불변식과 무관하다 ──
     queryTabInfos: async () => [],
     performBackup: async () => undefined,

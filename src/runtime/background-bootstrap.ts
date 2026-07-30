@@ -1,5 +1,5 @@
 import { computeBadge, drawsBadge, type BadgeSpec } from '@/core/badge';
-import { backupPayload, backupTarget, type BackupTarget, type SyncKV } from '@/core/backup';
+import { backupPayload, backupTarget, type BackupTarget } from '@/core/backup';
 import type { Command } from '@/core/commands';
 import type { MessageKey } from '@/core/i18n';
 import type { ResetStep } from '@/core/reset';
@@ -57,9 +57,6 @@ export interface BackgroundDeps {
   queryTabInfos(): Promise<TabInfo[]>;
   /** 대상 저장소는 상태의 sync 스위치가 정한다 — 어댑터는 받은 곳에 쓴다 (티켓 07). */
   performBackup(payload: string, profileCount: number, target: BackupTarget): Promise<unknown>;
-  /** 백업 네임스페이스(`bk:`)만 읽는다 — 전체 초기화가 같은 구역의 권위 상태를 넘보지 않게. */
-  readBackupKV(target: BackupTarget): Promise<SyncKV>;
-  removeBackupKeys(target: BackupTarget, keys: string[]): Promise<void>;
   /**
    * 스냅샷 한 행을 지운다 (release R2-3) — 결과는 잔여 개수를 든 객체로 돌아온다.
    *
@@ -72,8 +69,6 @@ export interface BackgroundDeps {
   onSnapshotDeleteRequest(
     handler: (snapshotId: string, target: BackupTarget) => Promise<unknown>,
   ): void;
-  /** 세션 요약을 지운다 (전체 초기화) — 다음 재조정이 새 요약을 발행한다. */
-  clearSummary(): Promise<void>;
   replaceSessionRules(rules: NetRule[]): Promise<void>;
   /**
    * 계산된 배지를 툴바에 반영한다 — 어댑터는 그대로 그리기만 한다.
@@ -322,9 +317,6 @@ export function bootstrap(deps: BackgroundDeps): void {
         // 깊이만 풀고, 다음 상태 변경이 정상적으로 다시 예약하게 둔다(삭제와 다른 점).
         resumeBackupWrites({ reschedule: snapshot });
       },
-      readBackupKV: deps.readBackupKV,
-      removeBackupKeys: deps.removeBackupKeys,
-      clearSummary: deps.clearSummary,
     });
     // 실패는 삼키지 않는다 — 어디서 멈췄는지 그대로 올려 보내 사용자가 다시 누를 수 있게 한다.
     if (!result.ok) {

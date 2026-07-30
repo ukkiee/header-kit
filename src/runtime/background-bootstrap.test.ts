@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyCommand, type Command } from '@/core/commands';
 import { createDefaultState, type StoredState } from '@/core/schema';
-import { performFullReset } from '@/core/reset';
+import { performFullReset, type ResetEffects } from '@/core/reset';
 import type { StateWriter } from '@/core/state-writer';
 import { bootstrap, type BackgroundDeps } from './background-bootstrap';
 
@@ -13,14 +13,32 @@ import { bootstrap, type BackgroundDeps } from './background-bootstrap';
  * **상태 쓰기 한 걸음**뿐이다. 레인 직렬화·허가 계약은 S3
  * (`service-worker.integration.test.ts`)가 진짜 어댑터 위에서 본다.
  */
-function fakeWriter(overrides: Partial<StateWriter> = {}): StateWriter {
+type ResetStorage = Pick<ResetEffects, 'readBackupKV' | 'removeBackupKeys' | 'clearSummary'>;
+
+/**
+ * 초기화가 만지는 저장소 효과는 이제 **쓰기 문이 소유한다** (structure r2 R-2) — 호출부가
+ * 인자로 건네주면 그 콜백이 레인 작업 안에서 돌아 백업 쓰기를 fan-out할 수 있기 때문이다.
+ * 그래서 대역도 부트스트랩 deps가 아니라 여기서 받는다.
+ */
+const noopResetStorage: ResetStorage = {
+  readBackupKV: async () => ({}),
+  removeBackupKeys: async () => {},
+  clearSummary: async () => {},
+};
+
+function fakeWriter(
+  overrides: Partial<StateWriter> = {},
+  storage: Partial<ResetStorage> = {},
+): StateWriter {
+  const effects = { ...noopResetStorage, ...storage };
   return {
     execute: async () => createDefaultState(),
     commitMigration: async () => false,
-    fullReset: async (effects) => {
+    fullReset: async (policy) => {
       const applied: { state?: StoredState } = {};
       const result = await performFullReset({
         ...effects,
+        ...policy,
         resetState: async () => {
           applied.state = createDefaultState();
         },
@@ -32,14 +50,18 @@ function fakeWriter(overrides: Partial<StateWriter> = {}): StateWriter {
 }
 
 /** 상태 리셋 단계에서 멈추는 초기화 — 삭제는 이미 끝난 뒤다(멱등이라 되돌리지 않는다). */
-const failingReset: StateWriter['fullReset'] = async (effects) => ({
-  result: await performFullReset({
-    ...effects,
-    resetState: async () => {
-      throw new Error('storage write failed');
-    },
-  }),
-});
+const failingReset =
+  (storage: Partial<ResetStorage> = {}): StateWriter['fullReset'] =>
+  async (policy) => ({
+    result: await performFullReset({
+      ...noopResetStorage,
+      ...storage,
+      ...policy,
+      resetState: async () => {
+        throw new Error('storage write failed');
+      },
+    }),
+  });
 
 /** 모든 효과·리스너를 no-op으로 채운 기본 deps — 테스트가 필요한 것만 덮어쓴다. */
 function fakeDeps(overrides: Partial<BackgroundDeps> = {}): BackgroundDeps {
@@ -50,11 +72,8 @@ function fakeDeps(overrides: Partial<BackgroundDeps> = {}): BackgroundDeps {
     publishSummary: async () => {},
     queryTabInfos: async () => [],
     performBackup: async () => undefined,
-    readBackupKV: async () => ({}),
-    removeBackupKeys: async () => {},
     deleteBackupSnapshot: async () => ({ ok: true }),
     onSnapshotDeleteRequest: () => {},
-    clearSummary: async () => {},
     replaceSessionRules: async () => {},
     applyBadge: async () => {},
     scheduleExpiryAlarm: async () => {},
@@ -282,16 +301,21 @@ describe('background bootstrap', () => {
         onCommand: (h) => {
           handler = h;
         },
-        readBackupKV: async (target) => ({ ...areas[target] }),
-        removeBackupKeys: async (target, keys) => {
-          // 디바운스된 자동 백업이 하필 삭제 도중에 내려앉는다 — 중단이 없으면 여기서 되살아난다.
-          for (const fire of timers.splice(0)) fire();
-          await flush();
-          for (const key of keys) delete areas[target]![key];
-        },
-        clearSummary: async () => {
-          summaryCleared = true;
-        },
+        stateWriter: fakeWriter(
+          {},
+          {
+            readBackupKV: async (target) => ({ ...areas[target] }),
+            removeBackupKeys: async (target, keys) => {
+              // 디바운스된 자동 백업이 하필 삭제 도중에 내려앉는다 — 중단이 없으면 되살아난다.
+              for (const fire of timers.splice(0)) fire();
+              await flush();
+              for (const key of keys) delete areas[target]![key];
+            },
+            clearSummary: async () => {
+              summaryCleared = true;
+            },
+          },
+        ),
         performBackup: async () => {
           backups += 1;
           if (resetting) backupsWhileResetting += 1;
@@ -349,10 +373,15 @@ describe('background bootstrap', () => {
           backedUp.push(payload);
           areas.sync!['bk:late:0'] = payload;
         },
-        readBackupKV: async (target) => ({ ...areas[target] }),
-        removeBackupKeys: async (target, keys) => {
-          for (const key of keys) delete areas[target]![key];
-        },
+        stateWriter: fakeWriter(
+          {},
+          {
+            readBackupKV: async (target) => ({ ...areas[target] }),
+            removeBackupKeys: async (target, keys) => {
+              for (const key of keys) delete areas[target]![key];
+            },
+          },
+        ),
         onCommand: (h) => {
           handler = h;
         },
@@ -401,11 +430,14 @@ describe('background bootstrap', () => {
         loadState: async () => populated,
         readState: async () => ({ status: 'ok', state: populated }),
         // 상태 리셋만 실패한다 — 삭제는 이미 끝난 뒤다(멱등이라 되돌리지 않는다).
-        stateWriter: fakeWriter({ fullReset: failingReset }),
-        readBackupKV: async (target) => ({ ...areas[target] }),
-        removeBackupKeys: async (target, keys) => {
-          for (const key of keys) delete areas[target]![key];
-        },
+        stateWriter: fakeWriter({
+          fullReset: failingReset({
+            readBackupKV: async (target) => ({ ...areas[target] }),
+            removeBackupKeys: async (target, keys) => {
+              for (const key of keys) delete areas[target]![key];
+            },
+          }),
+        }),
         performBackup: async (payload) => {
           backups += 1;
           areas.sync!['bk:late:0'] = payload;
@@ -644,12 +676,15 @@ describe('background bootstrap', () => {
           await deleteGate;
           return { ok: true };
         },
-        readBackupKV: async () => {
-          await resetGate;
-          return {};
-        },
         // 상태 리셋에서 실패한다 — 초기화의 재개는 `snapshot: false`로 풀린다.
-        stateWriter: fakeWriter({ fullReset: failingReset }),
+        stateWriter: fakeWriter({
+          fullReset: failingReset({
+            readBackupKV: async () => {
+              await resetGate;
+              return {};
+            },
+          }),
+        }),
         onSnapshotDeleteRequest: (h) => void (deleteHandler = h),
         onCommand: (h) => void (handler = h),
         setTimer: (cb) => void timers.push(cb),

@@ -3,15 +3,9 @@ import type { Command } from '@/core/commands';
 import { nextExpiry } from '@/core/expiry';
 import type { NetRule } from '@/core/rules';
 import type { StoredState } from '@/core/schema';
-import {
-  deleteBackupSnapshot,
-  performBackup,
-  readBackupKV,
-  removeBackupKeys,
-} from '@/platform/backupStore';
+import { deleteBackupSnapshot, performBackup } from '@/platform/backupStore';
 import { createStateWriter } from '@/platform/state-writer';
 import {
-  clearSummary,
   loadState,
   readState,
   onCommand,
@@ -106,10 +100,7 @@ export default defineBackground(() => {
     publishSummary,
     queryTabInfos,
     performBackup,
-    readBackupKV,
-    removeBackupKeys,
     deleteBackupSnapshot,
-    clearSummary,
     replaceSessionRules,
     applyBadge,
     scheduleExpiryAlarm,

@@ -174,3 +174,60 @@ r1의 accept를 적용한 뒤 그 픽스를 스스로 공격했다(렌즈 8개, 
 이 라운드에서 배운 규칙을 게이트로 고정했다: **허가를 이름 부를 수 있는 파일을 못 박는다.**
 허가가 모듈 경계를 넘는 순간 그 자리가 fan-out 자리가 되기 때문이다. dep 시그니처에 허가를
 되살리는 변이로 이 검사가 실제로 red가 되는 것을 확인했다.
+
+### structure r2
+
+아티팩트: `docs/reviews/scope-race-hardening/structure-r2.json`
+(`ok:true` / `verdict: needs-attention` / findings 2 / `reviewedSha` `f4e7b7e` /
+`headMovedDuringReview: false` / `planDriftDuringReview: false` / `ack: human-triage` /
+`triageMode: human`)
+
+R-1 accept — R-1 still open: the gate counts files, not Writer Lane instances
+R-2 accept — `fullReset` reopens a caller-supplied persistent-write boundary inside the lane
+
+#### 트리아지 전 사실 확인
+
+**R-1은 변이로 직접 반증했다.** 두 모양이 모두 게이트를 **통과**했다:
+`platform/state-writer.ts` 안에서 `createWriterLane()`을 두 번 부르기 → PASS,
+`createStateWriter(...)`를 두 번 구성하기(= 레인 둘) → PASS. 내 검사가 호출 수가 아니라
+`createWriterLane(`을 담은 **파일 수**를 셌고, `createStateWriter` 구성은 아예 세지 않았다.
+즉 r1의 "independently mintable"이 그대로 남아 있었다.
+
+**R-2도 사실이다.** `FullResetEffects`가 `readBackupKV`·`removeBackupKeys`·`clearSummary`를
+담고 있었고 구현이 레인을 쥔 채 그것들을 펼쳤다 — 호출부가 준 콜백이 레인 작업 안에서 도는,
+없애기로 한 바로 그 슬롯이다. 그 셋이 `fullReset` 밖에서 쓰이지 않는다는 것도 확인했다
+(`background-bootstrap.ts:325-327`이 전부).
+
+#### 사람 결정
+
+`as proposed` — 둘 다 accept.
+
+#### 적용 내역
+
+**R-1** — 게이트의 첫 검사가 **호출식 수**를 센다(파일 수가 아니다). 심볼 둘을 함께 센다:
+`createWriterLane`과 `createStateWriter`, 각각 정확히 1(선언은 제외). 실패 메시지가 파일별
+개수를 실어 어디가 둘인지 바로 보인다. 런타임 싱글턴으로 만들지 않은 이유: S3가 시나리오마다
+문을 새로 만들어(수백 회) 하드 싱글턴은 테스트를 깨뜨린다 — 이 성질은 게이트가 지킨다.
+변이 확인: 위 두 모양이 이제 **둘 다 red**다.
+
+**R-2** — `FullResetEffects`를 폐기하고 공개 인자를 예약 정책 둘로 좁혔다
+(`AutoBackupPolicy = Pick<ResetEffects, 'suspendAutoBackup' | 'resumeAutoBackup'>`).
+`platform/state-writer.ts`가 `readBackupKV`·`removeBackupKeys`(`./backupStore`)와
+`clearSummary`(`./stateStore`)를 직수입해 `ResetEffects`를 내부에서 완성한다. `BackgroundDeps`가
+그 셋을 잃었고 entrypoint 배선에서도 빠졌다. 새 층 엔지는 없다(셋 다 `platform/` 같은 디렉터리).
+경계가 D8이 이미 그어 둔 선("예약 정책은 레인이 대체하지 않는다")과 겹친다.
+
+**부수 발견**: 이 경계는 타입으로도 강제된다. 공개 인자를 저장소 효과까지 다시 넓히면
+구현의 스프레드 순서 때문에 `TS2783`("specified more than once, so this usage will be
+overwritten")이 세 줄 난다 — 넓히는 실수가 조용히 통과하지 않는다.
+
+**남는 한계를 적어 둔다**: `suspendAutoBackup`은 진행 중인 자동 Backup을 await하므로 그 백업의
+`bk:` 쓰기가 레인 작업 중에 착지할 수 있다. 이것은 fan-out이 아니라 순차 드레인이고, 호출부가
+임의의 저장소 조작을 **인자로 건네줄 수는 없게** 됐다 — R-2가 지적한 능력은 사라졌다. 남은
+부분(자동 Backup을 레인에 넣기)은 티켓 02 소관이며, 이 변경이 그 자리를
+`platform/state-writer.ts` 안으로 미리 옮겨 두어 나중에 공개 인터페이스를 깨지 않게 한다.
+
+**테스트 재배치**: 부트스트랩 테스트의 문 대역이 초기화의 저장소 효과를 넘겨받았다
+(`fakeWriter(overrides, storage)` · `failingReset(storage)`). 그 테스트들이 보는 것은 백업
+중단·드레인·재예약 순서이므로 대역이 그 저장소 절반을 흉내내는 것이 맞고, 순서 자체는 여전히
+진짜 `core/reset`이 돌린다.

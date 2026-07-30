@@ -24,12 +24,19 @@ export interface StateWriter {
   /**
    * 전체 초기화 — 백업 정리와 상태 리셋이 **한 획득 안에서 순차로** 돈다.
    *
-   * 순서·검증은 `core/reset`이 정한다. 상태 리셋만 구현이 채우고 나머지 효과는 호출부가
-   * 넘긴다(백업 네임스페이스·세션 요약은 권위 상태가 아니다). 실패는 삼키지 않고 `ResetResult`로
-   * 올려 보낸다 — 화면 문구 매핑은 호출부의 몫이다.
+   * 순서·검증은 `core/reset`이 정하고, 저장소를 만지는 효과는 **전부 구현이 소유한다.**
+   * 호출부가 넘기는 것은 예약 정책 둘뿐이다 — 저장소 조작을 인자로 받으면 그 콜백이 레인 작업
+   * 안에서 돌아 백업 read-modify-write를 fan-out할 수 있고, 그것이 없애기로 한 바로 그 슬롯이다
+   * (structure 게이트 r2 R-2). 실패는 삼키지 않고 `ResetResult`로 올려 보낸다 — 화면 문구
+   * 매핑은 호출부의 몫이다.
    */
-  fullReset(effects: FullResetEffects): Promise<{ result: ResetResult; state?: StoredState }>;
+  fullReset(policy: AutoBackupPolicy): Promise<{ result: ResetResult; state?: StoredState }>;
 }
 
-/** 전체 초기화에서 **상태 밖**을 맡는 효과들 — 상태 리셋은 쓰기 문이 채운다. */
-export type FullResetEffects = Omit<ResetEffects, 'resetState'>;
+/**
+ * 전체 초기화가 건드리는 **예약 정책**만 (D8: 예약 정책은 레인이 대체하지 않는다).
+ *
+ * 취소할 수 없는 타이머의 무효화와 "끝까지 간 초기화만 곧바로 다시 예약한다"는 판단은 성격이
+ * 달라 컴포지션 루트에 남는다. 저장소를 만지는 효과는 여기 없다 — 그것이 R-2의 요점이다.
+ */
+export type AutoBackupPolicy = Pick<ResetEffects, 'suspendAutoBackup' | 'resumeAutoBackup'>;
