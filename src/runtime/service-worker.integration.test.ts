@@ -6,6 +6,7 @@ import {
   readManifest,
   type BackupTarget,
   type ManifestEntry,
+  type SnapshotStatus,
 } from '@/core/backup';
 import type { Command } from '@/core/commands';
 import type { BackupMutation, BackupMutationResult } from '@/core/state-writer';
@@ -23,6 +24,7 @@ import {
   persistState,
   publishSummary,
 } from '@/platform/stateStore';
+import { listBackupSnapshots } from '@/platform/backupStore';
 import { createStateWriter } from '@/platform/state-writer';
 import { bootstrap, type BackgroundDeps } from './background-bootstrap';
 
@@ -132,6 +134,18 @@ function installStorageFake(
     return out;
   };
 
+  /**
+   * `browser.storage.onChanged` 구독자들. 티켓 04의 읽기 펜스가 매니페스트 변경을 기다리므로
+   * fake가 실제로 이벤트를 내야 한다 — no-op으로 두면 펜스가 늘 유계 시간까지 기다린다.
+   */
+  const changeListeners: ((changes: Kv, area: string) => void)[] = [];
+  const emitChange = (name: string, keys: string[]): void => {
+    if (keys.length === 0) return;
+    const changes: Kv = {};
+    for (const key of keys) changes[key] = {};
+    for (const listener of [...changeListeners]) listener(changes, name);
+  };
+
   const area = (kv: Kv, name: 'local' | 'sync', parked: boolean) => ({
     get: async (query?: unknown): Promise<Kv> => {
       if (parked) await scheduler.park(`${name}.get`);
@@ -155,10 +169,14 @@ function installStorageFake(
         if (stale !== null && stale !== undefined) violations.push(stale);
       }
       Object.assign(kv, structuredClone(items));
+      emitChange(name, Object.keys(items));
     },
     remove: async (query: string | string[]): Promise<void> => {
       if (parked) await scheduler.park(`${name}.remove`);
-      for (const key of typeof query === 'string' ? [query] : query) delete kv[key];
+      const keys = typeof query === 'string' ? [query] : query;
+      const removed = keys.filter((key) => key in kv);
+      for (const key of keys) delete kv[key];
+      emitChange(name, removed);
     },
   });
 
@@ -175,7 +193,15 @@ function installStorageFake(
           for (const key of typeof query === 'string' ? [query] : query) delete session[key];
         },
       },
-      onChanged: { addListener: () => {} },
+      onChanged: {
+        addListener: (listener: (changes: Kv, area: string) => void) => {
+          changeListeners.push(listener);
+        },
+        removeListener: (listener: (changes: Kv, area: string) => void) => {
+          const at = changeListeners.indexOf(listener);
+          if (at >= 0) changeListeners.splice(at, 1);
+        },
+      },
     },
   };
 
@@ -340,17 +366,24 @@ async function runOnce(scenario: Scenario, prefix: readonly number[]): Promise<S
     );
   }
 
-  for (let guard = 0; guard <= 500; guard += 1) {
+  /*
+   * 정착은 **보류 중인 저장소 작업이 없고 시작한 조작이 전부 끝났을 때**다.
+   *
+   * 앞의 조건만 보면 안 된다 (티켓 04): 읽기 펜스는 저장소를 만지지 않고 타이머를 기다리므로,
+   * 그 사이 보류 목록이 비어 루프가 일찍 빠져나가고 펜스가 시간 초과 뒤에 내는 재읽기를 아무도
+   * 풀어 주지 않는다 — 멀쩡한 구현이 교착으로 보고된다.
+   */
+  for (let guard = 0; ; guard += 1) {
     await settle();
-    if (scheduler.parked.length === 0) break;
-    scheduler.step();
-    if (guard === 500) throw new Error('스케줄러가 수렴하지 않았다');
-  }
-
-  // 보류 중인 저장소 작업이 없는데 아직 끝나지 않은 조작이 있으면 그것은 교착이다.
-  await settle();
-  if (pending.size > 0) {
-    throw new Error(`교착: 저장소가 조용한데 끝나지 않은 조작이 남았다 — ${[...pending]}`);
+    if (scheduler.parked.length === 0 && pending.size === 0) break;
+    if (scheduler.parked.length > 0) scheduler.step();
+    if (guard >= 1_000) {
+      throw new Error(
+        scheduler.parked.length > 0
+          ? '스케줄러가 수렴하지 않았다'
+          : `교착: 저장소가 조용한데 끝나지 않은 조작이 남았다 — ${[...pending]}`,
+      );
+    }
   }
 
   const outcomes: Record<string, PromiseSettledResult<unknown>> = {};
@@ -1091,6 +1124,87 @@ describe('S3 — 서비스워커 통합 시임', () => {
       },
     });
     expect(orderings).toBeGreaterThan(1);
+  });
+
+  /*
+   * ── 티켓 04: 축출 중 읽기 펜스 (D7) ───────────────────────────────────────
+   *
+   * 백업 계획의 **사전 정리**는 링에서 밀려나는 항목의 청크를 지우고, 그 청크들은 아직 커밋된
+   * 옛 매니페스트가 열거하고 있다. 사전 정리는 매니페스트 교체보다 **먼저** 일어나므로 그 사이에
+   * 읽으면 목록에는 있고 데이터는 없는 항목을 보게 되어 멀쩡한 Backup이 '손상됨'으로 그려진다.
+   *
+   * `MAX_SNAPSHOTS`(5)만큼 깔아 두면 다음 백업이 가장 오래된 것을 링에서 밀어내므로 `preRemoves`가
+   * 실제로 생긴다 — 창을 흉내내지 않고 프로덕션 계획이 만들게 한다.
+   *
+   * 펜스가 **유계** 시간을 넉넉히 잡아도 이 시나리오는 결정론적이다: 탐색기가 보류 중인 저장소
+   * 작업을 모두 풀어 주므로 매니페스트 커밋은 어떤 순서에서도 결국 착지하고, 그때 변경 이벤트가
+   * 온다. 커밋이 영영 오지 않는 순서는 아래 별 시나리오가 본다.
+   */
+  const FENCE_WAIT_MS = 5_000;
+
+  it('축출 중에 히스토리를 읽어도 멀쩡한 Backup이 손상으로 보이지 않는다', async () => {
+    const orderings = await forEachInterleaving({
+      seed: () => ({ [STATE_KEY]: twoProfiles() }), // syncBackup 기본값 true → 백업은 sync로
+      seedSync: () => seededBackups(['c1', 'c2', 'c3', 'c4', 'c5']), // 링이 꽉 찼다
+      start: (harness) => {
+        harness.stateChanged();
+        harness.fireBackupTimers(); // 축출을 일으키는 백업
+        return { listing: listBackupSnapshots('sync', FENCE_WAIT_MS) };
+      },
+      check: (outcomes, harness) => {
+        const listing = outcomes.listing as PromiseFulfilledResult<SnapshotStatus[]>;
+        expect(listing.status).toBe('fulfilled');
+        // 어떤 순서에서도 손상으로 그려지는 항목이 없다. 단순 재시도는 사전 정리 뒤 커밋 앞
+        // 창에 **두 읽기가 모두** 드는 순서에서 여기서 깨진다.
+        expect(listing.value.filter((entry) => entry.status === 'corrupt')).toEqual([]);
+        /*
+         * **축출이 정말 일어났는지 못 박는다.** 이것이 없으면 링을 덜 채워 창이 아예 열리지
+         * 않게 만들어도 위 단언이 그대로 통과한다 — 검증하려던 분기에 도달조차 못 하는 그 모양이다.
+         *
+         * 단언 대상은 **끝 상태**다. 읽기가 쓰기보다 먼저 이기는 순서에서는 목록이 축출 전
+         * 다섯을 그대로 보여 주는 것이 정답이므로, 목록에 축출을 요구하면 그 순서가 거짓
+         * 실패가 된다. 창이 열렸는지는 저장소가 답한다.
+         */
+        const settled = snapshotIds(harness.sync);
+        expect(settled).toHaveLength(5); // 새 스냅샷 + 살아남은 넷 (MAX_SNAPSHOTS)
+        expect(settled).not.toContain('c5'); // 가장 오래된 것이 링에서 밀려났다
+        expect(settled).toContain('c1'); // 직전 정상본은 남는다
+        // 그리고 저장소는 정합하다 — 목록에 남은 항목은 전부 데이터가 있다.
+        expect(manifestBacked(harness.sync)).toEqual([]);
+      },
+    });
+    expect(orderings).toBeGreaterThan(1);
+  });
+
+  /*
+   * 사전 정리 뒤 워커가 종료돼 **커밋이 영영 오지 않는** 순서 (티켓 04 수용 기준).
+   *
+   * 그 시점의 저장소는 정말로 불일치이므로 유계 시간 뒤 손상 판정이 사실상 옳다 — 다음 백업
+   * 계획의 self-healing이 그 항목을 치운다. **이 케이스가 없으면 펜스를 무한 대기로 구현해도
+   * 통과한다.** 그래서 쓰기를 아예 세우지 않고, 불일치한 저장소를 그대로 둔 채 읽는다.
+   */
+  it('커밋이 오지 않으면 유계 시간 뒤 손상으로 판정한다 — 무한히 기다리지 않는다', async () => {
+    const orderings = await forEachInterleaving({
+      seed: () => ({ [STATE_KEY]: twoProfiles() }),
+      // 매니페스트는 c1·c2를 열거하는데 c1의 청크가 없다 — 중단된 축출이 남긴 모양.
+      seedSync: () => {
+        const kv = seededBackups(['c1', 'c2']);
+        delete kv[chunkKey('c1', 0)];
+        return kv;
+      },
+      start: () => ({ listing: listBackupSnapshots('sync', 1) }),
+      check: (outcomes) => {
+        const listing = outcomes.listing as PromiseFulfilledResult<SnapshotStatus[]>;
+        expect(listing.status).toBe('fulfilled');
+        // 진짜로 유실된 것은 그대로 손상이고, 사유가 함께 온다.
+        const corrupt = listing.value.filter((entry) => entry.status === 'corrupt');
+        expect(corrupt.map((entry) => entry.id)).toEqual(['c1']);
+        expect(corrupt[0]?.reason).toBeDefined();
+        // 멀쩡한 것은 손상으로 번지지 않는다.
+        expect(listing.value.find((entry) => entry.id === 'c2')?.status).toBe('ok');
+      },
+    });
+    expect(orderings).toBeGreaterThan(0);
   });
 
   /*

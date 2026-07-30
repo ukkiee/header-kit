@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { BACKUP_MANIFEST_KEY, chunkKey, checksum, type ManifestEntry } from '@/core/backup';
 import { createWriterLane } from '@/core/writer-lane';
-import { clearCloudBackups, deleteBackupSnapshot } from '@/platform/backupStore';
+import { clearCloudBackups, deleteBackupSnapshot, listBackupSnapshots } from '@/platform/backupStore';
 
 /**
  * 클라우드 삭제는 순수 함수가 아니라 **remove → 재조회 → 검증** 경로다. core 단위 테스트
@@ -12,11 +12,19 @@ import { clearCloudBackups, deleteBackupSnapshot } from '@/platform/backupStore'
 
 type KV = Record<string, unknown>;
 
-/** 백업 키와 **권위 상태가 함께 사는** 저장소 구역을 흉내 낸다. */
+/**
+ * 백업 키와 **권위 상태가 함께 사는** 저장소 구역을 흉내 낸다.
+ *
+ * `onChanged` 구독자를 세어 둔다 (티켓 04) — 읽기 펜스가 읽기 한 번마다 구독을 열었다 닫으므로,
+ * 남기지 않는지를 그 수로 관측한다.
+ */
+const fakeListeners: unknown[] = [];
+
 function installFakeStorage(seed: KV, removeImpl?: (keys: string[], kv: KV) => void): KV {
-  const kv: KV = { ...seed };
+  const kv: KV = structuredClone(seed);
+  fakeListeners.length = 0;
   const area = {
-    get: async () => ({ ...kv }),
+    get: async () => structuredClone(kv),
     set: async (items: KV) => {
       Object.assign(kv, items);
     },
@@ -26,7 +34,17 @@ function installFakeStorage(seed: KV, removeImpl?: (keys: string[], kv: KV) => v
     },
   };
   (globalThis as unknown as { browser: unknown }).browser = {
-    storage: { sync: area, local: area },
+    storage: {
+      sync: area,
+      local: area,
+      onChanged: {
+        addListener: (listener: unknown) => fakeListeners.push(listener),
+        removeListener: (listener: unknown) => {
+          const at = fakeListeners.indexOf(listener);
+          if (at >= 0) fakeListeners.splice(at, 1);
+        },
+      },
+    },
   };
   return kv;
 }
@@ -187,5 +205,132 @@ describe('스냅샷 삭제 — 검증 실패 보고 (어댑터)', () => {
       ok: false,
       error: 'QUOTA_BYTES quota exceeded',
     });
+  });
+});
+
+/**
+ * 축출 중 읽기 펜스 (티켓 04) — 근거는 `listBackupSnapshots`의 주석이 정본이다. 여기서 보는
+ * 것은 그 펜스가 **리스너를 남기지 않는가**와, 구독을 첫 읽기보다 먼저 여는가다.
+ */
+describe('축출 중 읽기 펜스 — 구독 정리 (어댑터)', () => {
+  it('유계 시간으로 끝나도 구독을 남기지 않는다', async () => {
+    // 매니페스트는 열거하는데 청크가 없다 — 펜스가 열리고, 변경은 오지 않는다.
+    installFakeStorage({ [BACKUP_MANIFEST_KEY]: { snapshots: [entry('c1', 'text')] } });
+
+    for (let i = 0; i < 3; i += 1) {
+      const listed = await listBackupSnapshots('sync', 1);
+      expect(listed.map((snapshot) => snapshot.status)).toEqual(['corrupt']);
+    }
+
+    expect(fakeListeners).toHaveLength(0);
+  });
+
+  /*
+   * 구독은 **첫 읽기보다 먼저** 열려야 한다 (티켓 04 코드리뷰).
+   *
+   * 읽은 뒤에 열면 그 사이에 착지한 커밋의 이벤트를 놓친다. 쓰기는 서비스워커에 있고 읽기는
+   * 화면에 있으므로 그 틈은 프로세스 간 지연이다 — 여기서는 `get`이 값을 집어 준 직후에 커밋이
+   * 착지하는 것으로 그 틈을 만든다.
+   *
+   * 늦게 여는 구현은 이벤트를 놓쳐 유계 시간을 태우고 **손상**을 보고한다. 먼저 여는 구현은
+   * 그 이벤트를 잡아 다시 읽고 **정합한** 목록을 보인다 — 값으로 구분된다.
+   */
+  it('첫 읽기와 구독 사이에 착지한 커밋도 놓치지 않는다', async () => {
+    const kv: KV = {
+      // 축출 중 모양: 매니페스트는 c1을 열거하는데 그 청크가 이미 지워졌다.
+      [BACKUP_MANIFEST_KEY]: { snapshots: [entry('c1', 'text-c1'), entry('c2', 'text-c2')] },
+      [chunkKey('c2', 0)]: 'text-c2',
+    };
+    const listeners: ((changes: KV, area: string) => void)[] = [];
+    let committed = false;
+    (globalThis as unknown as { browser: unknown }).browser = {
+      storage: {
+        sync: {
+          get: async () => {
+            const snapshot = structuredClone(kv);
+            if (!committed) {
+              committed = true;
+              // 값을 집어 준 **직후** 커밋이 착지한다 — 축출이 끝나 c1이 목록에서 빠진다.
+              queueMicrotask(() => {
+                kv[BACKUP_MANIFEST_KEY] = { snapshots: [entry('c2', 'text-c2')] };
+                for (const listener of [...listeners]) {
+                  listener({ [BACKUP_MANIFEST_KEY]: {} }, 'sync');
+                }
+              });
+            }
+            return snapshot;
+          },
+          set: async () => {},
+          remove: async () => {},
+        },
+        onChanged: {
+          addListener: (listener: (changes: KV, area: string) => void) => listeners.push(listener),
+          removeListener: (listener: unknown) => {
+            const at = listeners.indexOf(listener as never);
+            if (at >= 0) listeners.splice(at, 1);
+          },
+        },
+      },
+    };
+
+    const listed = await listBackupSnapshots('sync', 50);
+
+    // 새 매니페스트로 다시 판정했다 — 손상으로 보고하지 않는다.
+    expect(listed.map((snapshot) => snapshot.id)).toEqual(['c2']);
+    expect(listed.every((snapshot) => snapshot.status === 'ok')).toBe(true);
+    expect(listeners).toHaveLength(0); // 이 시나리오는 자기 fake를 쓴다 — 구독이 닫혔다
+  });
+
+  /*
+   * **기본 유계 시간**(`MANIFEST_FENCE_MS`)으로 부르는 경로도 지난다 (티켓 04 코드리뷰).
+   *
+   * 나머지 테스트는 짧은 값을 넘겨 결정론을 얻는데, 그러면 배포되는 상수가 어느 테스트도 지나지
+   * 않는다. 여기서는 변경이 **즉시** 오게 해 기다림 없이 그 경로를 태운다 — 상수의 길이에
+   * 의존하지 않으면서 기본값 호출이 성립하는지를 본다.
+   */
+  it('기본 유계 시간으로 불러도 변경이 오면 곧바로 다시 판정한다', async () => {
+    const kv: KV = {
+      [BACKUP_MANIFEST_KEY]: { snapshots: [entry('c1', 'text-c1'), entry('c2', 'text-c2')] },
+      [chunkKey('c2', 0)]: 'text-c2',
+    };
+    const listeners: ((changes: KV, area: string) => void)[] = [];
+    (globalThis as unknown as { browser: unknown }).browser = {
+      storage: {
+        sync: {
+          get: async () => structuredClone(kv),
+          set: async () => {},
+          remove: async () => {},
+        },
+        onChanged: {
+          addListener: (listener: (changes: KV, area: string) => void) => {
+            listeners.push(listener);
+            // 구독이 열리는 순간 축출이 끝난다 — 펜스가 기다리지 않고 다시 읽는다.
+            kv[BACKUP_MANIFEST_KEY] = { snapshots: [entry('c2', 'text-c2')] };
+            listener({ [BACKUP_MANIFEST_KEY]: {} }, 'sync');
+          },
+          removeListener: (listener: unknown) => {
+            const at = listeners.indexOf(listener as never);
+            if (at >= 0) listeners.splice(at, 1);
+          },
+        },
+      },
+    };
+
+    // 두 번째 인자를 넘기지 않는다 — 배포되는 기본값을 그대로 쓴다.
+    const listed = await listBackupSnapshots('sync');
+
+    expect(listed.map((snapshot) => snapshot.id)).toEqual(['c2']);
+    expect(listed.every((snapshot) => snapshot.status === 'ok')).toBe(true);
+    expect(listeners).toHaveLength(0);
+  });
+
+  it('정합한 목록에서는 구독을 아예 열지 않는다 — 펜스는 불일치에만 붙는다', async () => {
+    installFakeStorage({
+      [BACKUP_MANIFEST_KEY]: { snapshots: [entry('c1', 'text-c1')] },
+      [chunkKey('c1', 0)]: 'text-c1',
+    });
+
+    expect((await listBackupSnapshots('sync', 1)).map((snapshot) => snapshot.status)).toEqual(['ok']);
+    expect(fakeListeners).toHaveLength(0);
   });
 });
