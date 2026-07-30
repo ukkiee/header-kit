@@ -103,3 +103,33 @@ deferred(6): rule-form 59.9KB · sortable-profile-list 44.4KB · motion 36.4KB �
   (130/131), N43은 통과**. 겨눈 시나리오만 정확히 빨개졌다.
 - 티켓 05: 스킴 구분자·종결 문자·리터럴 독법 세 가드를 각각 걷어내는 변이 넷이 각각 4·3·4·3건을
   red로 만들었다.
+
+## 갱신 — 릴리스 게이트 r1 이후
+
+r1의 R-2를 accept·적용하면서 코드가 바뀌었으므로 다시 돌리고 다시 적는다. 위 절의 `22d52dc`
+기록은 그 시점의 사실로 남겨 둔다.
+
+| | |
+|---|---|
+| 검증한 커밋 | `54fab3f9e1e8cb84fa93fb91165a08cf5be64db1` |
+| 트리 객체 | `0a403aaa54ddffd25becd1a1ffcf1640ddf82ff3` |
+| 워킹 트리 | clean |
+
+`22d52dc` 이후의 **코드** 델타는 둘뿐이다 — `src/platform/stateStore.ts`와
+`src/platform/stateStore.test.ts`(릴리스 r1 R-2). 나머지 변경은 문서다
+(`decisions.md` · `release-r1.json` · 이 파일). 아래 결과는 그 코드 내용 그대로에서 측정했다.
+
+| 명령 | 결과 |
+|---|---|
+| `bun run check` | **통과** |
+| `bun run test` | **435/435 통과** (432 → +3: 전송 거부 계약) |
+| `bun run build` | **통과** |
+| `bun run smoke` | **131/131 통과** |
+| `bun run writer-lane-gate` | **PASS** |
+| `bun run bundle-gate` | **PASS** — 531.8KB = 386KB + 145.8KB, 여유 44.2KB |
+
+R-2 픽스는 **변이로 red를 확인**했다: `sendCommand`의 `catch`를 걷어내면 명령 채널 두 건만
+red가 되고 형제 백업 채널 테스트는 green으로 남는다 — 두 채널이 독립적으로 단언된다는 뜻이다.
+
+r1의 R-1은 **defer**로 이월했다. 근거와 다시 열 때의 결정 지점은 `decisions.md`의
+`#### 이월 (release r1 R-1)`에 있다.
