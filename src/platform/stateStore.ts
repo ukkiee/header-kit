@@ -162,7 +162,8 @@ const DELETE_SNAPSHOT_MESSAGE = 'headerkit:delete-snapshot';
  * 렌더러가 직접 지우지 않는 이유는 `bk:manifest`의 writer를 하나로 세우기 위해서다.
  * 자동 Backup은 서비스워커에 살고 삭제는 팝업·탭 렌더러에 살았다 — 서로 다른 JS
  * 컨텍스트라 인프로세스 락으로는 원리적으로 못 맞춘다(`browser.storage`에 CAS가 없다).
- * 삭제를 서비스워커로 옮기면 그쪽이 자동 Backup을 중단·드레인한 뒤 지울 수 있다.
+ * 삭제를 서비스워커로 옮기면 둘이 같은 Writer Lane 작업이 되어 겹칠 수 없다 (티켓 02).
+ * 티켓 02 이전에는 삭제가 자동 Backup을 중단·드레인한 뒤 지웠는데, 레인이 그 둘을 흡수했다.
  *
  * 전이 명령(`sendCommand`)과 채널을 가르는 이유: 삭제는 권위 상태를 바꾸지 않고
  * 결과가 `CommandResult`가 아니라 잔여 개수를 든 `DeleteSnapshotResult`다.

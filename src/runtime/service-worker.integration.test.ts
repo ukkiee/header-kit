@@ -1,4 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import {
+  BACKUP_MANIFEST_KEY,
+  chunkKey,
+  checksum,
+  readManifest,
+  type BackupTarget,
+  type ManifestEntry,
+} from '@/core/backup';
 import type { Command } from '@/core/commands';
 import {
   createDefaultState,
@@ -13,7 +21,6 @@ import {
   loadState,
   persistState,
   publishSummary,
-  readState,
 } from '@/platform/stateStore';
 import { createStateWriter } from '@/platform/state-writer';
 import { bootstrap, type BackgroundDeps } from './background-bootstrap';
@@ -109,7 +116,7 @@ function installStorageFake(
   scheduler: Scheduler,
   violations: Violations,
   options: FakeOptions,
-): { local: Kv; stateWrites: () => number } {
+): { local: Kv; sync: Kv; stateWrites: () => number } {
   const local: Kv = structuredClone(seed);
   const sync: Kv = {};
   const session: Kv = {};
@@ -171,7 +178,7 @@ function installStorageFake(
     },
   };
 
-  return { local, stateWrites: () => stateWrites };
+  return { local, sync, stateWrites: () => stateWrites };
 }
 
 // ── 시험대 ──────────────────────────────────────────────────────────────────
@@ -186,8 +193,14 @@ interface Harness {
   expiryAlarm(): void;
   /** 저장소 변경 — 재조정을 촉발한다(재조정 중 발견된 지난 만료가 여기서 나온다). */
   stateChanged(): void;
-  /** 저장소의 현재 내용 (local 구역) */
+  /** 자동 Backup 디바운스 타이머를 터뜨린다 — 걸려 있는 것 전부. */
+  fireBackupTimers(): void;
+  /** 렌더러의 스냅샷 삭제 요청 (`onSnapshotDeleteRequest`). */
+  deleteSnapshot(snapshotId: string, target: BackupTarget): Promise<unknown>;
+  /** 저장소의 현재 내용 (local 구역 — 권위 상태와 `bk:`가 함께 산다) */
   local: Kv;
+  /** 클라우드(sync) 구역 — 초기화가 `syncBackup`을 기본값으로 되돌리면 그 뒤 백업이 여기로 간다. */
+  sync: Kv;
   /** `state` 키에 착지한 쓰기 횟수 — "아무것도 쓰지 않았다"는 횟수로만 관측된다. */
   stateWrites: () => number;
   /** `logError`로 올라온 맥락 문자열 */
@@ -211,6 +224,11 @@ interface Scenario {
   start: (harness: Harness) => Record<string, Promise<unknown>>;
   /** 한 순서가 끝난 뒤의 관측 가능한 결과 */
   check: (outcomes: Record<string, PromiseSettledResult<unknown>>, harness: Harness) => void;
+  /**
+   * `check`가 새로 시작한 작업(예: 재예약된 백업 타이머)까지 정착시킨 뒤 보는 결과.
+   * `check`에서 촉발한 것이 저장소를 더 만질 때 필요하다.
+   */
+  after?: (harness: Harness) => void;
   /** 불변식 (a) — 이 쓰기가 직전 저장값의 편집을 지우는가. 지우면 문자열을 돌려준다. */
   onStateWrite?: FakeOptions['onStateWrite'];
   /** 읽기와 쓰기 사이에 저장소가 바깥에서 바뀌는 순서를 세운다. */
@@ -227,7 +245,7 @@ const MAX_ORDERINGS = 400;
 async function runOnce(scenario: Scenario, prefix: readonly number[]): Promise<Scheduler> {
   const scheduler = new Scheduler(prefix);
   const violations: Violations = [];
-  const { local, stateWrites } = installStorageFake(scenario.seed(), scheduler, violations, {
+  const { local, sync, stateWrites } = installStorageFake(scenario.seed(), scheduler, violations, {
     onStateWrite: scenario.onStateWrite,
     afterStateRead: scenario.afterStateRead,
   });
@@ -238,27 +256,33 @@ async function runOnce(scenario: Scenario, prefix: readonly number[]): Promise<S
   let togglePause = (): void => {};
   let expiryAlarm = (): void => {};
   let stateChanged = (): void => {};
+  const backupTimers: (() => void)[] = [];
+  let deleteRequest: (id: string, target: BackupTarget) => Promise<unknown> = async () => {
+    throw new Error('onSnapshotDeleteRequest 핸들러가 등록되지 않았다');
+  };
   let early: Promise<StoredState> | undefined;
   const errors: string[] = [];
 
   bootstrap({
     // ── 진짜 저장소 어댑터 (S3의 본령) ──
     loadState,
-    readState,
     // 쓰기 문도 **진짜**다 — 레인·허가·직렬화가 프로덕션과 같은 코드로 돈다.
     stateWriter: createStateWriter({ validateCommand: async () => null }),
     publishSummary,
     // ── 저장소 밖 효과 — 이 티켓의 불변식과 무관하다 ──
     queryTabInfos: async () => [],
-    performBackup: async () => undefined,
-    deleteBackupSnapshot: async () => ({ ok: true }),
-    onSnapshotDeleteRequest: () => {},
+    onSnapshotDeleteRequest: (handler) => {
+      deleteRequest = handler;
+    },
     replaceSessionRules: async () => {},
     applyBadge: async () => {},
     scheduleExpiryAlarm: async () => {},
     now: () => scenario.now ?? 1000,
-    // 백업 타이머는 걸리기만 하고 발화하지 않는다 — 자동 Backup은 티켓 02가 레인에 넣는다.
-    setTimer: () => {},
+    // 백업 타이머는 시나리오가 터뜨릴 때만 발화한다 — 예약 정책은 부트스트랩의 몫이므로
+    // 그 발화 시점을 시나리오가 정해야 겹침을 세울 수 있다.
+    setTimer: (callback) => {
+      backupTimers.push(callback);
+    },
     // 리스너 등록은 프로덕션에서도 주입 dep다. 시나리오가 이 손잡이로 진입점을 두드린다.
     onCommand: (handler) => {
       command = handler;
@@ -286,7 +310,12 @@ async function runOnce(scenario: Scenario, prefix: readonly number[]): Promise<S
     togglePause: () => togglePause(),
     expiryAlarm: () => expiryAlarm(),
     stateChanged: () => stateChanged(),
+    fireBackupTimers: () => {
+      for (const fire of backupTimers.splice(0)) fire();
+    },
+    deleteSnapshot: (id, target) => deleteRequest(id, target),
     local,
+    sync,
     stateWrites,
     errors,
   };
@@ -326,6 +355,16 @@ async function runOnce(scenario: Scenario, prefix: readonly number[]): Promise<S
 
   expect(violations, `불변식 위반 (순서 ${scheduler.picks.join('·')})`).toEqual([]);
   scenario.check(outcomes, harness);
+  if (scenario.after !== undefined) {
+    // `check`가 촉발한 작업을 끝까지 돌린다 — 남은 저장소 작업을 순서대로 풀어 준다.
+    for (let guard = 0; guard <= 200; guard += 1) {
+      await settle();
+      if (scheduler.parked.length === 0) break;
+      scheduler.step();
+    }
+    expect(violations, `불변식 위반 (after, 순서 ${scheduler.picks.join('·')})`).toEqual([]);
+    scenario.after(harness);
+  }
   delete (globalThis as unknown as { browser?: unknown }).browser;
   return scheduler;
 }
@@ -461,6 +500,66 @@ function expiredRuleState(): StoredState {
       { id: 'p2', name: 'Two', active: false, shortLabel: '2', color: '#16a34a', modifications: [] },
     ],
   };
+}
+
+/**
+ * 유효한 매니페스트 항목 — **반환 타입을 명시한다** (티켓 02).
+ *
+ * 여기 있던 이유가 실측된 것이다: `backupStore.test.ts`의 옛 빌더는
+ * `{ id, at, profileCount, chunkCount, bytes }`를 만들어 `ManifestEntry`의 `createdAt`·
+ * `checksum`을 빠뜨렸고, 그래서 `readManifest`가 빈 목록을 돌려주어 **삭제가 매니페스트를
+ * 쓰는 분기가 한 번도 실행되지 않았다.** 반환 타입 하나가 그 상태를 타입 검사에서 막는다.
+ */
+function manifestEntry(id: string, text: string): ManifestEntry {
+  return { id, createdAt: 1, chunkCount: 1, checksum: checksum(text), profileCount: 1 };
+}
+
+/** 매니페스트 항목 셋과 그 청크가 든 백업 구역 시드. */
+function seededBackups(ids: string[]): Kv {
+  const kv: Kv = {
+    [BACKUP_MANIFEST_KEY]: { snapshots: ids.map((id) => manifestEntry(id, `text-${id}`)) },
+  };
+  for (const id of ids) kv[chunkKey(id, 0)] = `text-${id}`;
+  return kv;
+}
+
+/**
+ * 불변식 (b) — 매니페스트에 남은 항목은 전부 실제 데이터가 있다.
+ *
+ * **각 순서의 끝에서만** 본다. 백업 계획에는 공간 확보용 사전 정리가 있고 그 청크들은 매니페스트
+ * 교체보다 먼저 지워지므로, 커밋 앞 창에서는 일시적으로 불일치가 정상이다(D7). 그 창을 읽기
+ * 쪽에서 막는 것이 티켓 04의 펜스이고, 여기서는 **정착한 결과**만 판정한다.
+ */
+function manifestBacked(kv: Kv): string[] {
+  const missing: string[] = [];
+  for (const entry of readManifest(kv).snapshots) {
+    for (let i = 0; i < entry.chunkCount; i += 1) {
+      if (!(chunkKey(entry.id, i) in kv)) missing.push(chunkKey(entry.id, i));
+    }
+  }
+  return missing;
+}
+
+/**
+ * 매니페스트가 열거하지 않는 `bk:` 청크 — **역방향** 손실의 자취다.
+ *
+ * 매니페스트를 통째로 쓰는 동작이 그 사이 커밋된 항목을 지우면 그 청크만 남는다. 목록→데이터
+ * 방향(`manifestBacked`)만 보면 그 손실이 보이지 않는다: 목록에서 사라진 것은 짝을 확인할
+ * 대상이 아니기 때문이다.
+ */
+function orphanChunks(kv: Kv): string[] {
+  const listed = new Set<string>();
+  for (const entry of readManifest(kv).snapshots) {
+    for (let i = 0; i < entry.chunkCount; i += 1) listed.add(chunkKey(entry.id, i));
+  }
+  return Object.keys(kv)
+    .filter((key) => key.startsWith('bk:') && key !== BACKUP_MANIFEST_KEY && !listed.has(key))
+    .sort();
+}
+
+/** 매니페스트에 남은 스냅샷 id (정렬) — 목록에 무엇이 보이는가. */
+function snapshotIds(kv: Kv): string[] {
+  return readManifest(kv).snapshots.map((entry) => entry.id).sort();
 }
 
 /** 활성 Profile id 집합 — 편집이 살아남았는지를 값 하나로 본다. */
@@ -728,6 +827,206 @@ describe('S3 — 서비스워커 통합 시임', () => {
     expect(orderings).toBeGreaterThan(0);
   });
 
+/*
+   * ── 티켓 02: 백업 네임스페이스 (`bk:`) ─────────────────────────────────────
+   *
+   * `backupStore.test.ts`의 `스냅샷 삭제 ↔ 동시 자동 Backup (어댑터)` 두 건과
+   * `background-bootstrap.test.ts`의 `삭제는 진행 중인 자동 Backup을 드레인한 뒤에야
+   * 매니페스트를 읽는다` · `겹친 중단은 재진입 안전하다`가 여기로 옮겨 왔다. 행 단위 대응은
+   * 티켓 저널에 있다.
+   *
+   * 옛 자리들이 겨눈 것은 **기계**였다(드레인 await·중단 깊이 카운터). 레인이 그 둘을 흡수했고,
+   * 옛 픽스처는 `ManifestEntry`를 만족하지 않아 검증하려던 분기에 도달조차 못 했다. 여기서는
+   * 진짜 어댑터와 유효한 픽스처로 **결과**를 본다 — 그것도 모든 순서에서.
+   *
+   * 대상 저장소를 `local`로 둔다(`syncBackup: false`). `bk:`와 권위 상태가 같은 구역에 사는
+   * 쪽이 더 까다롭다 — 백업 정리가 `state`를 넘보면 여기서 드러난다.
+   */
+  const localBackupState = (): StoredState => ({ ...twoProfiles(), syncBackup: false });
+
+  it('겹쳐 도착한 두 삭제가 둘 다 완료되고 서로의 결과를 지우지 않는다', async () => {
+    const orderings = await forEachInterleaving({
+      seed: () => ({ [STATE_KEY]: localBackupState(), ...seededBackups(['s1', 's2', 's3']) }),
+      start: (harness) => ({
+        first: harness.deleteSnapshot('s1', 'local'),
+        second: harness.deleteSnapshot('s2', 'local'),
+      }),
+      check: (outcomes, harness) => {
+        expect(outcomes.first).toMatchObject({ status: 'fulfilled', value: { ok: true } });
+        expect(outcomes.second).toMatchObject({ status: 'fulfilled', value: { ok: true } });
+        // 지운 둘만 사라지고 세 번째는 목록에도, 데이터에도 남는다.
+        expect(snapshotIds(harness.local)).toEqual(['s3']);
+        expect(harness.local[chunkKey('s3', 0)]).toBe('text-s3');
+        expect(harness.local[chunkKey('s1', 0)]).toBeUndefined();
+        expect(harness.local[chunkKey('s2', 0)]).toBeUndefined();
+        // 불변식 (b) — 목록에 남은 항목은 전부 실제 데이터가 있다.
+        expect(manifestBacked(harness.local)).toEqual([]);
+        // 역방향 — 목록에 없는 청크도 남지 않는다.
+        expect(orphanChunks(harness.local)).toEqual([]);
+        // 권위 상태는 백업 정리에 휩쓸리지 않는다.
+        expect(activeIds(harness.local[STATE_KEY])).toEqual([]);
+      },
+    });
+    expect(orderings).toBeGreaterThan(1);
+  });
+
+  it('삭제와 자동 Backup이 겹쳐도 결과가 정합하다', async () => {
+    const orderings = await forEachInterleaving({
+      seed: () => ({ [STATE_KEY]: localBackupState(), ...seededBackups(['s1']) }),
+      start: (harness) => {
+        // 예약을 **실제로** 하나 걸어 둔다. 부트스트랩의 초기 예약은 마이그레이션 커밋이
+        // 정착한 뒤에야 걸리므로, `start`에서 그냥 터뜨리면 빈 목록을 터뜨려 아무것도
+        // 검증하지 않는다 (티켓 02 코드리뷰가 잡은 것).
+        harness.stateChanged();
+        harness.fireBackupTimers(); // 디바운스된 자동 Backup이 삭제와 겹친다
+        return { deleting: harness.deleteSnapshot('s1', 'local') };
+      },
+      check: (outcomes, harness) => {
+        // **정방향**: 삭제가 성공을 보고한다. `verifySnapshotDeleteComplete`가 그 사이 커밋된
+        // 스냅샷이 우리 쓰기에 지워진 것을 잡으면 `{ok:false, remaining}`이 온다.
+        expect(outcomes.deleting).toMatchObject({ status: 'fulfilled', value: { ok: true } });
+        // 지운 행은 어느 순서에서도 되살아나지 않는다.
+        expect(snapshotIds(harness.local)).not.toContain('s1');
+        expect(harness.local[chunkKey('s1', 0)]).toBeUndefined();
+        // 자동 Backup이 남긴 것이 있으면 그 데이터도 함께 있다.
+        expect(manifestBacked(harness.local)).toEqual([]);
+        // **역방향**: 목록에 없는 청크가 남지 않는다. 통째 교체가 그 사이 커밋된 항목을
+        // 지웠다면 그 청크만 고아로 남으므로, 이 단언이 그 손실을 잡는다.
+        expect(orphanChunks(harness.local)).toEqual([]);
+      },
+    });
+    expect(orderings).toBeGreaterThan(1);
+  });
+
+  /*
+   * 무효화된 예약은 초기화 **뒤에** 발화해도 쓰지 않는다 (D8, 티켓 02).
+   *
+   * 티켓 02가 백업 본문의 이중 중단 검사를 걷어냈으므로, 무효화가 요청 경계로 올라갔다.
+   * 여기서 세우는 순서가 바로 그 이유다: 초기화 요청이 레인에 선 **직후**(본문은 아직
+   * 시작하지 않았다) 타이머가 발화한다. 무효화가 본문 안에만 있으면 이 스냅샷이 초기화 뒤에
+   * 돌아, 실패 경로에서 옛 Profile을 되살린다.
+   */
+  it('초기화 요청 직후 발화한 예약은 백업을 되살리지 않는다', async () => {
+    const orderings = await forEachInterleaving({
+      seed: () => ({ [STATE_KEY]: localBackupState(), ...seededBackups(['s1', 's2']) }),
+      start: (harness) => {
+        // 예약을 하나 걸어 둔다. 부트스트랩의 초기 예약은 마이그레이션 커밋이 정착한 뒤에야
+        // 걸리므로, 여기서는 상태 변경으로 **동기적으로** 하나 만든다 — 그러지 않으면
+        // 아래 발화가 빈 목록을 터뜨려 아무것도 검증하지 않는다.
+        harness.stateChanged();
+        const resetting = harness.command({ type: 'full-reset' }); // 경계에서 무효화
+        harness.fireBackupTimers(); // 무효화된 예약 — 발화해도 쓰지 않아야 한다
+        return { resetting };
+      },
+      check: (outcomes, harness) => {
+        expect(outcomes.resetting?.status).toBe('fulfilled');
+        // 백업이 **두 구역 모두** 비워진 채로 남는다 — 무효화된 예약이 아무것도 쓰지 않았다.
+        // sync까지 보는 이유: 초기화는 `syncBackup`을 기본값(true)으로 되돌리므로, 그 뒤에 도는
+        // 스냅샷은 local이 아니라 sync로 간다. local만 보면 이 단언이 조용히 통과한다.
+        // (초기화 성공이 요구한 **새** 예약은 이 시나리오가 터뜨리지 않으므로, 남은 것이 있다면
+        // 그것은 무효화됐어야 할 옛 예약이 쓴 것이다.)
+        expect(Object.keys(harness.local).filter((key) => key.startsWith('bk:'))).toEqual([]);
+        expect(Object.keys(harness.sync).filter((key) => key.startsWith('bk:'))).toEqual([]);
+        // 권위 상태는 기본값으로 돌아갔고 옛 Profile은 없다.
+        const stored = harness.local[STATE_KEY] as StoredState;
+        expect(stored.profiles.map((profile) => profile.id)).not.toContain('p1');
+      },
+    });
+    expect(orderings).toBeGreaterThan(0);
+  });
+
+  /*
+   * 초기화가 끝까지 가면 곧바로 깨끗한 기본 상태의 스냅샷이 잡힌다 (티켓 02 수용 기준).
+   *
+   * 재예약만 확인하면 절반이다 — 예약이 실제로 발화했을 때 **무엇이** 스냅샷되는지가 이
+   * 계약의 요점이다. `snapshot()`이 payload를 스스로 만들므로 여기서 값으로 확인할 수 있다.
+   */
+  it('초기화가 끝까지 가면 곧바로 깨끗한 기본 상태의 스냅샷이 잡힌다', async () => {
+    const orderings = await forEachInterleaving({
+      seed: () => ({ [STATE_KEY]: localBackupState(), ...seededBackups(['s1']) }),
+      start: (harness) => ({ resetting: harness.command({ type: 'full-reset' }) }),
+      check: (outcomes, harness) => {
+        expect(outcomes.resetting?.status).toBe('fulfilled');
+        // 초기화가 요구한 재예약이 걸려 있다 — 그것을 터뜨린다.
+        harness.fireBackupTimers();
+      },
+      // 재예약된 스냅샷이 정착한 뒤의 결과를 본다.
+      after: (harness) => {
+        // 기본값은 `syncBackup: true`이므로 스냅샷은 클라우드 구역으로 간다.
+        expect(snapshotIds(harness.sync)).toHaveLength(1);
+        expect(manifestBacked(harness.sync)).toEqual([]);
+        // 옛 스냅샷은 되살아나지 않았다.
+        expect(Object.keys(harness.local).filter((key) => key.startsWith('bk:'))).toEqual([]);
+      },
+    });
+    expect(orderings).toBeGreaterThan(0);
+  });
+
+  /*
+   * 초기화 **도중에** 요청된 스냅샷도 그 뒤에 착지하지 않는다 (티켓 02 코드리뷰).
+   *
+   * 경계 무효화는 요청 **앞**에 걸린 예약만 막는다. 초기화가 레인에 선 뒤 걸린 예약은 새 세대를
+   * 들고 있어 그 검사를 통과하고, 발화하면 스냅샷이 초기화 **뒤**에 선다 — 초기화가
+   * reset-state에서 실패하면 상태가 아직 옛 Profile이라 방금 지운 백업이 되살아난다. 그래서
+   * 쓰기 문이 완료된 초기화 횟수를 세고, 요청 시점보다 값이 달라진 스냅샷은 쓰지 않는다.
+   */
+  it('초기화 도중에 요청된 스냅샷은 초기화 뒤에 쓰지 않는다', async () => {
+    const orderings = await forEachInterleaving({
+      seed: () => ({ [STATE_KEY]: localBackupState(), ...seededBackups(['s1']) }),
+      start: (harness) => {
+        const resetting = harness.command({ type: 'full-reset' }); // 경계에서 세대 무효화
+        harness.stateChanged(); // 초기화가 레인에 선 **뒤** 걸린 새 예약 (새 세대)
+        harness.fireBackupTimers(); // 세대 검사를 통과한다 — 문이 막아야 한다
+        return { resetting };
+      },
+      check: (outcomes, harness) => {
+        expect(outcomes.resetting?.status).toBe('fulfilled');
+        // 어느 구역에도 스냅샷이 남지 않는다. 초기화 성공이 요구한 **새** 예약은 이 시나리오가
+        // 터뜨리지 않으므로, 남은 것이 있다면 초기화 도중 요청된 그 스냅샷이 쓴 것이다.
+        expect(Object.keys(harness.local).filter((key) => key.startsWith('bk:'))).toEqual([]);
+        expect(Object.keys(harness.sync).filter((key) => key.startsWith('bk:'))).toEqual([]);
+      },
+    });
+    expect(orderings).toBeGreaterThan(0);
+  });
+
+  it('전체 초기화가 겹친 삭제와 다투지 않는다', async () => {
+    const orderings = await forEachInterleaving({
+      seed: () => ({ [STATE_KEY]: localBackupState(), ...seededBackups(['s1', 's2']) }),
+      start: (harness) => ({
+        resetting: harness.command({ type: 'full-reset' }),
+        deleting: harness.deleteSnapshot('s1', 'local'),
+      }),
+      check: (outcomes, harness) => {
+        expect(outcomes.resetting?.status).toBe('fulfilled');
+        expect(outcomes.deleting?.status).toBe('fulfilled');
+        // 어느 순서든 결과가 정의돼 있다: 백업은 비고, 남은 것이 있어도 데이터와 짝이 맞는다.
+        expect(manifestBacked(harness.local)).toEqual([]);
+        expect(manifestBacked(harness.sync)).toEqual([]);
+        expect(Object.keys(harness.local).filter((key) => key.startsWith('bk:'))).toEqual([]);
+      },
+    });
+    expect(orderings).toBeGreaterThan(1);
+  });
+
+  it('이미 지운 행을 다시 지워도 오류가 나지 않는다', async () => {
+    const orderings = await forEachInterleaving({
+      seed: () => ({ [STATE_KEY]: localBackupState(), ...seededBackups(['s1']) }),
+      start: (harness) => ({
+        first: harness.deleteSnapshot('s1', 'local'),
+        again: harness.deleteSnapshot('s1', 'local'),
+      }),
+      check: (outcomes, harness) => {
+        expect(outcomes.first).toMatchObject({ status: 'fulfilled', value: { ok: true } });
+        expect(outcomes.again).toMatchObject({ status: 'fulfilled', value: { ok: true } });
+        expect(snapshotIds(harness.local)).toEqual([]);
+        expect(manifestBacked(harness.local)).toEqual([]);
+        expect(orphanChunks(harness.local)).toEqual([]);
+      },
+    });
+    expect(orderings).toBeGreaterThan(1);
+  });
+
   /*
    * 불변식 (d)의 **쓰기측** 계약 (D5가 남긴 둘 중 하나).
    *
@@ -776,7 +1075,7 @@ describe('S3 — 서비스워커 통합 시임', () => {
  * 방어이고, 유효 기간은 그 방어가 뚫렸을 때 조용한 손상 대신 오류가 나게 하는 2차 방어다.
  */
 describe('쓰기 서비스가 저장소를 고치는 유일한 문이다', () => {
-  const seeded = (seed: StoredState): { local: Kv; stateWrites: () => number } =>
+  const seeded = (seed: StoredState): { local: Kv; sync: Kv; stateWrites: () => number } =>
     installStorageFake({ [STATE_KEY]: seed }, new ImmediateScheduler([]), [], {});
 
   const writerOn = (): ReturnType<typeof createStateWriter> =>

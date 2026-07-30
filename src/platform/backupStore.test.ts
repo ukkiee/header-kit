@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { BACKUP_MANIFEST_KEY } from '@/core/backup';
+import { BACKUP_MANIFEST_KEY, chunkKey, checksum, type ManifestEntry } from '@/core/backup';
+import { createWriterLane } from '@/core/writer-lane';
 import { clearCloudBackups, deleteBackupSnapshot } from '@/platform/backupStore';
 
 /**
@@ -76,95 +77,86 @@ describe('클라우드 백업 삭제 (어댑터)', () => {
   });
 });
 
-/**
- * 삭제의 매니페스트 **통째 교체**와 그 사이 착지한 커밋 (release R2-3).
+/*
+ * `스냅샷 삭제 ↔ 동시 자동 Backup (어댑터)` 두 건과 그 전용 지연 fake가 여기서 **S3로 옮겨
+ * 갔다** (티켓 02). 옮긴 단언의 행 단위 대응은 티켓 저널에 있다.
  *
- * `bk:manifest`에는 writer가 둘 있고 서로 다른 JS 컨텍스트에 산다 — 자동 Backup은
- * 서비스워커, 삭제는 (픽스 전) 렌더러. 삭제는 읽은 매니페스트에서 한 항목만 뺀 것을
- * 통째로 쓰므로, 읽기와 쓰기 사이에 커밋된 스냅샷은 그 쓰기에 조용히 사라진다. 사후
- * 검증이 **지운 id의 부재만** 보면 그 손실이 `{ok:true}`로 보고된다.
+ * 이동이 약화가 아닌 근거는 실측이다: 그 테스트의 픽스처
+ * `{ id, at, profileCount, chunkCount, bytes }`는 `ManifestEntry`가 요구하는 `createdAt`·
+ * `checksum`을 갖지 않는다. 그래서 `readManifest`가 **빈 목록**을 돌려주고
+ * `planSnapshotDelete(...).found === false`가 되어, **삭제가 매니페스트를 쓰는 분기가 한 번도
+ * 실행되지 않았다.** 두 테스트는 green이었지만 자기가 검증한다고 적은 분기에 도달하지
+ * 못했다 — 릴리스 r3의 R-3이 살아 있던 자리가 정확히 이것이다.
  *
- * 즉시 resolve하는 `installFakeStorage`로는 이 인터리빙을 표현할 수 없어 지연 변형을
- * 따로 세운다(기존 헬퍼는 그대로 둔다) — 어댑터 시임의 본령이다.
+ * S3는 진짜 어댑터와 유효한 픽스처로 같은 성질을 보고, 한 순서가 아니라 모든 순서를 본다.
+ * 그리고 경합 자체는 이제 레인이 닫는다 — 겹친 삭제가 성립하지 않는다.
+ *
+ * 아래 클라우드 삭제 테스트 셋은 남는다: 경합이 아니라 remove → 재조회 → 검증 경로를 본다.
  */
-function installDeferredStorage(seed: KV) {
-  const kv: KV = structuredClone(seed);
-  let holdNextGet = false;
-  let release = () => {};
-  const area = {
-    // 실제 storage.get도 나중에 착지한 쓰기를 소급해 보여주지 않는다 — 호출 시점의 값을 집는다.
-    get: async () => {
-      const snapshot = structuredClone(kv);
-      if (holdNextGet) {
-        holdNextGet = false;
-        await new Promise<void>((resolve) => void (release = resolve));
-      }
-      return snapshot;
-    },
-    set: async (items: KV) => {
-      Object.assign(kv, structuredClone(items));
-    },
-    remove: async (keys: string[]) => {
-      for (const key of keys) delete kv[key];
-    },
-  };
-  (globalThis as unknown as { browser: unknown }).browser = {
-    storage: { sync: area, local: area },
-  };
-  return {
-    kv,
-    holdNextGet: () => {
-      holdNextGet = true;
-    },
-    release: () => release(),
-  };
+
+/**
+ * 삭제의 **검증 실패 보고** (릴리스 r2 R2-3) — 경합이 아니라 remove → 재조회 → 검증 경로다.
+ *
+ * 경합 테스트 둘은 S3로 옮겨 갔지만(위 주석), 이 계약은 스펙이 원래 자리에 남긴다고 적은
+ * 것이다: "경합과 무관한 단위 테스트(삭제의 멱등성, **검증 실패 보고**, 덮어쓰기 거부)는
+ * 원래 자리에 남는다." 옮기면서 함께 사라져 `verifySnapshotDeleteComplete`가 저장소 전체에서
+ * 커버리지 0이 됐던 것을 되살린다(티켓 02 코드리뷰).
+ *
+ * 픽스처 빌더는 **반환 타입을 명시한다** — 옛 빌더가 `ManifestEntry`의 `createdAt`·`checksum`을
+ * 빠뜨려 매니페스트가 빈 목록으로 읽히고, 삭제가 매니페스트를 쓰는 분기가 한 번도 실행되지
+ * 않았던 것이 릴리스 r3의 R-3이다.
+ */
+function entry(id: string, text: string): ManifestEntry {
+  return { id, createdAt: 1, chunkCount: 1, checksum: checksum(text), profileCount: 1 };
 }
 
-const entry = (id: string) => ({ id, at: 1, profileCount: 1, chunkCount: 1, bytes: 4 });
+/** 삭제는 레인 안에서만 돈다 — 허가는 `lane.run` 밖에서 만들 수 없다 (ADR 0016). */
+const deleteInLane = (id: string, target: 'sync' | 'local') =>
+  createWriterLane().run((permit) => deleteBackupSnapshot(permit, id, target));
 
-describe('스냅샷 삭제 ↔ 동시 자동 Backup (어댑터)', () => {
-  it('읽기와 쓰기 사이에 커밋된 스냅샷이 사라지면 성공으로 접지 않는다', async () => {
-    const store = installDeferredStorage({
-      [BACKUP_MANIFEST_KEY]: { version: 1, snapshots: [entry('s1')] },
-      'bk:s1:0': 'chunk-s1',
-    });
+describe('스냅샷 삭제 — 검증 실패 보고 (어댑터)', () => {
+  it('remove가 청크를 남기면 성공으로 접지 않고 잔여를 보고한다', async () => {
+    // 매니페스트 커밋만 통하고 청크 정리가 통째로 실패하는 저장소.
+    installFakeStorage(
+      {
+        [BACKUP_MANIFEST_KEY]: { snapshots: [entry('s1', 'text-s1')] },
+        [chunkKey('s1', 0)]: 'text-s1',
+      },
+      () => {}, // remove가 아무것도 지우지 않는다
+    );
 
-    // 삭제의 계획용 읽기를 공중에 띄운다 — 매니페스트 [s1]을 이미 집었다.
-    store.holdNextGet();
-    const deleting = deleteBackupSnapshot('s1', 'sync');
-    await Promise.resolve();
+    const result = await deleteInLane('s1', 'sync');
 
-    // 그 사이 서비스워커의 자동 Backup이 새 스냅샷을 커밋한다.
-    store.kv[BACKUP_MANIFEST_KEY] = { version: 1, snapshots: [entry('s1'), entry('s2')] };
-    store.kv['bk:s2:0'] = 'chunk-s2';
-
-    store.release();
-    const result = await deleting;
-
-    // 지운 id는 사라졌다 — 부분 술어만 보면 여기서 성공으로 접힌다.
-    expect(store.kv['bk:s1:0']).toBeUndefined();
-    // 그러나 그 사이 커밋된 s2의 매니페스트 항목이 통째 교체에 지워졌고, 청크만 고아로 남았다.
-    expect(store.kv['bk:s2:0']).toBe('chunk-s2');
     expect(result.ok).toBe(false);
-    expect(result).toMatchObject({ remaining: 1 });
+    expect(result).toMatchObject({ remaining: expect.any(Number) });
   });
 
-  it('아무도 끼어들지 않으면 지연되어도 성공을 보고한다 — 넓힌 검증이 정상 삭제를 막지 않는다', async () => {
-    const store = installDeferredStorage({
-      [BACKUP_MANIFEST_KEY]: { version: 1, snapshots: [entry('s1'), entry('s2')] },
-      'bk:s1:0': 'chunk-s1',
-      'bk:s2:0': 'chunk-s2',
-      // 읽기 전부터 있던 고아 청크(손상 스냅샷의 잔해)는 실패 근거가 아니다.
+  it('읽기 전부터 있던 고아 청크는 실패 근거가 아니다 — 정상 삭제가 매번 실패로 보고되지 않게', async () => {
+    const kv = installFakeStorage({
+      [BACKUP_MANIFEST_KEY]: { snapshots: [entry('s1', 'text-s1'), entry('s2', 'text-s2')] },
+      [chunkKey('s1', 0)]: 'text-s1',
+      [chunkKey('s2', 0)]: 'text-s2',
+      // 손상 스냅샷의 잔해 — 매니페스트가 세지 않는 청크.
       'bk:ghost:0': 'orphan',
     });
 
-    store.holdNextGet();
-    const deleting = deleteBackupSnapshot('s1', 'sync');
-    await Promise.resolve();
-    store.release();
+    expect(await deleteInLane('s1', 'sync')).toEqual({ ok: true });
+    // 지운 것만 사라지고 나머지와 잔해는 그대로다.
+    expect(kv[chunkKey('s2', 0)]).toBe('text-s2');
+    expect(kv['bk:ghost:0']).toBe('orphan');
+  });
 
-    expect(await deleting).toEqual({ ok: true });
-    expect(store.kv['bk:s2:0']).toBe('chunk-s2');
-    expect(store.kv['bk:ghost:0']).toBe('orphan');
+  it('저장소가 던지면 사유와 함께 실패를 돌려준다 — 던지지 않는다', async () => {
+    installFakeStorage(
+      { [BACKUP_MANIFEST_KEY]: { snapshots: [entry('s1', 'text-s1')] } },
+      () => {
+        throw new Error('QUOTA_BYTES quota exceeded');
+      },
+    );
+
+    expect(await deleteInLane('s1', 'sync')).toEqual({
+      ok: false,
+      error: 'QUOTA_BYTES quota exceeded',
+    });
   });
 });

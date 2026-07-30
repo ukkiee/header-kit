@@ -13,6 +13,8 @@ import {
   type SnapshotStatus,
   type SyncKV,
 } from '@/core/backup';
+import type { DeleteSnapshotResult as CoreDeleteSnapshotResult } from '@/core/state-writer';
+import type { WritePermit } from '@/core/writer-lane';
 
 /**
  * 백업 저장소 어댑터 — 계획(core/backup)의 단계 순서만 집행한다:
@@ -43,31 +45,51 @@ export async function readSyncKV(): Promise<SyncKV> {
 /**
  * 지정한 키만 지운다 — 구역을 비우지 않는다. 무엇을 지울지는 호출부가 `backupKeys`로
  * 정하므로, local 구역의 권위 상태(`state`)가 삭제에 휩쓸릴 자리가 없다 (전체 초기화 R-3).
+ *
+ * Writer Lane의 쓰기 허가를 요구한다 (티켓 02). `bk:` 매니페스트는 통째로 교체되므로 겹친
+ * 두 쓰기가 서로의 결과를 지운다 — 그것이 릴리스 r3의 R-3이었고, 레인이 그 창을 닫는다.
  */
-export async function removeBackupKeys(target: BackupTarget, keys: string[]): Promise<void> {
+export async function removeBackupKeys(
+  permit: WritePermit,
+  target: BackupTarget,
+  keys: string[],
+): Promise<void> {
+  permit.assertLive();
   if (keys.length === 0) return;
   await area(target).remove(keys);
 }
 
-export async function applyBackupPlan(plan: BackupPlan, target: BackupTarget): Promise<void> {
+export async function applyBackupPlan(
+  permit: WritePermit,
+  plan: BackupPlan,
+  target: BackupTarget,
+): Promise<void> {
   if (plan.kind !== 'write') return;
 
+  permit.assertLive();
   const store = area(target);
   if (plan.preRemoves.length > 0) {
     await store.remove(plan.preRemoves);
   }
   await store.set(plan.chunkWrites);
+  // 커밋 직전에 한 번 더 본다 (ADR 0016: 진입 시점 + 쓰기 직전). 위 두 await 동안 이 작업이
+  // 끝났다면 이 커밋은 레인이 다음 작업으로 넘어간 뒤에 착지한다 — 매니페스트 커밋은 통째
+  // 교체라 그 착지가 그 사이 확정된 목록을 지운다.
+  permit.assertLive();
   await store.set({ [BACKUP_MANIFEST_KEY]: plan.manifest }); // 커밋
   if (plan.postRemoves.length > 0) {
     await store.remove(plan.postRemoves);
   }
 }
 
+/** 자동 Backup 한 번 — 레인 안에서만 돈다 (티켓 02). */
 export async function performBackup(
+  permit: WritePermit,
   text: string,
   profileCount: number,
   target: BackupTarget,
 ): Promise<BackupPlan['kind']> {
+  permit.assertLive();
   const kv = await readBackupKV(target);
   const plan = planBackup(
     kv,
@@ -76,7 +98,7 @@ export async function performBackup(
     { id: () => crypto.randomUUID(), now: () => Date.now() },
     backupLimits(target),
   );
-  await applyBackupPlan(plan, target);
+  await applyBackupPlan(permit, plan, target);
   return plan.kind;
 }
 
@@ -111,25 +133,32 @@ export type ClearCloudResult =
  * 먼저 지우면 매니페스트에 살아 있는 항목의 청크가 사라져, 지웠다는 행이 '손상됨'으로
  * 되살아난다.
  */
-export type DeleteSnapshotResult = ClearCloudResult;
+/**
+ * 삭제 결과의 이름은 `core/state-writer`에 있다 — 화면이 그리는 값이므로 계약 층에 사는 것이
+ * 맞고, 두 곳에 같은 모양을 따로 적어 두면 곧 어긋난다 (티켓 02 코드리뷰).
+ */
+export type { DeleteSnapshotResult } from '@/core/state-writer';
 
 export async function deleteBackupSnapshot(
+  permit: WritePermit,
   snapshotId: string,
   target: BackupTarget,
-): Promise<DeleteSnapshotResult> {
+): Promise<CoreDeleteSnapshotResult> {
   try {
+    permit.assertLive();
     const before = await readBackupKV(target);
     const plan = planSnapshotDelete(before, snapshotId);
     // 매니페스트에 없으면 커밋할 것이 없다 — 이미 지운 행을 다시 지워도 무해하다(멱등).
     // 잔여 청크는 그 경우에도 정리한다.
     if (plan.found) {
+      permit.assertLive();
       await area(target).set({ [BACKUP_MANIFEST_KEY]: plan.manifest });
     }
-    await removeBackupKeys(target, plan.removeKeys);
+    await removeBackupKeys(permit, target, plan.removeKeys);
     // 검증은 **읽은 시점의 KV와 함께** 본다 (release R2-3) — 매니페스트를 통째로 쓰는
     // 동작을 "지운 id가 없다"는 부분 술어로만 검사하면, 그 사이 커밋된 스냅샷이 우리
-    // 쓰기에 지워진 것을 성공으로 접는다. 경합 자체는 이 호출을 서비스워커 한 곳으로
-    // 세워 닫고(배선은 runtime/background-bootstrap), 이 검증은 마지막 그물이다.
+    // 쓰기에 지워진 것을 성공으로 접는다. 경합 자체는 이제 레인이 닫고(허가를 요구하므로
+    // 겹친 삭제가 성립하지 않는다), 이 검증은 마지막 그물이다.
     const verified = verifySnapshotDeleteComplete(before, await readBackupKV(target), snapshotId);
     return verified.ok ? { ok: true } : { ok: false, remaining: verified.remaining.length };
   } catch (error) {

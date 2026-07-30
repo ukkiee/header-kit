@@ -1,14 +1,14 @@
 import { computeBadge, drawsBadge, type BadgeSpec } from '@/core/badge';
-import { backupPayload, backupTarget, type BackupTarget } from '@/core/backup';
+import type { BackupTarget } from '@/core/backup';
 import type { Command } from '@/core/commands';
 import type { MessageKey } from '@/core/i18n';
 import type { ResetStep } from '@/core/reset';
 import { compile, type TabInfo } from '@/core/compile';
 import { hasExpiredRules } from '@/core/expiry';
 import type { NetRule } from '@/core/rules';
-import type { StoredState, StoredStateRead } from '@/core/schema';
+import type { StoredState } from '@/core/schema';
 import { summarizeCompile, type StatusSummary } from '@/core/summary';
-import type { StateWriter } from '@/core/state-writer';
+import type { DeleteSnapshotResult, StateWriter } from '@/core/state-writer';
 import { createReconciler } from './reconciler';
 
 /**
@@ -36,14 +36,6 @@ interface Snapshot {
 export interface BackgroundDeps {
   loadState(): Promise<StoredState>;
   /**
-   * 저장된 값을 **분류해서** 읽는다 — `loadState`가 접어 버리는 "읽을 수 없음"을 구분한다.
-   *
-   * 파생 데이터를 쓰기 전에 원본이 읽히는지 확인하려면 이것이 필요하다. `loadState`는
-   * blocked를 기본 상태로 접으므로, 그것만 보면 "프로필 0개"와 "읽을 수 없어서 0개처럼
-   * 보임"을 구분할 수 없고 그 차이가 백업을 오염시킨다(티켓 02 코드리뷰).
-   */
-  readState(): Promise<StoredStateRead>;
-  /**
    * 영속 저장소를 고치는 **유일한 문** (ADR 0016) — 구현은 `platform/state-writer`가 주고,
    * 이 컴포지션 루트는 그 매소드만 부른다.
    *
@@ -55,19 +47,9 @@ export interface BackgroundDeps {
   stateWriter: StateWriter;
   publishSummary(summary: StatusSummary): Promise<void>;
   queryTabInfos(): Promise<TabInfo[]>;
-  /** 대상 저장소는 상태의 sync 스위치가 정한다 — 어댑터는 받은 곳에 쓴다 (티켓 07). */
-  performBackup(payload: string, profileCount: number, target: BackupTarget): Promise<unknown>;
-  /**
-   * 스냅샷 한 행을 지운다 (release R2-3) — 결과는 잔여 개수를 든 객체로 돌아온다.
-   *
-   * 이 효과가 여기 있는 이유는 삭제가 **서비스워커 한 곳**에서만 일어나야 하기 때문이다.
-   * `bk:manifest`의 writer가 자동 Backup(서비스워커)과 삭제(렌더러)로 갈리면, 읽기와
-   * 통째 쓰기 사이에 착지한 커밋이 조용히 사라진다.
-   */
-  deleteBackupSnapshot(snapshotId: string, target: BackupTarget): Promise<unknown>;
   /** 렌더러의 삭제 요청을 받는다 — 핸들러의 결과가 그대로 응답이 된다. */
   onSnapshotDeleteRequest(
-    handler: (snapshotId: string, target: BackupTarget) => Promise<unknown>,
+    handler: (snapshotId: string, target: BackupTarget) => Promise<DeleteSnapshotResult>,
   ): void;
   replaceSessionRules(rules: NetRule[]): Promise<void>;
   /**
@@ -163,69 +145,24 @@ export function bootstrap(deps: BackgroundDeps): void {
 
   const converge = () => void reconciler.requestReconcile();
 
-  // 자동 Backup — 재조정과 별도 채널: 탭 이벤트발 재컴파일마다 sync 쓰기를 태우지
-  // 않기 위한 의도적 예외. 타이머 코얼레싱 + 최소 30초 간격으로 sync quota 안쪽 유지.
+  /*
+   * 자동 Backup — 재조정과 별도 채널: 탭 이벤트발 재컴파일마다 sync 쓰기를 태우지 않기 위한
+   * 의도적 예외. 타이머 코얼레싱 + 최소 30초 간격으로 sync quota 안쪽 유지.
+   *
+   * 여기 남은 것은 **예약 정책뿐이다** (D8). 레인이 흡수한 것들 — 겹친 작업이 서로의 창을
+   * 열지 않게 하던 깊이 카운터, 진행 중 백업을 기다리는 드레인 await, 백업 본문의 이중 중단
+   * 검사 — 은 티켓 02에서 걷어냈다. 스냅샷 쓰기가 이제 레인 작업이므로 삭제·초기화와 겹칠 수
+   * 없고, 그 셋이 만들던 창도 함께 사라진다.
+   */
   let backupScheduled = false;
   let lastBackupAt = 0;
   /**
-   * `bk:`를 건드리는 작업이 진행 중인 **깊이** (R-3, release R2-3) — 0보다 크면 스냅샷을
-   * 쓰지 않는다.
-   *
-   * boolean이 아니라 카운터인 이유: 사용자가 둘이다(전체 초기화·스냅샷 삭제). 겹쳐
-   * 들어왔을 때 먼저 끝난 쪽이 플래그를 되돌리면 다른 쪽의 창이 열린 채 남아, 이 중단이
-   * 막으려던 그 실패를 새로 만든다.
-   */
-  let suspendDepth = 0;
-  /** 진행 중인 백업 — 중단은 이것을 기다려야 가드를 이미 지난 스냅샷이 뒤늦게 착지하지 않는다. */
-  let inFlightBackup: Promise<void> = Promise.resolve();
-  /**
    * 예약 세대 — `setTimer`는 취소할 수 없으므로 중단이 이 값을 올려 이미 걸린 타이머를
-   * **무효화**한다. 없으면 초기화가 삭제 뒤에 실패해 중단이 풀린 다음 옛 예약이 발화해,
-   * 방금 지운 백업을 옛 상태로 되살린다.
+   * **무효화**한다. 레인이 이것을 대체하지 않는다: 순서대로 돌아도, 실패한 초기화 뒤에 옛
+   * 예약이 발화하면 상태가 아직 옛 프로필이라 방금 지운 백업이 되살아난다 (D8).
    */
   let backupGeneration = 0;
-  const runBackup = async () => {
-    backupScheduled = false;
-    /*
-     * 중단 중이면 아무것도 쓰지 않는다. 없으면 디바운스 중이던 스냅샷이 방금 비운
-     * 저장소에 옛 프로필을 다시 써 넣어, 사용자 눈에는 "초기화했는데 백업이 되살아난"
-     * 것으로 보인다. 재개가 직접 다시 예약하므로 여기서 예약을 되살릴 필요는 없다.
-     *
-     * 이 한 번의 검사만으로는 부족하다 — 아래 두 await 사이에 초기화가 시작되면 이미
-     * 가드를 지난 이 실행은 막히지 않는다. 그래서 performBackup 직전에 다시 보고,
-     * 중단하는 쪽은 진행 중인 이 promise를 기다린다.
-     */
-    if (suspendDepth > 0) return;
-    lastBackupAt = deps.now();
-    try {
-      /*
-       * 원본을 읽을 수 없으면 백업하지 않는다.
-       *
-       * 이 가드가 없으면 조용한 데이터 손실이 난다: 저장된 상태가 이 버전이 이해 못 하는
-       * 것(더 새 포맷이거나 올릴 수 없는 구 포맷)일 때 `loadState`는 **빈 기본 상태**로 접히고,
-       * 그것이 백업 링에 스냅샷으로 들어가 quota 회전으로 **진짜 스냅샷을 밀어낸다**.
-       * 로컬 원본은 `persistState` 가드가 지켜도, 백업이라는 다른 채널로 같은 손실이 난다.
-       * 백업은 SW가 깨어날 때마다 예약되므로 이 경로는 잠재적이 아니라 상시다.
-       */
-      const read = await deps.readState();
-      if (read.status === 'blocked') {
-        deps.logError(
-          'backup skipped',
-          new Error(
-            `stored state is unreadable (${read.reason}, v${read.storedVersion}); keeping existing backups intact`,
-          ),
-        );
-        return;
-      }
-      // 재검사: 여기 도달하기까지 지나온 await 동안 초기화가 시작됐을 수 있다. 이 스냅샷은
-      // 옛 payload를 들고 있어, 삭제·검증이 끝난 뒤에 착지하면 그대로 남는다.
-      if (suspendDepth > 0) return;
-      const state = read.state;
-      await deps.performBackup(backupPayload(state), state.profiles.length, backupTarget(state));
-    } catch (error) {
-      deps.logError('backup failed', error);
-    }
-  };
+
   const scheduleBackup = () => {
     if (backupScheduled) return; // 이미 예약됨 — 가장 이른 실행 유지
     backupScheduled = true;
@@ -235,69 +172,39 @@ export function bootstrap(deps: BackgroundDeps): void {
       // 중단이 무효화한 예약이면 발화해도 쓰지 않는다. 예약 자리는 중단이 이미 비웠으므로
       // 여기서 되돌리지 않는다 — 그 사이 걸린 새 예약을 덮어쓰지 않기 위해서다.
       if (generation !== backupGeneration) return;
-      inFlightBackup = runBackup();
+      backupScheduled = false;
+      lastBackupAt = deps.now();
+      void writer.snapshot().then(
+        (outcome) => {
+          // 건너뛴 것은 오류가 아니지만 조용히 묻히면 안 된다 — 저장소가 읽히지 않는다는
+          // 사실이 백업이 멈춘 이유이므로 드러낸다.
+          if (outcome.status === 'skipped') deps.logError('backup skipped', new Error(outcome.reason));
+        },
+        (error: unknown) => deps.logError('backup failed', error),
+      );
     }, delay);
   };
 
   /**
-   * `bk:`를 건드리기 직전에 자동 Backup을 멈추고 **드레인**한다 (R-3, release R2-3).
+   * `bk:`를 건드리기 직전에 자동 Backup 예약을 **무효화**한다 (D8).
    *
-   * 세 가지를 함께 한다:
-   * 1. 깊이를 올린다 — 겹친 작업이 서로의 창을 열지 않는다.
-   * 2. 세대를 올리고 예약 자리를 비운다 — `setTimer`는 취소할 수 없으므로 이미 걸린
-   *    타이머는 발화해도 쓰지 않는다.
-   * 3. 진행 중인 백업을 **기다린다** — 플래그만 세우고 돌아오면 이미 가드를 지난 그
-   *    백업이 읽기와 쓰기 사이에 그대로 착지한다. 재검사 앞이었다면 거기서 멈추고,
-   *    이미 재검사를 지났다면 커밋까지 끝난 뒤에야 우리가 읽는다 — 어느 쪽이든 그
-   *    쓰기가 우리 읽기 **앞에** 놓인다는 것이 이 await가 사는 이유다.
+   * 티켓 02 이전에는 여기서 깊이를 올리고 진행 중인 백업을 드레인했다. 그 둘은 레인이
+   * 흡수했다 — 백업 쓰기가 레인 작업이므로 초기화와 겹칠 수 없다. 남은 일은 취소할 수 없는
+   * 타이머를 무효화하는 것뿐이고, 그것은 직렬화가 풀지 못하는 문제다: 발화 시점이 초기화
+   * **뒤**여도 그 백업이 쓰는 것은 초기화가 실패했을 때의 **옛 프로필**이다.
    */
-  const suspendBackupWrites = async (): Promise<void> => {
-    suspendDepth += 1;
+  const suspendBackupWrites = (): void => {
     backupGeneration += 1;
     backupScheduled = false;
-    await inFlightBackup;
   };
 
-  /** 재예약을 요구한 겹이 하나라도 있었는가 — 요구는 깊이 해제를 살아남는다 (release R2 R-11). */
-  let rescheduleOnResume = false;
   /**
-   * 중단을 푼다. `reschedule`을 요구한 겹이 있었으면 마지막 한 겹이 풀릴 때 **반드시**
-   * 다시 예약한다.
-   *
-   * 중단이 예약 자리를 비웠으므로 여기서 되살리지 않으면 다음 `onStateChanged`까지
-   * 백업이 없다. 전체 초기화는 상태가 바뀌어 그 이벤트가 뒤따르지만, **스냅샷 삭제는
-   * `storage.local.state`를 건드리지 않아 그 복구가 없다** — 되살리지 않으면 그 백업은
-   * 영구히 사라진다.
-   *
-   * 그래서 요구를 이 호출의 인자로만 보면 안 된다 (R-11): 삭제와 **실패한** 초기화가 겹쳐
-   * 요구하지 않은 쪽(`reschedule: snapshot === false`)이 마지막에 풀리면, 깊이만 보는 판단은
-   * 삭제가 명령한 재예약을 삼킨다 — 두 중단이 서로 간섭한다는 그 실패가 플래그에서 재예약
-   * 비트로 옮겨 온 것뿐이다.
+   * 예약을 되살린다. 초기화가 **끝까지 갔을 때만** 곧바로 다시 예약한다 — 그때 스냅샷되는
+   * 것은 깨끗한 default다. 실패했다면 상태가 아직 옛 프로필이라 지금 예약하면 방금 지운
+   * 백업이 되살아난다. 그 경우는 예약 없이 두고, 다음 상태 변경이 정상적으로 다시 예약한다.
    */
   const resumeBackupWrites = ({ reschedule }: { reschedule: boolean }): void => {
-    rescheduleOnResume ||= reschedule;
-    suspendDepth = Math.max(0, suspendDepth - 1);
-    if (suspendDepth > 0) return;
-    if (rescheduleOnResume) scheduleBackup();
-    rescheduleOnResume = false;
-  };
-
-  /**
-   * 스냅샷 한 행 삭제 — **서비스워커가 집행한다** (release R2-3).
-   *
-   * 렌더러가 직접 지우면 `bk:manifest`의 writer가 두 JS 컨텍스트에 서고, 삭제의 읽기와
-   * 통째 쓰기 사이에 자동 Backup의 커밋이 착지해 조용히 사라진다. `browser.storage`에
-   * CAS가 없으므로 인프로세스 락으로는 원리적으로 못 고친다 — writer를 하나로 세우는
-   * 것이 유일한 답이다. 삭제는 실패해도 던지지 않고 결과 객체로 돌려준다.
-   */
-  const deleteSnapshot = async (snapshotId: string, target: BackupTarget): Promise<unknown> => {
-    await suspendBackupWrites();
-    try {
-      return await deps.deleteBackupSnapshot(snapshotId, target);
-    } finally {
-      // 삭제는 상태를 바꾸지 않아 onStateChanged가 뒤따르지 않는다 — 무조건 다시 예약한다.
-      resumeBackupWrites({ reschedule: true });
-    }
+    if (reschedule) scheduleBackup();
   };
 
   /**
@@ -308,13 +215,24 @@ export function bootstrap(deps: BackgroundDeps): void {
    * 그래서 초기화 도중 도착한 명령과 마지막 쓰기를 다투지 않는다.
    */
   const fullReset = async (): Promise<StoredState> => {
+    /*
+     * 예약 무효화를 **요청 경계에서** 한 번 더 한다 (티켓 02).
+     *
+     * `core/reset`이 작업 본문 시작에서 `suspendAutoBackup`을 부르지만, 요청이 레인에 서고
+     * 본문이 시작되기까지의 사이에 발화한 타이머는 아직 옛 세대를 보고 스냅샷을 레인에
+     * 세운다. 그 스냅샷은 초기화 **뒤에** 돌고, 초기화가 reset-state에서 실패했다면 상태가
+     * 아직 옛 프로필이라 방금 지운 백업을 되살린다. 티켓 02 이전에는 백업 본문의 이중 중단
+     * 검사가 이 창을 막았는데 레인이 그것을 걷어냈으므로, 무효화를 그 창 **앞으로** 옮긴다.
+     * 세대는 단조 증가라 두 번 올려도 무해하다.
+     */
+    suspendBackupWrites();
     const { result, state } = await writer.fullReset({
       suspendAutoBackup: suspendBackupWrites,
       resumeAutoBackup: ({ snapshot }) => {
-        // 끝까지 간 초기화만 곧바로 다시 예약한다 — 중단 창에서 눌러 버린 예약이 사라진
-        // 자리를 메우고, 그때 스냅샷되는 것은 깨끗한 default다. 실패했다면 상태가 아직
-        // 옛 프로필이라 지금 예약하면 방금 지운 백업이 되살아난다. 그 경우는 예약 없이
-        // 깊이만 풀고, 다음 상태 변경이 정상적으로 다시 예약하게 둔다(삭제와 다른 점).
+        // 끝까지 간 초기화만 곧바로 다시 예약한다 — 무효화가 눌러 버린 예약이 사라진 자리를
+        // 메우고, 그때 스냅샷되는 것은 깨끗한 default다. 실패했다면 상태가 아직 옛 프로필이라
+        // 지금 예약하면 방금 지운 백업이 되살아난다. 그 경우는 예약 없이 두고, 다음 상태
+        // 변경이 정상적으로 다시 예약하게 둔다(삭제와 다른 점).
         resumeBackupWrites({ reschedule: snapshot });
       },
     });
@@ -332,7 +250,16 @@ export function bootstrap(deps: BackgroundDeps): void {
   deps.onCommand((command) =>
     command.type === 'full-reset' ? fullReset() : writer.execute(command),
   );
-  deps.onSnapshotDeleteRequest(deleteSnapshot);
+  /*
+   * 스냅샷 한 행 삭제 — 쓰기 문이 그대로 받는다 (티켓 02).
+   *
+   * 티켓 02 이전에는 여기에 삭제가 자동 Backup을 중단하고 드레인한 뒤 지우는 래퍼가 있었다.
+   * 그 둘이 필요했던 이유는 삭제의 읽기와 매니페스트 통째 쓰기 사이에 백업 커밋이 착지할 수
+   * 있었기 때문인데, 지금은 둘 다 레인 작업이라 겹칠 수 없다. 중단이 사라지니 그것이 비운
+   * 예약 자리를 되살릴 필요도 없어졌다 — 걸려 있던 타이머가 그대로 발화한다. 그래서 이 진입점에
+   * 부트스트랩이 더할 것이 없다.
+   */
+  deps.onSnapshotDeleteRequest((snapshotId, target) => writer.deleteSnapshot(snapshotId, target));
 
   deps.onStateChanged(() => {
     converge();

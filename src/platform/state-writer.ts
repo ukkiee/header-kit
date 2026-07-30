@@ -1,10 +1,16 @@
+import { backupPayload, backupTarget, type BackupTarget } from '@/core/backup';
 import { applyCommand, type Command } from '@/core/commands';
 import { performFullReset, type ResetResult } from '@/core/reset';
 import type { StoredState } from '@/core/schema';
-import type { AutoBackupPolicy, StateWriter } from '@/core/state-writer';
+import type {
+  AutoBackupPolicy,
+  DeleteSnapshotResult,
+  SnapshotOutcome,
+  StateWriter,
+} from '@/core/state-writer';
 import { createWriterLane, type WritePermit } from '@/core/writer-lane';
-import { readBackupKV, removeBackupKeys } from './backupStore';
-import { clearSummary, commitMigration, loadState, persistState } from './stateStore';
+import { deleteBackupSnapshot, performBackup, readBackupKV, removeBackupKeys } from './backupStore';
+import { clearSummary, commitMigration, loadState, persistState, readState } from './stateStore';
 
 /**
  * 영속 저장소를 고치는 **유일한 문** — Writer Lane을 소유하고, 쓰기 허가가 이 파일 밖으로
@@ -51,6 +57,19 @@ export function createStateWriter(deps: StateWriterDeps): StateWriter {
   const lane = createWriterLane();
 
   /**
+   * 완료된 전체 초기화의 횟수 (티켓 02 코드리뷰).
+   *
+   * 스냅샷은 **요청 시점의** 이 값을 집고, 자기 작업이 돌 때 값이 달라져 있으면 쓰지 않는다.
+   * 막는 것은 "초기화보다 먼저 요청됐는데 초기화 뒤에 착지하는 스냅샷"이다 — 초기화가
+   * reset-state에서 실패하면 상태가 아직 옛 Profile이라, 그 스냅샷이 방금 지운 백업을
+   * 되살린다. 레인은 이것을 막지 못한다: 순서대로 돌아도 그 스냅샷이 **뒤**일 수 있다.
+   *
+   * 부트스트랩의 예약 세대와 겹치지 않는다. 그쪽은 **아직 발화하지 않은 타이머**를 무효화하고,
+   * 이쪽은 **이미 요청된 작업**이 착지하는 것을 막는다 — 서로 다른 순간이다.
+   */
+  let completedResets = 0;
+
+  /**
    * 명령 하나의 read-modify-write. **직렬화하지 않는다** — 레인 작업 안에서만 불리므로
    * 이 함수가 도는 동안 다른 저장소 쓰기가 진행 중일 수 없다. 자체 FIFO를 두지 않는 이유는
    * 같은 성질을 보장하는 기계를 둘 두면 다음 리뷰어가 "둘 중 어느 것이 권위인가"를 다시
@@ -82,7 +101,7 @@ export function createStateWriter(deps: StateWriterDeps): StateWriter {
           // 저장소를 만지는 효과는 **여기서 직수입한 것**만 쓴다. 호출부가 건네주게 두면 그
           // 콜백이 레인 작업 안에서 백업 read-modify-write를 fan-out할 수 있다 (r2 R-2).
           readBackupKV,
-          removeBackupKeys,
+          removeBackupKeys: (target, keys) => removeBackupKeys(permit, target, keys),
           clearSummary,
           // 예약 정책 둘만 호출부의 것이다 (D8).
           ...policy,
@@ -92,8 +111,44 @@ export function createStateWriter(deps: StateWriterDeps): StateWriter {
             applied.state = await applyOne(permit, { type: 'full-reset' });
           },
         });
+        completedResets += 1;
         return { result, state: applied.state };
       });
+    },
+
+    snapshot(): Promise<SnapshotOutcome> {
+      const requestedAt = completedResets;
+      return lane.run(async (permit) => {
+        // 초기화가 이 요청과 착지 사이에 끝났다면 쓰지 않는다 — 위 `completedResets` 참조.
+        if (requestedAt !== completedResets) {
+          return { status: 'skipped', reason: 'a full reset completed after this snapshot was requested' };
+        }
+        // 읽을 수 없는 상태는 백업하지 않는다 — 근거는 `core/state-writer`의 `snapshot()`
+        // 주석이 정본이다. `loadState`가 아니라 `readState`를 쓰는 이유가 그것이다.
+        const read = await readState();
+        if (read.status === 'blocked') {
+          return {
+            status: 'skipped',
+            reason: `stored state is unreadable (${read.reason}, v${read.storedVersion}); keeping existing backups intact`,
+          };
+        }
+        const state = read.state;
+        const kind = await performBackup(
+          permit,
+          backupPayload(state),
+          state.profiles.length,
+          backupTarget(state),
+        );
+        if (kind === 'write') return { status: 'written' };
+        if (kind === 'skip') return { status: 'unchanged' };
+        // 예산을 넘겨 아무것도 쓰지 못했다 — 직전 정상본 보존이 우선이지만, 백업이 멈춘
+        // 사실은 드러나야 한다.
+        return { status: 'skipped', reason: 'snapshot exceeds the backup budget for this store' };
+      });
+    },
+
+    deleteSnapshot(snapshotId: string, target: BackupTarget): Promise<DeleteSnapshotResult> {
+      return lane.run((permit) => deleteBackupSnapshot(permit, snapshotId, target));
     },
   };
 }

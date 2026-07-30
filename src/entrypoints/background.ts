@@ -3,11 +3,9 @@ import type { Command } from '@/core/commands';
 import { nextExpiry } from '@/core/expiry';
 import type { NetRule } from '@/core/rules';
 import type { StoredState } from '@/core/schema';
-import { deleteBackupSnapshot, performBackup } from '@/platform/backupStore';
 import { createStateWriter } from '@/platform/state-writer';
 import {
   loadState,
-  readState,
   onCommand,
   onSnapshotDeleteRequest,
   onStateChanged,
@@ -93,14 +91,11 @@ async function scheduleExpiryAlarm(state: StoredState, now: number): Promise<voi
 export default defineBackground(() => {
   bootstrap({
     loadState,
-    readState,
     // 쓰기 문은 여기서 **한 번** 만들어진다 — 어댑터를 직수입하므로 허가가 이 배선에
     // 등장하지 않는다 (ADR 0016).
     stateWriter: createStateWriter({ validateCommand }),
     publishSummary,
     queryTabInfos,
-    performBackup,
-    deleteBackupSnapshot,
     replaceSessionRules,
     applyBadge,
     scheduleExpiryAlarm,
