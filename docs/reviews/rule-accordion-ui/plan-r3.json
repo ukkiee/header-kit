@@ -1,0 +1,62 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "plan",
+  "ack": "human-triage",
+  "triageMode": "human",
+  "verdict": "needs-attention",
+  "summary": "No-ship. R2-1 is still open because line 159 retains the rejected read-and-delete lifecycle despite the correct acknowledgment design at lines 192 and 245. R2-2’s original chain omission is resolved by lines 181 and 246, but that fix introduces a new high-risk ordering gap for real v1 legacy-filter states. No separate new critical/high issue was substantiated in the acknowledgment command.",
+  "planFile": "docs/reviews/rule-accordion-ui/spec.md",
+  "planInDiff": true,
+  "reviewedFileCount": 5,
+  "target": "working tree diff",
+  "reviewer": "codex",
+  "fallbackFrom": null,
+  "fallbackReason": null,
+  "effort": "xhigh",
+  "inputMode": "inline-diff",
+  "reviewedSha": "bedc470bb35fc3350687bd9750e7479569ba5fd5",
+  "reviewedTree": "0a98dfe595feb19c6e58b04a9f7d7cf1f7e4a233",
+  "reviewedPlanSha256": "d9bbfabb13d265885d7bd43390f3f6e15e1e81203d2c704fd2c55ab40ee806a2",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "backendExitCode": 0,
+  "parseError": null,
+  "promptDelivery": {
+    "mechanism": "token-echo",
+    "enforcing": false,
+    "verified": true,
+    "echoed": "0e3158d9368642ed"
+  },
+  "findingCount": 2,
+  "planFindingCount": 2,
+  "triage": "review-gate SKILL.md § Triage governs: render EVERY finding as a full table row, never inside a dialog; then ask the ROUND before the rows — take every Proposed decision as it stands, or decide row by row — and `as proposed` ends the round in that ONE action; only if row-by-row was chosen, ask per finding with that row's Proposed decision as the first option, a reject or defer taking a free-text reason; echo back ONLY the rows that carried free text, and none if the round was decided by selection alone; max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "R2-1 still open: module decision still consumes notice on display",
+      "body": "The module-level decision still says the UI reads and deletes the persisted notice. That directly contradicts stories 64–64c and the later decision at line 192, which requires an explicit acknowledgment command and successful persistence before deletion. An engineer following the module breakdown can therefore reintroduce the exact failure: rendering the popup permanently consumes the only explanation for already-broadened rules, even if the popup immediately closes.",
+      "file": "docs/reviews/rule-accordion-ui/spec.md",
+      "line_start": 159,
+      "line_end": 159,
+      "confidence": 0.99,
+      "recommendation": "Rewrite this decision so UI reads are explicitly side-effect-free and only a successfully persisted acknowledgment command may remove the notice.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "high",
+      "title": "New high: v1 retirement runs before legacy filters materialize",
+      "body": "The new chain runs v2→v3 before validation. In the current repository, validation calls `backfillProfile`, which calls `migrateProfileFilters`; that step converts legacy v1 profile filters into `requestMethods`, `initiatorDomains`, `tabDomains`, and `expiresAt`. A literal implementation therefore strips/counts no such fields during v2→v3, then recreates them after the destructive gate and commits the result as v3. The migration will not run again, leaving retired hidden conditions or potentially rejecting the v1 state. The test at line 246 seeds already-materialized Conditions/methods, so it misses this representation and cannot prove v1/v2 convergence or an accurate notice count.",
+      "file": "docs/reviews/rule-accordion-ui/spec.md",
+      "line_start": 181,
+      "line_end": 188,
+      "confidence": 0.99,
+      "recommendation": "Materialize legacy profile filters before v2→v3 retirement, or make v2→v3 explicitly consume legacy `profile.filters`. Add an authoritative v1 fixture containing HEAD/CONNECT/OTHER, initiator-domain, tab-domain, and time filters; assert all derived retired fields are removed, counted, reported, and absent after rereading committed v3.",
+      "isPlanFinding": true
+    }
+  ],
+  "next_steps": [
+    "Reconcile the notice module decision with the acknowledgment lifecycle.",
+    "Settle legacy-filter normalization ordering before slicing migration tickets and extend the v1 chain fixture."
+  ]
+}

@@ -1,0 +1,74 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "plan",
+  "ack": "human-triage",
+  "triageMode": "human",
+  "verdict": "needs-attention",
+  "summary": "No-ship: the plan leaves two destructive format migrations unsafe and one legacy-condition transition undefined.",
+  "planFile": "docs/reviews/rule-accordion-ui/spec.md",
+  "planInDiff": true,
+  "reviewedFileCount": 2,
+  "target": "working tree diff",
+  "reviewer": "codex",
+  "fallbackFrom": null,
+  "fallbackReason": null,
+  "effort": "xhigh",
+  "inputMode": "inline-diff",
+  "reviewedSha": "bedc470bb35fc3350687bd9750e7479569ba5fd5",
+  "reviewedTree": "0a98dfe595feb19c6e58b04a9f7d7cf1f7e4a233",
+  "reviewedPlanSha256": "6edfb7257ef77c0a59e7822f595e0f6fde09210637c9c6703c6366073a72782a",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "backendExitCode": 0,
+  "parseError": null,
+  "promptDelivery": {
+    "mechanism": "token-echo",
+    "enforcing": false,
+    "verified": true,
+    "echoed": "05620795a1956064"
+  },
+  "findingCount": 3,
+  "planFindingCount": 3,
+  "triage": "review-gate SKILL.md § Triage governs: render EVERY finding as a full table row, never inside a dialog; then ask the ROUND before the rows — take every Proposed decision as it stands, or decide row by row — and `as proposed` ends the round in that ONE action; only if row-by-row was chosen, ask per finding with that row's Proposed decision as the first option, a reject or defer taking a free-text reason; echo back ONLY the rows that carried free text, and none if the round was decided by selection alone; max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "Response Cookie changes meaning without a version boundary",
+      "body": "The existing `set-cookie.value` stores the complete Set-Cookie line, while the plan makes it a cookie value combined with new name/attribute fields. Backfilling defaults cannot preserve an existing line such as `sid=abc; Path=/; Secure`. Keeping storage and export at v2 also lets an older build accept new records, ignore the added fields, and compile only the bare value as the complete header. Existing rules, imports, and rollback installs can therefore emit materially different or malformed cookies.",
+      "file": "docs/reviews/rule-accordion-ui/spec.md",
+      "line_start": 141,
+      "line_end": 151,
+      "confidence": 0.99,
+      "recommendation": "Introduce storage and export format v3. Define an explicit v2→v3 conversion or legacy raw-line variant that preserves compiled output, and test old-rule upgrade, new-export rejection by v2, downgrade blocking, unknown attributes, Expires, embedded `=`, mode, and empty values.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "high",
+      "title": "Condition retirement has no persistence or notification lifecycle",
+      "body": "The plan strips and counts retired keys in load/import backfill but does not define how a same-version load commits that destructive cleanup. Current loading is read-only and only a versioned `migrated` result is committed through the Writer Lane. A straightforward implementation therefore either leaves keys in `storage.local` and repeats cleanup on every restart, or invents an unplanned write path. Moreover, compile receives already-sanitized profiles, so the affected count is gone before the proposed compile warning is created. Story 61 and the promised notification cannot both be delivered from the stated design.",
+      "file": "docs/reviews/rule-accordion-ui/spec.md",
+      "line_start": 142,
+      "line_end": 151,
+      "confidence": 0.98,
+      "recommendation": "Specify an idempotent Writer-Lane migration transaction, preferably as v3, returning both sanitized state and affected-rule count. Define where the report survives until display/acknowledgement and its ordering relative to the first broadened compile. Test failed commit retry, worker restart, repeated load, concurrent commands, import, and physical storage cleanup.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "medium",
+      "title": "Open question: HEAD·CONNECT·OTHER 조건을 어떻게 처리하는가",
+      "body": "The plan exposes only GET/POST/PUT/PATCH/DELETE/OPTIONS, but the current persisted enum also supports HEAD, CONNECT, and OTHER. No migration or convergence rule covers those values. Narrowing validation can reset an existing state; retaining them creates invisible restrictions; dropping the last selected method makes compilation omit `requestMethods` and silently widens the Modification to every method. Ticket slicing would have to guess among three materially different behaviors.",
+      "file": "docs/reviews/rule-accordion-ui/spec.md",
+      "line_start": 60,
+      "line_end": 60,
+      "confidence": 0.97,
+      "recommendation": "Explicitly preserve, map, or retire HEAD/CONNECT/OTHER. Define their row/form representation and edit-save behavior, then test load→edit→save→compile for each legacy method, including single-method conditions.",
+      "isPlanFinding": true
+    }
+  ],
+  "next_steps": [
+    "Revise the schema and export migration decision before slicing tickets.",
+    "Define the Writer-Lane cleanup/report contract and rollback behavior.",
+    "Settle legacy request-method handling and add its acceptance tests."
+  ]
+}

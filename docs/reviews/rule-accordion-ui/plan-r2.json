@@ -1,0 +1,62 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "plan",
+  "ack": "human-triage",
+  "triageMode": "human",
+  "verdict": "needs-attention",
+  "summary": "No-ship. R-1 resolved: v3 boundary, raw-line fallback, downgrade rejection, and output-preservation tests are specified. R-2 still-open: the notice is deleted on display rather than acknowledgment. R-3 resolved: HEAD/CONNECT/OTHER are explicitly retired, reported, and tested. The fix also introduces a high-risk gap for stored v1 users.",
+  "planFile": "docs/reviews/rule-accordion-ui/spec.md",
+  "planInDiff": true,
+  "reviewedFileCount": 4,
+  "target": "working tree diff",
+  "reviewer": "codex",
+  "fallbackFrom": null,
+  "fallbackReason": null,
+  "effort": "xhigh",
+  "inputMode": "inline-diff",
+  "reviewedSha": "bedc470bb35fc3350687bd9750e7479569ba5fd5",
+  "reviewedTree": "0a98dfe595feb19c6e58b04a9f7d7cf1f7e4a233",
+  "reviewedPlanSha256": "ecd88e90eaf74e4fb7ab870b2388413ec119d97a097f91b61ac55bf10f62ba86",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "backendExitCode": 0,
+  "parseError": null,
+  "promptDelivery": {
+    "mechanism": "token-echo",
+    "enforcing": false,
+    "verified": true,
+    "echoed": "03beba726e908cab"
+  },
+  "findingCount": 2,
+  "planFindingCount": 2,
+  "triage": "review-gate SKILL.md § Triage governs: render EVERY finding as a full table row, never inside a dialog; then ask the ROUND before the rows — take every Proposed decision as it stands, or decide row by row — and `as proposed` ends the round in that ONE action; only if row-by-row was chosen, ask per finding with that row's Proposed decision as the first option, a reject or defer taking a free-text reason; echo back ONLY the rows that carried free text, and none if the round was decided by selection alone; max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "R-2 still open: notice is consumed before acknowledgment",
+      "body": "The plan deletes the persisted notice after the UI reads and displays it, but story 64 requires retention until the user confirms it. A popup can close or crash immediately after rendering, or one surface can consume the notice before the user sees another. The destructive migration has already broadened rules, so this can permanently remove the only explanation. Testing only covers survival until the notice reaches the UI, not acknowledgment or failed acknowledgment persistence.",
+      "file": "docs/reviews/rule-accordion-ui/spec.md",
+      "line_start": 184,
+      "line_end": 184,
+      "confidence": 0.99,
+      "recommendation": "Define an explicit acknowledgment command through the StateWriter/Writer Lane and clear the notice only after that command persists successfully. Test close-without-ack, worker restart, multiple open surfaces, and acknowledgment write failure.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "high",
+      "title": "New high: v3 migration omits the existing v1→v2→v3 chain",
+      "body": "The plan defines v2→v3 as the sole destructive migration gate but never specifies how an authoritative stored v1 state reaches it. The current v1 helper stamps `schemaVersion: SCHEMA_VERSION` directly (`src/core/persist.ts:297-298`) and the v1 reader validates that result without another migration (`src/core/persist.ts:371-377`). After raising the constant to 3, a straightforward implementation labels v1 data as v3 without restructuring legacy Set-Cookie values or retiring conditions. Depending on v3 validation, users who skipped v2 will either be blocked from their profiles or compile an old raw Set-Cookie line under the new field meaning.",
+      "file": "docs/reviews/rule-accordion-ui/spec.md",
+      "line_start": 173,
+      "line_end": 179,
+      "confidence": 0.99,
+      "recommendation": "Specify explicit chained migrations: v1→v2 must stamp v2, then its result must pass through v2→v3 before validation and commit. Add authoritative-storage v1 fixtures containing legacy Set-Cookie, retired conditions, and retired methods; verify output preservation, notice creation, Writer-Lane commit, and retry behavior.",
+      "isPlanFinding": true
+    }
+  ],
+  "next_steps": [
+    "Correct the notice acknowledgment lifecycle and its tests.",
+    "Define and test the complete v1→v2→v3 stored-state migration chain before ticket slicing."
+  ]
+}
