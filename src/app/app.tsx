@@ -21,7 +21,9 @@ import { DEFAULT_THEME } from '@/core/theme';
 import { useAppliedTheme } from '@/ui/use-theme';
 import type { StatusSummary as StatusSummaryData } from '@/core/summary';
 import { canvas } from '@/ui/tokens';
-import { ExternalLink, History, Layers, Pause, Play, Settings } from 'lucide-react';
+import { statusCountsText } from '@/features/status/status-text';
+import { loadRuleForm, ruleFormIntentProps } from '@/features/modifications/lazy-rule-form';
+import { ExternalLink, History, Layers, Pause, Play, Plus, Settings } from 'lucide-react';
 import {
   getSummary,
   loadState,
@@ -57,6 +59,12 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
   // 단일 프로필 뷰(ADR 0004)의 선택 — 렌더마다 reconcileSelection으로 재조정된다.
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [railView, setRailView] = useState<RailView>('profiles');
+  /*
+   * 규칙 폼의 열림 상태가 여기 있는 이유는 여는 버튼이 **본문 헤더**에 있기 때문이다
+   * (ADR 0017). 목록 쪽에 두면 헤더 버튼이 목록 안으로 손을 뻗어야 한다.
+   * 'new' = 생성, id = 그 규칙 편집, null = 목록만 (ADR 0006).
+   */
+  const [editingRule, setEditingRule] = useState<'new' | string | null>(null);
   const [commandError, setCommandError] = useState<string | null>(null);
   /** 로드가 멈춘 사유 (R-3) — 읽을 수 없는 상태를 빈 화면으로 그리지 않기 위해 따로 든다. */
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -160,16 +168,24 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
   };
 
   /**
-   * 프로필 선택 — 고르면 프로필 화면으로 돌아온다.
+   * 프로필 선택 (ADR 0017).
    *
-   * 사이드바는 레일 화면과 무관하게 항상 보인다(ADR 0005). 그래서 백업·환경설정을 보는
-   * 중에도 프로필을 누를 수 있는데, 본문이 그대로면 선택이 어디에도 반영되지 않아
-   * **눌러도 아무 일이 안 일어난 것처럼** 보였다. 고르는 행위 자체가 "이 프로필을 보겠다"는
-   * 뜻이므로 화면을 함께 옮긴다.
+   * 화면을 함께 옮기던 보정이 사라졌다. 그 보정은 사이드바가 레일 화면과 무관하게 늘 보이던
+   * 시절(ADR 0005) "백업을 보는 중에 프로필을 눌러도 아무 일이 안 일어난 것처럼 보인다"를
+   * 막으려던 것인데, 이제 프로필 열이 프로필 화면에서만 서므로 **누를 것 자체가 없다**.
+   *
+   * 편집 중이던 폼은 닫는다 — 다른 프로필의 규칙을 고치던 폼이 그대로 열려 있으면 지금 보는
+   * 목록에 없는 규칙을 편집하게 된다.
    */
   const selectProfile = (id: string) => {
     setSelectedId(id);
-    setRailView('profiles');
+    setEditingRule(null);
+  };
+
+  /** 폼으로 가는 문 — 여는 즉시 청크를 부른다(트리거의 hover가 이미 시작했으면 같은 약속). */
+  const openRuleForm = (target: 'new' | string) => {
+    void loadRuleForm();
+    setEditingRule(target);
   };
 
   const createAndSelectProfile = () => {
@@ -223,36 +239,51 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
       onDeleteRule={deleteRuleWithUndo}
       userHeaders={state.customHeaderNames}
       onCommandWithResult={dispatchWithResult}
+      editingRule={editingRule}
+      onEditingRuleChange={setEditingRule}
+      onOpenRuleForm={openRuleForm}
     />
   ) : (
     <p className="text-xs text-muted-foreground">{t(locale, 'noProfilesYet')}</p>
   );
 
-  // 단일 셸 (ADR 0005) — 두 표면이 같은 레일+사이드바+본문을 쓴다.
-  // 차이는 크기(팝업 760×580 고정 / 탭 전폭·전고)와 "탭에서 열기"뿐.
-  //
-  // 팝업 프로필 열은 **14rem 아래로 내려가지 않는다**. 총폭 760은 고정값이라(ADR 0005)
-  // 레일이 라벨을 얻어 넓어진 만큼을 프로필 열에서 빼면, 행에 새로 붙은 인라인 토글까지
-  // 겹쳐 이름 칩이 라벨화 이전보다 좁아진다 — 티켓이 "넓힘"이라 적은 열이 오히려 줄어든다.
-  //
-  // 두 표면 모두 **확정 높이**여야 한다. 탭이 min-h-screen이면 행이 내용만큼 늘어나
-  // 뷰포트가 넘칠 일이 없고, 스크롤이 ScrollArea가 아니라 문서로 떨어진다 — 탭에서만
-  // OS 기본 스크롤바가 뜨고 앱 스타일 스크롤바는 아예 렌더되지 않는다 (structure r1 S-2).
+  const showProfileColumn = railView === 'profiles';
+  const headerTitle =
+    railView === 'profiles'
+      ? (selectedProfile?.name ?? t(locale, 'appName'))
+      : railView === 'backups'
+        ? t(locale, 'railBackups')
+        : t(locale, 'railSettings');
+  const headerSubtitle =
+    railView === 'profiles'
+      ? summary && statusCountsText(summary, (key) => t(locale, key))
+      : railView === 'backups'
+        ? t(locale, 'headerBackupsSub')
+        : t(locale, 'headerSettingsSub');
+
+  /*
+   * 단일 셸 (ADR 0005) — 두 표면이 같은 레일+본문을 쓴다. 차이는 크기와 '탭에서 열기'뿐.
+   *
+   * **프로필 열은 프로필 화면에서만 선다** (ADR 0017이 ADR 0005를 개정). 백업·설정에서는
+   * 본문이 그 폭을 가져가므로 팝업에서도 히스토리 행이 살 만해진다. 열 폭은 시안 값이다 —
+   * 좁아진 레일(68) 덕에 본문에 남는 폭은 오히려 늘었다(408 → 428).
+   *
+   * 두 표면 모두 **확정 높이**여야 한다. 탭이 min-h-screen이면 행이 내용만큼 늘어나
+   * 뷰포트가 넘칠 일이 없고, 스크롤이 ScrollArea가 아니라 문서로 떨어진다 — 탭에서만
+   * OS 기본 스크롤바가 뜬다 (structure r1 S-2).
+   */
   return (
     <LocaleProvider locale={locale}>
       <MotionProvider>
       <IconTooltipProvider>
       <div
-        className={`grid ${canvas} ${
-          surface === 'tab'
-            ? 'h-screen grid-cols-[10rem_16rem_minmax(0,1fr)]'
-            : 'h-[580px] w-[760px] grid-cols-[8rem_14rem_minmax(0,1fr)]'
+        className={`grid ${canvas} ${surface === 'tab' ? 'h-screen' : 'h-[580px] w-[760px]'} ${
+          showProfileColumn ? 'grid-cols-[68px_264px_minmax(0,1fr)]' : 'grid-cols-[68px_minmax(0,1fr)]'
         }`}
       >
         <nav className="flex flex-col gap-1 border-r border-border p-2">
           {/* 레일 아이콘도 다른 아이콘 버튼과 같은 셸을 쓴다 — 툴팁(호버·키보드 포커스)과
-              접근성 이름이 같은 카탈로그 키에서 나와 갈라지지 않는다. size="rail"은 그 셸에
-              보이는 라벨을 세운 것으로(티켓 10), 클릭 대상은 오히려 커진다(높이 32).
+              접근성 이름이 같은 카탈로그 키에서 나와 갈라지지 않는다.
 
               선택 표시는 **색만이 아니다** — 왼쪽 2px 막대(위치·형태)가 함께 선다. 색을
               지워도 어느 화면인지 남아야 한다(스펙 story 38). */}
@@ -274,92 +305,123 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
           ))}
           {/*
             레일 하단 — 지금 실제로 걸려 있는 규칙 수(스펙 story 20). 값의 출처는 background가
-            발행한 요약 하나뿐이라(독립 재컴파일 없음) 툴바 배지·상태 줄과 같은 수를 말한다.
+            발행한 요약 하나뿐이라(독립 재컴파일 없음) 툴바 배지·헤더 부제와 같은 수를 말한다.
             일시정지면 요약의 규칙 수가 0이므로 여기도 0으로 떨어진다.
           */}
-          <p className="mt-auto flex flex-col px-2 pt-2 text-xs">
+          <p className="mt-auto flex flex-col items-center pt-2 text-xs">
             <strong className="font-mono text-sm font-medium">{summary?.ruleCount ?? 0}</strong>
             <span className="text-muted-foreground">{t(locale, 'railApplied')}</span>
           </p>
         </nav>
 
-        {/* 랜드마크(aside/main)가 곧 스크롤 컨테이너다 — render 합성이라 껍데기 div가
-            한 겹 더 끼지 않고, 높이는 그리드 칸에서 확정된다.
-
-            shadcn ScrollArea는 Viewport 클래스를 소스에 고정해 두어 viewportClassName을
-            받지 않는다 — 그래서 레이아웃(gap·padding)은 안쪽 div가 맡는다. 소스를 고치지
-            않는 대가로 여기서만 한 겹이 늘어난다(ADR 0014). */}
-        <ScrollArea render={<aside />} className="min-h-0 border-r border-border">
-          <div className="flex flex-col gap-2 p-3">
-          <ProfileSidebar
-            profiles={state.profiles}
-            selectedId={effectiveSelectedId}
-            paused={state.paused}
-            onSelect={selectProfile}
-            onCreate={createAndSelectProfile}
-            onReorder={(profileId, toIndex) =>
-              dispatch({ type: 'move-profile', profileId, toIndex })
-            }
-            onToggleActive={(profileId, active) =>
-              dispatch({ type: 'toggle-profile', profileId, active })
-            }
-          />
-          </div>
-        </ScrollArea>
+        {showProfileColumn && (
+          <ScrollArea render={<aside />} className="min-h-0 border-r border-border">
+            <div className="flex flex-col gap-2 p-3">
+            <ProfileSidebar
+              profiles={state.profiles}
+              selectedId={effectiveSelectedId}
+              paused={state.paused}
+              onSelect={selectProfile}
+              onCreate={createAndSelectProfile}
+              onReorder={(profileId, toIndex) =>
+                dispatch({ type: 'move-profile', profileId, toIndex })
+              }
+              onToggleActive={(profileId, active) =>
+                dispatch({ type: 'toggle-profile', profileId, active })
+              }
+            />
+            </div>
+          </ScrollArea>
+        )}
 
         {/*
+          본문은 **고정 헤더 + 스크롤 몸통**이다 (ADR 0017). 헤더까지 함께 스크롤되면 지금 보는
+          프로필 이름과 적용 수가 목록을 내리는 순간 사라진다 — 시안이 그 줄을 고정해 둔 이유다.
+
           `min-h-0`이 없으면 스크롤이 조용히 죽는다 — 그리드 자식의 기본 min-height는 auto라
-          칸보다 작아지지 않고, 그러면 뷰포트가 넘칠 일이 없어 콘텐츠가 팝업 셸 자체를
-          밀어낸다(760×580 고정이 깨진다, ADR 0005). 원래 ScrollArea는 이 클래스를 자기
-          Root에 넣어 뒀는데 shadcn 소스에는 `relative`뿐이라 호출부가 준다.
+          칸보다 작아지지 않고, 그러면 콘텐츠가 팝업 셸 자체를 밀어낸다(760×580 고정이 깨진다).
         */}
-        <ScrollArea render={<main />} className="min-h-0 min-w-0">
-          <div className="flex flex-col gap-3 p-4">
-          <div className="flex items-center justify-between">
-            <h1 className="text-base font-semibold">{t(locale, 'appName')}</h1>
-            <div className="flex items-center gap-1">
+        <main className="flex min-h-0 min-w-0 flex-col">
+          <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3">
+            <div className="flex min-w-0 flex-col">
+              <h1
+                className={`truncate text-base font-semibold tracking-tight ${
+                  state.paused ? 'text-muted-foreground' : ''
+                }`}
+              >
+                {headerTitle}
+              </h1>
+              {headerSubtitle && (
+                <p className="truncate text-xs text-muted-foreground">{headerSubtitle}</p>
+              )}
+            </div>
+            <div className="ml-auto flex shrink-0 items-center gap-1">
               {surface === 'popup' && (
-                <Button variant="ghost" size="sm" aria-label={t(locale, 'openInTab')} onClick={openTabApp}>
-                  <ExternalLink size={14} strokeWidth={1.75} />
-                  <span className="ml-1.5">{t(locale, 'openInTab')}</span>
-                </Button>
+                <IconButton
+                  label={t(locale, 'openInTab')}
+                  icon={ExternalLink}
+                  onClick={openTabApp}
+                />
               )}
               {pauseButton}
+              {/* 규칙 추가는 프로필 화면의 동작이다 — 백업·설정에는 더할 목록이 없다. */}
+              {/*
+                폼이 열려 있는 동안은 누를 수 없다. 리포에 같은 부류의 선례가 있다 — 예전에는
+                하단 버튼을 아예 감췄다("폼이 접히는 중인데 버튼이 그 밑에서 튀어나온다").
+                헤더 버튼은 자리가 고정이라 감출 필요는 없지만, 편집 중에 눌리면 나가는 폼과
+                들어오는 폼이 한동안 **둘 다 DOM에 있어** 같은 이름의 입력이 둘이 된다.
+              */}
+              {railView === 'profiles' && selectedProfile && (
+                <Button
+                  size="sm"
+                  disabled={editingRule !== null}
+                  {...ruleFormIntentProps}
+                  onClick={() => openRuleForm('new')}
+                >
+                  <Plus size={14} strokeWidth={1.75} className="mr-1" />
+                  {t(locale, 'addRule')}
+                </Button>
+              )}
             </div>
-          </div>
+          </header>
 
-          {/* 오류·일시정지 배너는 레일 화면과 무관하게 항상 보인다 — 조용한 실패 금지. */}
-          {alerts}
+          <ScrollArea className="min-h-0 flex-1">
+            <div className="flex flex-col gap-3 p-4">
+            {/* 오류·일시정지 배너는 레일 화면과 무관하게 항상 보인다 — 조용한 실패 금지. */}
+            {alerts}
 
-          <MotionView viewKey={railView}>
-            {railView === 'profiles' && (
-              <>
-                {summary && <StatusSummary summary={summary} />}
-                {profileEditor}
-              </>
-            )}
-            {/* 백업 화면이 파일 왕복(JSON 내보내기·가져오기)과 스냅샷 히스토리를 함께 갖는다
-                (티켓 09) — 둘 다 "프로필 전체를 어딘가에 두고 되찾는" 같은 일이라, 파일은
-                프로필 화면에 두고 스냅샷만 여기 두면 백업하러 온 사람이 반쪽만 찾는다. */}
-            {railView === 'backups' && (
-              <>
-                <TransferPanel state={state} onCommand={dispatchWithResult} />
-                <BackupPanel syncBackup={state.syncBackup} onCommand={dispatchWithResult} />
-              </>
-            )}
-            {railView === 'preferences' && (
-              <PreferencesPanel
-                customHeaderNames={state.customHeaderNames}
-                theme={state.theme}
-                locale={localePreference}
-                badgeVisible={state.badgeVisible}
-                onCommand={dispatch}
-                incognitoAllowed={incognitoAllowed}
-              />
-            )}
-          </MotionView>
-          </div>
-        </ScrollArea>
+            <MotionView viewKey={railView}>
+              {railView === 'profiles' && (
+                <>
+                  {/* 수는 헤더가 말하므로 여기서는 끈다 — 경고·오류는 그대로 남는다.
+                      조용한 실패 금지는 시안에 자리가 없다고 사라지는 계약이 아니다. */}
+                  {summary && <StatusSummary summary={summary} showCounts={false} />}
+                  {profileEditor}
+                </>
+              )}
+              {/* 백업 화면이 파일 왕복(JSON 내보내기·가져오기)과 스냅샷 히스토리를 함께 갖는다
+                  (티켓 09) — 둘 다 "프로필 전체를 어딘가에 두고 되찾는" 같은 일이라, 파일은
+                  프로필 화면에 두고 스냅샷만 여기 두면 백업하러 온 사람이 반쪽만 찾는다. */}
+              {railView === 'backups' && (
+                <>
+                  <TransferPanel state={state} onCommand={dispatchWithResult} />
+                  <BackupPanel syncBackup={state.syncBackup} onCommand={dispatchWithResult} />
+                </>
+              )}
+              {railView === 'preferences' && (
+                <PreferencesPanel
+                  customHeaderNames={state.customHeaderNames}
+                  theme={state.theme}
+                  locale={localePreference}
+                  badgeVisible={state.badgeVisible}
+                  onCommand={dispatch}
+                  incognitoAllowed={incognitoAllowed}
+                />
+              )}
+            </MotionView>
+            </div>
+          </ScrollArea>
+        </main>
       </div>
       </IconTooltipProvider>
       </MotionProvider>

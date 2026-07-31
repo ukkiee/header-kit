@@ -27,7 +27,8 @@ const iconButton = cva(
        * `sm`은 행 안에 여럿 늘어서는 반복 액션(편집/삭제), `md`는 단독으로 서는
        * 내비게이션. 레일을 sm으로 바꾸면 32×28 → 24×24로 클릭 대상이 줄어든다.
        *
-       * `rail`은 아이콘 옆에 **보이는 라벨**을 세우는 레일 전용 셸(티켓 10) — 칸 폭을
+       * `rail`은 아이콘 **아래에** 보이는 라벨을 세우는 레일 전용 셸(티켓 10, ADR 0017에서
+       * 시안 폭 68px에 맞춰 세로 배치로) — 칸 폭을
        * 가득 채우고 내용을 왼쪽으로 정렬한다. `justify-*`가 베이스가 아니라 각 크기에
        * 붙어 있는 이유가 이것이다: 베이스에 두면 두 유틸이 한 클래스 목록에 함께 실려
        * 승자가 CSS 출력 순서에 달리고, 그건 소스에서 읽히지 않는다.
@@ -35,7 +36,7 @@ const iconButton = cva(
       size: {
         sm: 'size-6 justify-center',
         md: 'h-7 w-8 justify-center',
-        rail: 'h-8 w-full justify-start gap-2 px-2 text-xs',
+        rail: 'h-auto w-full flex-col justify-center gap-1 px-1 py-2 text-[10px] leading-3',
       },
     },
     defaultVariants: { tone: 'default', size: 'sm' },
@@ -43,7 +44,7 @@ const iconButton = cva(
 );
 
 /** 셸 크기와 짝을 이루는 아이콘 px — 둘이 따로 놀면 여백이 어긋난다. */
-const ICON_PX = { sm: 14, md: 16, rail: 16 } as const;
+const ICON_PX = { sm: 14, md: 16, rail: 20 } as const;
 
 /** 인접 아이콘 사이 툴팁 딜레이 그룹화 — 셸(App) 루트에서 한 번 감싼다. */
 export function IconTooltipProvider({ children }: { children: ReactNode }) {

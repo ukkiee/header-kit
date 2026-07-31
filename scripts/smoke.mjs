@@ -793,7 +793,8 @@ try {
 
   const tabApp = await context.newPage();
   await tabApp.goto(`chrome-extension://${extId}/app.html?locale=en`);
-  await tabApp.getByRole('heading', { name: 'HeaderKit' }).waitFor();
+  // 제목은 이제 **프로필 이름**이라 고정 문자열로 기다릴 수 없다 (ADR 0017) — 레일로 본다.
+  await tabApp.getByRole('button', { name: 'Show profiles', exact: true }).waitFor();
   const shownRuleCount = await tabApp.getByText(/active rule/).textContent();
   const shownProfileCount = await tabApp.getByText(/active profile/).textContent();
   record('J1: 탭 앱이 활성 규칙·프로필 수를 표시한다 (요약이 Compile과 일치)',
@@ -1638,7 +1639,12 @@ try {
     `search=[${searchResult.join('|')}], selected=${sidebarSelected}, backups=${backupsShown}, prefs=${prefsShown}`);
 
   // N10: 표면 동일성 — 탭 앱에서 규칙 폼으로 추가 → 실제 요청 반영 (ADR 0006 원자 저장)
-  await tabApp.getByRole('button', { name: 'Add rule' }).click();
+  /*
+   * `.first()`인 이유 (ADR 0017): 규칙 추가 버튼이 **둘**이다 — 본문 헤더의 것과 빈 상태
+   * 상자의 CTA. 시안에 둘 다 있고 하는 일도 같다. DOM 순서상 헤더가 먼저이므로 first가 곧
+   * 헤더 버튼이고, 이 스모크들이 재려는 것은 "규칙 추가 흐름"이지 어느 버튼인지가 아니다.
+   */
+  await tabApp.getByRole('button', { name: 'Add rule' }).first().click();
   await tabApp.getByLabel('Header name', { exact: true }).waitFor({ timeout: 5000 });
   await tabApp.getByLabel('Header name', { exact: true }).fill('X-From-Tab');
   await closeSuggestions(tabApp);
@@ -1789,8 +1795,14 @@ try {
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
   await popup.getByLabel('URL filter').fill('scope=1');
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  /*
+   * 폼이 **접히기를 기다린다** (ADR 0017). 예전에는 하단 추가 버튼이 폼이 있는 동안 감춰져
+   * 클릭이 저절로 기다렸는데, 헤더의 추가 버튼은 자리가 고정이라 늘 있다. 기다리지 않으면
+   * 나가는 폼과 들어오는 폼이 한동안 둘 다 DOM에 있어 같은 이름의 입력이 둘이 된다.
+   */
+  await waitFormClosed();
   // 2) 무스코프 규칙(X-U) 추가
-  await popup.getByRole('button', { name: 'Add rule' }).click();
+  await popup.getByRole('button', { name: 'Add rule' }).first().click();
   await popup.getByLabel('Header name', { exact: true }).fill('X-U');
   await closeSuggestions(popup);
   await popup.getByLabel('Value', { exact: true }).fill('u');
@@ -1949,7 +1961,7 @@ try {
   await popup.reload();
 
   // a: 빈 헤더 이름 Save → 인라인 오류 + aria-invalid + 저장 안 됨(폼 유지)
-  await popup.getByRole('button', { name: 'Add rule' }).click();
+  await popup.getByRole('button', { name: 'Add rule' }).first().click();
   const nameInput = popup.getByLabel('Header name', { exact: true }).first();
   // 클릭 직후 한 번만 읽으면 레이스다 — 헤더 이름 입력은 지연 청크가 도착하며 한 번
   // 교체되고(ui-polish 03), 그 찰나에 읽으면 이전 노드나 body를 보게 된다. 사용자에게
@@ -2093,7 +2105,7 @@ try {
    * N18i: 좁은 스코프 Block은 확인을 요구하지 않는다 — 경고가 모든 Block에 뜨면
    * 사용자는 곧 읽지 않고 누르게 되고, 넓은 스코프 경고의 값이 사라진다.
    */
-  await popup.getByRole('button', { name: 'Add rule' }).click();
+  await popup.getByRole('button', { name: 'Add rule' }).first().click();
   await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
   await pickOption(popup, 'Type', 'Block request');
   await popup.getByLabel('URL filter').fill('ads.example.com');
@@ -2116,7 +2128,7 @@ try {
    * 삼킨다 — 대안 하나가 도메인에 묶였다는 이유로 좁다고 읽으면 확인 없이 저장된다.
    * N18h와 같은 눈으로 본다: 배너가 아니라 **저장이 일어나지 않았는지**.
    */
-  await popup.getByRole('button', { name: 'Add rule' }).click();
+  await popup.getByRole('button', { name: 'Add rule' }).first().click();
   await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
   await pickOption(popup, 'Type', 'Block request');
   await pickOption(popup, 'URL match type', 'Regex (advanced)');
@@ -2142,7 +2154,7 @@ try {
    * Save에서 켜지는 경로다. N18h/N18j와 같은 눈으로 **둘 다** 본다: 확인 UI의 존재와
    * 저장된 개수의 불변. 개수만 보면 확인이 사라지고 그냥 실패한 경우와 구분되지 않는다.
    */
-  await popup.getByRole('button', { name: 'Add rule' }).click();
+  await popup.getByRole('button', { name: 'Add rule' }).first().click();
   await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
   await pickOption(popup, 'Type', 'Block request');
   await pickOption(popup, 'URL match type', 'Regex (advanced)');
@@ -2172,7 +2184,7 @@ try {
    * 본다 — `wide`는 "금지"가 아니라 "확인이 필요하다"는 뜻이므로, 확인을 눌러도 저장되지
    * 않으면 그것은 다른 결함이다.
    */
-  await popup.getByRole('button', { name: 'Add rule' }).click();
+  await popup.getByRole('button', { name: 'Add rule' }).first().click();
   await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
   await pickOption(popup, 'Type', 'Block request');
   await pickOption(popup, 'URL match type', 'Regex (advanced)');
@@ -2194,7 +2206,7 @@ try {
     `warned=${pathWarned}, not-saved=${pathNotSaved}, saved-after-confirm=${pathSavedAfterConfirm}`);
 
   // 아래 c~e는 열린 폼을 이어서 굴린다 — Block 저장으로 닫혔으니 다시 연다.
-  await popup.getByRole('button', { name: 'Add rule' }).click();
+  await popup.getByRole('button', { name: 'Add rule' }).first().click();
   await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
 
   // c: 모드 숨김 — 비허용 요청 헤더 이름이면 Mode 미노출, 허용(Accept)이면 노출
@@ -2225,7 +2237,7 @@ try {
     (v) => v === true,
   );
   await waitFormClosed();
-  await popup.getByRole('button', { name: 'Add rule' }).click();
+  await popup.getByRole('button', { name: 'Add rule' }).first().click();
   await popup.getByLabel('Header name', { exact: true }).waitFor({ timeout: 5000 });
   // 열린 Select 팝업 안의 Esc는 팝업만 닫고 폼은 유지해야 한다(이중 닫힘 방지)
   await popup.getByRole('combobox', { name: 'Type', exact: true }).click();
@@ -2276,7 +2288,7 @@ try {
   await pollProfileName((v) => /^Profile \d+$/.test(v));
   const emptyHintShown = await popup.getByText('No rules yet. Add one below.').isVisible().catch(() => false);
   // 빈 상태 CTA(Add rule)를 누르면 규칙 폼이 열린다
-  await popup.getByRole('button', { name: 'Add rule' }).click();
+  await popup.getByRole('button', { name: 'Add rule' }).first().click();
   const formOpened = await popup.getByRole('combobox', { name: 'Type', exact: true })
     .waitFor({ timeout: 5000 }).then(() => true, () => false);
   record('N19b: 빈 상태 안내 + CTA로 규칙 폼 열림',
@@ -2339,7 +2351,7 @@ try {
   await popup.reload();
   await pollSessionRuleCount(sw, 2);
   // 규칙 추가(행 enter): 폼으로 추가 → 목록에 반영
-  await popup.getByRole('button', { name: 'Add rule' }).click();
+  await popup.getByRole('button', { name: 'Add rule' }).first().click();
   await popup.getByLabel('Header name', { exact: true }).fill('X-M3');
   await closeSuggestions(popup);
   await popup.getByLabel('Value', { exact: true }).fill('3');
@@ -2397,7 +2409,7 @@ try {
     // "보이지만 호버되지 않은" 상태로 읽을 수 있다.
     await page.getByText('X-P').first().hover();
     const icon = await transformStates(page, page.getByRole('button', { name: 'Edit', exact: true }));
-    const button = await transformStates(page, page.getByRole('button', { name: 'Add rule' }));
+    const button = await transformStates(page, page.getByRole('button', { name: 'Add rule' }).first());
     const chip = await transformStates(page, page.getByRole('button', { name: 'New profile' }));
     await page.getByRole('button', { name: 'Profile menu', exact: true }).click();
     // 항목은 열릴 때 순차 등장한다(ui-polish 05) — 그 y 애니메이션이 도는 중에 읽으면
@@ -2417,7 +2429,7 @@ try {
   // N21b: 감도 대조 — 프로브가 실제로 모션을 감지할 수 있음을 먼저 보인다.
   await popup.emulateMedia({ reducedMotion: null });
   await popup.reload();
-  await popup.getByRole('button', { name: 'Add rule' }).first().waitFor({ timeout: 5000 });
+  await popup.getByRole('button', { name: 'Add rule' }).first().first().waitFor({ timeout: 5000 });
   await popup.waitForTimeout(700);
   const lively = await probePressPrimitives(popup);
   const allMoving = Object.values(lively).every(
@@ -2430,7 +2442,7 @@ try {
   // N21c: 부재 단언 — 같은 프로브가 reduced-motion에서는 아무 변형도 보지 못한다.
   await popup.emulateMedia({ reducedMotion: 'reduce' });
   await popup.reload();
-  await popup.getByRole('button', { name: 'Add rule' }).first().waitFor({ timeout: 5000 });
+  await popup.getByRole('button', { name: 'Add rule' }).first().first().waitFor({ timeout: 5000 });
   await popup.waitForTimeout(700);
   const still = await probePressPrimitives(popup);
   const allNone = Object.values(still).every(
@@ -2733,6 +2745,9 @@ try {
    * 여기서는 그 결과를 화면에서 확인한다 — 토큰 값만 보면 이 분기를 영영 놓친다.
    */
   const fieldContrast = async (scheme) => {
+    // 검색 입력은 **프로필 열**에 있고 그 열은 프로필 화면에서만 선다 (ADR 0017) —
+    // 앞 시나리오가 다른 레일 화면에 남겨 두면 여기서 기다릴 것이 아예 없다.
+    await popup.getByRole('button', { name: 'Show profiles', exact: true }).click();
     await popup.emulateMedia({ colorScheme: scheme });
     await popup.waitForTimeout(150);
     return popup.getByPlaceholder('Search profiles…').evaluate((el) => {
@@ -2764,7 +2779,7 @@ try {
   // 근거가 이것이다. 보이면 곧 "넘치는 내용이 있다"는 신호여야 어포던스가 성립한다.
   await seedProfiles([baseProfile('p-short', 'Short', manyRules.slice(0, 1))]);
   await popup.reload();
-  await popup.getByRole('button', { name: 'Add rule' }).waitFor({ timeout: 5000 });
+  await popup.getByRole('button', { name: 'Add rule' }).first().waitFor({ timeout: 5000 });
   const thumbsWhenShort = await popup.locator(THUMB).count();
   record('N22b: 넘치지 않으면 스크롤바가 렌더되지 않는다',
     thumbsWhenShort === 0,
@@ -2983,11 +2998,11 @@ try {
     );
     await page.setViewportSize({ width: 760, height: 580 });
     await page.goto(`chrome-extension://${extId}/popup.html?locale=en`);
-    await page.getByRole('button', { name: 'Add rule' }).waitFor({ timeout: 5000 });
+    await page.getByRole('button', { name: 'Add rule' }).first().waitFor({ timeout: 5000 });
     return page;
   };
   const fillNewRule = async (page, name) => {
-    await page.getByRole('button', { name: 'Add rule' }).click();
+    await page.getByRole('button', { name: 'Add rule' }).first().click();
     await page.getByLabel('Header name', { exact: true }).first().waitFor({ timeout: 5000 });
     await page.getByLabel('Header name', { exact: true }).first().fill(name);
     await page.getByLabel('Value', { exact: true }).first().fill('v');
@@ -3118,7 +3133,7 @@ try {
   // N24c: 폼 닫힘 — reduced-motion에서는 exit 창 없이 즉시 제거된다(스펙의 관측 계약).
   // 기본 모션에서는 MotionRow의 height 전이만큼 남아 있어야 대조가 성립한다.
   const measureFormRemoval = async (page, { via }) => {
-    await page.getByRole('button', { name: 'Add rule' }).click();
+    await page.getByRole('button', { name: 'Add rule' }).first().click();
     await page.getByRole('button', { name: 'Cancel' }).waitFor({ timeout: 5000 });
     if (via === 'save') {
       await page.getByLabel('Header name', { exact: true }).first().fill(`X-Close-${Date.now() % 100000}`);
@@ -3148,13 +3163,13 @@ try {
   await seedProfiles([baseProfile('p-close', 'Close', [])]);
   await popup.emulateMedia({ reducedMotion: null });
   await popup.reload();
-  await popup.getByRole('button', { name: 'Add rule' }).waitFor({ timeout: 5000 });
+  await popup.getByRole('button', { name: 'Add rule' }).first().waitFor({ timeout: 5000 });
   await popup.waitForTimeout(700);
   const livelyClose = await measureFormRemoval(popup, { via: 'cancel' });
   const livelySave = await measureFormRemoval(popup, { via: 'save' });
   await popup.emulateMedia({ reducedMotion: 'reduce' });
   await popup.reload();
-  await popup.getByRole('button', { name: 'Add rule' }).waitFor({ timeout: 5000 });
+  await popup.getByRole('button', { name: 'Add rule' }).first().waitFor({ timeout: 5000 });
   const reducedClose = await measureFormRemoval(popup, { via: 'cancel' });
   const reducedSave = await measureFormRemoval(popup, { via: 'save' });
   await popup.emulateMedia({ reducedMotion: null });
@@ -3263,7 +3278,7 @@ try {
   // 저장 전에 포커스를 일부러 딴 곳(종류 셀렉트)에 둔다 — 폼 열림 autoFocus가 남아
   // 있는 상태로 재면 "이동했다"가 아니라 "원래 거기 있었다"를 보게 된다.
   const focusAfterBlockedSave = async (page, { kind, expected, setup }) => {
-    await page.getByRole('button', { name: 'Add rule' }).click();
+    await page.getByRole('button', { name: 'Add rule' }).first().click();
     await page.getByRole('button', { name: 'Cancel', exact: true }).waitFor({ timeout: 5000 });
     if (kind) {
       const typeSelect = page.getByRole('combobox', { name: 'Type', exact: true });
@@ -3301,7 +3316,7 @@ try {
 
   await seedProfiles([baseProfile('p-focus', 'Focus', [])]);
   await popup.reload();
-  await popup.getByRole('button', { name: 'Add rule' }).waitFor({ timeout: 5000 });
+  await popup.getByRole('button', { name: 'Add rule' }).first().waitFor({ timeout: 5000 });
 
   const focusCases = {
     '헤더 이름': await focusAfterBlockedSave(popup, {
@@ -3590,32 +3605,45 @@ try {
       : '버튼을 찾지 못함');
   await popup.getByRole('button', { name: 'Cancel', exact: true }).click();
 
-  // N32: 레일 화면(백업·환경설정)에서 프로필을 고르면 프로필 화면으로 돌아온다.
-  // 사이드바는 늘 보이므로 거기서 고를 수 있는데, 본문이 그대로면 선택이 어디에도
-  // 반영되지 않아 눌러도 아무 일이 없는 것처럼 보였다.
+  /*
+   * N32: 레일 화면(백업·설정)에는 **고를 프로필이 아예 없다** (ADR 0017이 ADR 0005를 개정).
+   *
+   * 이 자리는 원래 "거기서 고르면 프로필 화면으로 돌아온다"를 재던 곳이었다. 그 보정은
+   * 사이드바가 늘 보이던 시절 "눌러도 아무 일이 안 일어난 것처럼 보인다"를 막으려던 것인데,
+   * 시안은 같은 문제에 다른 답을 내놨다 — **누를 것 자체를 없앤다.** 그래서 재는 대상이
+   * 바뀌었지 사라진 것이 아니다: 그때 막으려던 실패가 지금도 불가능한지를 본다.
+   *
+   * 부재만 단언하면 "열이 통째로 안 그려져도 통과"로 퇴화하므로, 프로필 화면에서 같은
+   * 컨트롤이 **있음**을 먼저 보여 감도 대조를 건다.
+   */
   await seedProfiles([
     baseProfile('p-a', 'Alpha', [hdr({ id: 'm1', name: 'X-A', value: '1' })]),
     { ...baseProfile('p-b', 'Beta', []), active: false },
   ]);
   await popup.reload();
-  await popup.getByRole('button', { name: 'Show settings' }).click();
-  await popup.waitForTimeout(300);
-  const onPrefs = await popup.evaluate(() =>
-    [...document.querySelectorAll('nav button')].map((b) => b.getAttribute('aria-pressed')));
-  await popup.getByRole('button', { name: /^Select profile Beta/ }).click();
-  await popup.waitForTimeout(400);
-  const afterSelect = await popup.evaluate(() => ({
-    rail: [...document.querySelectorAll('nav button')].map((b) => b.getAttribute('aria-pressed')),
-    // 프로필 화면으로 돌아왔다면 규칙 편집기가 있다.
-    hasEditor: [...document.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Add rule'),
-    // 그리고 편집 중인 것이 방금 고른 프로필이어야 한다.
-    editing: document.querySelector('input[aria-label="Profile name"]')?.value ?? null,
-  }));
-  record('N32: 레일 화면에서 프로필을 고르면 프로필 화면으로 돌아온다',
-    onPrefs[2] === 'true' && afterSelect.rail[0] === 'true' &&
-      afterSelect.hasEditor && afterSelect.editing === 'Beta',
-    `환경설정 화면 pressed=${JSON.stringify(onPrefs)} → 선택 후 pressed=${JSON.stringify(afterSelect.rail)}, ` +
-    `편집기=${afterSelect.hasEditor}, 편집중="${afterSelect.editing}"`);
+  const selectableOn = async (railButton) => {
+    await popup.getByRole('button', { name: railButton }).click();
+    await popup.waitForTimeout(300);
+    return {
+      pressed: await popup.evaluate(() =>
+        [...document.querySelectorAll('nav button')].map((b) => b.getAttribute('aria-pressed'))),
+      selects: await popup.getByRole('button', { name: /^Select profile/ }).count(),
+      search: await popup.getByPlaceholder('Search profiles…').count(),
+    };
+  };
+  const onProfilesView = await selectableOn('Show profiles');
+  const onSettingsView = await selectableOn('Show settings');
+  const onBackupsView = await selectableOn('Show backups');
+  await popup.getByRole('button', { name: 'Show profiles' }).click();
+  await popup.waitForTimeout(200);
+
+  record('N32: 백업·설정에는 고를 프로필이 없다 — 프로필 열이 서지 않는다',
+    onProfilesView.pressed[0] === 'true' && onProfilesView.selects === 2 && onProfilesView.search === 1 &&
+      onSettingsView.pressed[2] === 'true' && onSettingsView.selects === 0 && onSettingsView.search === 0 &&
+      onBackupsView.pressed[1] === 'true' && onBackupsView.selects === 0 && onBackupsView.search === 0,
+    `프로필 pressed=${JSON.stringify(onProfilesView.pressed)} selects=${onProfilesView.selects} search=${onProfilesView.search}, ` +
+    `설정 selects=${onSettingsView.selects} search=${onSettingsView.search}, ` +
+    `백업 selects=${onBackupsView.selects} search=${onBackupsView.search}`);
 
   // N33: 스크롤바 트랙의 opacity 전이가 reduced-motion에서 **꺼진다** (릴리스 게이트 R-2).
   //
@@ -3635,7 +3663,7 @@ try {
     await page.emulateMedia({ reducedMotion: reduced ? 'reduce' : null });
     await page.setViewportSize({ width: 760, height: 580 });
     await page.goto(`chrome-extension://${extensionId}/popup.html?locale=en`);
-    await page.getByRole('button', { name: 'Add rule' }).waitFor({ timeout: 5000 });
+    await page.getByRole('button', { name: 'Add rule' }).first().waitFor({ timeout: 5000 });
     await page.waitForTimeout(300);
     // 트랙은 넘치는 사이드바에만 뜬다(Base UI keepMounted 기본 false). 18 프로필로 넘치게 했다.
     const state = await page.evaluate(() => {
@@ -3672,6 +3700,12 @@ try {
       };
     });
     const tip = page.getByRole('tooltip').filter({ hasText: name }).first();
+    /*
+     * 호버 **전에** 포인터를 치운다. 레일 버튼이 세로 배치로 커지면서(ADR 0017) 직전
+     * 시나리오가 남긴 포인터가 이미 버튼 안에 들어오는 경우가 생겼고, 그러면 `hover()`가
+     * 새 mouseenter를 내지 않아 툴팁이 영영 열리지 않는다 — 아래 이탈 확인과 대칭이다.
+     */
+    await page.mouse.move(1, 1);
     await button.hover();
     const hoverTip = await tip.waitFor({ timeout: 3000 }).then(() => true, () => false);
     await page.mouse.move(1, 1);
@@ -3729,17 +3763,29 @@ try {
   };
   await railPopupKo.close();
 
-  const allRail = [...Object.values(railEn), ...Object.values(railKo)];
-  const everyIconOk = allRail.every(
-    (r) =>
-      r.found && r.hoverTip && r.hoverTipClosed && r.focusTip &&
-      // 셸을 바꾸며 32×28 / 아이콘 16px보다 작아지지 않았는지
-      r.width >= 32 && r.height >= 28 && r.icon >= 16,
-  );
+  const allRail = [
+    ...Object.entries(railEn).map(([k, r]) => [`en:${k}`, r]),
+    ...Object.entries(railKo).map(([k, r]) => [`ko:${k}`, r]),
+  ];
+  const railOkOf = (r) =>
+    r.found && r.hoverTip && r.hoverTipClosed && r.focusTip &&
+    // 셸을 바꾸며 32×28 / 아이콘 16px보다 작아지지 않았는지
+    r.width >= 32 && r.height >= 28 && r.icon >= 16;
+  const everyIconOk = allRail.every(([, r]) => railOkOf(r));
+  /*
+   * 실패한 항목을 **이름과 함께** 남긴다. 예시 하나만 찍던 메시지는 여섯 중 다른 하나가
+   * 걸렸을 때 무엇을 봐야 하는지 말해 주지 않아, 실패가 곧 재현 실험이 됐다.
+   */
+  const railFailures = allRail
+    .filter(([, r]) => !railOkOf(r))
+    .map(([name, r]) =>
+      `${name}{found=${r.found},hover=${r.hoverTip},close=${r.hoverTipClosed},focus=${r.focusTip},` +
+      `${r.width}x${r.height},icon=${r.icon}}`)
+    .join(' ');
   record('N28: 레일 아이콘 셋 — en/ko 호버·포커스·Tab 툴팁, 클릭 대상·선택 표시 유지',
     everyIconOk && tabTip &&
       railSelected.pressed === 'true' && railSelected.background !== unselectedBg,
-    `아이콘 ${allRail.length}개 전부 ok=${everyIconOk} (예: ${railEn.backups.width}x${railEn.backups.height}/icon${railEn.backups.icon}), ` +
+    `아이콘 ${allRail.length}개 전부 ok=${everyIconOk}` + (railFailures ? ` 실패=[${railFailures}]` : '') + `, ` +
     `Tab 툴팁=${tabTip}, 선택 배경 ${unselectedBg} → ${railSelected.background} (pressed=${railSelected.pressed})`);
 
 
@@ -3832,11 +3878,17 @@ try {
   await tabShellPage.getByRole('button', { name: 'Show profiles', exact: true }).waitFor({ timeout: 5000 });
   const tabShell = await tabShellPage.evaluate(shellProbe);
   await tabShellPage.close();
+  /*
+   * 레일과 프로필 열은 **두 표면이 같은 시안 폭**을 쓴다 (ADR 0017) — 예전에는 탭이 둘 다
+   * 더 넓었다. 탭의 여분은 전부 본문이 가져가므로, 열 폭이 같다는 것과 본문만 넓다는 것을
+   * 함께 못박는다(둘 중 하나만 보면 셋 다 같아져도 통과한다).
+   */
   const sizeOk =
     popupShell.w === 760 && popupShell.h === 580 && popupShell.overflow === 0 &&
     popupShell.cols[0] < popupShell.cols[1] &&
     tabShell.w === 1100 && tabShell.h === 700 && tabShell.overflow === 0 &&
-    tabShell.cols[0] > popupShell.cols[0] && tabShell.cols[1] > popupShell.cols[1];
+    tabShell.cols[0] === popupShell.cols[0] && tabShell.cols[1] === popupShell.cols[1] &&
+    tabShell.cols[2] > popupShell.cols[2];
 
   record('N41: 셸 구조 — 레일 라벨·적용 수, 프로필 열(스와치·인라인 토글), 팝업 760×580 · 탭 전폭',
     railOk && appliedText === '1applied' && columnOk && inlineToggled && sizeOk,
@@ -3882,6 +3934,41 @@ try {
   record('N41d: 팝업 프로필 열 ≥ 224px (레일 라벨화 이전 폭 유지)',
     popupShell.cols[1] >= 224,
     `popup cols=${JSON.stringify(popupShell.cols)}`);
+
+  /*
+   * N41g: 프로필 열은 **프로필 화면에서만** 선다 (ADR 0017이 ADR 0005를 개정).
+   *
+   * DOM에서만 참인 것이라 여기서 본다: 백업·설정으로 옮기면 그리드 칸이 셋에서 둘로 줄고
+   * 본문이 그 폭을 가져간다. 열 폭만 보면 "숨겼는데 자리는 남은" 상태를 못 잡으므로 칸 수와
+   * 본문 폭을 함께 단언한다. 헤더 제목도 화면을 따라 바뀌는지 같이 확인한다 — 제목이 지금
+   * 무엇을 보는지 말하지 않으면 열이 사라진 화면에서 방향을 잃는다.
+   */
+  const shellAt = async (railButton) => {
+    await popup.getByRole('button', { name: railButton, exact: true }).click();
+    await popup.waitForTimeout(150);
+    return popup.evaluate(shellProbe);
+  };
+  const profilesShell = await shellAt('Show profiles');
+  const backupsShell = await shellAt('Show backups');
+  const settingsShell = await shellAt('Show settings');
+  await popup.getByRole('button', { name: 'Show profiles', exact: true }).click();
+  await popup.waitForTimeout(150);
+
+  const columnHidden =
+    profilesShell.cols.length === 3 &&
+    backupsShell.cols.length === 2 &&
+    settingsShell.cols.length === 2 &&
+    // 본문이 그 폭을 실제로 가져갔다 — 숨기기만 하고 자리를 남기면 여기서 걸린다.
+    backupsShell.cols[1] > profilesShell.cols[2] &&
+    settingsShell.cols[1] > profilesShell.cols[2] &&
+    // 레일은 어느 화면에서도 같은 폭이다.
+    backupsShell.cols[0] === profilesShell.cols[0];
+
+  record('N41g: 프로필 열은 프로필 화면에서만 — 백업·설정에서는 본문이 그 폭을 가져간다',
+    columnHidden,
+    `profiles cols=${JSON.stringify(profilesShell.cols)}, ` +
+      `backups cols=${JSON.stringify(backupsShell.cols)}, ` +
+      `settings cols=${JSON.stringify(settingsShell.cols)}`);
 
   /*
    * N41e: 프로필 행의 규칙 수·전역 정지 (티켓 13, 스펙 story 22·25·38).
@@ -4247,7 +4334,7 @@ try {
     }, name);
 
   // (a) 끄고 저장 — 폼을 열면 켜져 있고(기본값), 끄면 그 선택이 저장에 실린다.
-  await popup.getByRole('button', { name: 'Add rule' }).click();
+  await popup.getByRole('button', { name: 'Add rule' }).first().click();
   await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
   const defaultOn = (await activateSwitch().getAttribute('aria-checked')) === 'true';
   await popup.getByLabel('Header name', { exact: true }).fill('X-Act-Dark');
@@ -4261,7 +4348,7 @@ try {
   const savedOff = darkMod?.enabled === false;
 
   // (b) 토글을 만지지 않은 저장 — 이전과 같이 켜진 채다.
-  await popup.getByRole('button', { name: 'Add rule' }).click();
+  await popup.getByRole('button', { name: 'Add rule' }).first().click();
   await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
   await popup.getByLabel('Header name', { exact: true }).fill('X-Act-Default');
   await closeSuggestions(popup);
@@ -4303,7 +4390,7 @@ try {
   const editKeptOff = seededAfterEdit?.enabled === false;
 
   // (e) 종류를 바꿔도 선택이 남는다 — 초안 전환이 enabled를 승계한다.
-  await popup.getByRole('button', { name: 'Add rule' }).click();
+  await popup.getByRole('button', { name: 'Add rule' }).first().click();
   await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
   await activateSwitch().click();
   await pickOption(popup, 'Type', 'Block request');

@@ -26,6 +26,14 @@ export interface ProfileSectionProps {
   userHeaders?: readonly string[];
   /** 규칙 저장 — 권위 실행 결과를 폼이 돌려받아 거부를 인라인으로 보여준다. */
   onCommandWithResult: (command: Command) => Promise<{ ok: boolean; error?: string }>;
+  /**
+   * 폼의 열림 상태는 **셸이 든다** (ADR 0017) — 여는 버튼이 본문 헤더로 갔기 때문이다.
+   * 'new' = 생성, id = 그 규칙 편집, null = 목록만 (ADR 0006).
+   */
+  editingRule: 'new' | string | null;
+  onEditingRuleChange: (next: 'new' | string | null) => void;
+  /** 폼으로 가는 문 — 여는 즉시 청크를 부른다. */
+  onOpenRuleForm: (target: 'new' | string) => void;
 }
 
 export function ProfileSection({
@@ -34,6 +42,9 @@ export function ProfileSection({
   onDeleteRule,
   userHeaders,
   onCommandWithResult,
+  editingRule,
+  onEditingRuleChange,
+  onOpenRuleForm,
 }: ProfileSectionProps) {
   const t = useT();
   /*
@@ -44,21 +55,8 @@ export function ProfileSection({
    * 한 프레임도 그려지지 않는다.
    */
   const RuleForm = useRuleForm();
-  // 규칙 폼 상태 — 'new' = 생성, id = 편집, null = 목록만 (ADR 0006, 의도적 로컬)
-  const [editingRule, setEditingRule] = useState<'new' | string | null>(null);
-  /* 폼을 여는 유일한 문 — 여는 즉시 청크를 부른다. 트리거의 hover·focus가 이미 시작해 두었으면
-     `loadRuleForm`이 같은 약속을 돌려주므로 두 번 받지 않는다. */
-  const openRuleForm = (target: 'new' | string) => {
-    void loadRuleForm();
-    setEditingRule(target);
-  };
-  // 신규 폼이 화면에 남아 있는 동안(퇴장 애니메이션 포함) '규칙 추가' 버튼을 감춘다.
-  // editingRule만 보면 폼이 아직 접히는 중인데 버튼이 그 밑에서 튀어나온다.
-  // 진입점이 여럿(하단 버튼·빈 상태 CTA)이라 editingRule에서 파생시켜 하나도 빠뜨리지 않는다.
-  const [newFormPresent, setNewFormPresent] = useState(false);
-  useEffect(() => {
-    if (editingRule === 'new') setNewFormPresent(true);
-  }, [editingRule]);
+  const setEditingRule = onEditingRuleChange;
+  const openRuleForm = onOpenRuleForm;
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const confirmTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(confirmTimer.current), []);
@@ -218,7 +216,7 @@ export function ProfileSection({
       {/* 새 규칙 폼은 열릴 때 height-in(ui-refine 08), 닫힐 때 height-out 한다.
           AnimatePresence가 없으면 열림만 애니메이션되고 닫힘은 즉시 사라진다 —
           story 21("취소·저장을 누르면 폼이 자연스럽게 접힌다")이 절반만 성립했다. */}
-      <AnimatePresence initial={false} onExitComplete={() => setNewFormPresent(false)}>
+      <AnimatePresence initial={false}>
         {editingRule === 'new' && (
           <MotionRow key="new-rule-form">
             {RuleForm ? (
@@ -233,20 +231,6 @@ export function ProfileSection({
           </MotionRow>
         )}
       </AnimatePresence>
-      {/* 빈 상태 CTA가 추가를 유도하므로 하단 버튼은 규칙이 있을 때만 노출한다. */}
-      {!newFormPresent && profile.modifications.length > 0 && (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="self-start"
-           {...ruleFormIntentProps}
-          onClick={() => openRuleForm('new')}
-        >
-          <Plus size={14} strokeWidth={1.75} className="mr-1" />
-          {t('addRule')}
-        </Button>
-      )}
-
     </Card>
   );
 }

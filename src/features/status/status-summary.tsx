@@ -5,6 +5,12 @@ import { warningText } from './warning-text';
 
 export interface StatusSummaryProps {
   summary: StatusSummaryData;
+  /**
+   * 수 줄을 그릴지 (ADR 0017). 앱 셸에서는 본문 헤더가 그 수를 이미 말하므로 끈다 —
+   * 같은 수를 두 번 그리면 어느 쪽이 최신인지 읽는 사람이 판단해야 한다. 경고·오류는
+   * 이 값과 무관하게 언제나 남는다(조용한 실패 금지).
+   */
+  showCounts?: boolean;
 }
 
 /**
@@ -12,10 +18,11 @@ export interface StatusSummaryProps {
  * "지금 브라우저에 무엇이 걸려 있는가"는 항상 보이되 시선을 뺏지 않는다.
  * 경고·오류는 시맨틱 Alert로 아래에 남는다 — 조용한 실패 금지.
  */
-export function StatusSummary({ summary }: StatusSummaryProps) {
+export function StatusSummary({ summary, showCounts = true }: StatusSummaryProps) {
   const t = useT();
   return (
     <section className="flex flex-col gap-1.5 text-xs">
+      {showCounts && (
       <div className="flex items-center gap-2 text-muted-foreground">
         <span>
           <strong className="font-medium text-foreground">
@@ -46,6 +53,7 @@ export function StatusSummary({ summary }: StatusSummaryProps) {
           <span className="text-green-600 dark:text-green-400">{t('noIssues')}</span>
         )}
       </div>
+      )}
 
       {summary.applyError && (
         <AlertBanner as="p" severity="danger" role="alert">

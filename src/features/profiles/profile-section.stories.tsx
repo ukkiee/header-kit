@@ -45,12 +45,17 @@ function InteractiveProfileSection({ initial }: { initial: Profile }) {
   };
   const onDeleteRule = (profileId: string, modificationId: string) =>
     setState((s) => applyCommand(s, { type: 'remove-modification', profileId, modificationId }));
+  // 앱에서는 셸이 드는 상태 — 스토리에서는 이 래퍼가 그 자리를 대신한다.
+  const [editingRule, setEditingRule] = useState<'new' | string | null>(null);
   return (
     <ProfileSection
       profile={profile}
       onCommand={onCommand}
       onDeleteRule={onDeleteRule}
       onCommandWithResult={onCommandWithResult}
+      editingRule={editingRule}
+      onEditingRuleChange={setEditingRule}
+      onOpenRuleForm={setEditingRule}
     />
   );
 }
@@ -61,6 +66,9 @@ export const Active: Story = {
     onCommand: () => {},
     onDeleteRule: () => {},
     onCommandWithResult: async () => ({ ok: true }),
+    editingRule: null,
+    onEditingRuleChange: () => {},
+    onOpenRuleForm: () => {},
   },
   render: (args) => <InteractiveProfileSection initial={args.profile} />,
 };
@@ -71,6 +79,9 @@ export const Inactive: Story = {
     onCommand: () => {},
     onDeleteRule: () => {},
     onCommandWithResult: async () => ({ ok: true }),
+    editingRule: null,
+    onEditingRuleChange: () => {},
+    onOpenRuleForm: () => {},
   },
   render: (args) => <InteractiveProfileSection initial={args.profile} />,
 };

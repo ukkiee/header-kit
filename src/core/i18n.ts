@@ -195,6 +195,8 @@ const en = {
   railSettings: 'Settings',
   /** 레일 하단 — 지금 브라우저에 실제로 걸려 있는 규칙 수의 캡션. */
   railApplied: 'applied',
+  headerBackupsSub: 'Export · Import · Sync',
+  headerSettingsSub: 'Theme, badge, language',
   ariaToggleBackups: 'Toggle backups',
   ariaTogglePreferences: 'Toggle preferences',
   ariaNewAutocompleteHeader: 'New autocomplete header',
@@ -395,6 +397,8 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     railBackups: '백업',
     railSettings: '설정',
     railApplied: '적용 중',
+    headerBackupsSub: '내보내기 · 가져오기 · 동기화',
+    headerSettingsSub: '테마, 배지, 언어',
     ariaToggleBackups: '백업 펼치기/접기',
     ariaTogglePreferences: '환경설정 펼치기/접기',
     ariaNewAutocompleteHeader: '새 자동완성 헤더',
