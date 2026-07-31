@@ -89,6 +89,60 @@ describe('commitMigration — v1 마이그레이션 커밋 (storage.local)', () 
   });
 });
 
+/**
+ * v2 → v3 커밋 (티켓 01, ADR 0017).
+ *
+ * 순수 분류기는 "메모리에서 올라갔다"까지만 보인다. 여기서 못 박는 것은 그 결과가 **쓰기 문을
+ * 지나 저장소에 굳는가**이다 — 굳지 않으면 SW가 깨어날 때마다 같은 변환이 되풀이되고,
+ * 저장된 JSON과 실제 동작이 영원히 어긋난 채로 남는다.
+ */
+describe('commitMigration — v2 응답 쿠키 재구조화 커밋', () => {
+  const V2 = {
+    schemaVersion: 2,
+    paused: false,
+    profiles: [
+      { id: 'p1', name: 'P', color: '#2563eb', shortLabel: 'P', active: true,
+        modifications: [{ kind: 'set-cookie', id: 'm1', value: 'sid=abc; Path=/',
+          enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }] },
+    ],
+    materialized: {},
+    customHeaderNames: [],
+  };
+
+  it('갈라낸 재료가 저장소에 굳는다', async () => {
+    const kv = seedLocal(V2);
+    expect(await commit()).toBe(true);
+    expect(kv.state).toMatchObject({
+      schemaVersion: SCHEMA_VERSION,
+      profiles: [{ modifications: [{ id: 'm1', name: 'sid', value: 'abc', path: '/' }] }],
+    });
+  });
+
+  it('한 번만 쓴다 — 굳은 뒤 다시 깨어나도 아무것도 쓰지 않는다', async () => {
+    seedLocal(V2);
+    expect(await commit()).toBe(true);
+    expect(writes).toBe(1);
+    expect(await commit()).toBe(false);
+    expect(writes).toBe(1);
+  });
+
+  it('쓰기가 실패하면 저장소는 v2로 남아 다음 기회에 다시 시도된다', async () => {
+    const kv = seedLocal(V2);
+    const local = (globalThis as unknown as { browser: { storage: { local: { set: unknown } } } })
+      .browser.storage.local;
+    const failing = local.set;
+    local.set = async () => {
+      throw new Error('quota');
+    };
+    await expect(commit()).rejects.toThrow('quota');
+    // 반쯤 올라간 상태로 굳지 않았다 — 다음 커밋이 같은 v2를 다시 만나 올린다.
+    expect(kv.state).toMatchObject({ schemaVersion: 2 });
+    local.set = failing;
+    expect(await commit()).toBe(true);
+    expect(kv.state).toMatchObject({ schemaVersion: SCHEMA_VERSION });
+  });
+});
+
 /*
  * loadState는 **순수 읽기**다 (티켓 14).
  *

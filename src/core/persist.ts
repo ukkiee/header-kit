@@ -5,6 +5,7 @@ import {
   createDefaultState,
   DEFAULT_BADGE_VISIBLE,
   DEFAULT_SYNC_BACKUP,
+  parseSetCookieLine,
   PROFILE_COLORS,
   SCHEMA_VERSION,
   type Filter,
@@ -27,6 +28,26 @@ function isHeaderish(value: Record<string, unknown>): boolean {
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((x) => typeof x === 'string');
+}
+
+function isOptionalString(value: unknown): boolean {
+  return value === undefined || typeof value === 'string';
+}
+
+/** v3 응답 쿠키의 선택 필드 형 검증 (ADR 0017) — 이름·값은 호출부가 따로 본다. */
+function isSetCookieShape(value: Record<string, unknown>): boolean {
+  return (
+    isOptionalString(value.raw) &&
+    isOptionalString(value.domain) &&
+    isOptionalString(value.path) &&
+    isOptionalString(value.maxAge) &&
+    (value.sameSite === undefined ||
+      value.sameSite === 'none' ||
+      value.sameSite === 'lax' ||
+      value.sameSite === 'strict') &&
+    (value.secure === undefined || typeof value.secure === 'boolean') &&
+    (value.httpOnly === undefined || typeof value.httpOnly === 'boolean')
+  );
 }
 
 /** 규칙 조건(ADR 0010) 형 검증 — 선택 객체, 각 필드도 선택. */
@@ -67,7 +88,7 @@ export function isModification(value: unknown): value is Modification {
     case 'cookie':
       return typeof value.name === 'string' && isHeaderish(value);
     case 'set-cookie':
-      return isHeaderish(value);
+      return typeof value.name === 'string' && isSetCookieShape(value) && isHeaderish(value);
     case 'redirect':
       return typeof value.pattern === 'string' && typeof value.substitution === 'string';
     case 'user-agent':
@@ -153,6 +174,9 @@ export function backfillModification(value: unknown): unknown {
   // 무효 urlMatchType은 치유로 벗긴다(부재 = regex 하위 호환) — 전량 거부 방지.
   const healed: Record<string, unknown> = {
     ...(headerish ? { mode: 'override', emptyMeans: 'remove' } : {}),
+    // v3에서 응답 쿠키가 얻은 이름 — **검증보다 먼저** 기본값을 받아야 한다. 검증이 먼저
+    // 보면 이름 없는 옛 항목이 무효가 되어 상태 전체가 기본값으로 리셋된다.
+    ...(value.kind === 'set-cookie' ? { name: '' } : {}),
     comment: '',
     ...value,
   };
@@ -291,11 +315,74 @@ export type StoredStateRead =
  * union에 **더해질** 뿐 기존 항목의 형태를 바꾸지 않는다. 그래서 이 마이그레이션은 값을
  * 손대지 않고 버전만 올린다 — 백필·검증은 아래 공통 경로가 그대로 맡는다.
  *
- * 이름을 붙여 둔 이유는 다음 버전 때문이다. v3가 형태를 실제로 바꾸면 그 변환은 여기
- * 옆에 `migrateStoredStateV2ToV3`로 서고, 두 단계를 이어 붙이면 v1 사용자도 올라온다.
+ * **찍는 숫자는 리터럴 2다.** 예전에는 `SCHEMA_VERSION`을 찍었는데, 그러면 상수가 3으로
+ * 오르는 것만으로 v1 데이터가 v2→v3 변환을 한 번도 지나지 않은 채 "v3"로 라벨링된다 —
+ * v1 사용자의 원시 Set-Cookie가 새 뜻으로 읽혀 v3 경계가 막으려던 그 실패가 되살아난다.
+ * 각 단계는 자기 목적지만 안다.
  */
 function migrateStoredStateV1ToV2(value: Record<string, unknown>): Record<string, unknown> {
-  return { ...value, schemaVersion: SCHEMA_VERSION };
+  return { ...value, schemaVersion: 2 };
+}
+
+/**
+ * 레거시 프로필 필터를 규칙 조건으로 실체화한다 — 상태 수준 래퍼 (ADR 0017).
+ *
+ * **v2→v3보다 먼저 돌아야 한다.** 진짜 v1 상태는 규칙 조건을 갖고 있지 않다 — 그것들은
+ * 프로필 수준 레거시 필터에서 이 변환이 만들어 낸다. 퇴역 게이트를 이보다 앞에 두면 아직
+ * 태어나지 않은 것을 찾다가 아무것도 못 찾고, 그 뒤에 검증이 퇴역 대상을 새로 만들어 커밋한다.
+ *
+ * 필터 키가 없으면 즉시 반환하므로 검증 안에서 다시 불려도 무해하다.
+ */
+function materializeLegacyFilters(value: Record<string, unknown>): Record<string, unknown> {
+  if (!Array.isArray(value.profiles)) return value;
+  return {
+    ...value,
+    profiles: value.profiles.map((p) => (isRecord(p) ? migrateProfileFilters(p) : p)),
+  };
+}
+
+/**
+ * 옛 원시 Set-Cookie 한 줄을 v3의 이름·값·속성으로 옮긴다 (ADR 0017).
+ *
+ * 가를 수 없으면 **원시 그대로 보존**한다 — 그러면 컴파일이 그 줄을 그대로 내보내므로
+ * 나가는 헤더가 이전과 같다. 이미 v3인 항목(`name`을 가진)은 손대지 않아, 이 변환이 여러 번
+ * 돌아도 결과가 같다.
+ */
+export function migrateSetCookieToV3(value: unknown): unknown {
+  if (!isRecord(value) || value.kind !== 'set-cookie' || typeof value.name === 'string') {
+    return value;
+  }
+  const line = typeof value.value === 'string' ? value.value : '';
+  const parts = parseSetCookieLine(line);
+  return parts ? { ...value, ...parts } : { ...value, name: '', value: '', raw: line };
+}
+
+/**
+ * v2 → v3 마이그레이션 (ADR 0017) — 응답 쿠키 재구조화.
+ *
+ * `migrateStoredStateV1ToV2`와 같은 이유로 목적지 숫자를 리터럴로 찍는다.
+ */
+function migrateStoredStateV2ToV3(value: Record<string, unknown>): Record<string, unknown> {
+  if (!Array.isArray(value.profiles)) return { ...value, schemaVersion: 3 };
+  return {
+    ...value,
+    schemaVersion: 3,
+    profiles: value.profiles.map((p) =>
+      isRecord(p) && Array.isArray(p.modifications)
+        ? { ...p, modifications: p.modifications.map(migrateSetCookieToV3) }
+        : p,
+    ),
+  };
+}
+
+/**
+ * 옛 상태를 v3까지 올리는 단 하나의 문 — 순서가 계약이다 (ADR 0017).
+ *
+ * 실체화가 퇴역·재구조화보다 **먼저**다. 이 순서가 티켓 02의 퇴역이 실제로 대상을 볼 수
+ * 있게 하는 자리이고, 여기서 뒤집히면 퇴역이 아무것도 못 찾은 채 통과한다.
+ */
+function upgradeToCurrent(value: Record<string, unknown>): Record<string, unknown> {
+  return migrateStoredStateV2ToV3(materializeLegacyFilters(value));
 }
 
 /** 검증을 통과한 StoredState거나, 통과하지 못하면 null. 분류와 검증을 나눠 둔다. */
@@ -368,12 +455,20 @@ export function readStoredState(value: unknown): StoredStateRead {
     return state ? { status: 'ok', state } : { status: 'reset', state: createDefaultState() };
   }
 
+  // 마이그레이션이 실패하면 **기본 상태로 갈아치우지 않는다** — 원본을 그대로 두어
+  // 사용자가 되돌리거나 내보내 살릴 수 있게 한다.
   if (storedVersion === 1) {
-    const state = validateStoredState(migrateStoredStateV1ToV2(value));
-    // 마이그레이션이 실패하면 **기본 상태로 갈아치우지 않는다** — 원본 v1을 그대로 두어
-    // 사용자가 되돌리거나 내보내 살릴 수 있게 한다.
+    // 두 단계를 이어 붙인다 — v2를 건너뛴 사용자와 v2를 거친 사용자가 같은 곳에 도착한다.
+    const state = validateStoredState(upgradeToCurrent(migrateStoredStateV1ToV2(value)));
     return state
       ? { status: 'migrated', from: 1, state }
+      : { status: 'blocked', reason: 'unmigratable', storedVersion };
+  }
+
+  if (storedVersion === 2) {
+    const state = validateStoredState(upgradeToCurrent(value));
+    return state
+      ? { status: 'migrated', from: 2, state }
       : { status: 'blocked', reason: 'unmigratable', storedVersion };
   }
 

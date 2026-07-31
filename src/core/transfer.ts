@@ -5,6 +5,7 @@ import {
   isModification,
   isRecord,
   migrateProfileFilters,
+  migrateSetCookieToV3,
   type Profile,
   type StoredState,
 } from './schema';
@@ -180,7 +181,7 @@ export function parseImport(
   const backfilled = (entries as Profile[]).map((p) => ({
     ...p,
     modifications: p.modifications.map(
-      (m) => backfillModification(m) as Profile['modifications'][number],
+      (m) => backfillModification(migrateSetCookieToV3(m)) as Profile['modifications'][number],
     ),
   }));
   const { profiles, notices } = normalizeImportedProfiles(backfilled, newId);

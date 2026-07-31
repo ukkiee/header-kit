@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { compile, type CompileEnv } from './compile';
-import type { Modification, Profile } from './schema';
+import { readStoredState, type Modification, type Profile } from './schema';
 
 function profile(mods: Modification[]): Profile {
   return {
@@ -55,7 +55,7 @@ describe('compile — Cookie', () => {
 describe('compile — Set-Cookie', () => {
   it('append는 Set-Cookie 응답 헤더를 추가한다', () => {
     const { rules } = compile(
-      [{ ...profile([]), modifications: [{ kind: 'set-cookie', id: 'm1', value: 'theme=dark; Path=/', mode: 'append', emptyMeans: 'remove', comment: '', enabled: true }] }],
+      [{ ...profile([]), modifications: [{ kind: 'set-cookie', id: 'm1', name: 'theme', value: 'dark', path: '/', mode: 'append', emptyMeans: 'remove', comment: '', enabled: true }] }],
       env,
     );
 
@@ -68,7 +68,7 @@ describe('compile — Set-Cookie', () => {
 
   it('빈 값 + remove는 Set-Cookie를 차단(제거)한다', () => {
     const { rules } = compile(
-      [{ ...profile([]), modifications: [{ kind: 'set-cookie', id: 'm1', value: '', mode: 'override', emptyMeans: 'remove', comment: '', enabled: true }] }],
+      [{ ...profile([]), modifications: [{ kind: 'set-cookie', id: 'm1', name: '', value: '', mode: 'override', emptyMeans: 'remove', comment: '', enabled: true }] }],
       env,
     );
 
@@ -139,5 +139,74 @@ describe('compile — Cookie Placeholder', () => {
     );
 
     expect(rules[0]?.action.requestHeaders?.[0]?.value).toBe('trace=real-uuid');
+  });
+});
+
+/**
+ * 업그레이드 출력 보존 (티켓 01, ADR 0017) — **이 파일에서 가장 중요한 묶음이다.**
+ *
+ * v2에서 응답 쿠키는 `value`에 든 Set-Cookie 한 줄을 그대로 헤더로 내보냈다. v3는 그 필드의
+ * 뜻을 바꾸므로, 업그레이드가 옳은지는 오직 하나로 판정된다 — **나가는 헤더가 같은가.**
+ * 구조화로 갈라졌든 원시로 보존됐든 마찬가지여야 한다.
+ */
+describe('compile — v2 응답 쿠키 업그레이드 후 출력 보존', () => {
+  const compileMigratedSetCookie = (v2Line: string) => {
+    const read = readStoredState({
+      schemaVersion: 2,
+      paused: false,
+      profiles: [
+        {
+          id: 'p1', name: 'P', active: true, shortLabel: 'P', color: '#2563eb',
+          modifications: [
+            { kind: 'set-cookie', id: 'm1', value: v2Line, enabled: true, mode: 'append', emptyMeans: 'remove', comment: '' },
+          ],
+        },
+      ],
+      materialized: {},
+      customHeaderNames: [],
+    });
+    if (read.status !== 'migrated') throw new Error(`expected migrated, got ${read.status}`);
+    const { rules } = compile(read.state.profiles, env);
+    return rules[0]?.action.responseHeaders?.[0];
+  };
+
+  it.each([
+    // 갈라지는 줄 — 조립기가 같은 글자를 되돌려 놓아야 한다.
+    ['sid=abc'],
+    ['sid=abc; Path=/'],
+    ['sid=abc; Domain=localhost; Path=/; Max-Age=60; SameSite=None; Secure; HttpOnly'],
+    ['theme=dark; SameSite=Lax'],
+    ['t=1; Max-Age=-1'],
+    // 갈라지지 않는 줄 — 원시 그대로 나가야 한다.
+    ['sid=abc; Expires=Wed, 21 Oct 2026 07:28:00 GMT'],
+    ['sid=a=b; Path=/'],
+    ['sid=abc; Partitioned'],
+    ['sid=abc; Secure; Path=/'], // 속성 순서가 조립 순서와 달라 원시로 남는다
+  ])('%s 는 업그레이드 뒤에도 글자 그대로 나간다', (line) => {
+    expect(compileMigratedSetCookie(line)).toEqual({
+      header: 'Set-Cookie',
+      operation: 'append',
+      value: line,
+    });
+  });
+
+  it('빈 값은 업그레이드 뒤에도 헤더를 제거한다', () => {
+    const read = readStoredState({
+      schemaVersion: 2,
+      paused: false,
+      profiles: [
+        {
+          id: 'p1', name: 'P', active: true, shortLabel: 'P', color: '#2563eb',
+          modifications: [
+            { kind: 'set-cookie', id: 'm1', value: '', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+          ],
+        },
+      ],
+      materialized: {},
+      customHeaderNames: [],
+    });
+    if (read.status !== 'migrated') throw new Error('migrated가 아니다');
+    const { rules } = compile(read.state.profiles, env);
+    expect(rules[0]?.action.responseHeaders?.[0]).toEqual({ header: 'Set-Cookie', operation: 'remove' });
   });
 });

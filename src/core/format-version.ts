@@ -14,10 +14,16 @@
  * 호환되므로(새 종류는 union에 **더해질** 뿐 기존 항목을 바꾸지 않는다) 마이그레이션은
  * 데이터를 손대지 않고 버전만 올린다 — `migrateStoredStateV1ToV2` 참고.
  *
+ * v2 → v3: 응답 쿠키의 `value`가 **뜻을 바꿨다** — Set-Cookie 한 줄 전체에서 쿠키의 값으로
+ * (ADR 0017). 더해지는 필드는 백필로 메울 수 있지만 뜻이 바뀌는 필드는 그럴 수 없고, 경계가
+ * 없으면 구버전 빌드가 새 레코드를 받아 값만 헤더 전체로 컴파일한다. **각 마이그레이션은
+ * 이 상수가 아니라 자기 목적지 숫자를 리터럴로 찍는다** — 상수를 찍으면 다음 버전이 올라간
+ * 순간 옛 데이터가 아무 변환 없이 새 버전으로 라벨링된다.
+ *
  * 버전을 올릴 때마다 `readStoredState`의 분류가 함께 자란다. 이 상수만 올리고 마이그레이션을
  * 두지 않으면, 기존 사용자의 상태가 '읽을 수 없음'으로 떨어져 데이터를 잃는다.
  */
-export const SCHEMA_VERSION = 2 as const;
+export const SCHEMA_VERSION = 3 as const;
 
 /**
  * 내보내기 파일의 포맷 버전.
@@ -26,7 +32,7 @@ export const SCHEMA_VERSION = 2 as const;
  * 거부하는 것은 이 버전보다 **새로운** 파일뿐이고, 그때도 파일을 변형하지 않는다(이 버전이
  * 모르는 종류를 지우고 되쓰면 최신 버전에서 그것이 사라진다).
  */
-export const EXPORT_FORMAT_VERSION = 2 as const;
+export const EXPORT_FORMAT_VERSION = 3 as const;
 
 /**
  * 이 버전이 읽을 수 있는 내보내기 포맷들.
@@ -35,7 +41,7 @@ export const EXPORT_FORMAT_VERSION = 2 as const;
  * 우리 자신이 방금 쓴 파일을 "HeaderKit 파일이 아님"으로 거부한다 — `newer` 분기에도 걸리지
  * 않아 오해를 주는 메시지가 나간다. 여기에는 **지난** 버전만 이력으로 남긴다.
  */
-const OLDER_READABLE_FORMAT_VERSIONS: readonly number[] = [1];
+const OLDER_READABLE_FORMAT_VERSIONS: readonly number[] = [1, 2];
 
 export const READABLE_FORMAT_VERSIONS: readonly number[] = [
   ...OLDER_READABLE_FORMAT_VERSIONS,

@@ -35,12 +35,12 @@ describe('ruleView', () => {
       ruleView({ kind: 'cookie', id: 'c', name: 'sid', value: 'x', enabled: true, mode: 'append', emptyMeans: 'remove', comment: '' }, t).badge,
     ).toBe('COOKIE');
     const setCookie = ruleView(
-      { kind: 'set-cookie', id: 's', value: 'theme=dark; Path=/', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+      { kind: 'set-cookie', id: 's', name: 'theme', value: 'dark', path: '/', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
       t,
     );
     expect(setCookie.badge).toBe('SET-COOKIE');
     expect(setCookie.summary).toBe('All URLs → theme=dark; Path=/');
-    expect(setCookie.title).toBe('SET-COOKIE');
+    expect(setCookie.title).toBe('theme');
   });
 
   it('append 모드는 요약에 표기된다 (지역화)', () => {

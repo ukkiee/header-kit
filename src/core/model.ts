@@ -1,4 +1,5 @@
 import type { Locale } from './i18n';
+import { hasPlaceholders } from './placeholder';
 import type { RequestMethod, ResourceType } from './rules';
 import { DEFAULT_THEME, type ThemePreference } from './theme';
 
@@ -103,14 +104,140 @@ export interface CookieModification {
   conditions?: RuleConditions;
 }
 
+/** SameSite 정책 — 붙이지 않을 때는 필드 자체가 없다. */
+export type SameSitePolicy = 'none' | 'lax' | 'strict';
+
+/** 조립된 쿠키 한 줄의 재료. Modification과 따로 두어 파서·조립기가 둘 다 이것만 안다. */
+export interface SetCookieParts {
+  name: string;
+  value: string;
+  domain?: string;
+  path?: string;
+  maxAge?: string;
+  sameSite?: SameSitePolicy;
+  secure?: boolean;
+  httpOnly?: boolean;
+}
+
+const SAME_SITE_LABEL: Record<SameSitePolicy, string> = {
+  none: 'None',
+  lax: 'Lax',
+  strict: 'Strict',
+};
+
 /**
- * Set-Cookie — Set-Cookie 응답 헤더를 수정한다 (ADR-0001).
- * append: 새 Set-Cookie 추가. override: 통째 교체. 빈 값 + remove: 차단(제거).
+ * 재료로 Set-Cookie 한 줄을 조립한다 (ADR 0017). 비운 속성은 붙지 않는다.
+ *
+ * 순서가 고정인 것이 중요하다 — `parseSetCookieLine`이 이 함수로 되돌려 원본과
+ * 글자까지 같은지 보는 것으로 "나가는 헤더가 같다"를 보증하기 때문이다.
+ */
+export function assembleSetCookie(parts: SetCookieParts): string {
+  const segments = [`${parts.name}=${parts.value}`];
+  if (parts.domain) segments.push(`Domain=${parts.domain}`);
+  if (parts.path) segments.push(`Path=${parts.path}`);
+  if (parts.maxAge) segments.push(`Max-Age=${parts.maxAge}`);
+  if (parts.sameSite) segments.push(`SameSite=${SAME_SITE_LABEL[parts.sameSite]}`);
+  if (parts.secure) segments.push('Secure');
+  if (parts.httpOnly) segments.push('HttpOnly');
+  return segments.join('; ');
+}
+
+/**
+ * 옛 원시 Set-Cookie 한 줄을 재료로 가른다 — **모호하면 null**이고, 그때 호출부는
+ * 그 줄을 원시 그대로 보존한다 (ADR 0017).
+ *
+ * 판정의 마지막 단계가 이 함수의 요점이다: 갈라낸 재료를 다시 조립해 **원본과 글자까지
+ * 같을 때만** 받는다. 그래서 구분자 간격이나 속성 순서 같은 것을 따로 규칙으로 적을 필요가
+ * 없고, "업그레이드해도 같은 쿠키가 나간다"가 문서가 아니라 구조로 성립한다. 잘못 갈라
+ * 다른 쿠키를 내보내는 것이 원시로 남기는 것보다 나쁘다.
+ */
+export function parseSetCookieLine(line: string): SetCookieParts | null {
+  const parts = readSetCookieLine(line);
+  return parts && assembleSetCookie(parts) === line ? parts : null;
+}
+
+function readSetCookieLine(line: string): SetCookieParts | null {
+  // 빈 줄은 v2에서 "헤더를 지운다"는 뜻이었다 — 재료로 가를 것이 없다.
+  // 플레이스홀더가 든 줄은 실체화 자리가 달라지므로 가르지 않는다.
+  if (line === '' || hasPlaceholders(line)) return null;
+
+  const [head, ...attributes] = line.split('; ');
+  if (head === undefined) return null;
+  const separator = head.indexOf('=');
+  if (separator <= 0) return null; // name=value 꼴이 아니거나 이름이 비었다
+  const value = head.slice(separator + 1);
+  if (value.includes('=')) return null; // 값 안의 = 는 모호함으로 본다
+
+  const parts: SetCookieParts = { name: head.slice(0, separator), value };
+  const seen = new Set<string>();
+  for (const attribute of attributes) {
+    const at = attribute.indexOf('=');
+    const key = (at < 0 ? attribute : attribute.slice(0, at)).toLowerCase();
+    const raw = at < 0 ? undefined : attribute.slice(at + 1);
+    if (seen.has(key)) return null; // 같은 속성이 두 번
+    seen.add(key);
+    switch (key) {
+      case 'domain':
+        if (!raw) return null;
+        parts.domain = raw;
+        break;
+      case 'path':
+        if (!raw) return null;
+        parts.path = raw;
+        break;
+      case 'max-age':
+        if (raw === undefined || !/^-?\d+$/.test(raw)) return null;
+        parts.maxAge = raw;
+        break;
+      case 'samesite': {
+        const policy = raw?.toLowerCase();
+        if (policy !== 'none' && policy !== 'lax' && policy !== 'strict') return null;
+        parts.sameSite = policy;
+        break;
+      }
+      case 'secure':
+        if (raw !== undefined) return null;
+        parts.secure = true;
+        break;
+      case 'httponly':
+        if (raw !== undefined) return null;
+        parts.httpOnly = true;
+        break;
+      // 모르는 속성 — Expires도 여기로 온다. 지원하지 않는 것을 버리고 되쓰면 다른 쿠키가 나간다.
+      default:
+        return null;
+    }
+  }
+  return parts;
+}
+
+/**
+ * Response Cookie — Set-Cookie 응답 헤더에 쿠키 한 줄을 **얹는다** (ADR-0001, ADR 0017).
+ *
+ * v3부터 `value`는 **쿠키의 값**이고, 이름·속성은 옆 필드가 든다. v2에서는 `value`가
+ * Set-Cookie 한 줄 전체였다 — 같은 필드의 뜻이 바뀌었으므로 그 경계가 v3다.
+ *
+ * 서버가 보낸 쿠키를 **고치는 것이 아니라 대신 놓는 것**이다. 브라우저에 헤더 값의 부분
+ * 수정이 없어서(ADR 0001) "서버 쿠키에서 Secure만 벗기기"는 이 종류로도 할 수 없다.
  */
 export interface SetCookieModification {
   kind: 'set-cookie';
   id: string;
+  /** 쿠키 이름. 원시 보존 항목은 빈 문자열이다. */
+  name: string;
+  /** 쿠키의 값 (v3부터). */
   value: string;
+  /**
+   * 가를 수 없어 그대로 보존한 옛 Set-Cookie 한 줄. 있으면 **이것이 헤더로 나가고**
+   * 구조화된 필드는 쓰이지 않는다 — 추측해서 다른 쿠키를 내보내지 않기 위해서다.
+   */
+  raw?: string;
+  domain?: string;
+  path?: string;
+  maxAge?: string;
+  sameSite?: SameSitePolicy;
+  secure?: boolean;
+  httpOnly?: boolean;
   mode: HeaderMode;
   emptyMeans: EmptyValueMeaning;
   comment: string;
@@ -363,7 +490,7 @@ export function createModification(kind: ModificationKind, id: string = crypto.r
     case 'cookie':
       return { kind, ...common, name: '', value: '', mode: 'append', emptyMeans: 'remove' };
     case 'set-cookie':
-      return { kind, ...common, value: '', mode: 'append', emptyMeans: 'remove' };
+      return { kind, ...common, name: '', value: '', mode: 'append', emptyMeans: 'remove' };
     case 'redirect':
       return { kind, ...common, pattern: '', substitution: '' };
     case 'user-agent':

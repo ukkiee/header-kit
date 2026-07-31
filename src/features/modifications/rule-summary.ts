@@ -1,5 +1,5 @@
 import type { Translator } from '@/core/i18n';
-import type { Modification, ModificationKind, RuleConditions } from '@/core/schema';
+import { assembleSetCookie, type Modification, type ModificationKind, type RuleConditions } from '@/core/schema';
 import { formatExpiryBadge } from './expiry-format';
 
 /**
@@ -118,7 +118,20 @@ function bareView(m: Modification, t: Translator): BareView {
     return { title: m.comment || m.name || badge, badge, summary: t('removeBothSides') };
   }
 
-  // set-cookie는 이름 없이 원시 Set-Cookie 값 하나다.
+  if (m.kind === 'set-cookie') {
+    /*
+     * 행은 **실제로 나가는 한 줄**을 보여 준다 (ADR 0017) — 가를 수 없어 원시로 보존된
+     * 항목은 그 줄이 그대로, 구조화된 항목은 조립한 줄이다. 이름·속성을 따로 늘어놓으면
+     * 행에서 읽는 것과 서버가 받는 것이 달라진다.
+     */
+    const line = m.raw ?? assembleSetCookie(m);
+    return {
+      title: m.comment || m.name || badge,
+      badge,
+      summary: line === '' ? `(${t(m.emptyMeans === 'remove' ? 'remove' : 'sendEmpty')})` : line,
+    };
+  }
+
   const name = 'name' in m ? m.name : '';
   const title = m.comment || name || badge;
   const empty = `(${t(m.emptyMeans === 'remove' ? 'remove' : 'sendEmpty')})`;

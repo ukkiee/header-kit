@@ -1,7 +1,7 @@
 import { isRuleExpired } from './expiry';
 import { hasPlaceholders } from './placeholder';
 import type { HeaderMode, Modification, Profile, RuleConditions, UrlMatchType } from './schema';
-import { placeholderTemplate } from './schema';
+import { assembleSetCookie, placeholderTemplate } from './schema';
 
 /** 값·mode를 가진 Modification 종류 (header/cookie/set-cookie). */
 type ValueModification = Extract<Modification, { mode: HeaderMode }>;
@@ -199,6 +199,25 @@ interface HeaderPlan {
 }
 
 function planHeaderish(modification: ValueModification, emitter: Emitter): HeaderPlan {
+  if (modification.kind === 'set-cookie') {
+    /*
+     * 응답 쿠키는 **한 줄을 통째로 얹는다** (ADR 0017). 가를 수 없어 원시로 보존된 항목은
+     * 그 줄이 그대로, 구조화된 항목은 조립한 줄이 나간다 — 둘 다 업그레이드 전과 같은 헤더다.
+     *
+     * 이름도 값도 비면 조립하지 않고 빈 문자열로 둔다. 그래야 빈 값의 뜻(remove)이 그대로
+     * 걸린다 — 조립하면 `=` 한 글자가 되어 "빈 쿠키를 심는" 다른 규칙이 된다.
+     */
+    const isBlank = modification.name.trim() === '' && modification.value === '';
+    const source = modification.raw ?? (isBlank ? '' : assembleSetCookie(modification));
+    return {
+      isRequest: false,
+      header: 'Set-Cookie',
+      // set-cookie는 고정 헤더라 이름이 빌 수 없다 — 빈 값 차단이 유효한 사용례.
+      nameForWarning: 'Set-Cookie',
+      userValue: source,
+      composedValue: consumeValue(source, modification.id, emitter),
+    };
+  }
   const value = consumeValue(modification.value, modification.id, emitter);
   switch (modification.kind) {
     case 'request-header':
@@ -224,15 +243,6 @@ function planHeaderish(modification: ValueModification, emitter: Emitter): Heade
         nameForWarning: modification.name,
         userValue: modification.value,
         composedValue: `${modification.name.trim()}=${value}`,
-      };
-    case 'set-cookie':
-      return {
-        isRequest: false,
-        header: 'Set-Cookie',
-        // set-cookie는 고정 헤더라 이름이 빌 수 없다 — 빈 값 차단이 유효한 사용례.
-        nameForWarning: 'Set-Cookie',
-        userValue: modification.value,
-        composedValue: value,
       };
   }
 }
