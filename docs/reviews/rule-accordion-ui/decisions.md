@@ -164,3 +164,21 @@ S2-1 accept — S-2 still open: authoritative commands bypass cookie variant val
 영향 범위가 넓고(모든 명령이 지난다), 거부가 잘못 걸리면 스모크가 짜 둔 시나리오만으로는
 안 잡힐 수 있다. 또 r1에서 수정이 새 구멍을 낸 전례가 있다(검증 순서를 바꾸자 무효 필터가
 조용히 삼켜졌다).
+
+### structure r3 (codex)
+
+사람이 명시적으로 지시한 라운드. **`ok:true` / `verdict: approve` / 발견 0건**
+(reviewedSha `ead1fba`, 33파일). 발견이 없으므로 트리아지할 행도 없다.
+
+S2-1 **resolved** 확인. 리뷰어가 짚은 근거: `persistState`가 다음 상태 전체를 검증하고
+(`stateStore.ts:108-112`), 배타 검증에 실제로 도달하며(`persist.ts:56-64,108-130,561-565`),
+권위 `state` 키에 쓰는 **유일한** 생산 경로가 그 뒤에 있다(`stateStore.ts:124`). 나머지
+`storage.local` 쓰기는 전부 생성·필터된 `bk:` 백업 키에 한정된다.
+
+라운드 3을 지시한 이유였던 **거짓 거부** 방향도 함께 확인됐다: 기본 상태·마이그레이션 결과·
+가져온 프로필·백업 복원·Placeholder 실체화·undo 복원이 전부 새 가드를 통과한다. 이 가드는
+모든 명령이 지나므로 잘못 걸리면 앱이 통째로 쓰지지 않는 상태가 되는데, 그 방향이 비어 있음을
+스모크(131/131) 말고 독립적으로 한 번 더 본 것이 이 라운드의 값이다.
+
+**structure 게이트 종결: r1(accept 3) → r2(accept 1) → r3 approve.** 세 게이트 중 사람 면제
+없이 닫힌 첫 게이트다(plan은 waiver로 닫혔다).
