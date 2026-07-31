@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isModification,
+  toStructuredSetCookie,
   createDefaultState,
   isBlockedFromOverwrite,
   readStoredState,
@@ -259,7 +261,9 @@ describe('v2→v3 — 응답 쿠키 재구조화', () => {
   ])('%s이면 추측하지 않고 원시로 보존한다', (_label, value) => {
     const m = migratedSetCookie(value);
     expect(m.raw).toBe(value);
-    expect(m.name).toBe('');
+    // 원시 변형은 구조화 재료를 **하나도** 갖지 않는다 (structure r1 S-2).
+    expect(m.name).toBeUndefined();
+    expect(m.value).toBeUndefined();
   });
 
   it('플레이스홀더가 든 줄은 원시로 보존한다 — 갈라 놓으면 실체화 자리가 달라진다', () => {
@@ -390,5 +394,93 @@ describe('가져오기 — v2 파일의 응답 쿠키', () => {
   it('모호한 줄은 로드 경로와 같게 원시로 보존된다', () => {
     expect(imported('sid=abc; Expires=Wed, 21 Oct 2026 07:28:00 GMT').raw)
       .toBe('sid=abc; Expires=Wed, 21 Oct 2026 07:28:00 GMT');
+  });
+});
+
+/**
+ * 응답 쿠키는 **두 표현 중 하나만** 갖는다 (structure r1 S-2).
+ *
+ * 예전에는 원시 보존이 선택 필드로 얹혀 있어, 구조화 재료와 원시 줄을 동시에 든 레코드가
+ * 저장소를 통과했다. 컴파일은 원시를 우선하므로 폼이 이름·값을 고쳐 저장하고 "성공"이라
+ * 말한 뒤에도 옛 줄이 계속 나가는 경로가 열려 있었다.
+ */
+describe('응답 쿠키 — 표현은 하나뿐', () => {
+  const record = (over: Record<string, unknown>) => ({
+    kind: 'set-cookie', id: 'm1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
+    ...over,
+  });
+
+  it('구조화 재료와 원시 줄을 함께 든 레코드는 무효다', () => {
+    expect(isModification(record({ name: 'sid', value: 'abc', raw: 'sid=abc' }))).toBe(false);
+  });
+
+  it('둘 중 하나만 들면 유효하다', () => {
+    expect(isModification(record({ name: 'sid', value: 'abc' }))).toBe(true);
+    expect(isModification(record({ raw: 'sid=abc; Expires=Wed, 21 Oct 2026 07:28:00 GMT' }))).toBe(true);
+  });
+
+  it('둘 다 없으면 무효다 — 무엇을 내보낼지 말하지 않은 규칙이다', () => {
+    expect(isModification(record({}))).toBe(false);
+  });
+
+  it('구조화로 옮기는 문은 원시 줄을 **지우면서** 나간다', () => {
+    const raw = record({ raw: 'sid=abc; Partitioned' }) as never;
+    const moved = toStructuredSetCookie(raw, { name: 'sid', value: 'abc' });
+    expect(moved.raw).toBeUndefined();
+    expect(moved).toMatchObject({ name: 'sid', value: 'abc' });
+    expect(isModification(moved)).toBe(true);
+  });
+});
+
+/**
+ * 저장소와 가져오기가 **같은 순서 있는 문**을 지난다 (structure r1 S-3).
+ *
+ * 예전에는 재구조화가 버전을 모르는 백필 안에 숨어 있어, 저장소는 실체화→재구조화로 가는데
+ * 가져오기는 그 반대로 갔다. 티켓 02가 퇴역을 얹는 순간 가져오기 문에서만 아직 태어나지
+ * 않은 조건을 벗기려 하게 되는 자리였다.
+ */
+describe('저장소와 가져오기가 같은 곳에 도착한다', () => {
+  const legacyProfile = () => ({
+    id: 'p1', name: 'Legacy', active: true, shortLabel: 'LG', color: '#2563eb',
+    modifications: [
+      { kind: 'set-cookie', id: 'm1', value: 'sid=abc; Path=/', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+    ],
+    filters: [
+      { kind: 'request-method', id: 'f1', enabled: true, methods: ['head'] },
+      { kind: 'tab-domain', id: 'f2', enabled: true, domain: 'tab.io' },
+    ],
+  });
+
+  const fromStorage = () => {
+    const read = readStoredState({
+      schemaVersion: 1, paused: false, profiles: [legacyProfile()], materialized: {}, customHeaderNames: [],
+    });
+    if (read.status !== 'migrated') throw new Error('migrated가 아니다');
+    return read.state.profiles[0]!.modifications[0]!;
+  };
+
+  const fromImport = () => {
+    const result = parseImport(JSON.stringify({ headerkit: 1, profiles: [legacyProfile()] }));
+    if (!result.ok) throw new Error(`import 실패: ${result.errors.join(', ')}`);
+    return result.profiles[0]!.modifications[0]!;
+  };
+
+  it('응답 쿠키가 같은 재료로 갈라진다', () => {
+    const a = fromStorage();
+    const b = fromImport();
+    if (a.kind !== 'set-cookie' || b.kind !== 'set-cookie') throw new Error('set-cookie가 아니다');
+    expect({ name: a.name, value: a.value, path: a.path, raw: a.raw })
+      .toEqual({ name: b.name, value: b.value, path: b.path, raw: b.raw });
+  });
+
+  it('레거시 필터도 같은 조건으로 실체화된다', () => {
+    expect(fromStorage().conditions).toEqual(fromImport().conditions);
+  });
+
+  it('무효한 레거시 필터는 여전히 파일 전체를 거부한다 — 조용히 삼키지 않는다', () => {
+    const broken = { ...legacyProfile(), filters: [{ kind: 'request-method', id: 'f1', enabled: true, methods: 'nope' }] };
+    const result = parseImport(JSON.stringify({ headerkit: 1, profiles: [broken] }));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.join(' ')).toMatch(/invalid filter/);
   });
 });

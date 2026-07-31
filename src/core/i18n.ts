@@ -146,6 +146,8 @@ const en = {
     'Response header changes may not show in the DevTools Network panel, but they reach the page.',
   placeholderNote:
     'New value each time the profile activates — constant while it stays on, never re-evaluated per request.',
+  rawCookieNote:
+    'Kept exactly as an older version stored it. Filling the fields above replaces this line:',
   pasteExportHere: 'Paste a HeaderKit export here…',
   // 필터 선택기 placeholder·힌트
   condTabDomainNote: 'Applies to every request from tabs on this domain — third-party included.',
@@ -353,6 +355,8 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
       '응답 헤더 변경은 DevTools 네트워크 패널에 보이지 않을 수 있으나 페이지에는 반영됩니다.',
     placeholderNote:
       '프로필을 켤 때마다 새 값이 생성되고, 켜져 있는 동안 유지되며, 요청마다 재평가되지 않습니다.',
+    rawCookieNote:
+      '예전 버전이 저장한 그대로 보존된 줄입니다. 위 칸을 채우면 이 줄을 대신합니다:',
     pasteExportHere: 'HeaderKit 내보내기 JSON을 여기에 붙여넣으세요…',
     condTabDomainNote: '이 도메인의 탭에서 나가는 모든 요청에 적용됩니다 — 서드파티 포함.',
     condExpiresNote: '이 시간에 규칙이 자동으로 꺼집니다.',

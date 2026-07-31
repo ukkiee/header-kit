@@ -267,3 +267,45 @@ describe('compile — 응답 쿠키의 Placeholder', () => {
     });
   });
 });
+
+/**
+ * 파서가 받아들인 파스는 **컴파일이 같은 바이트를 낸다** (structure r1 S-1).
+ *
+ * 파서는 조립기와의 왕복만 봤고 컴파일에는 조립기가 모르는 규칙이 하나 더 있었다 —
+ * 이름을 trim해 빈 쿠키로 접는 규칙. 그 사이로 ` =; Path=/` 같은 줄이 빠져나가
+ * `emptyMeans: 'remove'` 아래에서 헤더가 **제거**됐다. 왕복이 성립한다는 것만으로는
+ * 보존을 보증하지 못한다는 증거라, 여기서는 마이그레이션부터 방출까지를 통으로 본다.
+ */
+describe('compile — 파서 인증과 방출의 일치', () => {
+  const emitted = (v2Line: string, emptyMeans: 'remove' | 'send-empty' = 'remove') => {
+    const read = readStoredState({
+      schemaVersion: 2,
+      paused: false,
+      profiles: [
+        {
+          id: 'p1', name: 'P', active: true, shortLabel: 'P', color: '#2563eb',
+          modifications: [
+            { kind: 'set-cookie', id: 'm1', value: v2Line, enabled: true, mode: 'append', emptyMeans, comment: '' },
+          ],
+        },
+      ],
+      materialized: {},
+      customHeaderNames: [],
+    });
+    if (read.status !== 'migrated') throw new Error(`expected migrated, got ${read.status}`);
+    const { rules } = compile(read.state.profiles, env);
+    return rules[0]?.action.responseHeaders?.[0];
+  };
+
+  it.each([
+    [' =; Path=/'],
+    ['  =value'],
+    ['\t=x; Secure'],
+  ])('공백뿐인 이름(%s)은 원시로 남아 원본 바이트가 그대로 나간다', (line) => {
+    expect(emitted(line)).toEqual({ header: 'Set-Cookie', operation: 'append', value: line });
+  });
+
+  it('그런 줄은 빈 값으로 접히지 않는다 — 접히면 헤더가 제거된다', () => {
+    expect(emitted(' =; Path=/')).not.toEqual({ header: 'Set-Cookie', operation: 'remove' });
+  });
+});

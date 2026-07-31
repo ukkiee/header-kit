@@ -9,6 +9,9 @@ import {
   type Modification,
   type ModificationKind,
   type UrlMatchType,
+  isRawSetCookie,
+  toStructuredSetCookie,
+  type SetCookieParts,
 } from '@/core/schema';
 import { RuleConditionsFields } from './rule-conditions-fields';
 import { hasPlaceholders } from '@/core/placeholder';
@@ -152,6 +155,21 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
     if (next.conditions === undefined) return next;
     const { conditions: _c, ...rest } = next;
     return rest as Modification;
+  };
+
+  /**
+   * 초안 패치 (structure r1 S-2) — 응답 쿠키의 **재료를 건드리면 원시 보존에서 벗어난다**.
+   *
+   * 그러지 않으면 폼이 이름·값을 고쳐 저장하고 "성공"이라 말한 뒤에도 옛 줄이 계속 나간다.
+   * 벗어나는 문은 `toStructuredSetCookie` 하나뿐이고 그것이 raw를 지운다. 벗어나기 전의
+   * 줄은 아래 안내에 그대로 보이므로 무엇을 대신 놓는 중인지 보고 고칠 수 있다.
+   */
+  const patchDraft = (patch: Record<string, unknown>) => {
+    if (draft.kind === 'set-cookie' && isRawSetCookie(draft)) {
+      setDraft(toStructuredSetCookie(draft, { name: '', value: '', ...patch } as SetCookieParts));
+      return;
+    }
+    setDraft({ ...draft, ...patch } as Modification);
   };
 
   const save = async (confirmedWideScope = false) => {
@@ -352,16 +370,16 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
                   <Input
                     ref={nameRef}
                     autoFocus
-                    value={draft.name}
-                    onChange={(e) => setDraft({ ...draft, name: e.target.value } as Modification)}
+                    value={draft.name ?? ''}
+                    onChange={(e) => patchDraft({ name: e.target.value })}
                     placeholder="session_id"
                   />
                 ) : (
                   <HeaderNameInput
                     ref={nameRef}
                     autoFocus
-                    value={draft.name}
-                    onChange={(name) => setDraft({ ...draft, name } as Modification)}
+                    value={draft.name ?? ''}
+                    onChange={(name) => patchDraft({ name })}
                     userHeaders={userHeaders}
                   />
                 )}
@@ -374,13 +392,13 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
                 <Input
                   autoFocus={draft.kind === 'set-cookie'}
                   value={draft.value}
-                  onChange={(e) => setDraft({ ...draft, value: e.target.value } as Modification)}
+                  onChange={(e) => patchDraft({ value: e.target.value })}
                   className="min-w-0 flex-1"
                 />
                 <LargeEditor
                   title={`${t('value')} — ${('name' in draft && draft.name) || t('headerName')}`}
-                  value={draft.value}
-                  onCommit={(value) => setDraft({ ...draft, value } as Modification)}
+                  value={draft.value ?? ''}
+                  onCommit={(value) => patchDraft({ value })}
                 />
               </div>
             </FieldLabeled>
@@ -413,7 +431,13 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
             </FieldLabeled>
           </div>
           {draft.kind === 'response-header' && <NoteText>{t('responsePanelNote')}</NoteText>}
-          {hasPlaceholders(draft.value) && <NoteText>{t('placeholderNote')}</NoteText>}
+          {hasPlaceholders(draft.value ?? '') && <NoteText>{t('placeholderNote')}</NoteText>}
+          {/* 원시로 보존된 줄은 보이되 고칠 수 없다 — 재료를 채우면 그것이 이 줄을 대신한다. */}
+          {draft.kind === 'set-cookie' && isRawSetCookie(draft) && (
+            <NoteText>
+              {t('rawCookieNote')} <code className="font-mono">{draft.raw}</code>
+            </NoteText>
+          )}
         </>
       )}
 

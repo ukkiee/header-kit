@@ -5,6 +5,7 @@ import {
   isModification,
   isRecord,
   migrateProfileFilters,
+  upgradeProfile,
   type Profile,
   type StoredState,
 } from './schema';
@@ -67,18 +68,24 @@ function validateProfileEntry(value: unknown, index: number): string[] {
     });
   }
 
-  // 레거시 export의 프로필 필터 — 선택 필드, 있으면 형만 검증(마이그레이션 대상).
-  if (value.filters !== undefined) {
-    if (!Array.isArray(value.filters)) {
-      errors.push(`${label}.filters: expected array`);
-    } else {
-      value.filters.forEach((f, i) => {
-        if (!isFilter(f)) errors.push(`${label}.filters[${i}]: invalid filter`);
-      });
-    }
-  }
-
   return errors;
+}
+
+/**
+ * 레거시 프로필 필터의 형 검증 — **올리기 전에** 불러야 한다 (structure r1 S-3).
+ *
+ * 올리면 실체화가 필터 키를 걷어 가므로, 뒤에서 검증하면 무효한 필터가 거부되지 않고
+ * 조용히 삼켜진다. 파일 전체를 거부하는 쪽이 옳다 — 사용자는 규칙이 어디로 갔는지 모른 채
+ * "가져오기 성공"을 보게 되지 않는다.
+ */
+function legacyFilterErrors(value: unknown, index: number): string[] {
+  if (!isRecord(value) || value.filters === undefined) return [];
+  const path = `profiles[${index}]`;
+  const label = typeof value.name === 'string' ? `${path} ("${value.name}")` : path;
+  if (!Array.isArray(value.filters)) return [`${label}.filters: expected array`];
+  return value.filters.flatMap((f, i) =>
+    isFilter(f) ? [] : [`${label}.filters[${i}]: invalid filter`],
+  );
 }
 
 /**
@@ -87,6 +94,36 @@ function validateProfileEntry(value: unknown, index: number): string[] {
  * 배지 라벨 불변식(2자) 강제. 권위 실행 경로(import-profiles 명령)가
  * 항상 이 함수를 다시 태우므로, UI가 우회해도 불변식은 유지된다.
  */
+/**
+ * 레거시 프로필 필터가 가져오기에서 무엇을 남기고 무엇을 잃는지 (ADR 0010).
+ *
+ * **프로필을 올리기 전에** 불러야 한다 — 올리면 필터 키가 사라져 셀 것이 없어진다.
+ * enabled 기준으로 소실 종류·이주·꺼진 필터 폐기를 구분한다.
+ */
+export function legacyFilterNotices(profile: unknown): string[] {
+  if (!isRecord(profile)) return [];
+  const name = typeof profile.name === 'string' ? profile.name : '';
+  const legacyFilters = (Array.isArray(profile.filters) ? profile.filters : []).filter(isRecord);
+  const enabled = legacyFilters.filter((f) => f.enabled === true);
+  const isLostKind = (f: Record<string, unknown>) =>
+    f.kind === 'exclude-url' || f.kind === 'tab' || f.kind === 'tab-group' || f.kind === 'window';
+  const lost = enabled.filter(isLostKind);
+  const disabledCount = legacyFilters.length - enabled.length;
+  const notices: string[] = [];
+  if (lost.length > 0) {
+    notices.push(
+      `"${name}": ${lost.length} legacy filter(s) (exclude-url/tab/group/window) have no per-rule equivalent and were dropped.`,
+    );
+  }
+  if (enabled.some((f) => !isLostKind(f))) {
+    notices.push(`"${name}": legacy profile filters were migrated to per-rule conditions.`);
+  }
+  if (disabledCount > 0) {
+    notices.push(`"${name}": ${disabledCount} disabled legacy filter(s) were dropped.`);
+  }
+  return notices;
+}
+
 export function normalizeImportedProfiles(
   profiles: Profile[],
   newId: () => string = () => crypto.randomUUID(),
@@ -95,26 +132,8 @@ export function normalizeImportedProfiles(
   return {
     profiles: profiles.map((p) => {
       const raw = p as unknown as Record<string, unknown>;
-      // 레거시 export의 프로필 필터를 규칙 conditions로 이주한다 (ADR 0010).
-      // 공지는 enabled 기준으로 정확하게: 소실 종류·이주·꺼진 필터 폐기를 구분한다.
-      const legacyFilters = (Array.isArray(raw.filters) ? raw.filters : []).filter(isRecord);
-      const enabledFilters = legacyFilters.filter((f) => f.enabled === true);
-      const isLostKind = (f: Record<string, unknown>) =>
-        f.kind === 'exclude-url' || f.kind === 'tab' || f.kind === 'tab-group' || f.kind === 'window';
-      const lost = enabledFilters.filter(isLostKind);
-      const disabledCount = legacyFilters.length - enabledFilters.length;
-      if (lost.length > 0) {
-        notices.push(
-          `"${p.name}": ${lost.length} legacy filter(s) (exclude-url/tab/group/window) have no per-rule equivalent and were dropped.`,
-        );
-      }
-      if (enabledFilters.some((f) => !isLostKind(f))) {
-        notices.push(`"${p.name}": legacy profile filters were migrated to per-rule conditions.`);
-      }
-      if (disabledCount > 0) {
-        notices.push(`"${p.name}": ${disabledCount} disabled legacy filter(s) were dropped.`);
-      }
-      const migrated = migrateProfileFilters(raw) as unknown as Profile;
+      // 저장소와 같은 문을 지난다 — 이미 올라간 프로필에는 아무 일도 하지 않는다.
+      const migrated = upgradeProfile(raw) as unknown as Profile;
       return {
         ...migrated,
         id: newId(),
@@ -171,18 +190,38 @@ export function parseImport(
       : p,
   );
 
-  const errors = entries.flatMap((p, i) => validateProfileEntry(p, i));
+  /*
+   * 공지는 **올리기 전에** 센다 (structure r1 S-3) — 올리는 순간 레거시 필터 키가 사라지므로,
+   * 뒤에서 세면 "무엇이 이주했고 무엇이 소실됐는지"를 말할 근거가 이미 없다.
+   */
+  const notices = entries.flatMap(legacyFilterNotices);
+
+  /*
+   * 검증보다 **먼저** 올린다. v2 내보내기의 응답 쿠키는 이름도 원시 보존 표시도 없어서,
+   * 올리기 전에 검증하면 두 변형 중 어느 쪽도 아니라 파일 전체가 거부된다.
+   */
+  const upgraded = entries.map(upgradeProfile);
+
+  /*
+   * 레거시 필터는 **올리기 전** 모양으로, 나머지는 **올린 뒤** 모양으로 본다. 전자는 올리면
+   * 사라져 검증할 것이 없어지고, 후자는 올리기 전에 보면 v2 응답 쿠키가 두 변형 중 어느
+   * 쪽도 아니라 파일 전체가 거부된다. 검증하는 모양과 저장하는 모양이 같아야 한다.
+   */
+  const errors = [
+    ...entries.flatMap(legacyFilterErrors),
+    ...upgraded.flatMap((p, i) => validateProfileEntry(p, i)),
+  ];
   if (errors.length > 0) {
     return { ok: false, errors };
   }
 
   // 검증 통과분을 backfill해 신규 필드를 채운 뒤 정규화한다.
-  const backfilled = (entries as Profile[]).map((p) => ({
+  const backfilled = (upgraded as Profile[]).map((p) => ({
     ...p,
     modifications: p.modifications.map(
       (m) => backfillModification(m) as Profile['modifications'][number],
     ),
   }));
-  const { profiles, notices } = normalizeImportedProfiles(backfilled, newId);
+  const { profiles } = normalizeImportedProfiles(backfilled, newId);
   return { ok: true, profiles, notices };
 }

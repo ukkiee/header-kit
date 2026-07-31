@@ -152,14 +152,9 @@ export function assembleSetCookie(parts: SetCookieParts): string {
  * 서버가 보낸 쿠키를 **고치는 것이 아니라 대신 놓는 것**이다. 브라우저에 헤더 값의 부분
  * 수정이 없어서(ADR 0001) "서버 쿠키에서 Secure만 벗기기"는 이 종류로도 할 수 없다.
  */
-export interface SetCookieModification extends SetCookieParts {
+interface SetCookieBase {
   kind: 'set-cookie';
   id: string;
-  /**
-   * 가를 수 없어 그대로 보존한 옛 Set-Cookie 한 줄. 있으면 **이것이 헤더로 나가고**
-   * 구조화된 재료는 쓰이지 않는다 — 추측해서 다른 쿠키를 내보내지 않기 위해서다.
-   */
-  raw?: string;
   mode: HeaderMode;
   emptyMeans: EmptyValueMeaning;
   comment: string;
@@ -170,6 +165,55 @@ export interface SetCookieModification extends SetCookieParts {
   urlMatchType?: UrlMatchType;
   /** 적용 조건 (ADR 0010) — 없으면 무조건 적용. */
   conditions?: RuleConditions;
+}
+
+/** 재료로 조립해 얹는 보통의 응답 쿠키. */
+export interface StructuredSetCookieModification extends SetCookieBase, SetCookieParts {
+  raw?: undefined;
+}
+
+/**
+ * 가를 수 없어 옛 Set-Cookie 한 줄을 **그대로** 보존한 응답 쿠키 (ADR 0017).
+ *
+ * 구조화 재료를 **아예 갖지 않는** 것이 이 변형의 요점이다. 옛 코드는 raw를 선택 필드로
+ * 얹었는데, 그러면 저장소가 두 표현을 동시에 든 레코드를 받아들이고 컴파일은 raw를
+ * 우선한다 — 폼이 이름·속성을 고쳐 저장하고 "성공"이라 말한 뒤에도 옛 줄이 계속 나가는
+ * 경로가 열린다. 하나만 있을 수 있게 타입으로 못박아 그 상태를 표현조차 못 하게 한다.
+ *
+ * 벗어나는 길은 `toStructuredSetCookie` 하나뿐이고, 그것은 raw를 **지우면서** 나간다.
+ */
+export interface RawSetCookieModification extends SetCookieBase {
+  raw: string;
+  name?: undefined;
+  value?: undefined;
+  domain?: undefined;
+  path?: undefined;
+  maxAge?: undefined;
+  sameSite?: undefined;
+  secure?: undefined;
+  httpOnly?: undefined;
+}
+
+export type SetCookieModification = StructuredSetCookieModification | RawSetCookieModification;
+
+/** 원시 보존 항목인가 — 컴파일·요약·폼이 같은 술어를 쓴다. */
+export function isRawSetCookie(
+  modification: SetCookieModification,
+): modification is RawSetCookieModification {
+  return modification.raw !== undefined;
+}
+
+/**
+ * 원시 보존 항목을 구조화 변형으로 옮기는 **유일한 문** (ADR 0017).
+ *
+ * raw를 지우면서 나가므로, 옮긴 뒤에는 옛 줄이 남아 새 재료를 덮을 수 없다.
+ */
+export function toStructuredSetCookie(
+  modification: SetCookieModification,
+  parts: SetCookieParts,
+): StructuredSetCookieModification {
+  const { raw: _dropped, ...rest } = modification;
+  return { ...rest, ...parts, raw: undefined };
 }
 
 /** Redirect — regex 매칭 + 캡처 그룹 치환으로 URL을 재작성한다. */

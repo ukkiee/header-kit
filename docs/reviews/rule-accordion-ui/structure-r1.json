@@ -1,0 +1,74 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "structure",
+  "ack": "human-triage",
+  "triageMode": "human",
+  "verdict": "needs-attention",
+  "summary": "No-ship: the structured Set-Cookie path can change certified legacy bytes, and the persisted/domain seams are unsafe foundations for tickets 02 and 06.",
+  "planFile": "docs/reviews/rule-accordion-ui/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 27,
+  "target": "branch diff against main",
+  "reviewer": "codex",
+  "fallbackFrom": null,
+  "fallbackReason": null,
+  "effort": "xhigh",
+  "inputMode": "inline-diff",
+  "reviewedSha": "e91b918bb0a7c6e985c94760ae0f7a4edc8bdaae",
+  "reviewedTree": "1477fac5773720e7773e171d4cb722ef023fcf28",
+  "reviewedPlanSha256": "e4f496f58e62b4496f5a307e1885be473f9ac41e976d57479f04e5da450960e1",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "backendExitCode": 0,
+  "parseError": null,
+  "promptDelivery": {
+    "mechanism": "token-echo",
+    "enforcing": false,
+    "verified": true,
+    "echoed": "b6b06ffb984f5139"
+  },
+  "findingCount": 3,
+  "planFindingCount": 0,
+  "triage": "review-gate SKILL.md § Triage governs: render EVERY finding as a full table row, never inside a dialog; then ask the ROUND before the rows — take every Proposed decision as it stands, or decide row by row — and `as proposed` ends the round in that ONE action; only if row-by-row was chosen, ask per finding with that row's Proposed decision as the first option, a reject or defer taking a free-text reason; echo back ONLY the rows that carried free text, and none if the round was decided by selection alone; max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "Parser-certified cookies can still emit different bytes",
+      "body": "The parser certifies a structured migration by comparing the input with `assembleSetCookie`, but compilation applies an additional empty-cookie rule that the assembler does not share. For example, legacy ` =; Path=/` round-trips through the parser as `{ name: ' ', value: '', path: '/' }`; compilation then trims the name, treats the line as empty, and—under the normal `emptyMeans: 'remove'` setting—removes Set-Cookie instead of emitting the original bytes. This disproves the central structured-path preservation claim.",
+      "file": "src/core/compile.ts",
+      "line_start": 220,
+      "line_end": 224,
+      "confidence": 0.99,
+      "recommendation": "Use one canonical emission function for both parser acceptance and compilation, or reject whitespace-only cookie names before accepting a structured parse. Add a public migration→compile regression test for every accepted parse, including whitespace-only names with empty values and attributes.",
+      "isPlanFinding": false
+    },
+    {
+      "severity": "high",
+      "title": "The v3 cookie type persists contradictory raw and structured states",
+      "body": "The specification calls raw preservation a separate representation, but `SetCookieModification` instead requires structured fields and adds optional `raw`. Validation consequently accepts records containing both representations, while compilation gives `raw` absolute precedence. Ticket 06 can spread-edit and save new structured fields while retaining `raw`, report success, and continue emitting the old line. Because this ambiguity is part of persisted v3, correcting it after release may require another format boundary.",
+      "file": "src/core/model.ts",
+      "line_start": 155,
+      "line_end": 162,
+      "confidence": 0.98,
+      "recommendation": "Model raw-preserved and structured cookies as mutually exclusive discriminated variants, validate exactly one representation, and expose an explicit raw-to-structured conversion that removes the raw variant.",
+      "isPlanFinding": false
+    },
+    {
+      "severity": "high",
+      "title": "Imports bypass the ordered versioned migration seam ticket 02 must extend",
+      "body": "Semantic cookie conversion is hidden inside version-agnostic `backfillModification`. Stored-state migration materializes legacy filters before v2→v3, but imports call this backfill before `normalizeImportedProfiles` materializes those filters and never traverse `upgradeToCurrent`. Ticket 02 therefore cannot add retirement, counting, and notice creation once and obtain the same ordered behavior for storage and imports: adding it here runs too early and on current-v3 reads, while adding it elsewhere duplicates the destructive transformation and invites load/import drift.",
+      "file": "src/core/persist.ts",
+      "line_start": 163,
+      "line_end": 171,
+      "confidence": 0.97,
+      "recommendation": "Extract a version-aware profile migration returning transformed profiles plus impact metadata. Route stored v1/v2 data and legacy imports through the same `materialize legacy filters → v2→v3 transform → validate` seam, with an authoritative-storage/import integration fixture.",
+      "isPlanFinding": false
+    }
+  ],
+  "next_steps": [
+    "Unify parser certification with the exact compile emission path.",
+    "Replace the ambiguous persisted cookie shape with exclusive variants before v3 ships.",
+    "Establish one ordered, version-aware profile migration seam shared by storage and imports before implementing ticket 02."
+  ]
+}
