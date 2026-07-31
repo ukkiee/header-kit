@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { compile, type CompileEnv } from './compile';
-import { readStoredState, type Modification, type Profile } from './schema';
+import { placeholderTemplate, readStoredState, type Modification, type Profile } from './schema';
 
 function profile(mods: Modification[]): Profile {
   return {
@@ -208,5 +208,62 @@ describe('compile — v2 응답 쿠키 업그레이드 후 출력 보존', () =>
     if (read.status !== 'migrated') throw new Error('migrated가 아니다');
     const { rules } = compile(read.state.profiles, env);
     expect(rules[0]?.action.responseHeaders?.[0]).toEqual({ header: 'Set-Cookie', operation: 'remove' });
+  });
+});
+
+/**
+ * Placeholder × 응답 쿠키 (티켓 01 code-review, Spec 축).
+ *
+ * 실체화는 **`placeholderTemplate`이 가리키는 문자열**에 대해 일어나고 결과가 규칙 id 하나에
+ * 저장된다. v3에서 나가는 줄이 그 문자열과 달라지면(원시 보존이면 raw가, 구조화면 조립된
+ * 줄이 나간다) 컴파일이 엉뚱한 것을 소비한다 — 값이 통째로 빠지거나, 줄 전체가 uuid 하나로
+ * 바뀐다. 업그레이드 전에는 둘 다 옳게 나갔으므로 이것은 회귀다.
+ */
+describe('compile — 응답 쿠키의 Placeholder', () => {
+  const withMaterialized = (m: Modification, materialized: Record<string, string>) =>
+    compile([{ ...profile([]), modifications: [m] }], { ...env, materialized });
+
+  it('원시로 보존된 줄의 Placeholder가 실체화된 줄로 나간다', () => {
+    const read = readStoredState({
+      schemaVersion: 2,
+      paused: false,
+      profiles: [
+        {
+          id: 'p1', name: 'P', active: true, shortLabel: 'P', color: '#2563eb',
+          modifications: [
+            { kind: 'set-cookie', id: 'm1', value: 'sid={{uuid}}; Path=/', enabled: true, mode: 'append', emptyMeans: 'remove', comment: '' },
+          ],
+        },
+      ],
+      materialized: {},
+      customHeaderNames: [],
+    });
+    if (read.status !== 'migrated') throw new Error('migrated가 아니다');
+    const m = read.state.profiles[0]!.modifications[0]!;
+    // 실체화가 무엇을 대상으로 삼는지가 이 회귀의 뿌리다 — 나가는 줄과 같아야 한다.
+    expect(placeholderTemplate(m)).toBe('sid={{uuid}}; Path=/');
+
+    const { rules } = withMaterialized(m, { m1: 'sid=REAL; Path=/' });
+    expect(rules[0]?.action.responseHeaders?.[0]).toEqual({
+      header: 'Set-Cookie',
+      operation: 'append',
+      value: 'sid=REAL; Path=/',
+    });
+  });
+
+  it('구조화된 항목은 **값만** 실체화되고 줄은 그대로 조립된다', () => {
+    const m: Modification = {
+      kind: 'set-cookie', id: 'm1', name: 'sid', value: '{{uuid}}', path: '/',
+      enabled: true, mode: 'append', emptyMeans: 'remove', comment: '',
+    };
+    expect(placeholderTemplate(m)).toBe('{{uuid}}');
+
+    const { rules } = withMaterialized(m, { m1: 'REAL' });
+    // 줄 전체가 uuid로 바뀌면 쿠키 이름과 Path가 사라진다.
+    expect(rules[0]?.action.responseHeaders?.[0]).toEqual({
+      header: 'Set-Cookie',
+      operation: 'append',
+      value: 'sid=REAL; Path=/',
+    });
   });
 });

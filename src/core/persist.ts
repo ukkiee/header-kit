@@ -1,15 +1,19 @@
 import { isLocale } from './i18n';
 import { ALL_RESOURCE_TYPES, REQUEST_METHODS, type RequestMethod, type ResourceType } from './rules';
 import { DEFAULT_THEME, isThemePreference } from './theme';
+import { hasPlaceholders } from './placeholder';
 import {
+  assembleSetCookie,
   createDefaultState,
   DEFAULT_BADGE_VISIBLE,
   DEFAULT_SYNC_BACKUP,
-  parseSetCookieLine,
+  SAME_SITE_LABEL,
   PROFILE_COLORS,
   SCHEMA_VERSION,
   type Filter,
   type Modification,
+  type SameSitePolicy,
+  type SetCookieParts,
   type Profile,
   type StoredState,
 } from './model';
@@ -34,6 +38,11 @@ function isOptionalString(value: unknown): boolean {
   return value === undefined || typeof value === 'string';
 }
 
+/** 허용 집합은 라벨 맵이 소유한다 — 값을 늘려도 여기가 따라오지 않는 일이 없다. */
+function isSameSitePolicy(value: unknown): value is SameSitePolicy {
+  return typeof value === 'string' && value in SAME_SITE_LABEL;
+}
+
 /** v3 응답 쿠키의 선택 필드 형 검증 (ADR 0017) — 이름·값은 호출부가 따로 본다. */
 function isSetCookieShape(value: Record<string, unknown>): boolean {
   return (
@@ -41,10 +50,7 @@ function isSetCookieShape(value: Record<string, unknown>): boolean {
     isOptionalString(value.domain) &&
     isOptionalString(value.path) &&
     isOptionalString(value.maxAge) &&
-    (value.sameSite === undefined ||
-      value.sameSite === 'none' ||
-      value.sameSite === 'lax' ||
-      value.sameSite === 'strict') &&
+    (value.sameSite === undefined || isSameSitePolicy(value.sameSite)) &&
     (value.secure === undefined || typeof value.secure === 'boolean') &&
     (value.httpOnly === undefined || typeof value.httpOnly === 'boolean')
   );
@@ -157,6 +163,13 @@ function isProfile(value: unknown): value is Profile {
 /** Modification에 이후 슬라이스에서 추가된 필드를 기본값으로 채운다 (SSOT 보호). */
 export function backfillModification(value: unknown): unknown {
   if (!isRecord(value)) return value;
+  /*
+   * v3 응답 쿠키 재구조화도 여기서 한다 (ADR 0017) — 로드와 가져오기가 **함께 지나는**
+   * 한 곳이라, 두 진입점이 서로 다른 모양을 저장하는 일이 없다. 이름을 기본값으로 채우기만
+   * 하면 옛 원시 한 줄이 쿠키의 '값'으로 둔갑하므로, 채우는 대신 가른다.
+   */
+  value = migrateSetCookieToV3(value);
+  if (!isRecord(value)) return value;
   // redirect는 mode/emptyMeans가 없다 — 헤더 계열(및 cookie/set-cookie)만 채운다.
   if (value.kind === 'redirect') {
     // redirect의 urlFilter(ADR 0007 비대상)는 치유로 제거 — 검증 거부가 전체
@@ -174,9 +187,6 @@ export function backfillModification(value: unknown): unknown {
   // 무효 urlMatchType은 치유로 벗긴다(부재 = regex 하위 호환) — 전량 거부 방지.
   const healed: Record<string, unknown> = {
     ...(headerish ? { mode: 'override', emptyMeans: 'remove' } : {}),
-    // v3에서 응답 쿠키가 얻은 이름 — **검증보다 먼저** 기본값을 받아야 한다. 검증이 먼저
-    // 보면 이름 없는 옛 항목이 무효가 되어 상태 전체가 기본값으로 리셋된다.
-    ...(value.kind === 'set-cookie' ? { name: '' } : {}),
     comment: '',
     ...value,
   };
@@ -187,6 +197,75 @@ export function backfillModification(value: unknown): unknown {
     delete healed.urlMatchType;
   }
   return healed;
+}
+
+/**
+ * 옛 원시 Set-Cookie 한 줄을 재료로 가른다 — **모호하면 null**이고, 그때 호출부는
+ * 그 줄을 원시 그대로 보존한다 (ADR 0017).
+ *
+ * 판정의 마지막 단계가 이 함수의 요점이다: 갈라낸 재료를 다시 조립해 **원본과 글자까지
+ * 같을 때만** 받는다. 그래서 구분자 간격이나 속성 순서 같은 것을 따로 규칙으로 적을 필요가
+ * 없고, "업그레이드해도 같은 쿠키가 나간다"가 문서가 아니라 구조로 성립한다. 잘못 갈라
+ * 다른 쿠키를 내보내는 것이 원시로 남기는 것보다 나쁘다.
+ */
+export function parseSetCookieLine(line: string): SetCookieParts | null {
+  const parts = splitSetCookieLine(line);
+  return parts && assembleSetCookie(parts) === line ? parts : null;
+}
+
+function splitSetCookieLine(line: string): SetCookieParts | null {
+  // 빈 줄은 v2에서 "헤더를 지운다"는 뜻이었다 — 재료로 가를 것이 없다.
+  // 플레이스홀더가 든 줄은 실체화 자리가 달라지므로 가르지 않는다.
+  if (line === '' || hasPlaceholders(line)) return null;
+
+  const [head, ...attributes] = line.split('; ');
+  if (head === undefined) return null;
+  const separator = head.indexOf('=');
+  if (separator <= 0) return null; // name=value 꼴이 아니거나 이름이 비었다
+  const value = head.slice(separator + 1);
+  if (value.includes('=')) return null; // 값 안의 = 는 모호함으로 본다
+
+  const parts: SetCookieParts = { name: head.slice(0, separator), value };
+  const seen = new Set<string>();
+  for (const attribute of attributes) {
+    const at = attribute.indexOf('=');
+    const key = (at < 0 ? attribute : attribute.slice(0, at)).toLowerCase();
+    const raw = at < 0 ? undefined : attribute.slice(at + 1);
+    if (seen.has(key)) return null; // 같은 속성이 두 번
+    seen.add(key);
+    switch (key) {
+      case 'domain':
+        if (!raw) return null;
+        parts.domain = raw;
+        break;
+      case 'path':
+        if (!raw) return null;
+        parts.path = raw;
+        break;
+      case 'max-age':
+        if (raw === undefined || !/^-?\d+$/.test(raw)) return null;
+        parts.maxAge = raw;
+        break;
+      case 'samesite': {
+        const policy = raw?.toLowerCase();
+        if (!isSameSitePolicy(policy)) return null;
+        parts.sameSite = policy;
+        break;
+      }
+      case 'secure':
+        if (raw !== undefined) return null;
+        parts.secure = true;
+        break;
+      case 'httponly':
+        if (raw !== undefined) return null;
+        parts.httpOnly = true;
+        break;
+      // 모르는 속성 — Expires도 여기로 온다. 지원하지 않는 것을 버리고 되쓰면 다른 쿠키가 나간다.
+      default:
+        return null;
+    }
+  }
+  return parts;
 }
 
 /**

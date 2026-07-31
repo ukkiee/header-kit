@@ -204,18 +204,37 @@ function planHeaderish(modification: ValueModification, emitter: Emitter): Heade
      * 응답 쿠키는 **한 줄을 통째로 얹는다** (ADR 0017). 가를 수 없어 원시로 보존된 항목은
      * 그 줄이 그대로, 구조화된 항목은 조립한 줄이 나간다 — 둘 다 업그레이드 전과 같은 헤더다.
      *
-     * 이름도 값도 비면 조립하지 않고 빈 문자열로 둔다. 그래야 빈 값의 뜻(remove)이 그대로
-     * 걸린다 — 조립하면 `=` 한 글자가 되어 "빈 쿠키를 심는" 다른 규칙이 된다.
+     * 다른 종류와 달리 여기서 따로 재는 이유는 **실체화 대상이 다르기 때문**이다:
+     * 원시 항목은 줄 전체가, 구조화 항목은 값 하나가 실체화된다(`placeholderTemplate` 참고).
+     * 조립한 줄에 실체화를 걸면 이름과 속성까지 실체화 값 하나로 뭉개진다.
      */
-    const isBlank = modification.name.trim() === '' && modification.value === '';
-    const source = modification.raw ?? (isBlank ? '' : assembleSetCookie(modification));
+    if (modification.raw !== undefined) {
+      return {
+        isRequest: false,
+        header: 'Set-Cookie',
+        nameForWarning: 'Set-Cookie',
+        userValue: modification.raw,
+        composedValue: consumeValue(modification.raw, modification.id, emitter),
+      };
+    }
+    // 이름도 값도 비면 조립하지 않는다 — 그래야 빈 값의 뜻(remove)이 그대로 걸린다.
+    // 조립하면 `=` 한 글자가 되어 "빈 쿠키를 심는" 다른 규칙이 된다.
+    const line = modification.name.trim() === '' && modification.value === ''
+      ? ''
+      : assembleSetCookie(modification);
     return {
       isRequest: false,
       header: 'Set-Cookie',
       // set-cookie는 고정 헤더라 이름이 빌 수 없다 — 빈 값 차단이 유효한 사용례.
       nameForWarning: 'Set-Cookie',
-      userValue: source,
-      composedValue: consumeValue(source, modification.id, emitter),
+      userValue: line,
+      composedValue:
+        line === ''
+          ? ''
+          : assembleSetCookie({
+              ...modification,
+              value: consumeValue(modification.value, modification.id, emitter),
+            }),
     };
   }
   const value = consumeValue(modification.value, modification.id, emitter);
