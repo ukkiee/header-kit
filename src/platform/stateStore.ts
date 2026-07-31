@@ -92,6 +92,24 @@ export async function readState(): Promise<StoredStateRead> {
  */
 export async function persistState(permit: WritePermit, state: StoredState): Promise<void> {
   permit.assertLive();
+  /*
+   * **읽을 수 없는 것을 쓰지 않는다** (structure r2 S2-1) — 아래 가드의 나머지 반쪽이다.
+   * 지금까지는 "읽을 수 없는 것 **위에** 쓰지 않는다"만 있었고 그 대칭이 없었다.
+   *
+   * 명령 메시지는 캐스팅만 거쳐 들어오므로(`onCommand`) add·update·undo·import·백업 복원
+   * 어느 문으로도 모양이 깨진 레코드가 도착할 수 있다. 그것이 저장소에 닿으면 **다음 로드**의
+   * 검증이 실패해 `reset`이 되고 전 프로필이 기본 상태로 교체된다 — 쓴 시점과 잃는 시점이
+   * 떨어져 있어 화면에는 아무 설명도 남지 않는다.
+   *
+   * 명령마다 디코더를 붙이는 대신 여기서 막는 이유는 **모든 쓰기가 이 문 하나를 지나기**
+   * 때문이다 — 종류가 늘어도 빠뜨릴 자리가 생기지 않는다. 거부는 명령 왕복이 결과 객체로
+   * 돌려주므로(릴리스 r1 R-2) 화면에 배너로 뜨고, 저장소는 직전 상태 그대로 남는다.
+   */
+  if (readStoredState(state).status !== 'ok') {
+    throw new Error(
+      'Refusing to write a state this version could not read back — the change was rejected and your stored profiles are unchanged.',
+    );
+  }
   const existing = await browser.storage.local.get(STATE_KEY);
   if (isBlockedFromOverwrite(existing[STATE_KEY])) {
     throw new Error(

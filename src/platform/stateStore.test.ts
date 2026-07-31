@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { SCHEMA_VERSION } from '@/core/schema';
+import { createDefaultState, SCHEMA_VERSION } from '@/core/schema';
 import { createWriterLane } from '@/core/writer-lane';
 import {
   commitMigration,
+  persistState,
   loadState,
   requestBackupMutation,
   sendCommand,
@@ -140,6 +141,77 @@ describe('commitMigration — v2 응답 쿠키 재구조화 커밋', () => {
     local.set = failing;
     expect(await commit()).toBe(true);
     expect(kv.state).toMatchObject({ schemaVersion: SCHEMA_VERSION });
+  });
+});
+
+/**
+ * 쓰기 문은 **읽을 수 없는 것을 쓰지 않는다** (structure r2 S2-1).
+ *
+ * 지금까지 가드는 반쪽이었다 — "읽을 수 없는 것 **위에** 쓰지 않는다"만 있고 그 대칭이
+ * 없었다. 명령 메시지는 캐스팅만 거쳐 들어오므로, 모순된 레코드를 담은 명령 하나가 저장소에
+ * 닿으면 다음 로드에서 검증이 실패해 `reset`이 되고 **전 프로필이 기본 상태로 교체**된다.
+ * 명령마다 디코더를 붙이는 대신 문 하나에서 막는 이유는 add·update·undo·import·백업 복원이
+ * 전부 이 문을 지나기 때문이다.
+ */
+describe('persistState — 온전하지 않은 상태는 쓰지 않는다', () => {
+  const good = () => createDefaultState();
+
+  const withModification = (modification: unknown) => {
+    const state = good() as unknown as Record<string, unknown>;
+    const profiles = state.profiles as Array<Record<string, unknown>>;
+    return {
+      ...state,
+      profiles: [{ ...profiles[0], modifications: [modification] }],
+    } as unknown as ReturnType<typeof createDefaultState>;
+  };
+
+  const write = (state: ReturnType<typeof createDefaultState>) =>
+    createWriterLane().run((permit) => persistState(permit, state));
+
+  it('온전한 상태는 그대로 쓴다', async () => {
+    const kv = seedLocal(good());
+    await write(good());
+    expect(writes).toBe(1);
+    expect(kv.state).toMatchObject({ schemaVersion: SCHEMA_VERSION });
+  });
+
+  it('두 표현을 함께 든 응답 쿠키는 거부되고 아무것도 쓰이지 않는다', async () => {
+    const kv = seedLocal(good());
+    const before = structuredClone(kv.state);
+    await expect(
+      write(
+        withModification({
+          kind: 'set-cookie', id: 'm1', enabled: true, mode: 'override', emptyMeans: 'remove',
+          comment: '', name: 'sid', value: 'abc', raw: 'sid=abc',
+        }),
+      ),
+    ).rejects.toThrow();
+    expect(writes).toBe(0);
+    expect(kv.state).toEqual(before);
+  });
+
+  it('종류를 알 수 없는 규칙도 같은 문에서 막힌다', async () => {
+    seedLocal(good());
+    await expect(write(withModification({ kind: 'quantum', id: 'm1', enabled: true, comment: '' })))
+      .rejects.toThrow();
+    expect(writes).toBe(0);
+  });
+
+  /*
+   * 거부가 정상 편집을 막으면 앱이 통째로 쓰지지 않는 상태가 된다 — 이 가드에서 가장 비싼
+   * 실패 방향이라 두 변형을 모두 통과시키는지 명시적으로 본다.
+   */
+  it('두 변형 다 정상 편집으로 통과한다', async () => {
+    for (const modification of [
+      { kind: 'set-cookie', id: 'm1', enabled: true, mode: 'override', emptyMeans: 'remove',
+        comment: '', name: 'sid', value: 'abc', path: '/' },
+      { kind: 'set-cookie', id: 'm2', enabled: true, mode: 'append', emptyMeans: 'remove',
+        comment: '', raw: 'sid=abc; Expires=Wed, 21 Oct 2026 07:28:00 GMT' },
+    ]) {
+      seedLocal(good());
+      await write(withModification(modification));
+      expect(writes).toBe(1);
+    }
   });
 });
 
