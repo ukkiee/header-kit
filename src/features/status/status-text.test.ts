@@ -18,12 +18,23 @@ const summary = (over: Partial<StatusSummary> = {}): StatusSummary => ({
 describe('statusCountsText — 본문 헤더 부제', () => {
   it('두 수를 가운뎃점으로 잇는다', () => {
     expect(statusCountsText(summary(), at('en'))).toBe('5 active rules · 2 active profiles');
-    expect(statusCountsText(summary(), at('ko'))).toBe('5 적용 규칙 · 2 활성 프로필');
+    // 세는 단위가 수 뒤에 붙는다 — 코드에서 이어 붙였다면 여기가 '5 적용 규칙'으로 남았다.
+    expect(statusCountsText(summary(), at('ko'))).toBe('5개 적용 규칙 · 2개 활성 프로필');
   });
 
   it('하나일 때 단수형을 고른다 — 로케일마다 그 선택이 다르다', () => {
     expect(statusCountsText(summary({ ruleCount: 1, activeProfileCount: 1 }), at('en')))
       .toBe('1 active rule · 1 active profile');
+  });
+
+  /*
+   * 적용에 실패했으면 수보다 그 사실이 먼저다 — 걸리지 못한 규칙을 "적용 규칙"이라 부르면
+   * 헤더가 조용히 거짓을 말한다. 상태 요약 줄이 이미 갖고 있던 분기다.
+   */
+  it('적용 실패 중에는 "적용 규칙"이라 부르지 않는다', () => {
+    const failed = summary({ applyError: 'quota', hasProblems: true });
+    expect(statusCountsText(failed, at('en'))).toBe('5 rule(s) — not applied · 2 active profiles');
+    expect(statusCountsText(failed, at('ko'))).toBe('5 규칙 — 적용 안 됨 · 2개 활성 프로필');
   });
 
   it('0도 그대로 말한다 — 빈칸은 "없다"와 "아직 모른다"를 구별해 주지 않는다', () => {
@@ -37,6 +48,6 @@ describe('statusCountsText — 본문 헤더 부제', () => {
    */
   it('정지 중이라는 사실 자체는 이 문장이 말하지 않는다', () => {
     expect(statusCountsText(summary({ paused: true, ruleCount: 0, activeProfileCount: 0 }), at('ko')))
-      .toBe('0 적용 규칙 · 0 활성 프로필');
+      .toBe('0개 적용 규칙 · 0개 활성 프로필');
   });
 });

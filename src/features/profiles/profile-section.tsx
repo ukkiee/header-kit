@@ -9,7 +9,6 @@ import { Menu, MenuItem, MenuPopup, MenuTrigger } from '@/ui/menu';
 import { MotionSwap } from '@/ui/motion-swap';
 import { AnimatePresence, MotionRow } from '@/ui/motion-row';
 import {
-  loadRuleForm,
   ruleFormIntentProps,
   RuleFormSlot,
   useRuleForm,

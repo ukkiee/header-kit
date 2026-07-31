@@ -2287,8 +2287,12 @@ try {
   await popup.getByRole('button', { name: '+ New profile' }).click();
   await pollProfileName((v) => /^Profile \d+$/.test(v));
   const emptyHintShown = await popup.getByText('No rules yet. Add one below.').isVisible().catch(() => false);
-  // 빈 상태 CTA(Add rule)를 누르면 규칙 폼이 열린다
-  await popup.getByRole('button', { name: 'Add rule' }).first().click();
+  /*
+   * 이 자리가 재는 것은 **빈 상태 상자 안의 CTA**다. 헤더에도 같은 이름의 버튼이 생겼으므로
+   * (ADR 0017) `.first()`를 쓰면 헤더를 누르게 되어, 이 테스트가 이름은 CTA인데 실제로는
+   * 헤더를 재는 상태가 된다. DOM 순서상 CTA가 뒤이므로 `.last()`로 짚는다.
+   */
+  await popup.getByRole('button', { name: 'Add rule' }).last().click();
   const formOpened = await popup.getByRole('combobox', { name: 'Type', exact: true })
     .waitFor({ timeout: 5000 }).then(() => true, () => false);
   record('N19b: 빈 상태 안내 + CTA로 규칙 폼 열림',
@@ -2429,7 +2433,7 @@ try {
   // N21b: 감도 대조 — 프로브가 실제로 모션을 감지할 수 있음을 먼저 보인다.
   await popup.emulateMedia({ reducedMotion: null });
   await popup.reload();
-  await popup.getByRole('button', { name: 'Add rule' }).first().first().waitFor({ timeout: 5000 });
+  await popup.getByRole('button', { name: 'Add rule' }).first().waitFor({ timeout: 5000 });
   await popup.waitForTimeout(700);
   const lively = await probePressPrimitives(popup);
   const allMoving = Object.values(lively).every(
@@ -2442,7 +2446,7 @@ try {
   // N21c: 부재 단언 — 같은 프로브가 reduced-motion에서는 아무 변형도 보지 못한다.
   await popup.emulateMedia({ reducedMotion: 'reduce' });
   await popup.reload();
-  await popup.getByRole('button', { name: 'Add rule' }).first().first().waitFor({ timeout: 5000 });
+  await popup.getByRole('button', { name: 'Add rule' }).first().waitFor({ timeout: 5000 });
   await popup.waitForTimeout(700);
   const still = await probePressPrimitives(popup);
   const allNone = Object.values(still).every(
@@ -3958,6 +3962,8 @@ try {
     profilesShell.cols.length === 3 &&
     backupsShell.cols.length === 2 &&
     settingsShell.cols.length === 2 &&
+    // 열이 접힌 상태에서도 셸이 넘치지 않는다 — 팝업은 760×580 고정이라 넘치면 잘린다.
+    profilesShell.overflow === 0 && backupsShell.overflow === 0 && settingsShell.overflow === 0 &&
     // 본문이 그 폭을 실제로 가져갔다 — 숨기기만 하고 자리를 남기면 여기서 걸린다.
     backupsShell.cols[1] > profilesShell.cols[2] &&
     settingsShell.cols[1] > profilesShell.cols[2] &&
@@ -3968,7 +3974,8 @@ try {
     columnHidden,
     `profiles cols=${JSON.stringify(profilesShell.cols)}, ` +
       `backups cols=${JSON.stringify(backupsShell.cols)}, ` +
-      `settings cols=${JSON.stringify(settingsShell.cols)}`);
+      `settings cols=${JSON.stringify(settingsShell.cols)}, ` +
+    `overflow=${profilesShell.overflow}/${backupsShell.overflow}/${settingsShell.overflow}`);
 
   /*
    * N41e: 프로필 행의 규칙 수·전역 정지 (티켓 13, 스펙 story 22·25·38).
