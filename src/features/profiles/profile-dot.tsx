@@ -115,10 +115,18 @@ export function profileToggleLabel(profile: Pick<Profile, 'name'>, t: Translator
  * 곧 그 이름인데 그것이 먼저 잘리는 셈이다. 두 줄로 나누면 열도 넓어지지 않고 이름도 남는다.
  * 예전 한 줄 배치(`ml-auto` + 수 한두 자)는 붙는 것이 낱말이 아니라 숫자였을 때의 해법이다.
  *
- * **정지는 세 채널로 말한다** (티켓 AC6): 일시정지 아이콘(형태) · 메타 끝의 낱말(문자) ·
- * muted(색). 어느 하나가 죽어도 남는다 — 9px 글리프의 관용을 모르는 사람에게도, 색을 못 보는
- * 사람에게도 정지가 읽혀야 한다(스펙 story 38). 낱말 값은 행 접근성 이름이 쓰는 그 값이라
- * (`PROFILE_STATE_KEY`) 이름이 `(정지)`로 끝나고, 보이는 라벨이 이름에 담겨 WCAG 2.5.3도 맞는다.
+ * **정지는 세 채널로 말한다** (티켓 AC6, 스펙 story 44): 일시정지 아이콘(형태) · 메타 끝의
+ * 낱말(문자) · 글자 세기(색). 어느 하나가 죽어도 남는다 — 9px 글리프의 관용을 모르는
+ * 사람에게도, 색을 못 보는 사람에게도 정지가 읽혀야 한다.
+ *
+ * 색 채널이 **정지 쪽을 진하게** 만드는 것은 대비 때문이다 (code-review). 메타는 평상시
+ * 보조 텍스트라 이미 muted인데, 정지를 더 흐리게 하려면 muted 아래로 내려가야 하고 그러면
+ * 10px 글자가 `global.css`가 못 박은 본문 4.5:1을 깬다. 위로 올리면 채널이 살면서 대비도
+ * 함께 오른다 — 지금 아무것도 안 걸리고 있다는 사실은 눈에 띄어도 되는 종류다.
+ *
+ * 낱말 값은 행 접근성 이름이 쓰는 그 값이라(`PROFILE_STATE_KEY`) 이름이 `(정지)`로 끝난다 —
+ * **상태 낱말**이 양쪽에서 같다는 뜻이고, 그래서 음성 제어 사용자가 눈으로 읽은 그 말로 행을
+ * 부를 수 있다. 규칙 수까지 이름에 담기지는 않는다: 그것은 라벨이 아니라 곁들인 정보다.
  *
  * **수는 정지 중에도 깎지 않는다** — 규칙이 사라진 게 아니라 멈춘 것이고 재개하면 돌아온다.
  */
@@ -157,7 +165,7 @@ export function ProfileSelectRow({
             <span
               aria-hidden
               className={`flex w-full min-w-0 items-center gap-1 truncate text-[10px] tabular-nums ${
-                paused ? 'text-muted-foreground' : 'text-muted-foreground/80'
+                paused ? 'text-foreground' : 'text-muted-foreground'
               }`}
             >
               {paused && <Pause size={9} strokeWidth={2} fill="currentColor" className="shrink-0" />}

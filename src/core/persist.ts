@@ -327,11 +327,13 @@ export function dropRetiredKinds(modifications: unknown[]): unknown[] {
  *
  * 걷어도 공지는 뜨지 않는다. 이 필드는 어디에서도 렌더되지 않던 죽은 값이라 사라져도 걸리는
  * 규칙이 하나도 달라지지 않는다 — 공지는 규칙이 전보다 **넓게** 걸리게 됐을 때의 것이다(티켓 02).
+ *
+ * 이름이 복수형인 것은 이 자리가 다음 퇴역 필드도 받을 자리라서다. 지금은 하나뿐이므로
+ * export하지 않는다 — 두 호출부가 모두 이 파일 안에 있다.
  */
-export function dropRetiredProfileFields<T>(profile: T): T {
-  if (!isRecord(profile)) return profile;
+function dropRetiredProfileFields(profile: Record<string, unknown>): Record<string, unknown> {
   const { shortLabel: _retiredLabel, ...rest } = profile;
-  return rest as T;
+  return rest;
 }
 
 /**

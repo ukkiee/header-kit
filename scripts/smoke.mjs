@@ -1407,7 +1407,7 @@ try {
    * 끝까지 남는다. 이름은 카탈로그를 거치고(ko는 `새 프로필 N`), 색은 팔레트를 순서대로 돈다.
    */
   await popup.getByRole('button', { name: '+ New profile' }).click();
-  const createdName = await pollProfileName((v) => /^Profile \d+$/.test(v));
+  const createdName = await pollProfileName((v) => /^New profile \d+$/.test(v));
   const createdProfile = await sw.evaluate(async (name) => {
     const { state } = await chrome.storage.local.get('state');
     const p = state.profiles.find((x) => x.name === name);
@@ -1417,7 +1417,7 @@ try {
     .getByRole('button', { name: new RegExp(`^Select profile ${createdName} `) })
     .getAttribute('aria-current');
   record('N2: 새 프로필 — 이름·색 자동, 즉시 선택, 두 글자 라벨 없음',
-    /^Profile \d+$/.test(createdName) && /^#[0-9a-f]{6}$/i.test(createdProfile?.color ?? '') &&
+    /^New profile \d+$/.test(createdName) && /^#[0-9a-f]{6}$/i.test(createdProfile?.color ?? '') &&
       createdSelected === 'true' && createdProfile?.hasLabel === false,
     `name=${createdName}, color=${createdProfile?.color}, selected=${createdSelected}, shortLabel=${createdProfile?.hasLabel}`);
 
@@ -2421,7 +2421,7 @@ try {
 
   // 빈 상태: 규칙 0개 프로필 → 안내 + CTA로 폼 열림
   await popup.getByRole('button', { name: '+ New profile' }).click();
-  await pollProfileName((v) => /^Profile \d+$/.test(v));
+  await pollProfileName((v) => /^New profile \d+$/.test(v));
   const emptyHintShown = await popup.getByText('No rules yet. Add one below.').isVisible().catch(() => false);
   /*
    * 이 자리가 재는 것은 **빈 상태 상자 안의 CTA**다. 헤더에도 같은 이름의 버튼이 생겼으므로
@@ -4158,7 +4158,9 @@ try {
    * 여기서 보이는 낱말을 따로 본다.
    *
    * 렌더된 크기까지 재는 이유: 낱말을 sr-only로 숨겨도 `textContent`만 보는 단언은 통과한다.
-   * 폭·높이가 0이 아님을 함께 요구해야 "보이는" 채널이 실제로 선 것이 된다.
+   *
+   * **0보다 크다로는 부족하다** (code-review). Tailwind `sr-only`는 1×1로 렌더되므로 그
+   * 문턱을 그냥 넘는다. 10px 줄 상자는 실측 13px이라, 사람이 읽을 수 있는 크기를 요구한다.
    * 오버플로 0을 같이 보는 것은 이 낱말이 행을 넓히지 않는다는 AC6 쪽 경계다.
    */
   /*
@@ -4167,19 +4169,31 @@ try {
    * 채널의 성질은 그대로다: 화면에 정지라고 **적혀** 있어야 하고, 크기가 0이면 안 된다.
    */
   const pausedWord = () => popup.evaluate(() => ({
+    /*
+     * 낱말을 든 **메타 자신**을 잰다 — 마지막 `aria-hidden` span이다 (code-review).
+     * `textContent`로 넓게 찾으면 이름까지 감싼 바깥 상자가 먼저 걸려, 낱말을 sr-only로
+     * 숨겨도 이름 줄의 높이 때문에 w·h가 0이 아니게 나온다 — 가드가 헛돈다.
+     */
     rows: [...document.querySelectorAll('[aria-label^="Select profile"]')].map((r) => {
-      const el = [...r.querySelectorAll('span')].find((s) => /· paused$/.test(s.textContent?.trim() ?? ''));
-      if (!el) return null;
+      const el = [...r.querySelectorAll('span[aria-hidden]')].at(-1);
+      if (!el || !/· paused$/.test(el.textContent?.trim() ?? '')) return null;
       const box = el.getBoundingClientRect();
       return { w: Math.round(box.width), h: Math.round(box.height) };
+    }),
+    // 색 채널 — 메타의 글자 세기가 정지에서 바뀐다. 형태·문자와 함께 셋째 채널이다.
+    metaColors: [...document.querySelectorAll('[aria-label^="Select profile"]')].map((r) => {
+      const meta = [...r.querySelectorAll('span[aria-hidden]')].at(-1);
+      return meta ? getComputedStyle(meta).color : null;
     }),
     overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
   }));
   const wordRunning = await pausedWord();
   await popup.getByRole('button', { name: 'Pause' }).click();
+  // 읽을 수 있는 크기 — sr-only(1×1)도 display:none(0×0)도 이 문턱을 넘지 못한다.
+  const readable = (p) => !!p && p.w >= 20 && p.h >= 8;
   const wordPaused = await pollUntil(
     pausedWord,
-    (v) => v.rows.length === 2 && v.rows.every((p) => p && p.w > 0 && p.h > 0),
+    (v) => v.rows.length === 2 && v.rows.every(readable),
     5000,
     100,
   );
@@ -4190,13 +4204,21 @@ try {
     5000,
     100,
   );
-  record('N41f: 정지 — 보이는 낱말이 행에 서고(형태·색 말고 텍스트), 재개하면 사라진다',
+  /*
+   * 색 채널은 **정지 쪽이 더 진하다** (code-review). 메타는 평상시 보조 텍스트라 이미 muted라,
+   * 정지를 더 흐리게 하려면 muted 아래로 내려가 10px 글자가 본문 4.5:1을 깬다 — 위로 올리면
+   * 채널이 살면서 대비도 함께 오른다. 여기서는 "두 상태의 색이 실제로 다르다"만 잰다.
+   */
+  const colorChanged =
+    wordRunning.metaColors.length === 2 &&
+    wordRunning.metaColors.every((c, i) => c !== null && c !== wordPaused.metaColors[i]);
+  record('N41f: 정지 — 보이는 낱말이 행에 서고 글자 세기도 바뀐다(형태·문자·색), 재개하면 사라진다',
     wordRunning.rows.length === 2 && wordRunning.rows.every((p) => p === null) &&
-      wordPaused.rows.length === 2 && wordPaused.rows.every((p) => p && p.w > 0 && p.h > 0) &&
-      wordPaused.overflow === 0 &&
+      wordPaused.rows.length === 2 && wordPaused.rows.every(readable) &&
+      wordPaused.overflow === 0 && colorChanged &&
       wordResumed.rows.length === 2 && wordResumed.rows.every((p) => p === null),
     `실행=${JSON.stringify(wordRunning)}, 정지=${JSON.stringify(wordPaused)}, ` +
-      `재개=${JSON.stringify(wordResumed)}`);
+      `색 바뀜=${colorChanged}, 재개=${JSON.stringify(wordResumed)}`);
 
   /*
    * N41b: 아코디언 편집 (ADR 0017, 스펙 story 1–6) — **행이 사라지지 않는다.**

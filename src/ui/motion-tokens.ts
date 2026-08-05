@@ -35,18 +35,9 @@ export const POPUP_SPRING_EASE = 'cubic-bezier(0.34, 1.56, 0.64, 1)';
 /** 레일 화면 전환 fade — MotionView. */
 export const VIEW_TRANSITION = { duration: 0.12 } as const;
 
-/** 메뉴 항목 순차 등장 — 항목 사이 간격과 각 항목의 fade 길이(초). */
-export const MENU_ITEM_STAGGER_S = 0.05;
-export const MENU_ITEM_FADE_S = 0.12;
-
-/** 삭제 2단 확인 라벨 교체 — 짧게, 단계가 바뀐 것만 알린다. */
-export const LABEL_SWAP_S = 0.12;
-
-/**
- * 항목 n개가 전부 자리 잡기까지의 총 시간(ms). 마지막 항목은 `(n-1)`번째 간격이
- * 지난 뒤에야 fade를 시작한다. 스모크는 이 값으로 "아직 진행 중" 창을 잡는다.
+/*
+ * **메뉴 항목 순차 등장(stagger)과 라벨 교체 상수가 여기 없다** (티켓 04, ADR 0017의
+ * ADR 0012 개정). 프로필 ⋯ 메뉴가 앱의 유일한 메뉴였고 시안에 없어 사라졌으므로, 이 값들을
+ * 읽는 컴포넌트도 그 값으로 창을 잡던 스모크도 함께 걷혔다. 숫자만 남겨 두면 다음 사람이
+ * 살아 있는 모션 계약으로 읽는다 — 이 파일의 나머지는 실제로 그리는 것들이다.
  */
-export function menuStaggerTotalMs(itemCount: number): number {
-  const last = Math.max(itemCount - 1, 0);
-  return Math.round((last * MENU_ITEM_STAGGER_S + MENU_ITEM_FADE_S) * 1000);
-}

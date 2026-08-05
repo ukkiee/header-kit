@@ -246,10 +246,10 @@ const en = {
    *
    * `aria*` 접두를 뗀 것이 그 승격이다. 예전에는 정지만 눈에 보였고 나머지 둘은 이름에만
    * 있었는데, 시안의 행 메타(`N개 규칙 · 적용`)가 셋 다 화면에 올렸다. 한 벌만 두는 이유는
-   * WCAG 2.5.3(Label in Name)이다 — 보이는 낱말과 이름의 낱말이 갈라지면 음성 제어
+   * WCAG 2.5.3(Label in Name)이다 — 보이는 **상태 낱말**과 이름의 그것이 갈라지면 음성 제어
    * 사용자가 눈으로 읽은 그 말로 행을 부를 수 없다.
    *
-   * 전역 일시정지는 켬/끔을 덮어쓰는 **세 번째 값**이라 같은 자리에 들어간다 (스펙 story 25/38)
+   * 전역 일시정지는 켬/끔을 덮어쓰는 **세 번째 값**이라 같은 자리에 들어간다 (스펙 story 44)
    * — 저장된 active는 그대로이고 표시만 정지다.
    */
   profileStateOn: 'applied',
@@ -264,7 +264,7 @@ const en = {
    * 카탈로그를 거치는 이유는 이 이름이 **영구**이기 때문이다 — 이름 변경 컨트롤이 없어졌으므로
    * 만들 때 붙는 이름이 끝까지 남는다. 코드에 박아 두면 한국어 화면에도 영어 이름이 남는다.
    */
-  newProfileName: 'Profile {n}',
+  newProfileName: 'New profile {number}',
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -472,7 +472,7 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     profileStatePaused: '정지',
     profileRule: '{count}개 규칙',
     profileRules: '{count}개 규칙',
-    newProfileName: '새 프로필 {n}',
+    newProfileName: '새 프로필 {number}',
   },
 };
 

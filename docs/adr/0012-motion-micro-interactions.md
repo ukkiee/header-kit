@@ -23,3 +23,12 @@
 - **끄는 것(계약 안):** transform(scale·translate), opacity 페이드, height/`grid-template-rows` 같은 크기·레이아웃 전이, 순차 등장(stagger). 전정기관을 자극하는 **움직임**이 `prefers-reduced-motion`이 겨냥하는 대상이다. 이들은 reduced-motion에서 전이/애니메이션을 **아예 붙이지 않는다**(지속시간 0 대체가 아니라 부재). motion 프리미티브는 `usePressMotion`이 빈 객체를 돌려주는 것으로, CSS 표면은 `motion-reduce:transition-none`으로 집행한다.
 - **끄지 않는 것(계약 밖):** `transition-colors` — 배경·보더·텍스트 색의 페이드. 색 변화는 화면이 움직이지 않으므로 전정기관을 자극하지 않고, 없애면 접근성 이득 없이 reduced-motion 사용자만 더 투박한(툭 바뀌는) UI를 쓰게 된다. `main` 이전부터 모든 Button이 조건 없는 색 전이를 갖고 있었고, 이 경계는 그 현행 동작과도 일치한다. `fieldFocus`·프로필 이름 입력·아코디언 헤더의 포커스/호버 색 전이가 여기 해당한다.
 - **판정 기준:** "이 전이가 요소를 **이동·변형·페이드인아웃** 시키는가, 아니면 **색만** 바꾸는가." 앞이면 끄고, 뒤면 둔다. 스크롤바 페이드는 opacity라 앞에 속해 `motion-reduce:transition-none`을 받았고(전이만 끄고 opacity 값 60→100은 남긴다 — 어포던스 유지), smoke N33이 감도 대조와 함께 못박는다.
+
+## 개정 — 메뉴 항목 표면이 사라진다 (ADR 0017, 티켓 04)
+
+위 결정이 든 네 누름 표면 중 **메뉴 항목**이 없어진다. ADR 0017이 프로필의 이름 변경·색 변경·복제·삭제 컨트롤을 걷어내면서 그것들을 담고 있던 ⋯ 메뉴가 사라졌고, 그 메뉴가 앱의 **유일한** 메뉴였다 — 이제 화면에 뜨는 메뉴가 하나도 없다.
+
+함께 걷히는 것: 메뉴 항목의 순차 등장(stagger)과 삭제 2단 확인 라벨 교체 전환, 그 모션 상수들(`MENU_ITEM_STAGGER_S` · `MENU_ITEM_FADE_S` · `LABEL_SWAP_S` · `menuStaggerTotalMs`), `ui/menu.tsx`와 `ui/motion-swap.tsx`, 그것들을 재던 스모크 셋. 렌더되지 않는 프리미티브를 남겨 두면 다음 사람이 그것을 살아 있는 계약으로 읽는다.
+
+남는 것은 세 표면(Button · IconButton · SwitcherChip)이고, 그 셋의 결정은 위 그대로다. **2단 확인이라는 형태 자체는 남는다** — 백업 삭제와 전체 초기화가 같은 형태를 쓰고, 그쪽은 메뉴가 아니라 버튼 위에서 돈다.
+

@@ -7,7 +7,7 @@
 - **결정**: shadcn 소스를 원본 그대로 둔다. 재복사(`shadcn add`)가 곧 갱신이 되게 하기 위해서다. 소스를 고치기 시작하면 재복사할 때마다 같은 수정을 반복해야 하고, 그때부터 shadcn은 "업스트림"이 아니라 한 번 베껴 온 코드가 된다.
 
   대신 이 저장소가 포기할 수 없는 것들은 조합 파일로 흡수한다:
-  - `press-button.tsx` — 누름·호버 모션(ADR 0012). shadcn 기본은 `translate-y-px`인데, 그것만 쓰면 **버튼만** 다른 감각이 된다(칩·아이콘버튼·메뉴 항목은 spring scale). Base UI `render` 합성으로 motion 요소를 끼운다.
+  - `press-button.tsx` — 누름·호버 모션(ADR 0012). shadcn 기본은 `translate-y-px`인데, 그것만 쓰면 **버튼만** 다른 감각이 된다(칩·아이콘버튼은 spring scale — 메뉴 항목도 그랬으나 ADR 0017이 앱의 마지막 메뉴를 걷어냈다, ADR 0012 개정). Base UI `render` 합성으로 motion 요소를 끼운다.
   - `alert-banner.tsx` — `as` 시맨틱과 warn 단계. shadcn Alert는 div 고정이라 `<ul>`/`<li>`가 안 되고(가져오기 오류 목록이 목록 시맨틱을 잃는다), 변형도 default·destructive 둘뿐이라 '주의'가 없다.
   - `field-labeled.tsx` — 라벨-컨트롤 자동 연결(ADR 0011). shadcn Field는 순수 레이아웃 div라 호출부가 id/htmlFor를 직접 매야 하고 `aria-invalid`가 전파되지 않는다.
   - `text-field.tsx` — 크기 축(xs/sm/md). 팝업이 760×580 고정이라 필드 높이가 한 화면의 행 수를 정한다. shadcn 기본은 `h-8` 하나뿐이다.
