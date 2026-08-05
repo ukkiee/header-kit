@@ -279,8 +279,8 @@ describe('background bootstrap', () => {
       ...createDefaultState(),
       theme: 'dark',
       profiles: [
-        { id: 'p1', name: 'One', active: true, shortLabel: '1', color: '#2563eb', modifications: [] },
-        { id: 'p2', name: 'Two', active: false, shortLabel: '2', color: '#16a34a', modifications: [] },
+        { id: 'p1', name: 'One', active: true, color: '#2563eb', modifications: [] },
+        { id: 'p2', name: 'Two', active: false, color: '#16a34a', modifications: [] },
       ],
     };
     const timers: (() => void)[] = [];
@@ -356,7 +356,7 @@ describe('background bootstrap', () => {
     const populated: StoredState = {
       ...createDefaultState(),
       profiles: [
-        { id: 'p1', name: 'One', active: true, shortLabel: '1', color: '#2563eb', modifications: [] },
+        { id: 'p1', name: 'One', active: true, color: '#2563eb', modifications: [] },
       ],
     };
     const timers: (() => void)[] = [];
@@ -510,7 +510,6 @@ describe('background bootstrap', () => {
           id: 'p1',
           name: 'Legacy',
           active: true,
-          shortLabel: 'L',
           color: '#2563eb',
           modifications: [
             {

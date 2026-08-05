@@ -4,7 +4,6 @@ import {
   addProfile,
   expireRules,
   removeModification,
-  removeProfile,
   restoreModification,
   toggleProfile,
   updateModification,
@@ -40,7 +39,6 @@ function profile(overrides: Partial<Profile> = {}): Profile {
     id: 'p1',
     name: 'P',
     active: false,
-    shortLabel: 'P',
     color: '#2563eb',
     modifications: [mod('m-ph', 'trace-{{uuid}}'), mod('m-plain', 'static')],
     ...overrides,
@@ -112,15 +110,17 @@ describe('실체화 수명주기 (활성화 경계)', () => {
     expect(next.materialized).toEqual({ 'm-new': '42' });
   });
 
-  it('Modification 제거·Profile 제거가 실체화 값을 정리한다', () => {
+  /*
+   * 프로필 **제거**는 이 목록에 없다 (티켓 04) — 그 명령이 퇴역했기 때문이다. 프로필이 통째로
+   * 사라지는 경로는 이제 전체 초기화와 백업 복원 둘뿐이고, 둘 다 실체화 맵을 통째로 비운다
+   * (`restoreProfiles`의 `materialized: {}`) — 프로필별로 골라 지울 일이 남지 않았다.
+   */
+  it('Modification 제거가 실체화 값을 정리한다', () => {
     const deps = stubDeps();
     const on = toggleProfile(state([profile()]), 'p1', true, deps);
 
     const removedMod = removeModification(on, 'p1', 'm-ph');
     expect(removedMod.materialized).toEqual({});
-
-    const removedProfile = removeProfile(on, 'p1');
-    expect(removedProfile.materialized).toEqual({});
   });
 
   it('활성 상태로 추가된 Profile(Import·복원 경로)은 활성화 경계로 실체화된다', () => {

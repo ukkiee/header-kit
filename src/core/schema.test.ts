@@ -13,7 +13,7 @@ describe('parseStoredState', () => {
       paused: false,
       profiles: [
         {
-          id: 'p1', name: 'P', active: true, shortLabel: 'P', color: '#2563eb',
+          id: 'p1', name: 'P', active: true, color: '#2563eb',
           modifications: [
             { kind: 'request-header', id: 'm1', name: 'X', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
             // 자체 urlFilter가 있는 규칙은 URL 스코프를 유지한다 (0007 의미론)
@@ -58,7 +58,7 @@ describe('parseStoredState', () => {
       paused: false,
       profiles: [
         {
-          id: 'p1', name: 'P', active: true, shortLabel: 'P', color: '#2563eb',
+          id: 'p1', name: 'P', active: true, color: '#2563eb',
           modifications: [
             { kind: 'request-header', id: 'm1', name: 'X', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
           ],
@@ -75,7 +75,7 @@ describe('parseStoredState', () => {
       paused: false,
       profiles: [
         {
-          id: 'p1', name: 'P', active: true, shortLabel: 'P', color: '#2563eb',          modifications: [
+          id: 'p1', name: 'P', active: true, color: '#2563eb',          modifications: [
             { kind: 'request-header', id: 'm1', name: 'X', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '', urlFilter: 'api\\.example' },
           ],
         },
@@ -106,14 +106,14 @@ describe('parseStoredState', () => {
       paused: false,
       profiles: [
         {
-          id: 'p1', name: 'Kept', active: true, shortLabel: 'K', color: '#2563eb',
+          id: 'p1', name: 'Kept', active: true, color: '#2563eb',
           modifications: [
             { kind: 'csp', id: 'c1', directives: [{ name: 'default-src', value: "'self'" }], comment: '', enabled: true },
             { kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
             { kind: 'redirect', id: 'r1', pattern: '^https://a/(.*)', substitution: 'https://b/\\1', comment: '', enabled: true },
           ],
         },
-        { id: 'p2', name: 'Other', active: false, shortLabel: 'O', color: '#16a34a', modifications: [] },
+        { id: 'p2', name: 'Other', active: false, color: '#16a34a', modifications: [] },
       ],
       materialized: { m1: 'trace-abc' },
       customHeaderNames: ['X-Custom'],
@@ -121,7 +121,7 @@ describe('parseStoredState', () => {
 
     // 기본값 리셋이 아니다 — 프로필과 상태 메타가 그대로 남는다.
     expect(parsed.profiles.map((p) => p.id)).toEqual(['p1', 'p2']);
-    expect(parsed.profiles[0]).toMatchObject({ name: 'Kept', active: true, shortLabel: 'K', color: '#2563eb' });
+    expect(parsed.profiles[0]).toMatchObject({ name: 'Kept', active: true, color: '#2563eb' });
     expect(parsed.materialized).toEqual({ m1: 'trace-abc' });
     expect(parsed.customHeaderNames).toEqual(['X-Custom']);
     // csp만 빠지고 같은 프로필의 다른 수정은 순서까지 보존된다.
@@ -141,7 +141,6 @@ describe('parseStoredState', () => {
           id: 'p1',
           name: 'P',
           active: true,
-          shortLabel: 'P',
           color: '#2563eb',
           modifications: [{ kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
         },
@@ -169,7 +168,7 @@ describe('parseStoredState', () => {
       syncBackup: true,
       profiles: [
         {
-          id: 'p1', name: 'P', active: true, shortLabel: 'P', color: '#2563eb',
+          id: 'p1', name: 'P', active: true, color: '#2563eb',
           modifications: [],
         },
       ],
@@ -198,7 +197,35 @@ describe('parseStoredState', () => {
     expectDefaultState(parseStoredState(undefined));
   });
 
-  it('shortLabel/color가 없는 이전 v1 상태는 기본값으로 채워 보존한다 (전량 거부 금지)', () => {
+  /*
+   * **두 글자 라벨은 읽는 문에서 걷힌다** (ADR 0017, 티켓 04) — 어디에서도 렌더되지 않던
+   * 죽은 필드다. 재는 것이 두 가지인 이유는 실패 방식이 둘이기 때문이다: 검증이 아직
+   * 요구하면 그 필드가 없는 새 상태가 **전량 거부**되어 프로필이 사라지고, 걷어내지 않으면
+   * 저장소에 죽은 값이 영원히 실려 다닌다.
+   *
+   * 이것 때문에 공지가 뜨지는 않는다 — 걸리는 규칙이 하나도 달라지지 않으므로 알릴 것이 없다.
+   */
+  it('두 글자 라벨은 있어도 걷히고, 없어도 거부되지 않는다', () => {
+    const withLabel = parseStoredState({
+      schemaVersion: SCHEMA_VERSION,
+      paused: false,
+      profiles: [
+        { id: 'p1', name: 'Kept', active: true, shortLabel: 'KE', color: '#2563eb', modifications: [] },
+      ],
+    });
+    expect(withLabel.profiles.map((p) => p.id)).toEqual(['p1']);
+    expect('shortLabel' in withLabel.profiles[0]!).toBe(false);
+    expect(withLabel.retirementNotice).toBeUndefined();
+
+    const withoutLabel = parseStoredState({
+      schemaVersion: SCHEMA_VERSION,
+      paused: false,
+      profiles: [{ id: 'p1', name: 'Kept', active: true, color: '#2563eb', modifications: [] }],
+    });
+    expect(withoutLabel.profiles.map((p) => p.id)).toEqual(['p1']);
+  });
+
+  it('color가 없는 이전 v1 상태는 기본값으로 채워 보존한다 (전량 거부 금지)', () => {
     const legacy = {
       schemaVersion: SCHEMA_VERSION,
       paused: false,
@@ -220,7 +247,6 @@ describe('parseStoredState', () => {
       id: 'p1',
       name: 'kept',
       active: true,
-      shortLabel: 'K',
     });
     expect(typeof parsed.profiles[0]?.color).toBe('string');
     expect(parsed.profiles[0]?.modifications).toHaveLength(1);
@@ -239,7 +265,6 @@ describe('parseStoredState', () => {
             id: 'p1',
             name: 'P',
             active: true,
-            shortLabel: 'P',
             color: '#2563eb',
             modifications: [{ kind: 'request-header', id: 'm1', name: 'X', value: 1, enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
           },

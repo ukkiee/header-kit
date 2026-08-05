@@ -193,7 +193,6 @@ function isProfile(value: unknown): value is Profile {
     typeof value.id === 'string' &&
     typeof value.name === 'string' &&
     typeof value.active === 'boolean' &&
-    typeof value.shortLabel === 'string' &&
     typeof value.color === 'string' &&
     Array.isArray(value.modifications) &&
     value.modifications.every(isModification)
@@ -319,15 +318,31 @@ export function dropRetiredKinds(modifications: unknown[]): unknown[] {
 }
 
 /**
+ * 퇴역한 **프로필 필드**를 걷어낸다 (ADR 0017, 티켓 04) — 지금은 두 글자 라벨 하나다.
+ *
+ * 읽기 경로와 가져오기 경로가 **각각** 부른다. 하나로 합치지 못하는 이유는 두 문이 실제로
+ * 다르기 때문이다: 이미 현재 버전인 상태는 업그레이드를 아예 지나지 않고 검증만 받는다
+ * (`readStoredState`의 같은 버전 분기) — 거기에만 두면 지금 설치된 거의 모든 상태가 이 필드를
+ * 영원히 들고 다닌다. 반대로 검증 쪽에만 두면 가져오기가 그것을 그대로 실어 온다.
+ *
+ * 걷어도 공지는 뜨지 않는다. 이 필드는 어디에서도 렌더되지 않던 죽은 값이라 사라져도 걸리는
+ * 규칙이 하나도 달라지지 않는다 — 공지는 규칙이 전보다 **넓게** 걸리게 됐을 때의 것이다(티켓 02).
+ */
+export function dropRetiredProfileFields<T>(profile: T): T {
+  if (!isRecord(profile)) return profile;
+  const { shortLabel: _retiredLabel, ...rest } = profile;
+  return rest as T;
+}
+
+/**
  * v1 내부 반복 중 추가된 선택 필드를 기본값으로 채운다.
  * 필드 추가가 기존 저장 상태를 전량 거부로 파괴하면 안 된다 (SSOT 보호).
  */
 function backfillProfile(value: unknown): unknown {
   if (!isRecord(value)) return value;
   const base = {
-    shortLabel: typeof value.name === 'string' ? value.name.charAt(0).toUpperCase() : '',
     color: PROFILE_COLORS[0],
-    ...value,
+    ...dropRetiredProfileFields(value),
     // 퇴역 종류는 isProfile 검증에 닿기 전에 버린다 — 닿으면 전체 리셋이다.
     modifications: Array.isArray(value.modifications)
       ? dropRetiredKinds(value.modifications).map(backfillModification)
@@ -570,7 +585,7 @@ export function upgradeProfile(value: unknown): ProfileUpgrade {
     if (widened) retired += 1;
     return modification;
   });
-  return { profile: { ...materialized, modifications }, retired };
+  return { profile: dropRetiredProfileFields({ ...materialized, modifications }), retired };
 }
 
 /**

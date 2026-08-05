@@ -64,11 +64,12 @@ function withoutKey(
   return rest;
 }
 
-export interface ProfileMeta {
-  name: string;
-  shortLabel: string;
-  color: string;
-}
+/*
+ * **프로필의 메타를 바꾸는 명령이 없다** (ADR 0017, 티켓 04). 이름·색은 만들 때 정해지고,
+ * 복제·삭제 컨트롤도 시안에 없어 함께 퇴역했다 — `duplicate-profile`·`remove-profile`·
+ * `update-profile-meta` 셋과 그 순수 함수들이 이 커밋에서 사라진 이유다. 호출부가 없는
+ * 명령을 남겨 두면 화면에 없는 조작이 메시지로는 계속 가능한 채로 남는다.
+ */
 
 /**
  * 저장 상태의 모든 전이는 이 명령들을 거친다 — UI·Import·Restore가 각자
@@ -292,14 +293,6 @@ export function addProfile(
   return base;
 }
 
-export function removeProfile(state: StoredState, profileId: string): StoredState {
-  const profile = state.profiles.find((p) => p.id === profileId);
-  const base = { ...state, profiles: state.profiles.filter((p) => p.id !== profileId) };
-  return profile
-    ? { ...base, materialized: clearProfileMaterialization(base.materialized, profile) }
-    : base;
-}
-
 export function moveProfile(
   state: StoredState,
   profileId: string,
@@ -311,29 +304,6 @@ export function moveProfile(
   const [moved] = profiles.splice(from, 1);
   profiles.splice(Math.max(0, Math.min(toIndex, profiles.length)), 0, moved!);
   return { ...state, profiles };
-}
-
-export function duplicateProfile(state: StoredState, profileId: string): StoredState {
-  const source = state.profiles.find((p) => p.id === profileId);
-  if (!source) return state;
-  const copy: Profile = {
-    ...source,
-    id: crypto.randomUUID(),
-    name: `${source.name} copy`,
-    active: false,
-    modifications: source.modifications.map((m) => ({ ...m, id: crypto.randomUUID() })),
-  };
-  return addProfile(state, copy, profileId);
-}
-
-export function updateProfileMeta(
-  state: StoredState,
-  profileId: string,
-  meta: ProfileMeta,
-): StoredState {
-  // shortLabel 1–2자 불변식은 UI가 아니라 여기(권위 실행 경로)서 강제한다.
-  const normalized = { ...meta, shortLabel: meta.shortLabel.slice(0, 2) };
-  return withProfile(state, profileId, (profile) => ({ ...profile, ...normalized }));
 }
 
 export function setPaused(state: StoredState, paused: boolean): StoredState {
@@ -456,10 +426,7 @@ export function expireRules(state: StoredState, now: number): StoredState {
 export type Command =
   | { type: 'toggle-profile'; profileId: string; active: boolean }
   | { type: 'add-profile'; profile: Profile; afterProfileId?: string }
-  | { type: 'duplicate-profile'; profileId: string }
-  | { type: 'remove-profile'; profileId: string }
   | { type: 'move-profile'; profileId: string; toIndex: number }
-  | { type: 'update-profile-meta'; profileId: string; meta: ProfileMeta }
   | { type: 'set-paused'; paused: boolean }
   | { type: 'toggle-pause' }
   | { type: 'set-theme'; theme: ThemePreference }
@@ -525,14 +492,8 @@ export function applyCommand(
       return toggleProfile(state, command.profileId, command.active, deps);
     case 'add-profile':
       return addProfile(state, command.profile, command.afterProfileId, deps);
-    case 'duplicate-profile':
-      return duplicateProfile(state, command.profileId);
-    case 'remove-profile':
-      return removeProfile(state, command.profileId);
     case 'move-profile':
       return moveProfile(state, command.profileId, command.toIndex);
-    case 'update-profile-meta':
-      return updateProfileMeta(state, command.profileId, command.meta);
     case 'set-paused':
       return setPaused(state, command.paused);
     case 'toggle-pause':

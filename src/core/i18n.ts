@@ -16,7 +16,6 @@ const en = {
   newProfile: 'New profile',
   profiles: 'Profiles',
   searchProfiles: 'Search profiles…',
-  menuDuplicate: 'Duplicate',
   menuDelete: 'Delete',
   addRule: 'Add rule',
   edit: 'Edit',
@@ -100,7 +99,6 @@ const en = {
   enableOnSave: 'Enable after saving',
   restore: 'Restore',
   confirmReplaceAll: 'Replace all?',
-  confirmDelete: 'Delete?',
   openInTab: 'Open in tab',
   headerName: 'Header name',
   cookieName: 'Cookie name',
@@ -211,10 +209,6 @@ const en = {
   ariaEnableModification: 'Enable modification',
   redirectPattern: 'Redirect pattern',
   ariaUrlMatchType: 'URL match type',
-  ariaBadgeColor: 'Badge color',
-  ariaProfileName: 'Profile name',
-  ariaBadgeLabel: 'Badge label',
-  ariaProfileMenu: 'Profile menu',
   ariaReorderProfile: 'Reorder {name}',
   ariaShowProfiles: 'Show profiles',
   ariaShowBackups: 'Show backups',
@@ -247,13 +241,30 @@ const en = {
   ariaOpenLargeEditor: '{title} — open large editor',
   ariaToggleProfile: 'Toggle {name}',
   ariaSelectProfile: 'Select profile {name} ({state})',
-  ariaStateOn: 'on',
-  ariaStateOff: 'off',
-  /**
-   * 전역 일시정지 중 프로필 행이 읽히는 상태 (티켓 13, 스펙 story 25/38). 켬/끔을 덮어쓰는
-   * 세 번째 값이라 같은 자리에 들어간다 — 저장된 active는 그대로이고 표시만 정지다.
+  /*
+   * 프로필 행의 상태 낱말 셋 (티켓 04) — 행 메타에 **보이고** 행 접근성 이름에도 들어간다.
+   *
+   * `aria*` 접두를 뗀 것이 그 승격이다. 예전에는 정지만 눈에 보였고 나머지 둘은 이름에만
+   * 있었는데, 시안의 행 메타(`N개 규칙 · 적용`)가 셋 다 화면에 올렸다. 한 벌만 두는 이유는
+   * WCAG 2.5.3(Label in Name)이다 — 보이는 낱말과 이름의 낱말이 갈라지면 음성 제어
+   * 사용자가 눈으로 읽은 그 말로 행을 부를 수 없다.
+   *
+   * 전역 일시정지는 켬/끔을 덮어쓰는 **세 번째 값**이라 같은 자리에 들어간다 (스펙 story 25/38)
+   * — 저장된 active는 그대로이고 표시만 정지다.
    */
-  ariaStatePaused: 'paused',
+  profileStateOn: 'applied',
+  profileStateOff: 'not applied',
+  profileStatePaused: 'paused',
+  /** 프로필 행 메타의 앞자리 — 그 프로필에 들어 있는 **켜진** 규칙 수 (스펙 story 42). */
+  profileRule: '{count} rule',
+  profileRules: '{count} rules',
+  /**
+   * `＋ 새 프로필`이 붙이는 이름 (티켓 04, 스펙 story 45).
+   *
+   * 카탈로그를 거치는 이유는 이 이름이 **영구**이기 때문이다 — 이름 변경 컨트롤이 없어졌으므로
+   * 만들 때 붙는 이름이 끝까지 남는다. 코드에 박아 두면 한국어 화면에도 영어 이름이 남는다.
+   */
+  newProfileName: 'Profile {n}',
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -268,7 +279,6 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     newProfile: '새 프로필',
     profiles: '프로필',
     searchProfiles: '프로필 검색…',
-    menuDuplicate: '복제',
     menuDelete: '삭제',
     addRule: '규칙 추가',
     edit: '편집',
@@ -333,7 +343,6 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     enableOnSave: '저장 후 바로 활성화',
     restore: '복원',
     confirmReplaceAll: '전체 교체?',
-    confirmDelete: '삭제?',
     openInTab: '탭에서 열기',
     headerName: '헤더 이름',
     cookieName: '쿠키 이름',
@@ -432,10 +441,6 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     ariaEnableModification: '수정 활성화',
     redirectPattern: '리다이렉트 패턴',
     ariaUrlMatchType: 'URL 매치 방식',
-    ariaBadgeColor: '배지 색',
-    ariaProfileName: '프로필 이름',
-    ariaBadgeLabel: '배지 라벨',
-    ariaProfileMenu: '프로필 메뉴',
     ariaReorderProfile: '{name} 순서 변경',
     ariaShowProfiles: '프로필 화면',
     ariaShowBackups: '백업 화면',
@@ -462,9 +467,12 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     ariaOpenLargeEditor: '{title} — 대형 편집기 열기',
     ariaToggleProfile: '{name} 켬/끔',
     ariaSelectProfile: '{name} 프로필 선택 ({state})',
-    ariaStateOn: '켬',
-    ariaStateOff: '끔',
-    ariaStatePaused: '정지',
+    profileStateOn: '적용',
+    profileStateOff: '미적용',
+    profileStatePaused: '정지',
+    profileRule: '{count}개 규칙',
+    profileRules: '{count}개 규칙',
+    newProfileName: '새 프로필 {n}',
   },
 };
 

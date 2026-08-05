@@ -3,14 +3,11 @@ import {
   addModification,
   addProfile,
   applyCommand,
-  duplicateProfile,
   moveProfile,
   removeModification,
-  removeProfile,
   setPaused,
   toggleProfile,
   updateModification,
-  updateProfileMeta,
 } from './commands';
 import type { Modification, RequestHeaderModification, StoredState } from './schema';
 import { readStoredState, SCHEMA_VERSION } from './schema';
@@ -27,8 +24,8 @@ function state(): StoredState {
     badgeVisible: true,
     syncBackup: true,
     profiles: [
-      { id: 'p1', name: 'One', active: false, shortLabel: '1', color: '#2563eb', modifications: [modification('m1')] },
-      { id: 'p2', name: 'Two', active: false, shortLabel: '2', color: '#16a34a', modifications: [] },
+      { id: 'p1', name: 'One', active: false, color: '#2563eb', modifications: [modification('m1')] },
+      { id: 'p2', name: 'Two', active: false, color: '#16a34a', modifications: [] },
     ],
     materialized: {},
     customHeaderNames: [],
@@ -78,68 +75,15 @@ describe('state transition commands', () => {
     expect(afterFirst.profiles.map((p) => p.id)).toEqual(['p1', 'p3', 'p2']);
   });
 
-  it('duplicateProfile은 새 id의 비활성 사본을 원본 바로 뒤에 넣는다', () => {
-    const next = duplicateProfile(state(), 'p1');
-
-    expect(next.profiles).toHaveLength(3);
-    const copy = next.profiles[1]!;
-    expect(copy.name).toBe('One copy');
-    expect(copy.active).toBe(false);
-    expect(copy.id).not.toBe('p1');
-    expect(copy.modifications[0]?.id).not.toBe('m1');
-    const copiedMod = copy.modifications[0];
-    expect(copiedMod?.kind === 'request-header' && copiedMod.name).toBe('X-A');
-  });
-
-  it('updateProfileMeta는 shortLabel을 2자로 강제한다 (권위 경로의 불변식)', () => {
-    const next = updateProfileMeta(state(), 'p1', {
-      name: 'One',
-      shortLabel: 'LONG',
-      color: '#dc2626',
-    });
-
-    expect(next.profiles[0]?.shortLabel).toBe('LO');
-  });
-
-  it('updateProfileMeta는 이름·색을 갱신하고 다른 프로필은 보존한다', () => {
-    const next = updateProfileMeta(state(), 'p1', {
-      name: 'Renamed',
-      shortLabel: '1',
-      color: '#dc2626',
-    });
-
-    expect(next.profiles[0]?.name).toBe('Renamed');
-    expect(next.profiles[0]?.color).toBe('#dc2626');
-    expect(next.profiles[0]?.shortLabel).toBe('1'); // 2자 이내는 그대로 통과
-    expect(next.profiles[1]?.name).toBe('Two');
-  });
-
-  it('removeProfile은 해당 Profile만 제거한다', () => {
-    const next = removeProfile(state(), 'p1');
-
-    expect(next.profiles.map((p) => p.id)).toEqual(['p2']);
-  });
-
+  /*
+   * **복제·삭제·메타 변경 테스트가 여기 없다** (ADR 0017, 티켓 04). 명령 셋이 함께 퇴역해서다 —
+   * 프로필로 할 수 있는 일은 만들기·켜고 끄기·옮기기 넷이고, 그 넷은 이 파일의 나머지가 잰다.
+   * 지운 것을 대신 지킬 것도 없다: 되돌리는 유일한 길은 전체 초기화이고 그것은 자기 테스트를 갖는다.
+   */
   it('moveProfile은 순서를 바꾼다 (순서 = 충돌 우선순위)', () => {
     const next = moveProfile(state(), 'p2', 0);
 
     expect(next.profiles.map((p) => p.id)).toEqual(['p2', 'p1']);
-  });
-
-  it('updateProfileMeta는 이름·라벨·색만 바꾼다', () => {
-    const next = updateProfileMeta(state(), 'p1', {
-      name: 'Renamed',
-      shortLabel: 'R',
-      color: '#dc2626',
-    });
-
-    expect(next.profiles[0]).toMatchObject({
-      name: 'Renamed',
-      shortLabel: 'R',
-      color: '#dc2626',
-      active: false,
-    });
-    expect(next.profiles[0]?.modifications).toHaveLength(1);
   });
 
   it('add/removeCustomHeaderName은 중복 없이 사용자 항목을 관리한다', () => {

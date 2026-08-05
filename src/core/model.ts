@@ -383,8 +383,6 @@ export interface Profile {
   id: string;
   name: string;
   active: boolean;
-  /** 툴바 배지에 표시되는 1–2자 라벨. */
-  shortLabel: string;
   /** 배지·UI 식별 색 (#rrggbb). */
   color: string;
   /** 종류를 가로지르는 단일 순서 — 충돌 의미론의 우선순위 세분에 쓰인다. */
@@ -481,15 +479,11 @@ export const PROFILE_COLORS = [
   '#0891b2',
 ] as const;
 
-export function createProfile(
-  name: string,
-  options: { id?: string; color?: string; shortLabel?: string } = {},
-): Profile {
+export function createProfile(name: string, options: { id?: string; color?: string } = {}): Profile {
   return {
     id: options.id ?? crypto.randomUUID(),
     name,
     active: false,
-    shortLabel: options.shortLabel ?? name.charAt(0).toUpperCase(),
     color: options.color ?? PROFILE_COLORS[0],
     modifications: [],
   };

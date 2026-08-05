@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { t as translate, type Locale } from '@/core/i18n';
-import type { StatusSummary } from '@/core/summary';
-import { statusCountsText } from './status-text';
+import type { ProfileRowStatus, StatusSummary } from '@/core/summary';
+import { profileRowMetaText, statusCountsText } from './status-text';
 
 const at = (locale: Locale) => (key: Parameters<typeof translate>[1]) => translate(locale, key);
 
@@ -49,5 +49,59 @@ describe('statusCountsText — 본문 헤더 부제', () => {
   it('정지 중이라는 사실 자체는 이 문장이 말하지 않는다', () => {
     expect(statusCountsText(summary({ paused: true, ruleCount: 0, activeProfileCount: 0 }), at('ko')))
       .toBe('0개 적용 규칙 · 0개 활성 프로필');
+  });
+});
+
+/**
+ * 프로필 행 메타 (티켓 04, 스펙 story 42) — `3개 규칙 · 적용`.
+ *
+ * 헤더 부제와 **같은 파일**에 있는 이유는 규약이 같기 때문이다: 가운뎃점으로 잇고, 수와 세는
+ * 단위를 카탈로그가 함께 든다. 나눠 두면 한쪽만 고쳐져 같은 화면의 두 줄이 다르게 읽힌다.
+ */
+describe('profileRowMetaText — 프로필 행 메타', () => {
+  const status = (over: Partial<ProfileRowStatus> = {}): ProfileRowStatus => ({
+    enabledModificationCount: 3,
+    state: 'on',
+    ...over,
+  });
+
+  it('규칙 수와 상태를 가운뎃점으로 잇는다', () => {
+    expect(profileRowMetaText(status(), at('en'))).toBe('3 rules · applied');
+    expect(profileRowMetaText(status(), at('ko'))).toBe('3개 규칙 · 적용');
+  });
+
+  it('하나일 때 단수형을 고른다 — 한국어는 굴절하지 않는다', () => {
+    expect(profileRowMetaText(status({ enabledModificationCount: 1 }), at('en')))
+      .toBe('1 rule · applied');
+    expect(profileRowMetaText(status({ enabledModificationCount: 1 }), at('ko')))
+      .toBe('1개 규칙 · 적용');
+  });
+
+  it('꺼진 프로필은 미적용이라 말한다', () => {
+    expect(profileRowMetaText(status({ state: 'off' }), at('en'))).toBe('3 rules · not applied');
+    expect(profileRowMetaText(status({ state: 'off' }), at('ko'))).toBe('3개 규칙 · 미적용');
+  });
+
+  /*
+   * 정지는 **낱말로** 읽힌다 (티켓 AC6). 아이콘과 흐림만으로는 9px 글리프의 관용을 아는
+   * 사람에게만 전달된다 — 색을 지워도, 형태를 못 읽어도 남는 채널이 하나 필요하다.
+   */
+  it('전역 정지 중에는 저장된 on/off 대신 정지라고 말한다', () => {
+    expect(profileRowMetaText(status({ state: 'paused' }), at('ko'))).toBe('3개 규칙 · 정지');
+    expect(profileRowMetaText(status({ state: 'paused' }), at('en'))).toBe('3 rules · paused');
+  });
+
+  /*
+   * 정지 중에도 **수는 깎지 않는다**. 규칙이 사라진 게 아니라 멈춘 것이고, 재개하면 그대로
+   * 돌아온다 — 여기서 0으로 내리면 사용자가 규칙을 잃었다고 읽는다.
+   */
+  it('정지가 규칙 수를 깎지 않는다', () => {
+    const paused = profileRowMetaText(status({ state: 'paused', enabledModificationCount: 7 }), at('ko'));
+    expect(paused.startsWith('7개 규칙')).toBe(true);
+  });
+
+  it('0도 그대로 말한다', () => {
+    expect(profileRowMetaText(status({ enabledModificationCount: 0, state: 'off' }), at('en')))
+      .toBe('0 rules · not applied');
   });
 });

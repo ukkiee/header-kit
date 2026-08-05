@@ -7,7 +7,6 @@ function profile(mods: Modification[]): Profile {
     id: 'p1',
     name: 'P',
     active: true,
-    shortLabel: 'P',
     color: '#2563eb',
     modifications: mods,
   };
@@ -156,7 +155,7 @@ describe('compile — v2 응답 쿠키 업그레이드 후 출력 보존', () =>
       paused: false,
       profiles: [
         {
-          id: 'p1', name: 'P', active: true, shortLabel: 'P', color: '#2563eb',
+          id: 'p1', name: 'P', active: true, color: '#2563eb',
           modifications: [
             { kind: 'set-cookie', id: 'm1', value: v2Line, enabled: true, mode: 'append', emptyMeans: 'remove', comment: '' },
           ],
@@ -196,7 +195,7 @@ describe('compile — v2 응답 쿠키 업그레이드 후 출력 보존', () =>
       paused: false,
       profiles: [
         {
-          id: 'p1', name: 'P', active: true, shortLabel: 'P', color: '#2563eb',
+          id: 'p1', name: 'P', active: true, color: '#2563eb',
           modifications: [
             { kind: 'set-cookie', id: 'm1', value: '', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
           ],
@@ -229,7 +228,7 @@ describe('compile — 응답 쿠키의 Placeholder', () => {
       paused: false,
       profiles: [
         {
-          id: 'p1', name: 'P', active: true, shortLabel: 'P', color: '#2563eb',
+          id: 'p1', name: 'P', active: true, color: '#2563eb',
           modifications: [
             { kind: 'set-cookie', id: 'm1', value: 'sid={{uuid}}; Path=/', enabled: true, mode: 'append', emptyMeans: 'remove', comment: '' },
           ],
@@ -283,7 +282,7 @@ describe('compile — 파서 인증과 방출의 일치', () => {
       paused: false,
       profiles: [
         {
-          id: 'p1', name: 'P', active: true, shortLabel: 'P', color: '#2563eb',
+          id: 'p1', name: 'P', active: true, color: '#2563eb',
           modifications: [
             { kind: 'set-cookie', id: 'm1', value: v2Line, enabled: true, mode: 'append', emptyMeans, comment: '' },
           ],

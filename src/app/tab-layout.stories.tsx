@@ -18,7 +18,6 @@ const profile: Profile = {
   id: 'p1',
   name: 'Staging API',
   active: true,
-  shortLabel: 'ST',
   color: '#d97706',
   modifications: [
     { kind: 'request-header', id: 'm1', name: 'Authorization', value: 'Bearer test', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },

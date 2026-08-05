@@ -34,7 +34,6 @@ function profile(overrides: Partial<Profile> = {}): Profile {
     id: 'p1',
     name: 'Alpha',
     active: false,
-    shortLabel: 'A',
     color: '#2563eb',
     modifications: [mod('m1', 'trace-{{uuid}}')],
     ...overrides,
@@ -220,7 +219,7 @@ describe('parseImport', () => {
     if (!result.ok) return;
     // 파일이 통째로 거부되지 않는다 — 프로필 메타는 그대로다.
     expect(result.profiles).toHaveLength(1);
-    expect(result.profiles[0]).toMatchObject({ name: 'Alpha', shortLabel: 'A', color: '#2563eb' });
+    expect(result.profiles[0]).toMatchObject({ name: 'Alpha', color: '#2563eb' });
     // csp만 빠지고 나머지 수정은 보존된다.
     expect(result.profiles[0]?.modifications.map((m) => m.kind)).toEqual(['request-header']);
     expect(result.profiles[0]?.modifications[0]).toMatchObject({ name: 'X-m1', value: 'kept' });
@@ -269,10 +268,25 @@ describe('normalizeImportedProfiles', () => {
     expect('filters' in profiles[0]!).toBe(false);
   });
 
-  it('배지 라벨 불변식(2자)을 강제한다', () => {
-    const { profiles } = normalizeImportedProfiles([profile({ shortLabel: 'IMPORT' })]);
+  /*
+   * **두 글자 라벨은 가져오면서 걷힌다** (티켓 04). 예전에는 여기서 2자로 자르는 불변식을
+   * 강제했는데, 그 필드가 어디에서도 렌더되지 않던 죽은 값이라 함께 퇴역했다. 옛 파일에는
+   * 아직 들어 있으므로, 재는 것은 "거부하지 않고 **떨어뜨리는가**"다 — 거부하면 사용자가
+   * 자기 백업을 못 읽고, 통과시키면 저장소에 죽은 값이 계속 실려 다닌다.
+   */
+  it('옛 파일의 두 글자 라벨은 거부되지 않고 떨어진다', () => {
+    const legacy = { ...profile(), shortLabel: 'IMPORT' } as unknown as Profile;
+    const { profiles } = normalizeImportedProfiles([legacy]);
 
-    expect(profiles[0]?.shortLabel).toBe('IM');
+    expect(profiles).toHaveLength(1);
+    expect(profiles[0]?.name).toBe('Alpha');
+    expect('shortLabel' in profiles[0]!).toBe(false);
+  });
+
+  it('그 파일은 파싱 단계에서도 통과한다 — 필드가 남아 있다고 전량 거부하지 않는다', () => {
+    const result = parseImport(importText([{ ...profile(), shortLabel: 'IMPORT' }]));
+
+    expect(result.ok).toBe(true);
   });
 });
 
@@ -298,7 +312,7 @@ describe('restore-profiles 명령 (교체 + 활성화 경계)', () => {
 describe('import-profiles 명령 (활성화 경계)', () => {
   it('권위 경로는 페이로드를 신뢰하지 않는다 — 기존 id와 겹쳐도 재생성으로 충돌이 없다', () => {
     const existing = profile({ id: 'dup', name: 'Existing' });
-    const payload = profile({ id: 'dup', name: 'Injected', shortLabel: 'LONGLABEL' });
+    const payload = profile({ id: 'dup', name: 'Injected' });
 
     const next = applyCommand(
       state([existing]),
@@ -308,7 +322,7 @@ describe('import-profiles 명령 (활성화 경계)', () => {
 
     const ids = next.profiles.map((p) => p.id);
     expect(new Set(ids).size).toBe(2);
-    expect(next.profiles[1]?.shortLabel).toBe('LO');
+    expect(next.profiles[1]?.name).toBe('Injected');
   });
 
   it('활성 상태로 Import된 Placeholder Profile은 원자적으로 실체화된다', () => {

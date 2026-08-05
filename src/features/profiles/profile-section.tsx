@@ -1,13 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
-import { Ellipsis, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import type { SuggestionHistory } from '@/core/autocomplete';
 import type { Command } from '@/core/commands';
 import type { Modification, Profile } from '@/core/schema';
 import { Button } from '@/ui/press-button';
 import { Card } from '@/ui/card';
-import { Input } from '@/ui/text-field';
-import { Menu, MenuItem, MenuPopup, MenuTrigger } from '@/ui/menu';
-import { MotionSwap } from '@/ui/motion-swap';
 import { AnimatePresence, MotionRow } from '@/ui/motion-row';
 import {
   ruleFormIntentProps,
@@ -69,9 +65,6 @@ export function ProfileSection({
   const RuleForm = useRuleForm();
   const setEditingRule = onEditingRuleChange;
   const openRuleForm = onOpenRuleForm;
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const confirmTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => () => clearTimeout(confirmTimer.current), []);
 
   /** 규칙 저장 — 원자 전송, 성공 시 폼 닫기. */
   const saveItem = async (item: Modification, op: 'add' | 'update') => {
@@ -94,77 +87,14 @@ export function ProfileSection({
     ? [editing, ...profile.modifications.filter((m) => m !== editing)]
     : profile.modifications;
 
-  const meta = { name: profile.name, shortLabel: profile.shortLabel, color: profile.color };
-  const updateMeta = (patch: Partial<typeof meta>) =>
-    onCommand({ type: 'update-profile-meta', profileId: profile.id, meta: { ...meta, ...patch } });
-
+  /*
+   * **카드에 헤더가 없다** (ADR 0017, 티켓 04). 예전에는 이 자리에 이름·색·두 글자 라벨 입력과
+   * ⋯ 메뉴(복제·삭제)가 있었다. 시안에 그 컨트롤들이 없으므로 넷 다 없앴고, 지금 보는 프로필의
+   * 이름은 본문 헤더 바가 제목으로 든다(티켓 03). 되돌리는 유일한 길은 전체 초기화다 —
+   * 값이 작지 않은 트레이드오프이고 ADR 0017에 그렇게 적혀 있다.
+   */
   return (
     <Card>
-      <div className="flex items-center gap-2">
-        <input
-          type="color"
-          value={profile.color}
-          onChange={(e) => updateMeta({ color: e.target.value })}
-          aria-label={t('ariaBadgeColor')}
-          className="size-6 shrink-0 cursor-pointer rounded border-none bg-transparent p-0"
-        />
-        <input
-          type="text"
-          value={profile.name}
-          onChange={(e) => updateMeta({ name: e.target.value })}
-          aria-label={t('ariaProfileName')}
-          // transition-colors — 이 입력만 `fieldFocus` 토큰을 안 쓰고 직접 적어서, 다른
-          // 필드가 전이를 얻을 때 혼자 툭 바뀌었다.
-          className="h-8 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 text-sm font-medium outline-none transition-colors focus:border-ring"
-        />
-        <Input
-          align="center"
-          value={profile.shortLabel}
-          onChange={(e) => updateMeta({ shortLabel: e.target.value.slice(0, 2) })}
-          aria-label={t('ariaBadgeLabel')}
-          maxLength={2}
-          className="w-10"
-        />
-        {/* on/off 스위치는 프로필 열의 각 행으로 갔다 (티켓 10) — 목록에서 바로 켜고 끄는
-            것이 디자인이고, 같은 이름의 컨트롤을 여기 하나 더 두면 무엇을 누르든 같은 일이
-            일어나는 중복 컨트롤이 된다. */}
-        <Menu
-          onOpenChange={(open) => {
-            // 메뉴가 닫히면 무장된 삭제 확인을 해제 — Esc 후 재열기에 즉시 삭제 방지.
-            if (!open) {
-              setConfirmingDelete(false);
-              clearTimeout(confirmTimer.current);
-            }
-          }}
-        >
-          <MenuTrigger render={<Button variant="ghost" size="sm" aria-label={t('ariaProfileMenu')} />}>
-            <Ellipsis size={16} strokeWidth={1.75} />
-          </MenuTrigger>
-          <MenuPopup>
-            {/* 순서 변경은 사이드바 드래그로 이동됐다 (ui-refine 06) — 메뉴는 복제·삭제만. */}
-            <MenuItem onClick={() => onCommand({ type: 'duplicate-profile', profileId: profile.id })}>
-              {t('menuDuplicate')}
-            </MenuItem>
-            {/* 2단 확인: 첫 클릭은 메뉴를 열어둔 채 라벨만 '삭제?'로 — 3초 내 재클릭이 실행. */}
-            <MenuItem
-              tone="danger"
-              closeOnClick={confirmingDelete}
-              onClick={() => {
-                if (confirmingDelete) {
-                  onCommand({ type: 'remove-profile', profileId: profile.id });
-                  setConfirmingDelete(false);
-                  return;
-                }
-                setConfirmingDelete(true);
-                confirmTimer.current = setTimeout(() => setConfirmingDelete(false), 3000);
-              }}
-            >
-              <MotionSwap>{confirmingDelete ? t('confirmDelete') : t('menuDelete')}</MotionSwap>
-            </MenuItem>
-          </MenuPopup>
-        </Menu>
-      </div>
-
       {profile.modifications.length === 0 && editingRule === null && (
         <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border py-6 text-center">
           <p className="text-xs text-muted-foreground">{t('noRulesYet')}</p>

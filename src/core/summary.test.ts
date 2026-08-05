@@ -12,7 +12,6 @@ function profile(overrides: Partial<Profile> = {}): Profile {
     id: 'p1',
     name: 'P',
     active: true,
-    shortLabel: 'P',
     color: '#2563eb',
     modifications: [mod('m1', 'X-A')],
     ...overrides,

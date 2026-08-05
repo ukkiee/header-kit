@@ -6,7 +6,6 @@ const profile = (id: string, active = false): Profile => ({
   id,
   name: id,
   active,
-  shortLabel: id.slice(0, 2),
   color: '#2563eb',
   modifications: [],
 });
@@ -22,7 +21,7 @@ describe('reconcileSelection', () => {
     expect(reconcileSelection('a', profiles)).toBe('a');
   });
 
-  it('선택 id가 사라지면(삭제) 첫 활성 프로필로 폴백한다', () => {
+  it('선택 id가 사라지면(복원·가져오기) 첫 활성 프로필로 폴백한다', () => {
     const profiles = [profile('a', false), profile('b', true), profile('c', true)];
     expect(reconcileSelection('gone', profiles)).toBe('b');
   });

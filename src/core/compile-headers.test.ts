@@ -19,7 +19,6 @@ function profile(mods: Modification[]): Profile {
     id: 'p1',
     name: 'P',
     active: true,
-    shortLabel: 'P',
     color: '#2563eb',
     modifications: mods,
   };

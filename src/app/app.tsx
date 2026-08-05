@@ -189,7 +189,8 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
   };
 
   const createAndSelectProfile = () => {
-    const profile = createProfile(`Profile ${state.profiles.length + 1}`, {
+    // 이름은 카탈로그를 거친다 (티켓 04) — 이름 변경 컨트롤이 없어져 이 이름이 끝까지 남는다.
+    const profile = createProfile(format(t(locale, 'newProfileName'), { n: state.profiles.length + 1 }), {
       color: PROFILE_COLORS[state.profiles.length % PROFILE_COLORS.length],
     });
     // 선택은 커맨드 성공 후 확정 — 낙관적 선택은 커밋-중-렌더 재조정이 되돌린다.

@@ -448,8 +448,8 @@ function twoProfiles(): StoredState {
   return {
     ...createDefaultState(),
     profiles: [
-      { id: 'p1', name: 'One', active: false, shortLabel: '1', color: '#2563eb', modifications: [] },
-      { id: 'p2', name: 'Two', active: false, shortLabel: '2', color: '#16a34a', modifications: [] },
+      { id: 'p1', name: 'One', active: false, color: '#2563eb', modifications: [] },
+      { id: 'p2', name: 'Two', active: false, color: '#16a34a', modifications: [] },
     ],
   };
 }
@@ -492,6 +492,7 @@ function v1State(): StoredV1 {
         id: 'p1',
         name: 'Legacy',
         color: '#2563eb',
+        // 진짜 v1은 두 글자 라벨을 갖고 있었다 — 올라오면서 걷히는지가 아래 단언이다 (티켓 04).
         shortLabel: 'LG',
         active: false,
         modifications: [
@@ -522,7 +523,6 @@ function expiredRuleState(): StoredState {
         id: 'p1',
         name: 'One',
         active: true,
-        shortLabel: '1',
         color: '#2563eb',
         modifications: [
           {
@@ -538,7 +538,7 @@ function expiredRuleState(): StoredState {
           },
         ],
       },
-      { id: 'p2', name: 'Two', active: false, shortLabel: '2', color: '#16a34a', modifications: [] },
+      { id: 'p2', name: 'Two', active: false, color: '#16a34a', modifications: [] },
     ],
   };
 }
@@ -710,6 +710,8 @@ describe('S3 — 서비스워커 통합 시임', () => {
         expect(stored.schemaVersion).toBe(SCHEMA_VERSION);
         expect(activeIds(stored)).toEqual(['p1']);
         expect(stored.profiles[0]?.modifications.map((m) => m.id)).toEqual(['m1']);
+        // 두 글자 라벨은 굳힌 v3에 **남아 있지 않다** (티켓 04) — 권위 저장소에서 실측한다.
+        expect('shortLabel' in stored.profiles[0]!).toBe(false);
         expect(harness.errors).not.toContain('migration commit failed');
       },
     });

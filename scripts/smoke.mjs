@@ -11,7 +11,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
-import { menuStaggerTotalMs, ROW_TRANSITION } from '../src/ui/motion-tokens.ts';
+import { ROW_TRANSITION } from '../src/ui/motion-tokens.ts';
 import { EXPORT_FORMAT_VERSION } from '../src/core/format-version.ts';
 
 const EXT_PATH = path.resolve(
@@ -1372,46 +1372,90 @@ try {
     { ...baseProfile('n-b', 'Beta', []), active: false },
   ]);
   await popup.reload();
-  // 커맨드 왕복(add/remove-profile) 후 렌더를 기다리며 이름 입력 값을 폴링한다.
+  /*
+   * 지금 보는 프로필의 이름은 **본문 헤더 제목**에서 읽는다 (티켓 03·04). 예전에는 카드
+   * 헤더의 이름 입력값을 폴링했는데, 그 입력이 시안에 없어 사라졌다 — 이름을 바꿀 방법이
+   * 없어졌으므로 이제 이 값은 "어느 프로필을 보고 있는가"만 말한다.
+   */
   const pollProfileName = (test, timeoutMs = 5000) =>
-    pollUntil(() => popup.getByLabel('Profile name').inputValue().catch(() => ''), test, timeoutMs, 100);
+    pollUntil(() => popup.locator('main h1').first().textContent().catch(() => ''), test, timeoutMs, 100);
 
   // 첫 활성(Alpha)이 자동 선택 → 사이드바에서 Beta 선택으로 전환
-  await popup.getByRole('button', { name: 'Select profile Beta' }).click();
+  await popup.getByRole('button', { name: /^Select profile Beta/ }).click();
   const shownName = await pollProfileName((v) => v === 'Beta');
   record('N1: 사이드바 선택 → 본문 프로필 전환', shownName === 'Beta', `name=${shownName}`);
 
-  // N1b: 사이드바 항목이 on/off 상태를 반영한다 (aria-label = 도트와 같은 소스)
-  const betaOff = await popup.getByRole('button', { name: 'Select profile Beta (off)' }).isVisible();
+  /*
+   * N1b: 사이드바 항목이 on/off 상태를 반영한다 (aria-label = 도트와 같은 소스).
+   *
+   * 낱말이 `on`/`off`에서 `applied`/`not applied`로 바뀐 것은 티켓 04다 — 같은 낱말이
+   * 이제 행 메타에 **보이기도** 하므로, 이름과 보이는 라벨이 갈라지지 않게 한 벌만 쓴다.
+   */
+  const betaOff = await popup.getByRole('button', { name: 'Select profile Beta (not applied)' }).isVisible();
   await popup.getByRole('switch', { name: 'Toggle Beta' }).click();
   const betaOn = await popup
-    .getByRole('button', { name: 'Select profile Beta (on)' })
+    .getByRole('button', { name: 'Select profile Beta (applied)' })
     .waitFor({ timeout: 5000 })
     .then(() => true, () => false);
   record('N1b: 사이드바 도트/라벨이 프로필 on/off 반영', betaOff && betaOn, `off=${betaOff}, on=${betaOn}`);
   await popup.getByRole('switch', { name: 'Toggle Beta' }).click();
 
-  // N2: + 새 프로필 → 생성된 프로필이 선택된다
+  /*
+   * N2: `＋ 새 프로필` — 이름과 색이 **자동으로** 정해지고 바로 선택된다 (티켓 04 AC7).
+   *
+   * 자동으로 정해지는 것이 요점이다: 이름을 바꿀 컨트롤이 없어졌으므로 여기서 붙는 이름이
+   * 끝까지 남는다. 이름은 카탈로그를 거치고(ko는 `새 프로필 N`), 색은 팔레트를 순서대로 돈다.
+   */
   await popup.getByRole('button', { name: '+ New profile' }).click();
   const createdName = await pollProfileName((v) => /^Profile \d+$/.test(v));
-  record('N2: 새 프로필 생성 → 즉시 선택', /^Profile \d+$/.test(createdName), `name=${createdName}`);
+  const createdProfile = await sw.evaluate(async (name) => {
+    const { state } = await chrome.storage.local.get('state');
+    const p = state.profiles.find((x) => x.name === name);
+    return { color: p?.color, hasLabel: p ? 'shortLabel' in p : null };
+  }, createdName);
+  const createdSelected = await popup
+    .getByRole('button', { name: new RegExp(`^Select profile ${createdName} `) })
+    .getAttribute('aria-current');
+  record('N2: 새 프로필 — 이름·색 자동, 즉시 선택, 두 글자 라벨 없음',
+    /^Profile \d+$/.test(createdName) && /^#[0-9a-f]{6}$/i.test(createdProfile?.color ?? '') &&
+      createdSelected === 'true' && createdProfile?.hasLabel === false,
+    `name=${createdName}, color=${createdProfile?.color}, selected=${createdSelected}, shortLabel=${createdProfile?.hasLabel}`);
 
-  // 삭제는 ⋯ 메뉴의 2단 확인(Delete → Delete?)으로 수행한다 (슬라이스 06)
-  const deleteSelected = async () => {
-    await popup.getByRole('button', { name: 'Profile menu', exact: true }).click();
-    await popup.getByRole('menuitem', { name: 'Delete' }).click();
-    await popup.getByRole('menuitem', { name: 'Delete?' }).click();
+  /*
+   * N3: **프로필 편집 컨트롤이 없다** (티켓 04 AC1·AC2, ADR 0017).
+   *
+   * 시안에 없으므로 이름·색·두 글자 라벨 입력과 ⋯ 메뉴(복제·삭제)를 넷 다 없앴다. 부재를
+   * 재는 이유는 이것이 **되돌릴 수 없는 결정**이기 때문이다 — 하나라도 다시 서면 사용자가
+   * 프로필을 지울 수 있게 되고, 그 프로필을 되살릴 길은 전체 초기화뿐이다.
+   *
+   * 없는 것만 세면 "화면이 통째로 안 그려졌다"도 통과하므로, 남은 넷(그립·토글·검색·만들기)이
+   * 실제로 서 있는 것을 같은 호흡에서 함께 잰다.
+   */
+  const gone = async (locator) => (await locator.count()) === 0;
+  const editorControlsGone =
+    (await gone(popup.getByLabel('Profile name'))) &&
+    (await gone(popup.getByLabel('Badge color'))) &&
+    (await gone(popup.getByLabel('Badge label'))) &&
+    (await gone(popup.getByRole('button', { name: 'Profile menu', exact: true })));
+  const survivors = {
+    grip: await popup.getByRole('button', { name: /^Reorder / }).count(),
+    toggle: await popup.getByRole('switch', { name: /^Toggle / }).count(),
+    search: await popup.getByLabel('Search profiles…').count(),
+    create: await popup.getByRole('button', { name: '+ New profile' }).count(),
   };
+  record('N3: 프로필 편집 컨트롤 부재 — 이름·색·두 글자 라벨·⋯ 메뉴가 없고 남은 넷은 선다',
+    editorControlsGone && survivors.grip > 0 && survivors.toggle > 0 &&
+      survivors.search === 1 && survivors.create === 1,
+    `편집컨트롤제거=${editorControlsGone}, ${JSON.stringify(survivors)}`);
 
-  // N3: 선택 프로필 삭제 → 재조정 불변식(첫 활성 → 첫 프로필)으로 폴백
-  await deleteSelected();
-  const afterDeleteName = await pollProfileName((v) => v === 'Alpha');
-  record('N3: 선택 프로필 삭제 → 첫 활성 프로필로 폴백', afterDeleteName === 'Alpha', `name=${afterDeleteName}`);
-
-  // N4: 마지막 프로필까지 삭제 → 빈 상태 안내가 보인다
-  await deleteSelected(); // Alpha 삭제 → Beta 선택(첫 프로필)
-  await pollProfileName((v) => v === 'Beta');
-  await deleteSelected(); // Beta 삭제 → 빈 목록
+  /*
+   * N4: 프로필이 하나도 없으면 빈 상태 안내가 보인다.
+   *
+   * 이르는 길이 바뀌었다 (티켓 04): 예전에는 목록에서 하나씩 지워 도달했는데 삭제가
+   * 사라졌으므로, 지금 이 상태에 이르는 길은 저장소가 빈 목록을 들고 있는 경우뿐이다.
+   */
+  await seedProfiles([]);
+  await popup.reload();
   const emptyShown = await popup
     .getByText('No profiles yet')
     .waitFor({ timeout: 5000 })
@@ -1693,20 +1737,21 @@ try {
   );
   const focusKept = /Reorder Bottom/.test(focusOnGrip);
 
-  // (d) 메뉴엔 이동 항목이 없다 — 복제·삭제만
-  await popup.getByRole('button', { name: 'Select profile Bottom' }).click();
-  await popup.getByRole('button', { name: 'Profile menu', exact: true }).click();
-  await popup.getByRole('menuitem', { name: 'Duplicate' }).waitFor({ timeout: 5000 });
-  const moveUpGone = (await popup.getByRole('menuitem', { name: 'Move up' }).count()) === 0;
-  const moveDownGone = (await popup.getByRole('menuitem', { name: 'Move down' }).count()) === 0;
-  await popup.keyboard.press('Escape');
+  /*
+   * (d) 순서를 바꾸는 길은 **드래그와 키보드뿐**이다 (티켓 04).
+   *
+   * 예전에는 여기서 "⋯ 메뉴에 이동 항목이 없다"를 쟀다. 그 메뉴가 통째로 사라졌으므로 재는
+   * 것을 옮긴다: 순서를 바꾸는 컨트롤이 그립 말고는 없다 — 위/아래 버튼이 어디에도 서지 않는다.
+   */
+  const moveButtonsGone =
+    (await popup.getByRole('button', { name: /Move (up|down)/ }).count()) === 0;
 
-  record('N8: 드래그·키보드 재정렬+Esc 취소(원순서·포커스 유지), 메뉴 이동 제거',
+  record('N8: 드래그·키보드 재정렬+Esc 취소(원순서·포커스 유지), 이동 컨트롤은 그립뿐',
     winnerBefore === 'top-wins'
       && dragOrder[0]?.startsWith('Bottom') && dragWinner === 'bottom-wins'
       && kbdOrder[0]?.startsWith('Bottom') && kbdWinner === 'bottom-wins'
-      && cancelKeptOrder && focusKept && moveUpGone && moveDownGone,
-    `drag=[${dragOrder.join('|')}]/${dragWinner}, kbd=[${kbdOrder.join('|')}]/${kbdWinner}, cancel-kept=${cancelKeptOrder}, focus-kept=${focusKept}, menu-move-gone=[${moveUpGone},${moveDownGone}]`);
+      && cancelKeptOrder && focusKept && moveButtonsGone,
+    `drag=[${dragOrder.join('|')}]/${dragWinner}, kbd=[${kbdOrder.join('|')}]/${kbdWinner}, cancel-kept=${cancelKeptOrder}, focus-kept=${focusKept}, move-buttons-gone=${moveButtonsGone}`);
 
   // N9: 탭 앱 셸 — 사이드바 검색·선택, 레일 화면 전환 (슬라이스 08)
   await seedProfiles([
@@ -1723,7 +1768,7 @@ try {
   await tabApp.getByLabel('Search profiles').fill('');
   await tabApp.getByRole('button', { name: 'Select profile Gamma' }).click();
   const sidebarSelected = await pollUntil(
-    () => tabApp.getByLabel('Profile name').inputValue().catch(() => ''),
+    () => tabApp.locator('main h1').first().textContent().catch(() => ''),
     (v) => v === 'Gamma',
   );
   // 레일 전환은 fade-in(ui-refine 08)이라 대상 화면 렌더를 기다린다(즉시 isVisible 아님).
@@ -1785,42 +1830,24 @@ try {
     kbSwitched === 'KeyB' && kbFormOpened,
     `sidebar=${kbSwitched}, form=${kbFormOpened}`);
 
-  // N12: 프로필 헤더 편집(이름·뱃지 라벨·뱃지 색) → 상태 반영 (매트릭스 행 14 마감)
-  // 각 편집은 UI 반영을 기다린 뒤 다음 편집 — 전체 객체 전송 모델의 순차 편집 규약.
-  await popup.getByLabel('Profile name').fill('Renamed');
-  // 스토리지가 아닌 UI(프롭) 반영을 기다린다 — 다음 편집이 스테일 프롭으로 이름을 되돌리지 않게.
-  await pollProfileName((v) => v === 'Renamed');
-  await popup.getByLabel('Badge label').fill('RN');
-  await pollUntil(() => popup.getByLabel('Badge label').inputValue(), (v) => v === 'RN', 5000, 100);
-  await popup.getByLabel('Badge color').fill('#dc2626');
-  // 최종 상태를 한 번에 단언 — 뒤 편집이 앞 편집을 덮었으면 여기서 잡힌다.
-  const finalMeta = await pollUntil(
-    () => sw.evaluate(async () => {
-      const { state } = await chrome.storage.local.get('state');
-      const p = state.profiles.find((x) => x.id === 'k-a');
-      return { name: p?.name, shortLabel: p?.shortLabel, color: p?.color };
-    }),
-    (m) => m.name === 'Renamed' && m.shortLabel === 'RN' && m.color === '#dc2626',
-    5000,
-    100,
-  );
-  record('N12: 헤더 이름·뱃지 편집 → 상태 반영',
-    finalMeta.name === 'Renamed' && finalMeta.shortLabel === 'RN' && finalMeta.color === '#dc2626',
-    `name=${finalMeta.name}, badge=${finalMeta.shortLabel}, color=${finalMeta.color}`);
+  /*
+   * **N12(프로필 헤더 편집)가 없다** (ADR 0017, 티켓 04). 이름·두 글자 라벨·색을 채우고
+   * 상태 반영을 보던 시나리오였는데, 그 컨트롤 셋이 사라졌다. 부재 자체는 N3이 잰다.
+   */
 
   // N12b: 팝업 사이드바 검색 필터 (ADR 0005 — 검색이 양 표면에서 동작)
-  await popup.getByLabel('Search profiles').fill('Renamed');
+  await popup.getByLabel('Search profiles').fill('KeyA');
   const popupSearch = await pollUntil(
     () => popup.locator('[aria-label^="Select profile"]').allTextContents(),
     (names) => names.length === 1,
   );
   await popup.getByLabel('Search profiles').fill('');
   record('N12b: 팝업 사이드바 검색 필터',
-    popupSearch.length === 1 && popupSearch[0]?.startsWith('Renamed'),
+    popupSearch.length === 1 && popupSearch[0]?.startsWith('KeyA'),
     `search=[${popupSearch.join('|')}]`);
 
   // N13: Export 경로 — 실제 다운로드 캡처 → 페이로드 검증 (release r1 R-2)
-  // 현재 상태: Renamed(k-a) + KeyB(k-b). 전체 선택 기본 → 2개 내보내기.
+  // 현재 상태: KeyA(k-a) + KeyB(k-b). 전체 선택 기본 → 2개 내보내기.
   await popup.getByRole('button', { name: 'Show backups' }).click();
   await popup.getByRole('button', { name: 'Export…' }).click();
   const [exportDownload] = await Promise.all([
@@ -1834,21 +1861,23 @@ try {
       // 내보내기는 항상 **현재** 버전으로 쓴다(읽기는 예전 v1도 받는다, ADR 0015).
       && exportPayload.headerkit === EXPORT_FORMAT_VERSION
       && exportPayload.profiles?.length === 2
-      && exportPayload.profiles.some((p) => p.name === 'Renamed'),
+      && exportPayload.profiles.some((p) => p.name === 'KeyA'),
     `file=${exportDownload.suggestedFilename()}, profiles=${exportPayload.profiles?.length}, names=[${exportPayload.profiles?.map((p) => p.name).join('|')}]`);
   // 뒤 시나리오는 규칙 본문을 만진다 — 프로필 화면으로 돌아간다.
   await popup.getByRole('button', { name: 'Show profiles' }).click();
 
   // N14: ko 로케일 접근성 이름 — aria-label이 en/ko 카탈로그를 경유한다 (aria-label-i18n)
-  // 상태: Renamed(k-a, 켬) + KeyB(k-b, 꺼짐)
+  // 상태: KeyA(k-a, 켬) + KeyB(k-b, 꺼짐)
   const popupKo = await context.newPage();
   await popupKo.goto(`chrome-extension://${extensionId}/popup.html?locale=ko`);
   const koToggle = await popupKo
-    .getByRole('switch', { name: 'Renamed 켬/끔' })
+    .getByRole('switch', { name: 'KeyA 켬/끔' })
     .waitFor({ timeout: 5000 })
     .then(() => true, () => false);
-  const koMenu = await popupKo.getByRole('button', { name: '프로필 메뉴' }).isVisible().catch(() => false);
-  const koSidebarItem = await popupKo.getByRole('button', { name: 'KeyB 프로필 선택 (끔)' }).isVisible().catch(() => false);
+  // ⋯ 메뉴가 사라졌으므로(티켓 04) 그 자리를 **행 메타**가 대신 잰다 — ko 카탈로그를 거친
+  // `N개 규칙 · 미적용`이 화면에 서고, 같은 낱말이 행 이름 끝에도 들어간다(WCAG 2.5.3).
+  const koRowMeta = await popupKo.getByText('0개 규칙 · 미적용', { exact: true }).isVisible().catch(() => false);
+  const koSidebarItem = await popupKo.getByRole('button', { name: 'KeyB 프로필 선택 (미적용)' }).isVisible().catch(() => false);
   const koRowToggle = await popupKo
     .getByRole('button', { name: '편집' })
     .first()
@@ -1857,9 +1886,9 @@ try {
   // 아이콘 버튼(ui-refine 03)의 ko aria — 삭제 아이콘이 카탈로그 경유 이름을 갖는다
   const koDeleteIcon = (await popupKo.getByRole('button', { name: '삭제', exact: true }).count()) > 0;
   await popupKo.close();
-  record('N14: ko 접근성 이름 — aria 카탈로그 경유',
-    koToggle && koMenu && koSidebarItem && koRowToggle && koDeleteIcon,
-    `toggle=${koToggle}, menu=${koMenu}, sidebar=${koSidebarItem}, row=${koRowToggle}, delete-icon=${koDeleteIcon}`);
+  record('N14: ko 접근성 이름 — aria 카탈로그 경유, 행 메타도 같은 낱말',
+    koToggle && koRowMeta && koSidebarItem && koRowToggle && koDeleteIcon,
+    `toggle=${koToggle}, meta=${koRowMeta}, sidebar=${koSidebarItem}, row=${koRowToggle}, delete-icon=${koDeleteIcon}`);
 
   /*
    * N14b: **폼 ko 라벨이 새 구성으로 뜨고, 퇴역한 조건 라벨은 어디에도 없다** (티켓 06).
@@ -1892,7 +1921,7 @@ try {
 
   // N15: 규칙 단위 URL 필터 (ADR 0007/0008) — contains(비정규식)와 regex 두 방식 모두
   // 매칭 URL에만 적용되고, 무스코프 규칙은 전역이며, 프로필 필터는 건드리지 않는다.
-  // 상태: Renamed(k-a, 켬, X-K:1) + KeyB. 팝업은 Renamed 선택.
+  // 상태: KeyA(k-a, 켬, X-K:1) + KeyB. 팝업은 KeyA 선택.
   // 1) 기존 규칙(X-K)에 contains 스코프(기본 방식) 부여 — 평문 부분 문자열
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
   await popup.getByLabel('URL filter').fill('scope=1');
@@ -2522,13 +2551,11 @@ try {
     const icon = await transformStates(page, page.getByRole('button', { name: 'Edit', exact: true }));
     const button = await transformStates(page, page.getByRole('button', { name: 'Add rule' }).first());
     const chip = await transformStates(page, page.getByRole('button', { name: 'New profile' }));
-    await page.getByRole('button', { name: 'Profile menu', exact: true }).click();
-    // 항목은 열릴 때 순차 등장한다(ui-polish 05) — 그 y 애니메이션이 도는 중에 읽으면
-    // "rest"가 진행 중 변형을 잡는다. 스태거가 끝날 때까지 기다린 뒤 누름·호버를 본다.
-    await page.getByRole('menuitem', { name: 'Duplicate' }).first().waitFor({ timeout: 5000 });
-    await page.waitForTimeout(menuStaggerTotalMs(await page.getByRole('menuitem').count()) + 150);
-    const item = await transformStates(page, page.getByRole('menuitem', { name: 'Duplicate' }));
-    return { button, chip, icon, item };
+    /*
+     * **메뉴 항목이 이 목록에 없다** (티켓 04, ADR 0012 개정). 앱에 남은 메뉴가 하나도 없어
+     * 그 표면이 사라졌다 — 남은 셋(Button·SwitcherChip·IconButton)은 그대로다.
+     */
+    return { button, chip, icon };
   };
 
   await seedProfiles([
@@ -2546,7 +2573,7 @@ try {
   const allMoving = Object.values(lively).every(
     (s) => s.rest === 'none' && s.hover !== 'none' && s.down !== 'none',
   );
-  record('N21b: 감도 대조 — 버튼·칩·아이콘버튼·메뉴항목이 호버·누름에 변형한다',
+  record('N21b: 감도 대조 — 버튼·칩·아이콘버튼이 호버·누름에 변형한다',
     allMoving,
     Object.entries(lively).map(([k, v]) => `${k}=${v.hover}/${v.down}`).join(' '));
 
@@ -2559,7 +2586,7 @@ try {
   const allNone = Object.values(still).every(
     (s) => s.rest === 'none' && s.hover === 'none' && s.down === 'none',
   );
-  record('N21c: reduced-motion — 네 표면 모두 호버·누름에 transform이 없다',
+  record('N21c: reduced-motion — 세 표면 모두 호버·누름에 transform이 없다',
     allNone,
     Object.entries(still).map(([k, v]) => `${k}=${v.hover}/${v.down}`).join(' '));
   await popup.emulateMedia({ reducedMotion: null });
@@ -2919,163 +2946,15 @@ try {
     tabThumbAppeared && !tabOverflow.docScrolls && tabThumbs >= 1,
     `thumbAppeared=${tabThumbAppeared}, docScrolls=${tabOverflow.docScrolls} (${tabOverflow.scrollH}>${tabOverflow.clientH}), thumbs=${tabThumbs}`);
 
-  // N23: 메뉴 순차 등장 + 삭제 2단 확인 라벨 전환 (ui-polish 05, ADR 0012).
-  // 관측 창이 한 프레임이라 Playwright 왕복으로는 못 잡는다 — 페이지 안에 관측자를
-  // 심어 두고, 대상이 나타난 **다음 애니메이션 프레임**의 계산 opacity를 찍는다.
-  // 대기 시간은 motion-tokens의 상수에서 온다(테스트가 자기 숫자를 들지 않는다).
-  /**
-   * 메뉴가 삽입된 직후부터 리드 항목이 정착(≈1)할 때까지 **매 프레임** 항목 opacity를 모은다.
+  /*
+   * **N23a/b/c(메뉴 순차 등장 · 삭제 2단 확인 라벨 · 메뉴 조작)가 없다** (티켓 04).
    *
-   * 예전엔 삽입 감지 후 rAF **한 번**만 표본했는데, 그 첫 프레임엔 motion의 애니메이션이
-   * 아직 안 붙어 전부 초기값 0으로 읽혔다([0,0]). 그러면 "앞 항목이 뒤보다 진행돼 있다"는
-   * 순차 단언이 0 > 0 = false로 헛돌아 간헐 실패했다(N23a 흔들림). 프레임을 모으면 스태거가
-   * 실제로 보이는 중간 프레임을 골라낼 수 있어 한 프레임의 타이밍에 기대지 않는다.
+   * 셋 다 프로필 ⋯ 메뉴 위에서 돌던 시나리오다. 그 메뉴가 앱의 **유일한** 메뉴였고 시안에
+   * 없어 사라졌으므로, 이제 화면에 뜨는 메뉴가 하나도 없다 — 재려 해도 열 것이 없다.
+   * ui-polish 05의 스태거와 ADR 0012의 '메뉴 항목' 표면이 함께 걷힌 이유이고, 그 개정은
+   * ADR 0017에 적혀 있다. 2단 확인 자체는 살아 있다: 백업 삭제·전체 초기화가 같은 형태를
+   * 쓰고 N39·N43이 그것을 잰다.
    */
-  const menuStaggerFrames = async (page, openMenu) => {
-    await page.evaluate(() => {
-      window.__menuFrames = null;
-      const observer = new MutationObserver(() => {
-        const menu = document.querySelector('[role="menu"]');
-        if (!menu) return;
-        observer.disconnect();
-        const frames = [];
-        const read = () =>
-          [...menu.querySelectorAll('[role="menuitem"]')].map((el) => Number(getComputedStyle(el).opacity));
-        let n = 0;
-        const tick = () => {
-          const frame = read();
-          frames.push(frame);
-          n += 1;
-          // 리드 항목이 정착했거나 40프레임(≈0.66s)이면 멈춘다 — reduced-motion은 처음부터
-          // [1,…]이라 첫 프레임에 바로 멈춘다.
-          if ((frame[0] ?? 1) >= 0.99 || n >= 40) {
-            window.__menuFrames = frames;
-            return;
-          }
-          requestAnimationFrame(tick);
-        };
-        requestAnimationFrame(tick);
-      });
-      observer.observe(document.body, { childList: true, subtree: true });
-      setTimeout(() => observer.disconnect(), 5000);
-    });
-    await openMenu();
-    const observed = await page
-      .waitForFunction(() => window.__menuFrames !== null, null, { timeout: 5000 })
-      .then(() => true, () => false);
-    return observed ? page.evaluate(() => window.__menuFrames) : null;
-  };
-
-  const firstFrameLabelOpacity = async (page, labelText, act) => {
-    await page.evaluate((text) => {
-      window.__labelProbe = null;
-      const observer = new MutationObserver(() => {
-        const el = [...document.querySelectorAll('[role="menuitem"], [role="menuitem"] *')].find(
-          (node) => node.children.length === 0 && node.textContent?.trim() === text,
-        );
-        if (!el) return;
-        observer.disconnect();
-        requestAnimationFrame(() => {
-          window.__labelProbe = Number(getComputedStyle(el).opacity);
-        });
-      });
-      observer.observe(document.body, { childList: true, subtree: true, characterData: true });
-      setTimeout(() => observer.disconnect(), 3000);
-    }, labelText);
-    await act();
-    const observed = await page
-      .waitForFunction(() => window.__labelProbe !== null, null, { timeout: 3000 })
-      .then(() => true, () => false);
-    return observed ? page.evaluate(() => window.__labelProbe) : null;
-  };
-
-  const openProfileMenu = (page) => () =>
-    page.getByRole('button', { name: 'Profile menu', exact: true }).click();
-
-  await seedProfiles([baseProfile('p-menu', 'Kebab', [])]);
-
-  // N23a: 순차 등장 — 기본 모션에서는 첫 프레임에 아직 덜 나온 항목이 있고(대조),
-  // reduced-motion에서는 처음부터 전부 완성돼 있다(부재). 대조를 먼저 둬 지연 로드된
-  // features가 그 시점에 도착했음을 근거로 남긴다(티켓 04와 같은 이유).
-  await popup.emulateMedia({ reducedMotion: null });
-  await popup.reload();
-  await popup.getByRole('button', { name: 'Profile menu', exact: true }).waitFor({ timeout: 5000 });
-  await popup.waitForTimeout(700);
-  const staggerFrames = await menuStaggerFrames(popup, openProfileMenu(popup));
-  const menuItemCount = await popup.getByRole('menuitem').count();
-  const settleMs = menuStaggerTotalMs(menuItemCount) + 200;
-  await popup.waitForTimeout(settleMs);
-  const staggerSettled = await popup.evaluate(() =>
-    [...document.querySelectorAll('[role="menuitem"]')].map((el) => Number(getComputedStyle(el).opacity)),
-  );
-  await popup.keyboard.press('Escape');
-
-  await popup.emulateMedia({ reducedMotion: 'reduce' });
-  await popup.reload();
-  await popup.getByRole('button', { name: 'Profile menu', exact: true }).waitFor({ timeout: 5000 });
-  await popup.waitForTimeout(700);
-  const stillFrames = await menuStaggerFrames(popup, openProfileMenu(popup));
-  // "앞 항목이 뒤 항목보다 더 진행돼 있다"까지 봐야 **순차**를 단언한 것이다. 단순히 "1 미만인
-  // 항목이 있다"로는 stagger를 0으로 만들어 전부 동시에 fade해도 통과한다. 모은 프레임 중
-  // **하나라도** 엄격 내림차순이면 스태거가 관측된 것이다 — 한 프레임의 타이밍에 안 기댄다.
-  const isSequential =
-    Array.isArray(staggerFrames) &&
-    staggerFrames.some((f) => f.length > 1 && f.every((o, i) => i === 0 || f[i - 1] > o));
-  // reduced-motion: 어느 프레임에서도 부분값이 없다(처음부터 전부 완성).
-  const reducedComplete =
-    Array.isArray(stillFrames) &&
-    stillFrames.length > 0 &&
-    stillFrames.every((f) => f.length > 0 && f.every((o) => o === 1));
-  record('N23a: 메뉴 순차 등장 — 앞 항목이 뒤보다 앞서고, reduced-motion은 즉시 완성',
-    isSequential &&
-      staggerSettled.length > 0 && staggerSettled.every((o) => o === 1) &&
-      reducedComplete,
-    `sequential=${isSequential}(${staggerFrames?.length}프레임), settled=${JSON.stringify(staggerSettled)}, reduced-complete=${reducedComplete} (항목 ${menuItemCount}, 창 ${settleMs}ms)`);
-
-  // N23b: 삭제 2단 확인 라벨 — 첫 클릭은 메뉴를 열어 둔 채 라벨만 바꾼다.
-  const reducedLabel = await firstFrameLabelOpacity(popup, 'Delete?', () =>
-    popup.getByRole('menuitem', { name: 'Delete', exact: true }).click());
-  const reducedMenuOpen = await popup.getByRole('menuitem').count();
-  await popup.keyboard.press('Escape');
-
-  await popup.emulateMedia({ reducedMotion: null });
-  await popup.reload();
-  await popup.getByRole('button', { name: 'Profile menu', exact: true }).waitFor({ timeout: 5000 });
-  await popup.waitForTimeout(700);
-  await popup.getByRole('button', { name: 'Profile menu', exact: true }).click();
-  await popup.getByRole('menuitem', { name: 'Delete', exact: true }).waitFor({ timeout: 5000 });
-  await popup.waitForTimeout(settleMs);
-  const livelyLabel = await firstFrameLabelOpacity(popup, 'Delete?', () =>
-    popup.getByRole('menuitem', { name: 'Delete', exact: true }).click());
-  record('N23b: 삭제 확인 라벨 — 기본 모션은 fade 중, reduced-motion은 즉시 완성(메뉴 유지)',
-    reducedLabel === 1 && typeof livelyLabel === 'number' && livelyLabel < 1 && reducedMenuOpen === 2,
-    `reduced=${reducedLabel}, lively=${livelyLabel}, reduced-menu-items=${reducedMenuOpen}`);
-
-  // N23c: 메뉴 조작 기능 회귀 없음 — 키보드 이동·Esc·항목 선택.
-  await popup.keyboard.press('Escape');
-  await popup.reload();
-  await popup.getByRole('button', { name: 'Profile menu', exact: true }).waitFor({ timeout: 5000 });
-  await popup.getByRole('button', { name: 'Profile menu', exact: true }).click();
-  await popup.getByRole('menuitem').first().waitFor({ timeout: 5000 });
-  await popup.keyboard.press('ArrowDown');
-  await popup.waitForTimeout(150);
-  // Base UI 메뉴는 aria-activedescendant 방식이라 activeElement는 팝업 컨테이너다 —
-  // 하이라이트는 항목의 data-highlighted로 읽어야 한다(popupItem 토큰이 쓰는 그 속성).
-  const highlighted = await popup.evaluate(
-    () => document.querySelector('[role="menuitem"][data-highlighted]')?.textContent?.trim() ?? '');
-  await popup.keyboard.press('Escape');
-  const closedByEsc = await popup
-    .getByRole('menuitem')
-    .first()
-    .waitFor({ state: 'detached', timeout: 3000 })
-    .then(() => true, () => false);
-  await popup.getByRole('button', { name: 'Profile menu', exact: true }).click();
-  await popup.getByRole('menuitem', { name: 'Duplicate', exact: true }).click();
-  const duplicated = await sw.evaluate(async () =>
-    (await chrome.storage.local.get('state')).state.profiles.length);
-  record('N23c: 메뉴 기능 회귀 없음 — 키보드 이동·Esc 닫기·항목 선택',
-    highlighted.length > 0 && closedByEsc && duplicated === 2,
-    `highlighted="${highlighted}", esc-closed=${closedByEsc}, profiles=${duplicated}`);
 
   // N24: 저장 중 상태 (ui-polish 06). 저장은 background 왕복이라 지연이 실재하지만
   // 로컬에서는 너무 빨라 관측 창이 없다 — 왕복을 인위적으로 늦춘다.
@@ -4200,13 +4079,31 @@ try {
   ]);
   await popup.reload();
   await popup.getByRole('button', { name: 'Show profiles', exact: true }).waitFor({ timeout: 5000 });
-  // 행 표식은 이름 칩 **안**의 마지막 요소다 — 밖에 붙으면 열이 넓어진다(티켓 10 R-5).
+  /*
+   * 행 메타는 이름 칩 **안**의 마지막 `aria-hidden` 요소다 (티켓 04) — 첫 번째는 색 스와치다.
+   * 밖에 붙이면 열이 넓어진다(티켓 10 R-5).
+   */
   const profileRows = () => popup.evaluate(() =>
-    [...document.querySelectorAll('[aria-label^="Select profile"]')].map((r) => ({
-      aria: r.getAttribute('aria-label'),
-      mark: r.lastElementChild?.textContent?.trim() ?? '',
-      glyph: !!r.lastElementChild?.querySelector('svg'),
-    })));
+    [...document.querySelectorAll('[aria-label^="Select profile"]')].map((r) => {
+      const spans = [...r.querySelectorAll('span[aria-hidden]')];
+      const swatch = spans[0];
+      const meta = spans.at(-1);
+      /*
+       * **메타가 이름 아래 줄에 선다** — 이름의 아래변보다 메타의 윗변이 아래다. 한 줄로
+       * 되돌리면 가장 긴 문구(`12 rules · not applied`)가 264px 열에서 이름을 예닐곱 자로
+       * 눌러 버리고, 목록에서 프로필을 짚는 단서가 바로 그 이름이다 (티켓 04).
+       */
+      const name = swatch?.nextElementSibling;
+      const belowName =
+        name && meta ? meta.getBoundingClientRect().top >= name.getBoundingClientRect().bottom : null;
+      return {
+        aria: r.getAttribute('aria-label'),
+        mark: meta?.textContent?.trim() ?? '',
+        glyph: !!meta?.querySelector('svg'),
+        nameShown: name ? Math.round(name.getBoundingClientRect().width) : 0,
+        belowName,
+      };
+    }));
   const rowsRunning = await pollUntil(profileRows, (rows) => rows.length === 2, 5000, 100);
 
   await popup.getByRole('button', { name: 'Pause' }).click();
@@ -4239,13 +4136,15 @@ try {
     5000,
     100,
   );
-  record('N41e: 프로필 행 — 켜진 규칙 수 + 정지 표시(형태·접근성 이름), 정지는 표시만',
-    rowsRunning[0]?.aria === 'Select profile CountA (on)' && rowsRunning[0]?.mark === '2' &&
-      rowsRunning[1]?.aria === 'Select profile CountB (off)' && rowsRunning[1]?.mark === '0' &&
-      rowsPaused.every((r) => r.glyph) && rowsPaused[0]?.mark === '2' && rowsPaused[1]?.mark === '0' &&
+  record('N41e: 프로필 행 — `N개 규칙 · 적용` + 정지 표시(형태·낱말·접근성 이름), 정지는 표시만',
+    rowsRunning[0]?.aria === 'Select profile CountA (applied)' && rowsRunning[0]?.mark === '2 rules · applied' &&
+      rowsRunning[1]?.aria === 'Select profile CountB (not applied)' && rowsRunning[1]?.mark === '0 rules · not applied' &&
+      rowsPaused.every((r) => r.glyph) &&
+      rowsPaused[0]?.mark === '2 rules · paused' && rowsPaused[1]?.mark === '0 rules · paused' &&
       activeWhilePaused === true && rowsStillPaused.every((r) => r.aria?.endsWith('(paused)')) &&
-      rowsResumed[0]?.aria === 'Select profile CountA (on)' && rowsResumed[0]?.mark === '2' &&
-      rowsResumed[1]?.aria === 'Select profile CountB (on)' && rowsResumed[1]?.mark === '0',
+      rowsResumed[0]?.aria === 'Select profile CountA (applied)' && rowsResumed[0]?.mark === '2 rules · applied' &&
+      rowsResumed[1]?.aria === 'Select profile CountB (applied)' && rowsResumed[1]?.mark === '0 rules · applied' &&
+      rowsRunning.every((r) => r.belowName === true && r.nameShown > 0),
     `실행=${JSON.stringify(rowsRunning)}, 정지=${JSON.stringify(rowsPaused)}, ` +
       `정지 중 토글 active=${activeWhilePaused} (여전히 정지=${rowsStillPaused.every((r) => r.aria?.endsWith('(paused)'))}), ` +
       `재개=${JSON.stringify(rowsResumed)}`);
@@ -4262,9 +4161,14 @@ try {
    * 폭·높이가 0이 아님을 함께 요구해야 "보이는" 채널이 실제로 선 것이 된다.
    * 오버플로 0을 같이 보는 것은 이 낱말이 행을 넓히지 않는다는 AC6 쪽 경계다.
    */
+  /*
+   * 낱말은 이제 행 메타 **문장 안**에 있다 (티켓 04) — `2 rules · paused`. 따로 서 있던
+   * 낱말 하나를 찾던 예전 프로브는 그것을 못 보므로, 메타로 끝나는 span을 찾아 잰다.
+   * 채널의 성질은 그대로다: 화면에 정지라고 **적혀** 있어야 하고, 크기가 0이면 안 된다.
+   */
   const pausedWord = () => popup.evaluate(() => ({
     rows: [...document.querySelectorAll('[aria-label^="Select profile"]')].map((r) => {
-      const el = [...r.querySelectorAll('span')].find((s) => s.textContent?.trim() === 'paused');
+      const el = [...r.querySelectorAll('span')].find((s) => /· paused$/.test(s.textContent?.trim() ?? ''));
       if (!el) return null;
       const box = el.getBoundingClientRect();
       return { w: Math.round(box.width), h: Math.round(box.height) };

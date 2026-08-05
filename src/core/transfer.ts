@@ -49,7 +49,7 @@ function validateProfileEntry(value: unknown, index: number): string[] {
   const label = typeof value.name === 'string' ? `${path} ("${value.name}")` : path;
   const errors: string[] = [];
 
-  for (const field of ['id', 'name', 'shortLabel', 'color'] as const) {
+  for (const field of ['id', 'name', 'color'] as const) {
     if (typeof value[field] !== 'string') errors.push(`${label}.${field}: expected string`);
   }
   if (typeof value.color === 'string' && !/^#[0-9a-fA-F]{6}$/.test(value.color)) {
@@ -161,7 +161,6 @@ export function normalizeImportedProfiles(
       return {
         ...migrated,
         id: newId(),
-        shortLabel: migrated.shortLabel.slice(0, 2),
         modifications: migrated.modifications.map((m) => ({ ...m, id: newId() })),
       };
     }),

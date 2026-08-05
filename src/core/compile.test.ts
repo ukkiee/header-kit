@@ -8,7 +8,6 @@ function profile(overrides: Partial<Profile> = {}): Profile {
     id: 'p1',
     name: 'Test Profile',
     active: true,
-    shortLabel: 'T',
     color: '#2563eb',
     modifications: [],
     ...overrides,

@@ -31,7 +31,7 @@ function mod(id: string, name: string): Modification {
 }
 
 function profile(modifications: Modification[]): Profile {
-  return { id: 'p1', name: 'P', active: true, shortLabel: 'P', color: '#2563eb', modifications };
+  return { id: 'p1', name: 'P', active: true, color: '#2563eb', modifications };
 }
 
 /** 컴파일 → 재조정 요약까지 실제로 태운다 — 배지가 보는 수가 방출된 규칙 수임을 확인한다. */

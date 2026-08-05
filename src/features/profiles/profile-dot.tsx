@@ -1,24 +1,14 @@
 import type { DraggableAttributes } from '@dnd-kit/core';
 import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities';
 import { GripVertical, Pause } from 'lucide-react';
-import { format, type MessageKey, type Translator } from '@/core/i18n';
+import { format, type Translator } from '@/core/i18n';
 import type { Profile } from '@/core/schema';
-import type { ProfileRowState, ProfileRowStatus } from '@/core/summary';
+import { PROFILE_STATE_KEY, type ProfileRowState, type ProfileRowStatus } from '@/core/summary';
+import { profileRowMetaText } from '@/features/status/status-text';
 import { useT } from '@/ui/i18n-context';
 import { SwitcherChip } from '@/ui/switcher-chip';
 import { ToggleSwitch } from '@/ui/toggle-switch';
 import { focusRing } from '@/ui/tokens';
-
-/**
- * 행 상태를 나르는 카탈로그 키 — 정지는 켬/끔을 덮어쓰는 **세 번째 값**이라 같은 자리에
- * 들어간다. 이름 형식(`Select profile {name} ({state})`)은 그대로라, 이 규약을 읽는
- * 호출부·단언이 상태 하나가 늘었다고 달라지지 않는다.
- */
-const STATE_KEY: Record<ProfileRowState, MessageKey> = {
-  on: 'ariaStateOn',
-  off: 'ariaStateOff',
-  paused: 'ariaStatePaused',
-};
 
 /**
  * 프로필 선택 컨트롤의 접근성 이름 — 양 표면 사이드바가 같은 규약을 공유한다.
@@ -34,7 +24,7 @@ export function profileSelectLabel(
 ): string {
   return format(t('ariaSelectProfile'), {
     name: profile.name,
-    state: t(STATE_KEY[state]),
+    state: t(PROFILE_STATE_KEY[state]),
   });
 }
 
@@ -114,21 +104,23 @@ export function profileToggleLabel(profile: Pick<Profile, 'name'>, t: Translator
 }
 
 /**
- * 선택 버튼(칩) + 인라인 토글 (티켓 10) — 그립·토글과 가로 공간을 나눠 칩(w-full)이
- * 넘치지 않게 min-w-0 flex-1로 감싼다.
+ * 선택 버튼(칩) + 인라인 토글 (티켓 04) — 시안의 행: 스와치 · 이름 · `N개 규칙 · 적용` · 스위치.
  *
- * 토글이 **목록 안에** 있는 이유: 켜고 끄려고 프로필을 먼저 골라 본문 편집기를 열 필요가
- * 없어야 한다(스펙 story 22). 그래서 이 스위치가 프로필 on/off의 단 하나의 컨트롤이다 —
- * 편집기 헤더에도 같은 이름의 스위치를 두면 같은 일을 하는 컨트롤이 화면에 둘이 된다.
+ * 토글이 **목록 안에** 있는 이유: 켜고 끄려고 프로필을 먼저 골라 본문을 열 필요가 없어야
+ * 한다(스펙 story 43). 그래서 이 스위치가 프로필 on/off의 단 하나의 컨트롤이다.
  *
- * **정지의 텍스트 채널** (fix R-4, 티켓 AC2): 아이콘(형태)과 muted(색)만으로는 9px 글리프의
- * 관용을 아는 사람에게만 정지가 읽힌다. 그래서 정지 중에만 낱말이 하나 함께 선다. 값은 행
- * 접근성 이름이 쓰는 그 값(`ariaStatePaused`)이라 — 이름이 `(paused)`로 끝난다 — 보이는
- * 라벨이 접근성 이름에 그대로 담겨 label-in-name(WCAG 2.5.3)도 함께 맞는다.
+ * **메타는 이름 아래 줄이다.** 열 폭은 264px로 못박혀 있고(ADR 0005·0017) 그 안에서 그립과
+ * 스위치가 자리를 먼저 가져가므로, 메타를 이름과 한 줄에 두면 가장 긴 문구
+ * (`12 rules · not applied`)가 이름을 예닐곱 자로 눌러 버린다 — 목록에서 프로필을 짚는 단서가
+ * 곧 그 이름인데 그것이 먼저 잘리는 셈이다. 두 줄로 나누면 열도 넓어지지 않고 이름도 남는다.
+ * 예전 한 줄 배치(`ml-auto` + 수 한두 자)는 붙는 것이 낱말이 아니라 숫자였을 때의 해법이다.
  *
- * 자리는 **이름 뒤·표식 앞**이다. 표식은 `ml-auto`로 붙는 한 덩어리라 그 안에 넣으면 수와
- * 붙어 읽히고, 스와치는 칩의 첫 요소로 남아야 한다. 행이 넓어지지 않는 것(AC6)은 낱말이
- * `shrink-0`이고 이름만 `min-w-0 truncate`라 성립한다 — 좁아지면 이름만 줄고 열 폭은 그대로다.
+ * **정지는 세 채널로 말한다** (티켓 AC6): 일시정지 아이콘(형태) · 메타 끝의 낱말(문자) ·
+ * muted(색). 어느 하나가 죽어도 남는다 — 9px 글리프의 관용을 모르는 사람에게도, 색을 못 보는
+ * 사람에게도 정지가 읽혀야 한다(스펙 story 38). 낱말 값은 행 접근성 이름이 쓰는 그 값이라
+ * (`PROFILE_STATE_KEY`) 이름이 `(정지)`로 끝나고, 보이는 라벨이 이름에 담겨 WCAG 2.5.3도 맞는다.
+ *
+ * **수는 정지 중에도 깎지 않는다** — 규칙이 사라진 게 아니라 멈춘 것이고 재개하면 돌아온다.
  */
 export function ProfileSelectRow({
   profile,
@@ -148,54 +140,34 @@ export function ProfileSelectRow({
   toggleLabel: string;
 }) {
   const t = useT();
+  const paused = status.state === 'paused';
   return (
     <>
       <div className="min-w-0 flex-1">
         <SwitcherChip selected={selected} aria-label={label} onClick={onSelect}>
-          <ProfileDot profile={profile} />
-          <span className="min-w-0 truncate">{profile.name}</span>
-          {status.state === 'paused' && (
-            <span aria-hidden className="shrink-0 text-[10px] text-muted-foreground">
-              {t('ariaStatePaused')}
+          <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
+            <span className="flex w-full min-w-0 items-center gap-1.5">
+              <ProfileDot profile={profile} />
+              <span className="min-w-0 truncate">{profile.name}</span>
             </span>
-          )}
-          <ProfileRowMark status={status} />
+            {/*
+              메타는 `aria-hidden`이다 — `aria-label`을 가진 버튼 **안**이라 어차피 낭독되지
+              않고, 상태는 그 이름이 문자열로 따로 나른다. 같은 사실을 두 번 말하면 낭독이 겹친다.
+            */}
+            <span
+              aria-hidden
+              className={`flex w-full min-w-0 items-center gap-1 truncate text-[10px] tabular-nums ${
+                paused ? 'text-muted-foreground' : 'text-muted-foreground/80'
+              }`}
+            >
+              {paused && <Pause size={9} strokeWidth={2} fill="currentColor" className="shrink-0" />}
+              <span className="min-w-0 truncate">{profileRowMetaText(status, t)}</span>
+            </span>
+          </span>
         </SwitcherChip>
       </div>
       {/* 정지 중에도 토글은 살아 있다 — 정지는 표시만 덮으므로 저장된 on/off는 지금도 고른다. */}
       <ToggleSwitch checked={profile.active} onCheckedChange={onToggleActive} aria-label={toggleLabel} />
     </>
-  );
-}
-
-/**
- * 행 오른쪽 끝의 상태 표식 — 켜진 규칙 수(스펙 story 22)와 전역 정지(story 25).
- *
- * **자리는 이름 칩 안이다.** 열 폭은 팝업 14rem·탭 16rem으로 못박혀 있으므로(ADR 0005,
- * 티켓 10 code-review R-5) 수를 행 바깥에 붙이면 열이 넓어지거나 이름 칩이 눌린다. 칩
- * 안에서 `ml-auto`로 오른쪽에 붙이면 좁아질 때 **이름만** truncate되고 행 폭은 그대로다.
- *
- * **정지는 색이 아니라 형태로 말한다.** 일시정지 아이콘(‖)이 수 앞에 서고 수는 muted로
- * 내려간다 — 그레이스케일에서도 "이 프로필의 N개가 지금 안 걸린다"가 읽힌다(story 38).
- * 수 자체는 깎지 않는다: 규칙이 사라진 게 아니라 멈춘 것이고, 재개하면 그대로 돌아온다.
- * 형태 옆의 **텍스트** 채널은 `ProfileSelectRow`가 따로 세운다(fix R-4) — 여기 넣으면
- * 낱말이 수와 한 덩어리로 붙어 읽힌다.
- *
- * `aria-hidden`인 이유: 이 표식은 `aria-label`을 가진 버튼 **안**이라 어차피 낭독되지
- * 않는다. 상태는 그 이름(`profileSelectLabel`)이 문자열로 따로 나른다 — 표식과 이름이
- * 같은 사실을 두 번 말하면 낭독이 겹친다.
- */
-function ProfileRowMark({ status }: { status: ProfileRowStatus }) {
-  const paused = status.state === 'paused';
-  return (
-    <span
-      aria-hidden
-      className={`ml-auto flex shrink-0 items-center gap-0.5 font-mono text-[10px] tabular-nums ${
-        paused ? 'text-muted-foreground' : ''
-      }`}
-    >
-      {paused && <Pause size={9} strokeWidth={2} fill="currentColor" />}
-      {status.enabledModificationCount}
-    </span>
   );
 }

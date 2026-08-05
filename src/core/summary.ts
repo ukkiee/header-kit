@@ -1,5 +1,6 @@
 import type { CompileResult } from './compile';
 import type { CompileWarning } from './compile-warnings';
+import type { MessageKey } from './i18n';
 import type { Profile } from './schema';
 
 /**
@@ -47,6 +48,19 @@ export interface SummaryContext {
 
 /** 프로필 행이 목록에서 읽히는 상태 — 저장된 on/off 위에 전역 정지가 덮인다. */
 export type ProfileRowState = 'on' | 'off' | 'paused';
+
+/**
+ * 상태 하나당 낱말 하나 (티켓 04) — **행 메타에 보이는 말과 행 이름에 담기는 말이 같다**.
+ *
+ * 표를 여기 두는 이유는 이 파일이 `ProfileRowState`를 정의하는 곳이기 때문이다. 읽는 쪽이
+ * 둘(메타 문구를 짓는 곳과 접근성 이름을 짓는 곳)이라, 각자 표를 들면 상태가 하나 늘거나
+ * 낱말이 바뀌는 날 한쪽만 고쳐지고 그 어긋남은 WCAG 2.5.3 위반으로 나타난다.
+ */
+export const PROFILE_STATE_KEY: Record<ProfileRowState, MessageKey> = {
+  on: 'profileStateOn',
+  off: 'profileStateOff',
+  paused: 'profileStatePaused',
+};
 
 export interface ProfileRowStatus {
   /** 그 프로필에 들어 있는 **켜진** Modification 수. */

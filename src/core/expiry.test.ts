@@ -23,7 +23,6 @@ function profile(id: string, active: boolean, modifications: Modification[]): Pr
     id,
     name: id,
     active,
-    shortLabel: id.charAt(0),
     color: '#2563eb',
     modifications,
   };

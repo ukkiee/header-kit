@@ -24,7 +24,6 @@ const sampleState: StoredState = {
       id: 'p1',
       name: 'Staging',
       active: true,
-      shortLabel: 'ST',
       color: '#d97706',
       modifications: [
         { kind: 'request-header', id: 'm1', name: 'Authorization', value: 'Bearer x', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
@@ -34,7 +33,6 @@ const sampleState: StoredState = {
       id: 'p2',
       name: 'QA flags',
       active: false,
-      shortLabel: 'QA',
       color: '#16a34a',
       modifications: [],
     },

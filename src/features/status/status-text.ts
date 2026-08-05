@@ -1,5 +1,5 @@
 import { format, type Translator } from '@/core/i18n';
-import type { StatusSummary } from '@/core/summary';
+import { PROFILE_STATE_KEY, type ProfileRowStatus, type StatusSummary } from '@/core/summary';
 
 /**
  * 본문 헤더의 부제 — `5개 적용 규칙 · 2개 활성 프로필` (ADR 0017).
@@ -26,4 +26,24 @@ export function statusCountsText(summary: StatusSummary, t: Translator): string 
     count: summary.activeProfileCount,
   });
   return `${rules} · ${profiles}`;
+}
+
+/**
+ * 프로필 행의 메타 — `3개 규칙 · 적용` (ADR 0017, 스펙 story 42).
+ *
+ * 헤더 부제와 같은 규약을 쓴다(가운뎃점으로 잇고, 수와 세는 단위는 카탈로그가 함께 든다).
+ * 그래서 같은 파일에 있다 — 나눠 두면 한쪽만 고쳐져 같은 화면의 두 줄이 다르게 읽힌다.
+ *
+ * 세는 수가 헤더 부제의 것과 **다른 질문의 답**인 것에 주의한다: 여기 수는 그 프로필의 켜진
+ * 규칙 수이고, 부제의 수는 지금 브라우저에 실제로 걸려 있는 수다. 겹친 규칙은 컴파일에서
+ * 하나로 접히므로 프로필별로 되돌려 귀속시킬 수 없다(`profileRowStatus` 주석).
+ *
+ * 상태 낱말은 행 접근성 이름이 쓰는 그 낱말이다(`PROFILE_STATE_KEY`) — 보이는 말과 이름의
+ * 말이 같아야 음성 제어 사용자가 눈으로 읽은 그 말로 행을 부를 수 있다(WCAG 2.5.3).
+ */
+export function profileRowMetaText(status: ProfileRowStatus, t: Translator): string {
+  const rules = format(t(status.enabledModificationCount === 1 ? 'profileRule' : 'profileRules'), {
+    count: status.enabledModificationCount,
+  });
+  return `${rules} · ${t(PROFILE_STATE_KEY[status.state])}`;
 }
