@@ -12,6 +12,7 @@ import {
   SCHEMA_VERSION,
   type Filter,
   type Modification,
+  type RetirementNotice,
   type SameSitePolicy,
   type SetCookieParts,
   type Profile,
@@ -462,6 +463,79 @@ export function migrateSetCookieToV3(value: unknown): unknown {
 }
 
 /**
+ * 이 버전이 더 이상 좁히지 못하는 조건 (ADR 0017) — 벗기면 규칙이 **넓어진다**.
+ *
+ * 넷 다 "여기엔 걸지 말라"를 말하던 것이라, 사라지면 지금까지 비껴가던 요청에 규칙이
+ * 걸리기 시작한다. 그래서 벗기는 것과 **세는 것**이 한 함수 안에 있다 — 세지 않으면
+ * 알릴 것이 없고, 알리지 않으면 사용자는 어느 날 규칙이 넓어진 이유를 모른다.
+ */
+const RETIRED_CONDITION_KEYS = [
+  'excludedDomains',
+  'initiatorDomains',
+  'tabDomains',
+  'expiresAt',
+] as const;
+
+/**
+ * 퇴역 요청 메서드 (ADR 0017) — 목록에서 빠지면 그만큼 규칙이 넓어진다.
+ *
+ * `RequestMethod`에 결속해 둔다: 생 문자열로 두면 오타나 union 변경이 조용히 통과하고,
+ * 그때 벗기기가 아무것도 못 찾아 넓어진 규칙이 세어지지 않는다.
+ *
+ * **이 목록과 위의 조건 키 목록은 `transfer.ts`의 가져오기 공지 문장이 함께 열거한다** —
+ * 한쪽만 고치면 그 문장이 조용히 거짓이 된다.
+ */
+const RETIRED_METHODS = ['head', 'connect', 'other'] as const satisfies readonly RequestMethod[];
+
+/**
+ * 규칙 하나에서 퇴역 조건·메서드를 벗긴다. `widened`는 **넓어졌는가**이지 필드를
+ * 만졌는가가 아니다 — 빈 배열은 애초에 아무것도 좁히지 않았으므로 걷어내도 넓어지지 않는다.
+ */
+function retireConditions(modification: unknown): { modification: unknown; widened: boolean } {
+  if (!isRecord(modification) || !isRecord(modification.conditions)) {
+    return { modification, widened: false };
+  }
+  const conditions: Record<string, unknown> = { ...modification.conditions };
+  let widened = false;
+
+  for (const key of RETIRED_CONDITION_KEYS) {
+    const value = conditions[key];
+    if (value === undefined) continue;
+    if (Array.isArray(value) ? value.length > 0 : true) widened = true;
+    delete conditions[key];
+  }
+
+  const methods = conditions.requestMethods;
+  if (Array.isArray(methods)) {
+    const retired: readonly string[] = RETIRED_METHODS;
+    const kept = methods.filter((m) => !retired.includes(m as string));
+    if (kept.length !== methods.length) {
+      widened = true;
+      /*
+       * 마지막 하나까지 퇴역이면 목록 자체를 지운다 — 빈 배열은 "어떤 메서드에도 안 걸린다"가
+       * 아니라 그냥 조건 없음이고, 저장 모양을 normalizeConditions와 같게 두어야 다음 저장에서
+       * 조용히 달라지지 않는다. 이때 규칙은 **모든 메서드**에 걸리므로 그것도 넓어진 것이다.
+       */
+      if (kept.length === 0) delete conditions.requestMethods;
+      else conditions.requestMethods = kept;
+    }
+  }
+
+  const next: Record<string, unknown> = { ...modification };
+  if (Object.keys(conditions).length > 0) next.conditions = conditions;
+  else delete next.conditions;
+  return { modification: next, widened };
+}
+
+/** 프로필 하나를 올린 결과 — 올린 값과 **조건을 잃은 규칙 수**를 함께 돌려준다. */
+export interface ProfileUpgrade {
+  /** 올라간 프로필. 검증 전이라 아직 unknown이다. */
+  profile: unknown;
+  /** 조건을 잃은 규칙 수. 규칙 하나가 여럿을 잃어도 하나로 센다. */
+  retired: number;
+}
+
+/**
  * 프로필 하나를 현재 포맷까지 올린다 — **순서가 계약이다** (ADR 0017, structure r1 S-3).
  *
  * 실체화가 재구조화보다 **먼저**다. 진짜 v1 상태는 규칙 조건을 갖고 있지 않다 — 그것들은
@@ -474,14 +548,23 @@ export function migrateSetCookieToV3(value: unknown): unknown {
  *
  * 이미 올라간 항목은 손대지 않으므로 여러 번 불려도 결과가 같다.
  */
-export function upgradeProfile(value: unknown): unknown {
-  if (!isRecord(value)) return value;
+export function upgradeProfile(value: unknown): ProfileUpgrade {
+  if (!isRecord(value)) return { profile: value, retired: 0 };
   const materialized = migrateProfileFilters(value);
-  if (!Array.isArray(materialized.modifications)) return materialized;
-  return {
-    ...materialized,
-    modifications: materialized.modifications.map(migrateSetCookieToV3),
-  };
+  if (!Array.isArray(materialized.modifications)) return { profile: materialized, retired: 0 };
+
+  /*
+   * 벗기기가 실체화 **뒤**인 것이 이 순서의 요점이다 (티켓 02). 진짜 v1 상태에는 규칙 조건이
+   * 없다 — 퇴역 대상은 레거시 필터에서 실체화가 만들어 낸다. 앞에 두면 아직 태어나지 않은
+   * 것을 찾다가 아무것도 못 찾고 통과하고, 그 뒤 실체화가 퇴역 대상을 새로 만들어 커밋한다.
+   */
+  let retired = 0;
+  const modifications = materialized.modifications.map((m) => {
+    const { modification, widened } = retireConditions(migrateSetCookieToV3(m));
+    if (widened) retired += 1;
+    return modification;
+  });
+  return { profile: { ...materialized, modifications }, retired };
 }
 
 /**
@@ -492,12 +575,44 @@ export function upgradeProfile(value: unknown): unknown {
  */
 function upgradeToCurrent(value: Record<string, unknown>): Record<string, unknown> {
   if (!Array.isArray(value.profiles)) return { ...value, schemaVersion: 3 };
-  return { ...value, schemaVersion: 3, profiles: value.profiles.map(upgradeProfile) };
+  const upgraded = value.profiles.map(upgradeProfile);
+  const rules = upgraded.reduce((sum, u) => sum + u.retired, 0);
+  const next: Record<string, unknown> = {
+    ...value,
+    schemaVersion: 3,
+    profiles: upgraded.map((u) => u.profile),
+  };
+  /*
+   * 아무것도 넓어지지 않았으면 공지를 담지 않는다 — `{ rules: 0 }`을 담으면 확인 버튼이
+   * 이유 없이 서고, 부재가 곧 "알릴 것이 없다"라는 필드의 계약도 깨진다.
+   */
+  if (rules > 0) next.retirementNotice = { rules };
+  return next;
+}
+
+/**
+ * 퇴역 공지의 형 검증 — theme·badgeVisible과 같은 계열의 **치유** 대상이다 (티켓 02).
+ *
+ * 읽을 수 없으면 상태 전체를 리셋하는 대신 **공지 없음**으로 접는다. 깨진 공지 하나가
+ * 프로필을 날릴 이유가 없다. 0 이하는 알릴 것이 없다는 뜻이므로 부재와 같게 다룬다 —
+ * 그러지 않으면 아무것도 넓어지지 않았는데 확인 버튼만 서 있는 화면이 나온다.
+ */
+function readRetirementNotice(value: unknown): RetirementNotice | undefined {
+  if (!isRecord(value)) return undefined;
+  const { rules } = value;
+  return typeof rules === 'number' && Number.isInteger(rules) && rules > 0 ? { rules } : undefined;
 }
 
 /** 검증을 통과한 StoredState거나, 통과하지 못하면 null. 분류와 검증을 나눠 둔다. */
 function validateStoredState(value: Record<string, unknown>): StoredState | null {
   if (typeof value.paused !== 'boolean' || !Array.isArray(value.profiles)) return null;
+  /*
+   * 공지는 **키째** 떼어 놓고 치유된 값만 다시 얹는다 (code-review). 스프레드에 남겨 두면
+   * 모양이 깨진 원본이 그대로 통과하고, `retirementNotice: undefined`로 덮으면 이번엔 키가
+   * 실체화되어 "부재가 곧 알릴 것이 없다"는 계약이 읽기 경로에서만 깨진다.
+   */
+  const { retirementNotice: rawNotice, ...rest } = value;
+  const retirementNotice = readRetirementNotice(rawNotice);
   const profiles = value.profiles.map(backfillProfile);
   const materialized = value.materialized ?? {};
   const customHeaderNames = Array.isArray(value.customHeaderNames)
@@ -526,7 +641,8 @@ function validateStoredState(value: Record<string, unknown>): StoredState | null
   const locale = isLocale(value.locale) ? value.locale : undefined;
   if (!profiles.every(isProfile) || !isMaterializedRecord(materialized)) return null;
   return {
-    ...value,
+    ...rest,
+    ...(retirementNotice ? { retirementNotice } : {}),
     theme,
     badgeVisible,
     syncBackup,

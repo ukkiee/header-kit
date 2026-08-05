@@ -88,6 +88,15 @@ const en = {
   countRule: '{count} active rule',
   countProfiles: '{count} active profiles',
   countProfile: '{count} active profile',
+  /*
+   * 퇴역 공지 (티켓 02, ADR 0017). 수와 세는 단위를 카탈로그가 **함께** 드는 것은 부제와 같은
+   * 이유다 — 붙는 자리가 언어마다 다르다. 문장이 말해야 하는 것은 "무엇이 사라졌나"가 아니라
+   * **"그래서 무엇이 달라졌나"**다: 조건이 없어졌다는 사실만으로는 사용자가 자기 규칙이 전보다
+   * 넓게 걸린다는 것을 짐작하지 못한다.
+   */
+  retirementNoticeRules: 'Some conditions are no longer supported and were removed — {count} rules now apply more broadly than before.',
+  retirementNoticeRule: 'Some conditions are no longer supported and were removed — {count} rule now applies more broadly than before.',
+  acknowledgeRetirement: 'Got it',
   activeRules: 'active rules',
   activeRule: 'active rule',
   activeProfiles: 'active profiles',
@@ -306,6 +315,9 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     countRule: '{count}개 적용 규칙',
     countProfiles: '{count}개 활성 프로필',
     countProfile: '{count}개 활성 프로필',
+    retirementNoticeRules: '더 이상 지원하지 않는 조건이 걷혔습니다 — 규칙 {count}개가 전보다 넓게 걸립니다.',
+    retirementNoticeRule: '더 이상 지원하지 않는 조건이 걷혔습니다 — 규칙 {count}개가 전보다 넓게 걸립니다.',
+    acknowledgeRetirement: '확인',
     activeRules: '적용 규칙',
     activeRule: '적용 규칙',
     activeProfiles: '활성 프로필',

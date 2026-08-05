@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { parseStoredState, SCHEMA_VERSION } from './schema';
 
 describe('parseStoredState', () => {
-  it('프로필 필터를 규칙 conditions로 마이그레이션한다 (ADR 0010, 의미론 보존)', () => {
+  /*
+   * ADR 0017이 ADR 0010의 "전량 이주"를 개정했다 (티켓 02). 이주 자체는 그대로지만, 이주한
+   * 조건 중 넷은 같은 변환 안에서 다시 걷힌다 — 그래서 여기서 재는 것은 "무엇이 남고 무엇이
+   * 걷혔는가"이고, 걷혀서 규칙이 넓어졌다는 사실은 공지가 들고 있어야 한다.
+   */
+  it('프로필 필터를 규칙 conditions로 마이그레이션하고 퇴역분은 걷어낸다 (ADR 0010→0017)', () => {
     const parsed = parseStoredState({
       schemaVersion: 1,
       paused: false,
@@ -35,16 +40,16 @@ describe('parseStoredState', () => {
     const m1 = p1.modifications[0]!;
     expect(m1.kind === 'request-header' && m1.urlFilter).toBe('(?:a\\.com)|(?:b\\.com)');
     expect(m1.kind === 'request-header' && m1.urlMatchType).toBe('regex');
+    // 살아남는 종류만 남는다 — initiator/tab 도메인과 자동 해제 시각은 퇴역했다.
     expect(m1.conditions).toEqual({
       resourceTypes: ['script'],
       requestMethods: ['post'],
-      initiatorDomains: ['init.io'],
-      tabDomains: ['tab.io'],
-      expiresAt: 300, // 최솟값
     });
     const m2 = p1.modifications[1]!;
     expect(m2.kind === 'request-header' && m2.urlFilter).toBe('own'); // 자체 스코프 유지
     expect(m2.conditions?.resourceTypes).toEqual(['script']);
+    // 규칙 둘 다 조건을 잃었으므로 둘 다 세어진다 — 규칙 단위로 하나씩.
+    expect(parsed.retirementNotice).toEqual({ rules: 2 });
   });
 
   it('disabled 프로필 필터는 마이그레이션하지 않고, 필터 없는 프로필은 그대로다', () => {

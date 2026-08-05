@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { createDefaultState, SCHEMA_VERSION } from '@/core/schema';
+import { createDefaultState, SCHEMA_VERSION, type StoredState } from '@/core/schema';
+import { acknowledgeRetirement } from '@/core/commands';
 import { createWriterLane } from '@/core/writer-lane';
 import {
   commitMigration,
@@ -141,6 +142,91 @@ describe('commitMigration — v2 응답 쿠키 재구조화 커밋', () => {
     local.set = failing;
     expect(await commit()).toBe(true);
     expect(kv.state).toMatchObject({ schemaVersion: SCHEMA_VERSION });
+  });
+});
+
+/**
+ * 퇴역 공지의 수명 (티켓 02, ADR 0017).
+ *
+ * 순수 분류기는 "공지가 계산됐다"까지만 보인다. 여기서 못 박는 것은 그 공지가 **저장소에서
+ * 얼마나 사는가**이다 — 팝업은 렌더 직후 닫히는 것이 정상 동작이라, 수명이 화면에 매여 있으면
+ * 규칙이 이미 넓어진 뒤에 그 이유를 설명하던 유일한 것이 사라진다.
+ */
+describe('퇴역 공지 — 저장소에서의 수명', () => {
+  const V2_RETIRED = {
+    schemaVersion: 2,
+    paused: false,
+    profiles: [
+      { id: 'p1', name: 'P', color: '#2563eb', shortLabel: 'P', active: true,
+        modifications: [{ kind: 'request-header', id: 'm1', name: 'X', value: '1',
+          enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
+          conditions: { tabDomains: ['tab.io'] } }] },
+    ],
+    materialized: {},
+    customHeaderNames: [],
+  };
+
+  /** 확인도 쓰기 문을 지난다 — 증표는 `lane.run` 밖에서 만들 수 없다 (D3). */
+  const acknowledge = (state: StoredState): Promise<void> =>
+    createWriterLane().run((permit) => persistState(permit, acknowledgeRetirement(state)));
+
+  /*
+   * 넓어진 규칙과 공지가 **한 번의 쓰기로 함께** 굳는다. 둘이 갈라지면 그 사이에 서비스워커가
+   * 죽는 것만으로 "규칙은 넓어졌는데 설명은 없는" 상태가 저장소에 남는다 — 그 창을 없애는
+   * 유일한 방법은 같은 커밋에 담는 것이다.
+   */
+  it('넓어진 상태와 공지가 한 커밋에 함께 굳는다', async () => {
+    const kv = seedLocal(V2_RETIRED);
+    expect(await commit()).toBe(true);
+    expect(writes).toBe(1);
+    expect(kv.state).toMatchObject({ retirementNotice: { rules: 1 } });
+    expect((await loadState()).profiles[0]?.modifications[0]?.conditions).toBeUndefined();
+  });
+
+  /*
+   * 팝업과 탭이 동시에 열려 있어도 한쪽이 다른 쪽 몫을 소비하지 않는다. 읽기가 부수효과를
+   * 갖지 않는 것이 그 보장의 전부라, 여기서는 **쓰기 횟수**로 잰다.
+   */
+  it('읽는 것으로는 지워지지 않는다 — 두 표면이 각자 읽어도 둘 다 본다', async () => {
+    seedLocal(V2_RETIRED);
+    await commit();
+    const popup = await loadState();
+    const tab = await loadState();
+
+    expect(popup.retirementNotice).toEqual({ rules: 1 });
+    expect(tab.retirementNotice).toEqual({ rules: 1 });
+    expect(writes).toBe(1); // 마이그레이션 커밋 하나뿐 — 읽기는 쓰지 않았다
+  });
+
+  /*
+   * 서비스워커가 깨어나 커밋을 다시 돌려도 공지가 부풀거나 사라지지 않는다. 이미 v3라
+   * 올릴 것이 없으므로 커밋은 물러나고, 공지는 확인될 때까지 저장소에 그대로 남는다.
+   */
+  it('서비스워커가 재시작해도 남는다 — 다시 세지도, 사라지지도 않는다', async () => {
+    seedLocal(V2_RETIRED);
+    await commit();
+    expect(await commit()).toBe(false);
+    expect((await loadState()).retirementNotice).toEqual({ rules: 1 });
+  });
+
+  it('확인 쓰기가 실패하면 공지가 저장소에 그대로 남는다', async () => {
+    const kv = seedLocal(V2_RETIRED);
+    await commit();
+    const loaded = await loadState();
+
+    const local = (globalThis as unknown as { browser: { storage: { local: { set: unknown } } } })
+      .browser.storage.local;
+    const working = local.set;
+    local.set = async () => {
+      throw new Error('quota');
+    };
+    await expect(acknowledge(loaded)).rejects.toThrow('quota');
+    expect(kv.state).toMatchObject({ retirementNotice: { rules: 1 } });
+
+    // 문이 다시 열리면 같은 확인이 통과하고, 그때 비로소 사라진다.
+    local.set = working;
+    await acknowledge(loaded);
+    expect((await loadState()).retirementNotice).toBeUndefined();
   });
 });
 

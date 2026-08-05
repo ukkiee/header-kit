@@ -25,3 +25,15 @@
 - [ ] 원시로 보존된 응답 쿠키를 열면 값이 보이고, 저장 전까지는 원시로 동작한다
 - [ ] 팝업은 1열, 탭은 2열이고 응답 쿠키 속성 3칸도 팝업에서는 세로로 쌓인다
 - [ ] 수렴 저장이 숨은 필드 3종 × 규칙 종류 8종 조합으로 단위 테스트된다
+
+## 티켓 02에서 이월 (code-review)
+
+**퇴역 조건 컨트롤 넷이 아직 폼에 서 있고, 지금은 입력이 저장에서 버려진다.**
+`rule-conditions-fields.tsx`가 제외 도메인·요청 출처 도메인·탭 도메인·자동 해제 시각 입력을
+계속 그리는데, 티켓 02가 `normalizeConditions`에서 그 분기를 지웠으므로 사용자가 값을 넣고
+저장하면 아무 말 없이 사라진다(다시 열면 빈칸). 티켓 02의 수용 기준은 분기 제거만 요구했고
+폼 필드 집합은 이 티켓의 것이라 넘긴다 — 이 티켓이 폼을 시안 구성으로 다시 쓸 때 넷을 함께
+없애야 한다. i18n 키(`condExcludedDomains`·`condInitiator`·`condTabDomains`·`condExpires`·
+`ariaExpiresAt`·`condInitiatorNote`·`condTabDomainNote`·`condExpiresNote`·`commaHint`)와
+`expiry-format.ts`도 그때 함께 정리 대상이 된다. 스모크 N14b는 ko 조건 라벨 둘을 재고 있어
+같이 갱신해야 한다.

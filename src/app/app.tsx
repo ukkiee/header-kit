@@ -15,7 +15,7 @@ import { Button } from '@/ui/press-button';
 import { LocaleProvider } from '@/ui/i18n-context';
 import { ScrollArea } from '@/ui/scroll-area';
 import type { Command } from '@/core/commands';
-import { pickLocale, pickLocalePreference, t, type MessageKey } from '@/core/i18n';
+import { format, pickLocale, pickLocalePreference, t, type MessageKey } from '@/core/i18n';
 import { createProfile, PROFILE_COLORS, type StoredState } from '@/core/schema';
 import { DEFAULT_THEME } from '@/core/theme';
 import { useAppliedTheme } from '@/ui/use-theme';
@@ -217,10 +217,37 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
     </Button>
   );
 
+  /*
+   * 퇴역 공지 (티켓 02, ADR 0017) — **그리는 것으로 소비하지 않는다.**
+   *
+   * 여기서 하는 일은 읽어서 보여 주는 것뿐이고, 지우는 것은 확인 버튼이 보내는 명령이다.
+   * 렌더에서 소비하면 팝업이 렌더 직후 닫히는 정상 동작만으로 공지가 사라진다 — 규칙은 이미
+   * 넓어졌는데 그 이유를 설명하던 유일한 것이 없어진 상태다. 명령이 쓰기 문에서 실패하면
+   * 상태가 갱신되지 않으므로(dispatch는 성공했을 때만 setState한다) 공지도 그대로 남는다.
+   */
+  const retirementNotice = state.retirementNotice;
   const alerts = (
     <>
       {incognitoAllowed === false && (
         <AlertBanner severity="info">{t(locale, 'incognitoBlocked')}</AlertBanner>
+      )}
+      {retirementNotice && (
+        <AlertBanner as="div" severity="warn" className="flex items-center gap-2">
+          <span className="min-w-0 flex-1">
+            {format(
+              t(locale, retirementNotice.rules === 1 ? 'retirementNoticeRule' : 'retirementNoticeRules'),
+              { count: retirementNotice.rules },
+            )}
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="shrink-0"
+            onClick={() => dispatch({ type: 'acknowledge-retirement' })}
+          >
+            {t(locale, 'acknowledgeRetirement')}
+          </Button>
+        </AlertBanner>
       )}
       {state.paused && <AlertBanner severity="warn">{t(locale, 'pausedNote')}</AlertBanner>}
       {commandError && (

@@ -13,7 +13,7 @@ import {
   updateProfileMeta,
 } from './commands';
 import type { RequestHeaderModification, StoredState } from './schema';
-import { SCHEMA_VERSION } from './schema';
+import { readStoredState, SCHEMA_VERSION } from './schema';
 
 function modification(id: string, name = 'X-A'): RequestHeaderModification {
   return { kind: 'request-header', id, name, value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' };
@@ -186,6 +186,51 @@ describe('state transition commands', () => {
 
     const pausedState = applyCommand(state(), { type: 'set-paused', paused: true });
     expect(pausedState.paused).toBe(true);
+  });
+
+  /*
+   * 퇴역 공지 확인 (티켓 02, ADR 0017).
+   *
+   * 확인이 **명령**인 것이 핵심이다 — 화면이 자기 상태에서 지우면 그 지움은 저장소에 닿지
+   * 못하고, 팝업이 닫히는 순간 되돌아온다. 명령이면 단일 writer의 쓰기 문을 지나므로,
+   * 쓰기가 실패했을 때 공지가 남는 것이 예외 처리가 아니라 기본 동작이다.
+   */
+  it('acknowledge-retirement는 공지를 지운다 — 필드째 사라진다', () => {
+    const withNotice = { ...state(), retirementNotice: { rules: 3 } };
+    const next = applyCommand(withNotice, { type: 'acknowledge-retirement' });
+
+    expect(next.retirementNotice).toBeUndefined();
+    // 0으로 두지 않는다 — 부재가 곧 "알릴 것이 없다"라는 필드의 계약이다.
+    expect('retirementNotice' in next).toBe(false);
+  });
+
+  it('확인은 공지 말고는 아무것도 건드리지 않는다', () => {
+    const withNotice = { ...state(), paused: true, retirementNotice: { rules: 1 } };
+    const next = applyCommand(withNotice, { type: 'acknowledge-retirement' });
+
+    expect(next.paused).toBe(true);
+    expect(next.profiles).toEqual(withNotice.profiles);
+    expect(next.materialized).toEqual(withNotice.materialized);
+  });
+
+  it('공지가 없으면 확인은 아무 일도 하지 않는다', () => {
+    const bare = state();
+    expect(applyCommand(bare, { type: 'acknowledge-retirement' })).toBe(bare);
+  });
+
+  /*
+   * 확인 결과가 **쓰기 문을 통과할 수 있는 모양**이어야 한다. persistState는 자신이 다시
+   * 읽어낼 수 없는 상태를 거부하므로(structure r2 S2-1), 여기서 모양이 깨지면 확인은 항상
+   * 실패하고 공지는 영영 지워지지 않는다.
+   */
+  it('확인한 상태는 이 버전이 다시 읽어낼 수 있다 — 쓰기 문을 지난다', () => {
+    const withNotice = { ...state(), retirementNotice: { rules: 2 } };
+    const next = applyCommand(withNotice, { type: 'acknowledge-retirement' });
+
+    const read = readStoredState(JSON.parse(JSON.stringify(next)));
+    expect(read.status).toBe('ok');
+    if (read.status !== 'ok') return;
+    expect(read.state.retirementNotice).toBeUndefined();
   });
 
   it('명령은 입력 상태를 변형하지 않는다 (불변성)', () => {

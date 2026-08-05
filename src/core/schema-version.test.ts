@@ -4,6 +4,7 @@ import {
   toStructuredSetCookie,
   createDefaultState,
   isBlockedFromOverwrite,
+  normalizeConditions,
   readStoredState,
   SCHEMA_VERSION,
 } from './schema';
@@ -299,6 +300,8 @@ describe('v1 → v2 → v3 체인', () => {
         ],
         // 실체화되기 **전**의 모습 — 조건은 아직 존재하지 않는다.
         filters: [
+          // 퇴역하지 않는 종류 — 실체화가 실제로 돌았는지 보는 감도 대조다.
+          { kind: 'resource-type', id: 'f0', enabled: true, resourceTypes: ['script'] },
           { kind: 'request-method', id: 'f1', enabled: true, methods: ['head', 'connect', 'other'] },
           { kind: 'initiator-domain', id: 'f2', enabled: true, domain: 'init.io' },
           { kind: 'tab-domain', id: 'f3', enabled: true, domain: 'tab.io' },
@@ -318,15 +321,24 @@ describe('v1 → v2 → v3 체인', () => {
     expect(read.state.schemaVersion).toBe(3);
   });
 
-  it('레거시 필터가 규칙 조건으로 실체화된다 — 순서가 실체화 먼저임을 보인다', () => {
+  /*
+   * 순서(실체화 먼저)를 재는 방법이 티켓 02에서 **바뀌었다**. 예전에는 실체화 산출물이
+   * 조건으로 남아 있는 것을 봤지만, 이제 그중 넷은 같은 변환 안에서 다시 걷혀 나가므로
+   * 조건만 봐서는 "실체화가 안 돌았다"와 "돌았고 걷혔다"를 구분할 수 없다.
+   *
+   * 그래서 퇴역 **집계**로 잰다 — 순서가 뒤집혀 벗기기가 먼저 돌면 아직 태어나지 않은 것을
+   * 찾다가 아무것도 못 찾고, 공지가 아예 생기지 않는다. 살아남는 조건 하나를 감도 대조로
+   * 함께 본다: 실체화가 통째로 안 돌았다면 그것도 없어야 하므로 두 단언이 서로를 지킨다.
+   */
+  it('레거시 필터가 실체화된 뒤 퇴역이 걷어 간다 — 순서가 실체화 먼저임을 보인다', () => {
     const read = readStoredState(realV1());
     if (read.status !== 'migrated') throw new Error('migrated가 아니다');
-    expect(read.state.profiles[0]?.modifications[0]?.conditions).toMatchObject({
-      requestMethods: ['head', 'connect', 'other'],
-      initiatorDomains: ['init.io'],
-      tabDomains: ['tab.io'],
-      expiresAt: 500,
+    // 살아남는 종류는 실체화된 그대로 남는다(감도 대조).
+    expect(read.state.profiles[0]?.modifications[0]?.conditions).toEqual({
+      resourceTypes: ['script'],
     });
+    // 퇴역 넷은 실체화된 뒤에야 발견될 수 있었다 — 발견됐다는 증거가 이 수다.
+    expect(read.state.retirementNotice).toEqual({ rules: 1 });
   });
 
   it('v1의 응답 쿠키도 v2를 거친 것과 **같은 곳에 도착한다**', () => {
@@ -482,5 +494,177 @@ describe('저장소와 가져오기가 같은 곳에 도착한다', () => {
     const result = parseImport(JSON.stringify({ headerkit: 1, profiles: [broken] }));
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.errors.join(' ')).toMatch(/invalid filter/);
+  });
+});
+
+/**
+ * 퇴역 Condition·메서드 벗기기와 집계 (티켓 02, ADR 0017).
+ *
+ * 넷 다 "여기엔 걸지 말라"를 말하던 것이라 사라지면 규칙이 **조용히 넓어진다**. 그래서
+ * 벗기는 것과 **몇 개가 영향받았는지 세는 것**이 한 변환 안에서 함께 일어나야 한다 —
+ * 세지 않으면 알릴 것이 없고, 알리지 않으면 사용자는 어느 날 규칙이 넓어진 이유를 모른다.
+ */
+describe('v2→v3 — 퇴역 조건·메서드', () => {
+  const v2With = (conditions: Record<string, unknown>) => ({
+    schemaVersion: 2,
+    paused: false,
+    profiles: [
+      {
+        id: 'p1', name: 'P', active: true, shortLabel: 'P', color: '#2563eb',
+        modifications: [
+          { kind: 'request-header', id: 'm1', name: 'X', value: '1', enabled: true,
+            mode: 'override', emptyMeans: 'remove', comment: '', conditions },
+        ],
+      },
+    ],
+    materialized: {},
+    customHeaderNames: [],
+  });
+
+  const upgraded = (conditions: Record<string, unknown>) => {
+    const read = readStoredState(v2With(conditions));
+    if (read.status !== 'migrated') throw new Error(`expected migrated, got ${read.status}`);
+    return read.state;
+  };
+
+  it.each([
+    ['제외 도메인', { excludedDomains: ['skip.io'] }],
+    ['요청 출처 도메인', { initiatorDomains: ['init.io'] }],
+    ['탭 도메인', { tabDomains: ['tab.io'] }],
+    ['자동 해제 시각', { expiresAt: 1_700_000_000_000 }],
+  ])('%s는 벗겨지고 영향 수에 세어진다', (_label, conditions) => {
+    const state = upgraded(conditions);
+    expect(state.profiles[0]?.modifications[0]?.conditions).toBeUndefined();
+    expect(state.retirementNotice).toEqual({ rules: 1 });
+  });
+
+  it('HEAD·CONNECT·OTHER만 남기고 나머지 메서드는 지킨다', () => {
+    const state = upgraded({ requestMethods: ['get', 'head', 'connect', 'other', 'post'] });
+    expect(state.profiles[0]?.modifications[0]?.conditions).toEqual({ requestMethods: ['get', 'post'] });
+    expect(state.retirementNotice).toEqual({ rules: 1 });
+  });
+
+  it('마지막 남은 메서드가 사라져 규칙이 모든 메서드에 걸리게 되면 그것도 세어진다', () => {
+    const state = upgraded({ requestMethods: ['head'] });
+    expect(state.profiles[0]?.modifications[0]?.conditions).toBeUndefined();
+    expect(state.retirementNotice).toEqual({ rules: 1 });
+  });
+
+  it('살아남는 조건만 가진 규칙은 세지 않는다 — 아무것도 넓어지지 않았다', () => {
+    const state = upgraded({ resourceTypes: ['script'], requestMethods: ['get'] });
+    expect(state.profiles[0]?.modifications[0]?.conditions)
+      .toEqual({ resourceTypes: ['script'], requestMethods: ['get'] });
+    expect(state.retirementNotice).toBeUndefined();
+  });
+
+  it('규칙 하나가 여러 개를 잃어도 한 번 센다 — 세는 단위는 규칙이다', () => {
+    const state = upgraded({ excludedDomains: ['a'], tabDomains: ['b'], expiresAt: 1 });
+    expect(state.retirementNotice).toEqual({ rules: 1 });
+  });
+
+  it('올린 상태를 다시 읽으면 공지가 새로 생기지 않는다 — 벗길 것이 이미 없다', () => {
+    const once = upgraded({ tabDomains: ['tab.io'] });
+    const twice = readStoredState(JSON.parse(JSON.stringify(once)));
+    expect(twice.status).toBe('ok');
+    if (twice.status !== 'ok') return;
+    // 공지는 확인될 때까지 남는다 — 다시 읽었다고 사라지지도, 부풀지도 않는다.
+    expect(twice.state.retirementNotice).toEqual({ rules: 1 });
+  });
+});
+
+/**
+ * 레거시 필터에서 **실체화된** 퇴역 조건도 벗겨진다 (티켓 02, 01이 세운 순서 덕분).
+ *
+ * 진짜 v1 상태에는 조건이 없다 — 실체화가 만들어 낸다. 벗기기가 실체화보다 앞에 있으면
+ * 아무것도 못 찾고 통과하고, 그 뒤 검증이 퇴역 대상을 새로 만들어 커밋한다.
+ */
+describe('v1 레거시 필터 → 실체화 → 퇴역', () => {
+  const realV1 = () => ({
+    schemaVersion: 1,
+    paused: false,
+    profiles: [
+      {
+        id: 'p1', name: 'Legacy', active: true, shortLabel: 'LG', color: '#2563eb',
+        modifications: [
+          { kind: 'request-header', id: 'm1', name: 'X', value: '1', enabled: true,
+            mode: 'override', emptyMeans: 'remove', comment: '' },
+        ],
+        filters: [
+          { kind: 'request-method', id: 'f1', enabled: true, methods: ['head', 'get'] },
+          { kind: 'initiator-domain', id: 'f2', enabled: true, domain: 'init.io' },
+          { kind: 'tab-domain', id: 'f3', enabled: true, domain: 'tab.io' },
+          { kind: 'time', id: 'f4', enabled: true, expiresAt: 500 },
+        ],
+      },
+    ],
+    materialized: {},
+    customHeaderNames: [],
+  });
+
+  it('실체화된 퇴역 조건이 빠짐없이 벗겨지고 살아남는 것만 남는다', () => {
+    const read = readStoredState(realV1());
+    if (read.status !== 'migrated') throw new Error('migrated가 아니다');
+    expect(read.state.profiles[0]?.modifications[0]?.conditions).toEqual({ requestMethods: ['get'] });
+    expect(read.state.retirementNotice).toEqual({ rules: 1 });
+  });
+
+  it('커밋된 v3를 다시 읽어도 퇴역 필드가 없다 — 저장소에 남지 않는다', () => {
+    const read = readStoredState(realV1());
+    if (read.status !== 'migrated') throw new Error('migrated가 아니다');
+    const again = readStoredState(JSON.parse(JSON.stringify(read.state)));
+    if (again.status !== 'ok') throw new Error('ok가 아니다');
+    const conditions = again.state.profiles[0]?.modifications[0]?.conditions as Record<string, unknown>;
+    for (const key of ['excludedDomains', 'initiatorDomains', 'tabDomains', 'expiresAt']) {
+      expect(conditions?.[key]).toBeUndefined();
+    }
+  });
+
+  /*
+   * **백업 파일**에도 남지 않는다 (수용 기준). 저장소만 보면 반쪽이다 — 내보낸 파일이 퇴역
+   * 필드를 들고 나가면 그것을 다시 들여올 때까지 그 값이 살아 있고, 파일을 열어 본 사용자는
+   * 이 버전이 더 이상 쓰지 않는 조건을 자기 규칙이 여전히 가진 것으로 읽는다.
+   */
+  it('내보낸 파일에도 퇴역 필드가 없다', () => {
+    const read = readStoredState(realV1());
+    if (read.status !== 'migrated') throw new Error('migrated가 아니다');
+    const file = exportProfiles(read.state, [read.state.profiles[0]!.id]);
+    const serialized = JSON.stringify(file);
+
+    for (const key of ['excludedDomains', 'initiatorDomains', 'tabDomains', 'expiresAt']) {
+      expect(serialized).not.toContain(key);
+    }
+    // 감도 대조 — 살아남는 조건은 파일에 실제로 들어 있다(부재 단언이 빈 파일로 퇴화하지 않게).
+    expect(serialized).toContain('"requestMethods":["get"]');
+  });
+});
+
+/**
+ * 조건 정규화가 퇴역 넷을 **통과시키지 않는다** (수용 기준, ADR 0017).
+ *
+ * 벗기기와 같은 변경에서 사라지는 것이 중요하다: 분기를 남기면 낡은 값이 화면에 보이지 않은
+ * 채 저장소에서 계속 살아남고, 벗기기 없이 분기만 지우면 무관한 저장 한 번에 그 값이 조용히
+ * 사라진다 — 그때는 규칙이 넓어졌다고 알릴 자리도 없다.
+ */
+describe('normalizeConditions — 퇴역 분기', () => {
+  it('퇴역 넷은 값이 있어도 통과하지 못한다', () => {
+    expect(
+      normalizeConditions({
+        excludedDomains: ['skip.io'],
+        initiatorDomains: ['init.io'],
+        tabDomains: ['tab.io'],
+        expiresAt: 1_700_000_000_000,
+      }),
+    ).toBeUndefined();
+  });
+
+  it('살아남는 둘만 통과한다 — 퇴역분이 섞여 있어도 걷힌다', () => {
+    expect(
+      normalizeConditions({
+        resourceTypes: ['script'],
+        requestMethods: ['get'],
+        tabDomains: ['tab.io'],
+        expiresAt: 1,
+      }),
+    ).toEqual({ resourceTypes: ['script'], requestMethods: ['get'] });
   });
 });

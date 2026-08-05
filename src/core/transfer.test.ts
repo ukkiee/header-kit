@@ -149,16 +149,20 @@ describe('parseImport', () => {
       urlFilter: 'own\\.example',
       urlMatchType: 'contains',
     });
-    // 리소스/메서드/도메인 계열은 각 규칙의 conditions로 복사되고, 시간은 최솟값이다
+    /*
+     * 이주한 조건 중 **살아남는 것만** 각 규칙에 남는다 (ADR 0017, 티켓 02). 탭 도메인과
+     * 자동 해제 시각은 같은 업그레이드 안에서 다시 걷힌다 — 걷혔다는 사실을 공지가 함께
+     * 말하지 않으면 바로 아래 "옮겼다" 공지가 거짓이 된다.
+     */
     for (const m of imported.modifications) {
-      expect(m.conditions).toEqual({
-        requestMethods: ['get', 'post'],
-        tabDomains: ['example.com'],
-        expiresAt: 200,
-      });
+      expect(m.conditions).toEqual({ requestMethods: ['get', 'post'] });
     }
     expect(result.notices).toContainEqual(
       expect.stringContaining('migrated to per-rule conditions'),
+    );
+    // 규칙 둘 다 조건을 잃었다 — 가져오기 공지가 그 수를 말한다.
+    expect(result.notices).toContainEqual(
+      expect.stringContaining('2 rule(s) lost conditions this version no longer supports'),
     );
   });
 

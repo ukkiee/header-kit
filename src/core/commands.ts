@@ -356,6 +356,22 @@ export function removeCustomHeaderName(state: StoredState, name: string): Stored
 }
 
 /**
+ * 퇴역 공지를 확인해 지운다 (티켓 02, ADR 0017) — **보는 것으로는 지워지지 않는다**.
+ *
+ * 확인이 명령인 이유는 그래야 단일 writer의 쓰기 문을 지나기 때문이다. 화면이 자기 사본에서
+ * 지우면 그 지움은 저장소에 닿지 못해 팝업이 닫히는 순간 되돌아오고, 반대로 렌더가 소비하면
+ * 팝업이 렌더 직후 닫히는 정상 동작만으로 공지가 사라진다 — 규칙은 이미 넓어졌는데 그 이유를
+ * 설명하던 유일한 것이 없어진 상태다. 쓰기가 실패하면 상태가 그대로이므로 공지도 그대로다.
+ *
+ * 값을 0으로 두지 않고 **필드를 지운다**: 부재가 곧 "알릴 것이 없다"라는 것이 이 필드의 계약이다.
+ */
+export function acknowledgeRetirement(state: StoredState): StoredState {
+  if (state.retirementNotice === undefined) return state;
+  const { retirementNotice: _acknowledged, ...rest } = state;
+  return rest;
+}
+
+/**
  * 만료된 규칙을 끄고 expiresAt을 소비한다 (ADR 0010) — 알람은 일회성이다.
  * 규칙만 꺼지고 프로필은 그대로다.
  */
@@ -401,6 +417,8 @@ export type Command =
   /** 전체 초기화의 상태 부분 — 저장소 삭제·자동 백업 중단은 런타임이 이 명령 주변에서 조율한다. */
   | { type: 'full-reset' }
   | { type: 'expire-rules'; now: number }
+  /** 퇴역 공지 확인 — 쓰기 문을 지나 성공했을 때만 공지가 사라진다 (티켓 02). */
+  | { type: 'acknowledge-retirement' }
   | { type: 'add-custom-header-name'; name: string }
   | { type: 'remove-custom-header-name'; name: string }
   | { type: 'add-modification'; profileId: string; modification: Modification }
@@ -479,6 +497,8 @@ export function applyCommand(
       return resetToDefaults();
     case 'expire-rules':
       return expireRules(state, command.now);
+    case 'acknowledge-retirement':
+      return acknowledgeRetirement(state);
     case 'add-custom-header-name':
       return addCustomHeaderName(state, command.name);
     case 'remove-custom-header-name':

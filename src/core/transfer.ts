@@ -124,6 +124,26 @@ export function legacyFilterNotices(profile: unknown): string[] {
   return notices;
 }
 
+/**
+ * 퇴역 조건을 잃은 규칙이 있으면 그 사실을 공지한다 (티켓 02).
+ *
+ * 이것이 없으면 바로 위의 "레거시 프로필 필터를 규칙 조건으로 옮겼다"가 **거짓말이 된다** —
+ * 옮겨진 조건 중 넷은 같은 업그레이드 안에서 다시 걷혀 나가고, 그 규칙들은 파일에 적혀 있던
+ * 것보다 넓게 걸린다. 옮겼다는 말만 남기고 걷어 갔다는 말을 빼면 그 차이를 알 길이 없다.
+ *
+ * **이 문장이 열거하는 목록의 출처는 `persist.ts`의 `RETIRED_CONDITION_KEYS`·`RETIRED_METHODS`다** —
+ * 그쪽이 바뀌면 여기도 함께 고쳐야 하고, 안 고치면 이 공지가 조용히 거짓이 된다.
+ */
+function retirementNotices({ entry, retired }: { entry: unknown; retired: number }): string[] {
+  if (retired === 0) return [];
+  const name = isRecord(entry) && typeof entry.name === 'string' ? entry.name : '';
+  return [
+    `"${name}": ${retired} rule(s) lost conditions this version no longer supports ` +
+      `(excluded/initiator/tab domains, auto-off, and the HEAD/CONNECT/OTHER methods) ` +
+      `and now apply more broadly.`,
+  ];
+}
+
 export function normalizeImportedProfiles(
   profiles: Profile[],
   newId: () => string = () => crypto.randomUUID(),
@@ -132,8 +152,12 @@ export function normalizeImportedProfiles(
   return {
     profiles: profiles.map((p) => {
       const raw = p as unknown as Record<string, unknown>;
-      // 저장소와 같은 문을 지난다 — 이미 올라간 프로필에는 아무 일도 하지 않는다.
-      const migrated = upgradeProfile(raw) as unknown as Profile;
+      /*
+       * 저장소와 같은 문을 지난다 — 이미 올라간 프로필에는 아무 일도 하지 않는다.
+       * 퇴역 수는 여기서 버린다: 이 경로에 닿는 프로필은 parseImport가 이미 올려 세어 둔
+       * 것이라, 다시 세면 같은 규칙을 두 번 알리게 된다.
+       */
+      const migrated = upgradeProfile(raw).profile as unknown as Profile;
       return {
         ...migrated,
         id: newId(),
@@ -191,16 +215,25 @@ export function parseImport(
   );
 
   /*
-   * 공지는 **올리기 전에** 센다 (structure r1 S-3) — 올리는 순간 레거시 필터 키가 사라지므로,
-   * 뒤에서 세면 "무엇이 이주했고 무엇이 소실됐는지"를 말할 근거가 이미 없다.
+   * 레거시 공지는 **올리기 전에** 센다 (structure r1 S-3) — 올리는 순간 레거시 필터 키가
+   * 사라지므로, 뒤에서 세면 "무엇이 이주했고 무엇이 소실됐는지"를 말할 근거가 이미 없다.
    */
-  const notices = entries.flatMap(legacyFilterNotices);
+  const legacyNotices = entries.flatMap(legacyFilterNotices);
 
   /*
    * 검증보다 **먼저** 올린다. v2 내보내기의 응답 쿠키는 이름도 원시 보존 표시도 없어서,
    * 올리기 전에 검증하면 두 변형 중 어느 쪽도 아니라 파일 전체가 거부된다.
    */
-  const upgraded = entries.map(upgradeProfile);
+  // 올린 결과를 **원본과 짝지어** 든다 — 인덱스로 다시 찾으면 두 배열의 순서가 계약이 된다.
+  const upgrades = entries.map((entry) => ({ entry, ...upgradeProfile(entry) }));
+  const upgraded = upgrades.map((u) => u.profile);
+
+  /*
+   * 퇴역 공지는 반대로 **올린 뒤**에만 셀 수 있다 — 무엇이 걷혔는지는 올리는 과정이 알고,
+   * 레거시 필터에서 실체화된 조건까지 포함해야 수가 맞는다. 두 공지가 함께 나가야 "옮겼다"와
+   * "그중 넷은 걷어 갔다"가 한 화면에서 읽힌다.
+   */
+  const notices = [...legacyNotices, ...upgrades.flatMap(retirementNotices)];
 
   /*
    * 레거시 필터는 **올리기 전** 모양으로, 나머지는 **올린 뒤** 모양으로 본다. 전자는 올리면

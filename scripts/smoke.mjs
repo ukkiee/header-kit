@@ -421,7 +421,15 @@ try {
   record('E1: 레거시 URL 필터 → 로드 마이그레이션이 규칙 스코프로 적용', tagged['x-f5'] === 'on' && untagged['x-f5'] === undefined,
     `tagged=${tagged['x-f5']}, untagged=${untagged['x-f5']}`);
 
-  // E2: 제외 도메인 조건 — 해당 도메인 요청에는 적용되지 않는다 (네이티브 excludedRequestDomains)
+  /*
+   * E2: 제외 도메인은 **퇴역했다** (ADR 0017, 티켓 02) — 좁히지 않고, 규칙이 그만큼 넓어진다.
+   *
+   * 예전에 이 자리는 "제외 도메인이 좁힌다"를 쟀다. 이제 저장소 문이 그 조건을 걷어 가므로
+   * 사용자는 그것을 가질 수 없고, 좁힘을 재는 단언은 **도달할 수 없는 상태**를 재게 된다.
+   * 그래서 같은 자리에서 반대쪽을 잰다 — 코어 테스트가 못 보는 것이 이것이다: 걷어낸 결과가
+   * 실제 브라우저에서 그 도메인까지 규칙을 내보내는가. 티켓 02가 "조용히 넓어진다"고 말한
+   * 그 넓어짐이 여기서 눈에 보인다.
+   */
   await seedProfiles([
     baseProfile('p-ex', 'Ex',
       [{ kind: 'request-header', id: 'm1', name: 'X-Ex', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
@@ -434,12 +442,22 @@ try {
     () => fetchEchoHeaders(page, '/headers'),
     (h) => h['x-ex'] === 'on',
   );
+  /** 나가는 규칙 어디에도 그 조건 키가 없다 — 우연히 매칭된 것이 아니라 걷혔다는 감도 대조. */
+  const noRuleCondition = (key) =>
+    sw.evaluate(async (k) => {
+      const rules = await chrome.declarativeNetRequest.getSessionRules();
+      return rules.every((r) => r.condition?.[k] === undefined);
+    }, key);
+  const noExcludedCondition = await noRuleCondition('excludedRequestDomains');
   await page.goto(`http://localhost:${port}/`);
-  const onExcluded = await fetchEchoHeaders(page, '/headers');
+  const onceExcluded = await pollUntil(
+    () => fetchEchoHeaders(page, '/headers'),
+    (h) => h['x-ex'] === 'on',
+  );
   await page.goto(origin);
-  record('E2: 제외 도메인 — 해당 도메인에서만 미적용',
-    onIncluded['x-ex'] === 'on' && onExcluded['x-ex'] === undefined,
-    `127.0.0.1=${onIncluded['x-ex']}, localhost=${onExcluded['x-ex']}`);
+  record('E2: 제외 도메인 퇴역 — 좁히지 않고 그 도메인에도 적용된다',
+    onIncluded['x-ex'] === 'on' && onceExcluded['x-ex'] === 'on' && noExcludedCondition,
+    `127.0.0.1=${onIncluded['x-ex']}, localhost=${onceExcluded['x-ex']}, 제외조건부재=${noExcludedCondition}`);
 
   // E3: 메서드 조건
   await seedProfiles([
@@ -478,30 +496,30 @@ try {
     viaXhr['x-doc-only'] === undefined && viaNav['x-doc-only'] === 'on',
     `xhr=${viaXhr['x-doc-only']}, nav=${viaNav['x-doc-only']}`);
 
-  // E6: Initiator 도메인 조건 — 요청 출처가 매칭될 때만 적용
+  /*
+   * E6: 요청 출처 도메인도 **퇴역했다** (ADR 0017, 티켓 02) — E2와 같은 이유로 뒤집었다.
+   *
+   * 여기서는 **맞지 않는** 출처를 심는 것이 요점이다. 예전 계약에서는 그 규칙이 어디에도
+   * 적용되지 않았다 — 지금 적용된다면 조건이 실제로 걷혔다는 뜻이고, 그것이 이 자리가
+   * 재야 하는 유일한 것이다.
+   */
   const idProfile = (domain) => [
     baseProfile('p-id', 'Id',
       [{ kind: 'request-header', id: 'm1', name: 'X-From-Local', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
         conditions: { initiatorDomains: [domain] } }]),
   ];
-  /** 두 시드가 같은 헤더를 쓴다 — 구분되는 것은 initiatorDomains뿐이다. */
-  const initiatorLive = (domain) => (rules) =>
-    rules.some((r) => (r.condition?.initiatorDomains ?? []).includes(domain));
-  await seedProfiles(idProfile('127.0.0.1'));
+  await seedProfiles(idProfile('nomatch.example'));
   await pollSessionRuleCount(sw, 1);
-  await pollSessionRuleMatch(sw, initiatorLive('127.0.0.1'), 'E6 initiator=127.0.0.1');
-  const matched = await pollUntil(
+  await pollSessionRuleMatch(
+    sw, headerOpLive('X-From-Local', (h) => h.value === 'on'), 'E6 X-From-Local=on');
+  const onceUnmatched = await pollUntil(
     () => fetchEchoHeaders(page, '/headers'),
     (h) => h['x-from-local'] === 'on',
   );
-  await seedProfiles(idProfile('nomatch.example'));
-  // 음성 단언이라 부재를 폴링하면 안 된다 — 매직 넘버 300ms 대신 새 시드의 조건이
-  // 실제로 설치됐음을 양성 확인한 뒤 한 번만 관측한다.
-  await pollSessionRuleMatch(sw, initiatorLive('nomatch.example'), 'E6 initiator=nomatch.example');
-  const unmatched = await fetchEchoHeaders(page, '/headers');
-  record('E6: Initiator 도메인 조건 — 출처 도메인 매칭 시에만 적용',
-    matched['x-from-local'] === 'on' && unmatched['x-from-local'] === undefined,
-    `matched=${matched['x-from-local']}, unmatched=${unmatched['x-from-local']}`);
+  const noInitiatorCondition = await noRuleCondition('initiatorDomains');
+  record('E6: 요청 출처 도메인 퇴역 — 맞지 않는 출처를 심어도 적용된다',
+    onceUnmatched['x-from-local'] === 'on' && noInitiatorCondition,
+    `nomatch에서 적용=${onceUnmatched['x-from-local']}, 출처조건부재=${noInitiatorCondition}`);
 
   // E4: 유효하지 않은 규칙 regex 스코프는 저장 시점(권위 경로)에 거부된다
   const rejection = await popup.evaluate(async () => {
@@ -523,72 +541,79 @@ try {
     rejection?.ok === false && /regex/i.test(rejection?.error ?? '') && stateAfter === 1,
     `ok=${rejection?.ok}, error="${rejection?.error}", mods=${stateAfter}`);
 
-  // ---------- F. 탭 도메인 조건 · 규칙 자동 해제 (ADR 0010) ----------
+  /*
+   * ---------- F. 탭 도메인 · 자동 해제 시각의 퇴역 (ADR 0017, 티켓 02) ----------
+   *
+   * 이 두 조건은 **좁히는 것을 넘어 서브시스템을 데리고 있었다** — 탭 감시와 만료 알람이다.
+   * 저장소 문이 조건을 걷어 가면 그 서브시스템들은 입력을 받지 못하므로, 여기서 재는 것은
+   * "규칙이 이제 그것들과 무관하게 나간다"이다. 서브시스템 자체의 철거는 티켓 10의 몫이다.
+   */
   await page.close(); // 이전 섹션의 127.0.0.1 탭이 탭 도메인 매칭을 오염시키지 않도록
   const pageB = await context.newPage();
   await pageB.goto(`${origin}/?who=B`);
 
-  // F1: 탭 도메인 조건 — 해당 도메인 탭이 있을 때만 적용, 이탈 시 자동 해제
+  /*
+   * F1: 탭 도메인 퇴역 — **맞는 탭이 하나도 없는** 도메인을 심는다. 예전 계약에서는 매칭 탭이
+   * 없으면 그 규칙이 아예 방출되지 않아 개수가 0이었다. 개수 1이 곧 조건이 걷혔다는 증거다.
+   */
   await seedProfiles([
     baseProfile('p-td', 'Td',
       [{ kind: 'request-header', id: 'm1', name: 'X-Tab-Domain', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
-        conditions: { tabDomains: ['127.0.0.1'] } }]),
+        conditions: { tabDomains: ['nomatch.example'] } }]),
   ]);
-  await pollSessionRuleCount(sw, 1);
+  await pollSessionRuleCount(sw, 1); // 예전이면 매칭 탭이 없어 0이었다
   // 세션 규칙이 등록됐다(count=1)고 곧바로 요청에 적용된 건 아니다 — updateSessionRules
-  // 해소와 실제 네트워크 반영 사이에 지연이 있고, 탭 도메인 규칙은 탭 추적까지 얽혀 더 크다.
-  // 룰 카운트만 보고 한 번 fetch하면 그 지연에 걸려 헤더가 아직 안 붙는다(F1 흔들림).
-  // 효과 자체(헤더 유무)를 폴링해 적용을 관측한다 — 매 시도가 no-store 새 요청이다.
-  const onDomain = await pollUntil(
+  // 해소와 실제 네트워크 반영 사이에 지연이 있다. 효과 자체(헤더 유무)를 폴링해 관측한다.
+  const noMatchingTab = await pollUntil(
     () => fetchEchoHeaders(pageB, '/headers'),
     (h) => h['x-tab-domain'] === 'on',
   );
-  await pageB.goto(`http://localhost:${port}/`);
-  await pollSessionRuleCount(sw, 0); // 도메인 이탈 → 매칭 탭 없음 → 그 규칙만 미방출
-  const offDomain = await pollUntil(
-    () => fetchEchoHeaders(pageB, '/headers'),
-    (h) => h['x-tab-domain'] === undefined,
-  );
-  record('F1: 탭 도메인 조건 — 도메인 안 적용, 이탈 시 자동 해제',
-    onDomain['x-tab-domain'] === 'on' && offDomain['x-tab-domain'] === undefined,
-    `on=${onDomain['x-tab-domain']}, off=${offDomain['x-tab-domain']}`);
+  record('F1: 탭 도메인 퇴역 — 맞는 탭이 없어도 규칙이 나가고 적용된다',
+    noMatchingTab['x-tab-domain'] === 'on',
+    `매칭 탭 없음에서 적용=${noMatchingTab['x-tab-domain']}`);
   await pageB.goto(origin);
 
-  // F3: 규칙 자동 해제 — 만료 알람이 그 규칙만 끄고 expiresAt을 소비, 프로필·배지는 유지
+  /*
+   * F3: 자동 해제 시각 퇴역 — **이미 지난** 시각을 심는다. 예전 계약에서는 방출 가드가 그
+   * 규칙을 걸러 개수가 1이었고, 알람이 저장소의 enabled를 false로 뒤집었다. 둘 다 일어나지
+   * 않아야 한다.
+   *
+   * 이 시나리오가 부수적으로 지키던 것이 하나 더 있다: 쓰기 문을 거치지 않는 **직접 실행
+   * 경로**(알람 리스너)도 쓰기 줄에서 직렬화된다는 증거였다. 조건이 걷히면서 그 증거가 여기서
+   * 사라진다 — 티켓 10이 그 증명을 다른 경로로 옮기기로 되어 있고, 지금부터 그 빚이 열려 있다.
+   */
   await seedProfiles([
     baseProfile('p-time', 'Ti',
       [
         { kind: 'request-header', id: 'm1', name: 'X-Timed', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
-          conditions: { expiresAt: Date.now() + 1500 } },
+          conditions: { expiresAt: Date.now() - 1000 } },
         { kind: 'request-header', id: 'm2', name: 'X-Stays', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
       ]),
   ]);
-  await pollSessionRuleCount(sw, 2);
-  const beforeExpiry = await fetchEchoHeaders(pageB, '/headers');
-
-  const expiredMod = await pollUntil(
-    () => sw.evaluate(async () => {
-      const { state } = await chrome.storage.local.get('state');
-      const p = state.profiles[0];
-      return { active: p.active, enabled: p.modifications[0].enabled, conditions: p.modifications[0].conditions ?? null };
-    }),
-    (s) => s.enabled === false,
-    20_000,
-    250,
-  );
-  const afterExpiry = await pollUntil(
+  await pollSessionRuleCount(sw, 2); // 예전이면 지난 시각의 규칙이 걸러져 1이었다
+  const pastExpiry = await pollUntil(
     () => fetchEchoHeaders(pageB, '/headers'),
-    (h) => h['x-timed'] === undefined,
+    (h) => h['x-timed'] === 'on' && h['x-stays'] === 'on',
   );
-  const expiredBadge = await sw.evaluate(() => chrome.action.getBadgeText({}));
-  // 배지는 적용 중인 **규칙 수**다 (티켓 06) — 만료로 두 규칙 중 하나가 꺼졌으니 1이 남는다.
-  // 프로필이 살아 있다는 증거는 위의 active===true가 들고 있고, 여기서 보는 것은 "배지가
-  // 죽지 않고 줄어든 실제 적용 수를 계속 말한다"는 쪽이다.
-  record('F3: 규칙 만료 → 그 규칙만 off + expiresAt 소비, 프로필·다른 규칙·배지 유지',
-    beforeExpiry['x-timed'] === 'on' && beforeExpiry['x-stays'] === 'on'
-      && expiredMod.enabled === false && expiredMod.active === true && expiredMod.conditions === null
-      && afterExpiry['x-timed'] === undefined && afterExpiry['x-stays'] === 'on' && expiredBadge === '1',
-    `before=[${beforeExpiry['x-timed']},${beforeExpiry['x-stays']}], mod-off=${expiredMod.enabled === false}, active=${expiredMod.active}, cond=${JSON.stringify(expiredMod.conditions)}, after=[${afterExpiry['x-timed']},${afterExpiry['x-stays']}], badge="${expiredBadge}"`);
+  /*
+   * "알람이 규칙을 끄지 않는다"는 음성 단언이라 **기다려서 재면 안 된다** — 이 파일이 세 곳에서
+   * 명문화한 규약이다(매직 넘버 대기 금지). 대신 끌 주체가 **애초에 예약되지 않았음**을 양성으로
+   * 관측한다: 재조정이 만료 예정을 보면 알람을 걸고, 없으면 지운다. 알람 부재가 곧 "끌 것이
+   * 스케줄되지 않았다"이고, 그것이 도달할 수 없는 상태다.
+   */
+  const expiryAlarmGone = await pollUntil(
+    () => sw.evaluate(async () => (await chrome.alarms.get('headerkit-expiry')) ?? null),
+    (alarm) => alarm === null,
+  );
+  const stillEnabled = await sw.evaluate(async () => {
+    const { state } = await chrome.storage.local.get('state');
+    return state.profiles[0].modifications[0].enabled;
+  });
+  const badgeAfter = await sw.evaluate(() => chrome.action.getBadgeText({}));
+  record('F3: 자동 해제 시각 퇴역 — 만료 알람이 예약되지 않고 규칙이 계속 적용된다',
+    pastExpiry['x-timed'] === 'on' && pastExpiry['x-stays'] === 'on'
+      && expiryAlarmGone === null && stillEnabled === true && badgeAfter === '2',
+    `적용=[${pastExpiry['x-timed']},${pastExpiry['x-stays']}], 알람부재=${expiryAlarmGone === null}, enabled=${stillEnabled}, badge="${badgeAfter}"`);
 
   // ---------- G. 이슈 07: Placeholder 실체화 수명주기 ----------
   const UUID_RE = /^req-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -1458,7 +1483,14 @@ try {
     editCount === 2 && profileCaptionGone,
     `edit-buttons=${editCount}, profile-caption-gone=${profileCaptionGone}`);
 
-  // N6: 폼 조건 disclosure — 제외 도메인 추가 → 배지 표기 → 비우면 conditions 제거 (ADR 0010)
+  /*
+   * N6: 폼 조건 disclosure — 조건 추가 → 배지 표기 → 비우면 conditions 제거 (ADR 0010).
+   *
+   * 예전에는 제외 도메인으로 쟀는데, 그 조건은 퇴역해 저장이 걷어 간다 (ADR 0017, 티켓 02) —
+   * 그대로 두면 이 시나리오가 "폼 편집이 저장된다"가 아니라 "걷혀 나간다"를 재게 된다.
+   * 재는 대상(disclosure 열림 → 저장 → 배지 → 비우면 제거)은 그대로 두고, **살아남는**
+   * 조건인 요청 메서드로 옮긴다.
+   */
   const pollFirstMod = (test, timeoutMs = 5000) =>
     pollUntil(
       () => sw.evaluate(async () => {
@@ -1469,23 +1501,25 @@ try {
       timeoutMs,
       100,
     );
+  const methodChip = (name) =>
+    popup.getByRole('group', { name: 'Methods' }).getByRole('button', { name, exact: true });
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
   await popup.getByRole('button', { name: 'Conditions' }).click(); // disclosure 열기
-  await popup.getByLabel('Excluded domains').fill('skip.example.com');
+  await methodChip('POST').click();
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
-  const condAdded = await pollFirstMod((m) => m?.conditions?.excludedDomains?.[0] === 'skip.example.com');
+  const condAdded = await pollFirstMod((m) => m?.conditions?.requestMethods?.[0] === 'post');
   await waitFormClosed();
-  // 조건은 이제 배지 줄로 표시된다 (ui-refine 05) — 제외 도메인은 부정 접두(~)
-  const condSummaryShown = await popup.getByText('~skip.example.com', { exact: true }).first().isVisible().catch(() => false);
+  // 조건은 이제 배지 줄로 표시된다 (ui-refine 05) — 메서드는 대문자 배지
+  const condSummaryShown = await popup.getByText('POST', { exact: true }).first().isVisible().catch(() => false);
   // 조건이 있는 규칙의 폼은 disclosure가 열린 채 시작 — 비우면 conditions 자체가 제거된다
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
-  const disclosureOpen = await popup.getByLabel('Excluded domains').isVisible().catch(() => false);
-  await popup.getByLabel('Excluded domains').fill('');
+  const disclosureOpen = await methodChip('POST').isVisible().catch(() => false);
+  await methodChip('POST').click(); // 선택 해제 → 남는 조건이 없다
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
   const condCleared = await pollFirstMod((m) => m !== null && m.conditions === undefined);
   await waitFormClosed();
   record('N6: 폼 조건 편집 — 추가·요약 표기·비우면 제거',
-    condAdded?.conditions?.excludedDomains?.[0] === 'skip.example.com' && condSummaryShown
+    condAdded?.conditions?.requestMethods?.[0] === 'post' && condSummaryShown
       && disclosureOpen && condCleared?.conditions === undefined,
     `added=${JSON.stringify(condAdded?.conditions)}, summary=${condSummaryShown}, open=${disclosureOpen}, cleared=${condCleared?.conditions === undefined}`);
 
@@ -2258,13 +2292,18 @@ try {
     kbdSaved === true && popupClosedFormKept === 0 && formStillOpen && escClosed,
     `saved=${kbdSaved}, popup-only-close=${popupClosedFormKept === 0 && formStillOpen}, form-esc-closed=${escClosed}`);
 
-  // N19: 조건 배지 줄 + 빈 상태 CTA (ui-refine 05)
-  const expiryMs = Date.now() + 3_600_000;
+  /*
+   * N19: 조건 배지 줄 + 빈 상태 CTA (ui-refine 05).
+   *
+   * 배지 차원은 **살아남는 조건 둘**(메서드·리소스 종류)로 잰다 — 제외 도메인·만료 배지는
+   * 저장소 문이 그 조건을 걷어 가 렌더될 일이 없다 (ADR 0017, 티켓 02). 재는 것은 배지 줄이
+   * 여러 차원을 구별해 그리는가와 조건 없는 행이 높이에 0을 기여하는가로 그대로다.
+   */
   await seedProfiles([
     baseProfile('p-badge', 'Badges', [
       { kind: 'request-header', id: 'm1', name: 'X-Plain', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
       { kind: 'request-header', id: 'm2', name: 'X-Cond', value: '2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
-        conditions: { requestMethods: ['post'], excludedDomains: ['cdn.example.com'], expiresAt: expiryMs } },
+        conditions: { requestMethods: ['post'], resourceTypes: ['script'] } },
     ]),
   ]);
   await popup.reload();
@@ -2275,13 +2314,13 @@ try {
   const plainContentH = await rows.nth(0).locator('.min-w-0').evaluate((el) => el.getBoundingClientRect().height);
   const condRowH = await rows.nth(1).evaluate((el) => el.getBoundingClientRect().height);
   const plainHeightIsContentOnly = Math.abs(plainRowH - (plainContentH + 16)) <= 1.5;
-  // 조건 있는 행에만 배지 노출: POST(메서드), ~cdn(제외, 부정 접두), 만료(시계)
+  // 조건 있는 행에만 배지 노출: POST(메서드)와 script(리소스 종류) — 두 차원이 함께 선다
   const methodBadge = await popup.getByText('POST', { exact: true }).isVisible().catch(() => false);
-  const excludeBadge = await popup.getByText('~cdn.example.com', { exact: true }).isVisible().catch(() => false);
+  const resourceBadge = await popup.getByText('script', { exact: true }).first().isVisible().catch(() => false);
   const plainHasNoBadge = (await rows.nth(0).getByText('POST', { exact: true }).count()) === 0;
-  record('N19a: 조건 배지 줄 — 값 배지·제외 부정 접두, 조건 없는 행은 배지 줄이 높이에 0 기여',
-    methodBadge && excludeBadge && plainHasNoBadge && plainHeightIsContentOnly && plainRowH < condRowH,
-    `method=${methodBadge}, exclude=${excludeBadge}, plain-no-badge=${plainHasNoBadge}, plainH=${Math.round(plainRowH)}=content(${Math.round(plainContentH)})+16?${plainHeightIsContentOnly}, condH=${Math.round(condRowH)}`);
+  record('N19a: 조건 배지 줄 — 두 차원의 값 배지, 조건 없는 행은 배지 줄이 높이에 0 기여',
+    methodBadge && resourceBadge && plainHasNoBadge && plainHeightIsContentOnly && plainRowH < condRowH,
+    `method=${methodBadge}, resource=${resourceBadge}, plain-no-badge=${plainHasNoBadge}, plainH=${Math.round(plainRowH)}=content(${Math.round(plainContentH)})+16?${plainHeightIsContentOnly}, condH=${Math.round(condRowH)}`);
 
   // 빈 상태: 규칙 0개 프로필 → 안내 + CTA로 폼 열림
   await popup.getByRole('button', { name: '+ New profile' }).click();
@@ -3648,6 +3687,73 @@ try {
     `프로필 pressed=${JSON.stringify(onProfilesView.pressed)} selects=${onProfilesView.selects} search=${onProfilesView.search}, ` +
     `설정 selects=${onSettingsView.selects} search=${onSettingsView.search}, ` +
     `백업 selects=${onBackupsView.selects} search=${onBackupsView.search}`);
+
+  /*
+   * N45: 퇴역 공지 (티켓 02, ADR 0017) — **보는 것으로는 지워지지 않는다.**
+   *
+   * 여기서만 볼 수 있는 것이 있다. 코어 테스트는 "확인 명령이 공지를 지운다"는 전이를 재지만,
+   * 팝업이 렌더 직후 닫히는 **정상 동작**만으로 공지가 소비되는지는 실제 창을 열고 닫아야
+   * 드러난다 — 그 실패 모양에서는 규칙이 이미 넓어진 뒤에 그 이유를 설명하던 유일한 것이
+   * 사라진다. 확인이 화면 안에서만 끝나지 않고 저장소까지 닿았는지도 새 창이 증인이다.
+   */
+  await sw.evaluate(async () => {
+    await chrome.storage.local.set({
+      state: {
+        schemaVersion: 2,
+        paused: false,
+        profiles: [
+          { id: 'p-ret', name: 'Retired', active: true, shortLabel: 'R', color: '#2563eb',
+            modifications: [
+              { kind: 'request-header', id: 'm1', name: 'X-Ret', value: 'on', enabled: true,
+                mode: 'override', emptyMeans: 'remove', comment: '',
+                conditions: { tabDomains: ['tab.io'] } },
+            ] },
+        ],
+        materialized: {},
+        customHeaderNames: [],
+      },
+    });
+  });
+
+  const RETIREMENT_TEXT = /no longer supported/;
+  const openRetirementPopup = async () => {
+    const p = await context.newPage();
+    await p.goto(`chrome-extension://${extensionId}/popup.html?locale=en`);
+    await p.getByRole('button', { name: 'Add rule' }).first().waitFor({ timeout: 5000 });
+    await p.waitForTimeout(200);
+    return p;
+  };
+
+  /*
+   * 두 표면을 **동시에** 연다. 순차로 열고 닫으면 "한쪽이 다른 쪽 몫까지 소비하지 않는다"를
+   * 재지 못한다 — 그 실패 모양은 먼저 그린 창이 공지를 소비해 **아직 열려 있는** 다른 창이
+   * 빈손이 되는 것이라, 둘이 겹쳐 있는 동안을 봐야 드러난다.
+   */
+  const noticeFirst = await openRetirementPopup();
+  const noticeSecond = await openRetirementPopup();
+  const seenFirst = await noticeFirst.getByText(RETIREMENT_TEXT).count();
+  const seenSecond = await noticeSecond.getByText(RETIREMENT_TEXT).count();
+  // 수까지 본다 — 문구만 맞고 수가 비면 "몇 개가 넓어졌는지"를 말하지 못한다.
+  const noticeBody = seenFirst > 0 ? await noticeFirst.getByText(RETIREMENT_TEXT).first().innerText() : '';
+  await noticeFirst.close();
+
+  // 한쪽을 보고 닫았을 뿐이다 — 남은 창에도, 새로 여는 창에도 그대로 있어야 한다.
+  const stillSecond = await noticeSecond.getByText(RETIREMENT_TEXT).count();
+  await noticeSecond.getByRole('button', { name: 'Got it' }).click();
+  await noticeSecond.getByText(RETIREMENT_TEXT).first()
+    .waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
+  const afterAck = await noticeSecond.getByText(RETIREMENT_TEXT).count();
+  await noticeSecond.close();
+
+  // 확인이 쓰기 문을 지나 저장소까지 닿았는가 — 새 창이 증인이다.
+  const noticeThird = await openRetirementPopup();
+  const afterReopen = await noticeThird.getByText(RETIREMENT_TEXT).count();
+  await noticeThird.close();
+
+  record('N45: 퇴역 공지 — 두 표면이 함께 보고, 보는 것으로는 안 지워지며, 확인해야 저장소에서 사라진다',
+    seenFirst > 0 && seenSecond > 0 && /\b1 rule\b/.test(noticeBody) && stillSecond > 0 &&
+      afterAck === 0 && afterReopen === 0,
+    `동시=[${seenFirst},${seenSecond}] "${noticeBody}", 한쪽 닫은 뒤=${stillSecond}, ack후=${afterAck}, 재열기=${afterReopen}`);
 
   // N33: 스크롤바 트랙의 opacity 전이가 reduced-motion에서 **꺼진다** (릴리스 게이트 R-2).
   //

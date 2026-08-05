@@ -23,29 +23,38 @@ export type UrlMatchType = 'domain' | 'contains' | 'prefix' | 'regex';
 /**
  * 규칙의 적용 조건 (ADR 0010) — 프로필 필터를 대체하는 규칙 단위 조건.
  * 전부 선택 필드이고, DNR 조건으로 직접 컴파일된다.
+ *
+ * **퇴역한 넷이 타입에 남아 있는 것은 의도다** (ADR 0017, 티켓 02). 저장소에서는 업그레이드가
+ * 이미 걷어 갔지만, 걷어 가기 **직전**의 값을 표현할 자리가 필요하다 — 진짜 v1 상태에는 규칙
+ * 조건이 없고 레거시 필터 실체화가 이 필드들을 만들어 내므로, 타입에서 빼면 그 산출물을
+ * 담을 수 없다. 이 필드들을 읽어 실제로 컴파일하던 서브시스템(만료 알람·탭 감시)의 철거는
+ * 티켓 10의 몫이고, 그때 타입에서도 함께 사라진다.
  */
 export interface RuleConditions {
-  /** 이 도메인들(서브도메인 포함)의 요청에는 적용하지 않는다. */
+  /** 퇴역 (ADR 0017) — 업그레이드 입력에만 나타난다. 이 도메인들의 요청에는 적용하지 않았다. */
   excludedDomains?: string[];
   resourceTypes?: ResourceType[];
   requestMethods?: RequestMethod[];
-  /** 요청 출처(origin) 도메인 매칭. */
+  /** 퇴역 (ADR 0017) — 업그레이드 입력에만 나타난다. 요청 출처(origin) 도메인 매칭. */
   initiatorDomains?: string[];
-  /** 이 도메인 탭에서 나가는 요청에만 적용 (탭 전개 → tabIds). */
+  /** 퇴역 (ADR 0017) — 업그레이드 입력에만 나타난다. 이 도메인 탭에서 나가는 요청에만 적용. */
   tabDomains?: string[];
-  /** 자동 해제 시각(epoch ms) — 만료 알람이 이 규칙만 끈다. */
+  /** 퇴역 (ADR 0017) — 업그레이드 입력에만 나타난다. 자동 해제 시각(epoch ms). */
   expiresAt?: number;
 }
 
-/** 조건 객체 정리 — 빈 필드는 벗기고, 전부 비면 undefined. */
+/**
+ * 조건 객체 정리 — 빈 필드는 벗기고, 전부 비면 undefined.
+ *
+ * **퇴역한 넷은 여기를 지나지 못한다** (ADR 0017, 티켓 02). 벗기기와 같은 변경에서 사라지는
+ * 것이 중요하다: 분기를 남기면 낡은 값이 화면에 보이지 않은 채 저장소에서 계속 살아남고,
+ * 벗기기 없이 분기만 지우면 무관한 저장 한 번에 그 값이 조용히 사라진다 — 그때는 규칙이
+ * 넓어졌다고 알릴 자리도 없다.
+ */
 export function normalizeConditions(conditions: RuleConditions): RuleConditions | undefined {
   const next: RuleConditions = {};
-  if (conditions.excludedDomains?.length) next.excludedDomains = conditions.excludedDomains;
   if (conditions.resourceTypes?.length) next.resourceTypes = conditions.resourceTypes;
   if (conditions.requestMethods?.length) next.requestMethods = conditions.requestMethods;
-  if (conditions.initiatorDomains?.length) next.initiatorDomains = conditions.initiatorDomains;
-  if (conditions.tabDomains?.length) next.tabDomains = conditions.tabDomains;
-  if (conditions.expiresAt !== undefined) next.expiresAt = conditions.expiresAt;
   return Object.keys(next).length > 0 ? next : undefined;
 }
 
@@ -364,9 +373,27 @@ export interface Profile {
   modifications: Modification[];
 }
 
+/**
+ * 업그레이드가 퇴역 조건을 벗기며 남긴 **일회성 공지** (ADR 0017, 티켓 02).
+ *
+ * 상태에 담는 이유는 컴파일 경고로는 못 하기 때문이다 — 컴파일은 이미 정제된 프로필을
+ * 받아 그 시점엔 영향 수가 사라지고 없다. 그리고 **보는 것으로는 지워지지 않는다**:
+ * 확인 명령이 쓰기 문을 지나 성공해야 사라진다. 팝업은 렌더 직후 닫히는 것이 정상이라,
+ * 그리는 것만으로 소비하면 규칙이 이미 넓어진 뒤에 유일한 설명이 사라진다.
+ */
+export interface RetirementNotice {
+  /** 조건을 잃은 **규칙** 수. 규칙 하나가 여럿을 잃어도 하나로 센다. */
+  rules: number;
+}
+
 export interface StoredState {
   schemaVersion: typeof SCHEMA_VERSION;
   paused: boolean;
+  /**
+   * 퇴역 공지 (ADR 0017) — 확인되기 전까지만 있다. 선택 필드인 것이 계약이다: 부재가
+   * "알릴 것이 없다"이고, 확인 명령은 값을 0으로 두는 대신 필드를 **지운다**.
+   */
+  retirementNotice?: RetirementNotice;
   /**
    * 명암 선호 (ADR 0015). 포맷 버전을 올리지 않는 이유: 새 필드는 union을 넓히지 않고
    * **더해질** 뿐이라 예전 상태도 백필로 그대로 읽힌다(customHeaderNames와 같은 계열).
