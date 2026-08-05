@@ -2322,7 +2322,8 @@ try {
   await seedProfiles([
     baseProfile('p-badge', 'Badges', [
       { kind: 'request-header', id: 'm1', name: 'X-Plain', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
-      { kind: 'request-header', id: 'm2', name: 'X-Cond', value: '2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
+      // 메모가 실린 규칙 하나 — 제목이 메모로 렌더되는지는 메모가 있어야만 잴 수 있다.
+      { kind: 'request-header', id: 'm2', name: 'X-Cond', value: '2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: 'My note',
         urlFilter: 'cond\\.example', urlMatchType: 'regex',
         conditions: { requestMethods: ['post'], resourceTypes: ['script'] } },
     ]),
@@ -2339,6 +2340,29 @@ try {
     row.evaluate((el) =>
       [...el.querySelectorAll('.min-w-0 .flex-wrap > *')].map((c) => c.textContent.trim()),
     );
+  /**
+   * 행 첫 줄의 제목과 뱃지 — **DOM에서 읽는다.**
+   *
+   * 순수 테스트는 `ruleView().title`까지만 말하고 그것이 실제로 그려지는지는 말하지 못한다.
+   * 이 단언이 없는 동안에는 제목·뱃지 렌더를 통째로 지워도 전 게이트가 통과했다.
+   */
+  const rowHeading = (row) =>
+    row.evaluate((el) => {
+      const line = el.querySelector('.min-w-0 > div:first-child');
+      return {
+        title: line.querySelector('span:first-child').textContent.trim(),
+        badge: line.querySelector('span:nth-child(2)').textContent.trim(),
+      };
+    });
+  const plainHeading = await rowHeading(rows.nth(0));
+  const condHeading = await rowHeading(rows.nth(1));
+  // 메모가 없으면 **종류 이름**이고(헤더 이름이 아니다), 있으면 그 메모다 (story 10).
+  const headingOk =
+    plainHeading.title === 'Request header' &&
+    condHeading.title === 'My note' &&
+    plainHeading.badge === 'REQ' &&
+    condHeading.badge === 'REQ';
+
   const plainChips = await chipTexts(rows.nth(0));
   const condChips = await chipTexts(rows.nth(1));
   // 조건이 없어도 스코프 칩은 선다 — 스코프는 조건이 아니라 규칙의 대상이다.
@@ -2350,9 +2374,10 @@ try {
   // 정규식 스코프에는 표시가 붙는다 (story 16) — 와일드카드와 헷갈리면 안 걸리는 이유를 모른다.
   const regexMark = await rows.nth(1).getByLabel('Regex (advanced)').count();
   const plainHasNoRegexMark = (await rows.nth(0).getByLabel('Regex (advanced)').count()) === 0;
-  record('N19a: 행 칩 줄 — 스코프가 맨 앞, 효과·리소스 묶음(토큰 아님)·메서드 순, 정규식 표시',
-    plainOk && condOk && rawTokenGone && regexMark === 1 && plainHasNoRegexMark,
-    `plain=${JSON.stringify(plainChips)}, cond=${JSON.stringify(condChips)}, raw-token-gone=${rawTokenGone}, regex-mark=${regexMark}, plain-mark-none=${plainHasNoRegexMark}`);
+  record('N19a: 행 — 제목(메모/종류 이름)·뱃지, 칩 줄은 스코프가 맨 앞, 효과·리소스 묶음(토큰 아님)·메서드 순, 정규식 표시',
+    headingOk && plainOk && condOk && rawTokenGone && regexMark === 1 && plainHasNoRegexMark,
+    `제목·뱃지=${JSON.stringify([plainHeading, condHeading])}=${headingOk}, ` +
+      `plain=${JSON.stringify(plainChips)}, cond=${JSON.stringify(condChips)}, raw-token-gone=${rawTokenGone}, regex-mark=${regexMark}, plain-mark-none=${plainHasNoRegexMark}`);
 
   // 빈 상태: 규칙 0개 프로필 → 안내 + CTA로 폼 열림
   await popup.getByRole('button', { name: '+ New profile' }).click();
@@ -4294,10 +4319,21 @@ try {
       return { border: cs.borderTopColor, bg: cs.backgroundColor };
     });
   });
+  /*
+   * **방향까지 잰다.** 대칭 비교(`!==` 둘)만으로는 삼항을 뒤집어 펼쳐진 카드를 민무늬로
+   * 만들어도 통과한다 — story 6이 정확히 반대가 된 상태인데도. 위 `openLayout`이 이미
+   * 열린 행이 맨 위임을 못박았으므로 DOM 순서상 `cardStyles[0]`이 펼쳐진 카드다.
+   *
+   * 방향을 재는 술어는 **배경의 채움 여부**다: 팔레트 값을 못박지 않으면서 "펼쳐진 쪽이
+   * 칠해져 있고 접힌 쪽은 민무늬"라는 결정 자체를 겨눈다.
+   */
+  const isTransparent = (color) => /rgba\(0, 0, 0, 0\)|transparent/.test(color);
   const cardsDiffer =
     cardStyles.length === 2 &&
     cardStyles[0].border !== cardStyles[1].border &&
-    cardStyles[0].bg !== cardStyles[1].bg;
+    cardStyles[0].bg !== cardStyles[1].bg &&
+    !isTransparent(cardStyles[0].bg) &&
+    isTransparent(cardStyles[1].bg);
 
   // 같은 버튼을 다시 누르면 접힌다 (story 5).
   await editIcons.nth(0).click();

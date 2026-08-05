@@ -246,6 +246,46 @@ describe('ruleView — 조건 칩', () => {
     expect(ruleView(header(), t).chips).toEqual(['X-Test: aaa']);
   });
 
+  /*
+   * 퇴역한 넷은 **칩을 만들지 않는다** — 예전의 조건 배지(제외 도메인 `~`, 요청 출처 `@`,
+   * 탭 도메인 `tab:`, 만료 시계)가 그 조건들과 함께 사라졌다.
+   *
+   * 이 계약을 잴 자리는 단위뿐이다. 저장소 문(`upgradeProfile`)이 적재에서 그 필드들을
+   * 걷어 가므로 실제 브라우저에서는 이 입력에 도달할 수 없고, 그래서 분기가 되살아나도
+   * 스모크는 아무것도 눈치채지 못한다. 타입은 티켓 10까지 그 필드를 들고 있으므로 여기서만
+   * 막을 수 있다.
+   */
+  it('퇴역 조건은 칩을 만들지 않는다 — 값이 남아 있어도', () => {
+    const view = ruleView(
+      header({
+        conditions: {
+          excludedDomains: ['skip.io'],
+          initiatorDomains: ['init.io'],
+          tabDomains: ['tab.io'],
+          expiresAt: 1_700_000_000_000,
+        },
+      }),
+      t,
+    );
+    expect(view.chips).toEqual(['X-Test: aaa']);
+  });
+
+  // 감도 대조 — 살아남는 조건이 섞여 있으면 그것만 칩이 된다(부재 단언이 공허해지지 않게).
+  it('퇴역 조건에 살아남는 조건이 섞여 있으면 살아남는 것만 칩이 된다', () => {
+    const view = ruleView(
+      header({
+        conditions: {
+          tabDomains: ['tab.io'],
+          expiresAt: 1,
+          resourceTypes: ['image'],
+          requestMethods: ['get'],
+        },
+      }),
+      t,
+    );
+    expect(view.chips).toEqual(['X-Test: aaa', 'Image', 'GET']);
+  });
+
   // 저장된 값의 순서가 아니라 **묶음의 표시 순서**로 나온다 — 행마다 칩 차례가 달라지지 않는다.
   it('리소스 종류는 여덟 묶음의 이름으로 접혀 나온다', () => {
     const view = ruleView(header({ conditions: { resourceTypes: ['script', 'sub_frame'] } }), t);
