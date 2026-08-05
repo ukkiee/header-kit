@@ -8,7 +8,7 @@
 
 **Blocked by:** 06 (규칙 폼 — 세 필드가 그 안에 있다)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] 헤더 이름 제안이 그대로 동작한다
 - [ ] 쿠키 이름 제안이 프리셋 + 사용 이력으로 뜬다
