@@ -14,6 +14,7 @@ import {
   type SetCookieParts,
 } from '@/core/schema';
 import { RuleConditionsFields } from './rule-conditions-fields';
+import { KIND_LABELS } from './rule-summary';
 import { hasPlaceholders } from '@/core/placeholder';
 import { AlertBanner } from '@/ui/alert-banner';
 import { Button } from '@/ui/press-button';
@@ -101,17 +102,6 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
     const issue = fieldErrors.find((e) => e.field === field);
     if (!issue) return undefined;
     return issue.reason === 'required' ? t('requiredField') : t('unsupportedPattern');
-  };
-
-  const KIND_LABELS: Record<ModificationKind, MessageKey> = {
-    'request-header': 'kindRequestHeader',
-    'response-header': 'kindResponseHeader',
-    cookie: 'modCookie',
-    'set-cookie': 'modSetCookie',
-    redirect: 'modRedirect',
-    'user-agent': 'kindUserAgent',
-    'header-removal': 'kindHeaderRemoval',
-    block: 'kindBlock',
   };
 
   const switchKind = (kind: ModificationKind) => {

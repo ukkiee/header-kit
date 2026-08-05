@@ -1,6 +1,9 @@
 /**
- * 만료 시각(expiresAt, epoch ms) 표기의 단일 출처 — 폼의 datetime-local 값과
- * 목록 배지가 같은 local wall-clock을 쓰게 한다 (표기가 갈라지지 않도록).
+ * 만료 시각(expiresAt, epoch ms) 표기 — 폼의 datetime-local 입력이 쓴다.
+ *
+ * 목록 배지용 `formatExpiryBadge`는 티켓 05에서 걷었다: 자동 해제 시각이 ADR 0017에서
+ * 퇴역해 행이 그 배지를 그리지 않고, 남겨 두면 아무도 부르지 않는 표기 규칙이 된다.
+ * 남은 둘도 티켓 06이 폼에서 그 입력을 없앨 때 함께 사라진다.
  */
 
 /** datetime-local 입력값 `YYYY-MM-DDTHH:MM` (local wall-clock). 미설정이면 빈 문자열. */
@@ -14,9 +17,4 @@ export function epochToLocalInput(ms: number | undefined): string {
 export function localInputToEpoch(value: string): number | undefined {
   const ms = new Date(value).getTime();
   return Number.isNaN(ms) || ms <= 0 ? undefined : ms;
-}
-
-/** 목록 배지용 표기 `YYYY-MM-DD HH:MM` — 폼 값과 같은 계산에서 파생(구분자만 다름). */
-export function formatExpiryBadge(ms: number): string {
-  return epochToLocalInput(ms).replace('T', ' ');
 }

@@ -262,6 +262,7 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
     <ProfileSection
       key={selectedProfile.id}
       profile={selectedProfile}
+      paused={state.paused}
       onCommand={dispatch}
       onDeleteRule={deleteRuleWithUndo}
       userHeaders={state.customHeaderNames}

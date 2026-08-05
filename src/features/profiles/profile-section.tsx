@@ -16,8 +16,19 @@ import {
 import { RuleRow } from '@/features/modifications/rule-row';
 import { useT } from '@/ui/i18n-context';
 
+/**
+ * 접힌 카드와 펼쳐진 카드가 **테두리와 배경 둘 다** 다르다 (story 6).
+ *
+ * 하나만 다르면 열린 것을 알아보는 단서가 하나뿐이고, 그 하나가 색이면 색을 못 보는 사람에게
+ * 아무 단서도 남지 않는다. 눌린 수정 아이콘까지 세면 세 겹이라 어느 하나가 죽어도 남는다.
+ */
+const collapsedCard = 'rounded-lg border border-border';
+const expandedCard = 'rounded-lg border border-primary bg-secondary/40';
+
 export interface ProfileSectionProps {
   profile: Profile;
+  /** 전역 정지 — 행이 꺼진 것과 같은 흐림으로 읽힌다 (story 12). */
+  paused: boolean;
   onCommand: (command: Command) => void;
   /** 규칙 삭제 — 스냅샷을 잡아 Undo 토스트를 띄운다 (ui-refine 07). */
   onDeleteRule: (profileId: string, modificationId: string) => void;
@@ -37,6 +48,7 @@ export interface ProfileSectionProps {
 
 export function ProfileSection({
   profile,
+  paused,
   onCommand,
   onDeleteRule,
   userHeaders,
@@ -162,39 +174,55 @@ export function ProfileSection({
         </div>
       )}
 
-      {/* 아코디언 카드 목록 (티켓 10, ADR 0006/0009) — 규칙 하나가 카드 하나다. 수정
-          아이콘을 누르면 그 규칙이 **맨 위로 올라오며**(orderedModifications) 카드가 폼으로
-          펼쳐지고, 저장·취소하면 접혀 두 줄 요약으로 돌아온다. 편집 중인 규칙을 목록에서
-          잃지 않게 하는 것이 목적이라 순서는 편집이 끝나면 원래대로 돌아온다. */}
+      {/*
+        아코디언 카드 목록 (ADR 0017, 스펙 story 1–7) — 규칙 하나가 카드 하나다.
+
+        **행은 사라지지 않는다.** 예전에는 편집 중인 규칙의 행이 폼으로 교체돼, 무엇을 고치는
+        중인지가 화면에서 없어졌다. 이제 행은 그대로 있고 그 아래로 폼이 펼쳐진다 — 그것이
+        아코디언이라는 말의 뜻이고, 이 티켓의 이유다.
+
+        펼쳐진 규칙은 **맨 위로 올라온다**(orderedModifications). 목록 자체의 순서(상태)는
+        건드리지 않으므로 폼을 닫으면 원래 자리로 돌아온다 — 저장으로 끝나든 취소로 끝나든
+        사용자가 기억하는 순서가 유지된다.
+      */}
       <div className="flex flex-col gap-1.5">
         <AnimatePresence initial={false}>
-          {orderedModifications.map((modification) =>
-            // 행↔폼 교체는 키를 달리해 AnimatePresence가 height enter/exit로 전환한다 —
-            // 폼 열림에 부드러운 height-in을 준다 (ui-refine 08).
-            editingRule === modification.id ? (
-              <MotionRow key={`${modification.id}-form`}>
-                <div className="rounded-lg border border-border p-2">
-                  {RuleForm ? (
-                    <RuleForm
-                      initial={modification}
-                      userHeaders={userHeaders}
-                      onCancel={() => setEditingRule(null)}
-                      onSave={(next) => saveItem(next, 'update')}
-                    />
-                  ) : (
-                    <RuleFormSlot />
-                  )}
-                </div>
-              </MotionRow>
-            ) : (
+          {/*
+            새 규칙 폼이 목록 **맨 위**에 카드로 열린다 (story 7). 예전에는 목록 아래에
+            있어서, 규칙이 많으면 방금 만들기 시작한 것을 찾아 스크롤해야 했다.
+          */}
+          {editingRule === 'new' && (
+            <MotionRow key="new-rule-form">
+              <div className={`${expandedCard} p-2`}>
+                {RuleForm ? (
+                  <RuleForm
+                    userHeaders={userHeaders}
+                    onCancel={() => setEditingRule(null)}
+                    onSave={(next) => saveItem(next, 'add')}
+                  />
+                ) : (
+                  <RuleFormSlot />
+                )}
+              </div>
+            </MotionRow>
+          )}
+
+          {orderedModifications.map((modification) => {
+            const open = editingRule === modification.id;
+            return (
               // 규칙 행 추가/삭제 시 fade+height enter/exit (ui-refine 08) — reduced-motion 존중.
               <MotionRow key={modification.id}>
                 {/* 폼으로 가는 길목 셋째 — 행 어디에 포인터가 닿거나 포커스가 들어오면 청크를
-                    받기 시작한다. 연필 아이콘까지 두 층(RuleRow·ItemRow)을 뚫는 대신 여기에
-                    두면 배선이 한 곳이고, 행에 닿는 것 자체가 이미 편집 의도에 가깝다. */}
-                <div className="rounded-lg border border-border px-2.5" {...ruleFormIntentProps}>
+                    받기 시작한다. 연필 아이콘까지 뚫고 내려보내는 대신 여기에 두면 배선이 한
+                    곳이고, 행에 닿는 것 자체가 이미 편집 의도에 가깝다. */}
+                <div
+                  className={`px-2.5 ${open ? expandedCard : collapsedCard}`}
+                  {...ruleFormIntentProps}
+                >
                   <RuleRow
                     modification={modification}
+                    paused={paused}
+                    editing={open}
                     onToggleEnabled={(enabled) =>
                       onCommand({
                         type: 'update-modification',
@@ -202,34 +230,36 @@ export function ProfileSection({
                         modification: { ...modification, enabled } as Modification,
                       })
                     }
-                    onEdit={() => openRuleForm(modification.id)}
+                    // 같은 버튼으로 열고 닫는다 (story 5) — 열려 있으면 누르는 것이 접기다.
+                    onEdit={() => (open ? setEditingRule(null) : openRuleForm(modification.id))}
                     onRemove={() => onDeleteRule(profile.id, modification.id)}
                   />
+                  {/* 폼이 행 **아래로** 펼쳐진다 — 열림에 height-in, 닫힘에 height-out
+                      (ui-refine 08). AnimatePresence가 없으면 닫힘이 즉시 사라진다. */}
+                  <AnimatePresence initial={false}>
+                    {open && (
+                      <MotionRow key={`${modification.id}-form`}>
+                        <div className="border-t border-border py-2">
+                          {RuleForm ? (
+                            <RuleForm
+                              initial={modification}
+                              userHeaders={userHeaders}
+                              onCancel={() => setEditingRule(null)}
+                              onSave={(next) => saveItem(next, 'update')}
+                            />
+                          ) : (
+                            <RuleFormSlot />
+                          )}
+                        </div>
+                      </MotionRow>
+                    )}
+                  </AnimatePresence>
                 </div>
               </MotionRow>
-            ),
-          )}
+            );
+          })}
         </AnimatePresence>
       </div>
-
-      {/* 새 규칙 폼은 열릴 때 height-in(ui-refine 08), 닫힐 때 height-out 한다.
-          AnimatePresence가 없으면 열림만 애니메이션되고 닫힘은 즉시 사라진다 —
-          story 21("취소·저장을 누르면 폼이 자연스럽게 접힌다")이 절반만 성립했다. */}
-      <AnimatePresence initial={false}>
-        {editingRule === 'new' && (
-          <MotionRow key="new-rule-form">
-            {RuleForm ? (
-              <RuleForm
-                userHeaders={userHeaders}
-                onCancel={() => setEditingRule(null)}
-                onSave={(next) => saveItem(next, 'add')}
-              />
-            ) : (
-              <RuleFormSlot />
-            )}
-          </MotionRow>
-        )}
-      </AnimatePresence>
     </Card>
   );
 }

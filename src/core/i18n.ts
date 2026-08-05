@@ -37,6 +37,19 @@ const en = {
   condExcludedDomains: 'Excluded domains',
   condResourceTypes: 'Resource types',
   condMethods: 'Methods',
+  /*
+   * 리소스 묶음 여덟 개 (ADR 0017, 티켓 05) — 사용자가 고르는 이름이다. 브라우저의 열다섯
+   * 가지 토큰(`main_frame` 등)은 이 카탈로그에 들어오지 않는다: 그것들은 지역화 대상이 아니라
+   * 묶음이 감추는 구현 세부이고, 화면에 새면 여덟 개로 줄인 의미가 없어진다.
+   */
+  groupXhr: 'XHR',
+  groupDocument: 'Document',
+  groupImage: 'Image',
+  groupScript: 'Script',
+  groupStyle: 'Style',
+  groupMedia: 'Media',
+  groupFont: 'Font',
+  groupOther: 'Other',
   condInitiator: 'Initiator domains',
   condTabDomains: 'Tab domains',
   condExpires: 'Auto-off at',
@@ -268,6 +281,14 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     condExcludedDomains: '제외 도메인',
     condResourceTypes: '리소스 종류',
     condMethods: '메서드',
+    groupXhr: 'XHR',
+    groupDocument: '문서',
+    groupImage: '이미지',
+    groupScript: '스크립트',
+    groupStyle: '스타일',
+    groupMedia: '미디어',
+    groupFont: '폰트',
+    groupOther: '기타',
     condInitiator: '요청 출처 도메인',
     condTabDomains: '탭 도메인',
     condExpires: '자동 해제 시각',

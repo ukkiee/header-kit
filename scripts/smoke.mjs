@@ -1855,7 +1855,18 @@ try {
     (h) => h['x-k'] === '1' && h['x-u'] === 'u',
   );
   const outScope = await fetchEchoHeaders(pageB, '/headers');
-  const scopedSummary = await popup.getByText(/scope=1.*→.*X-K/i).first().isVisible().catch(() => false);
+  /*
+   * 행이 스코프와 효과를 **각각의 칩으로** 그린다 (ADR 0017, 티켓 05). 예전에는 `스코프 →
+   * 효과` 한 문자열이라 정규식 하나로 잴 수 있었는데, 이제 둘이 따로라 둘 다 있는지를 본다 —
+   * 스코프 칩만 보면 효과가 사라져도 통과하고, 그 반대도 마찬가지다.
+   */
+  const ruleRow = popup
+    .locator('.group')
+    .filter({ has: popup.getByRole('button', { name: 'Edit', exact: true }) })
+    .first();
+  const scopedSummary =
+    (await ruleRow.getByText('scope=1', { exact: false }).first().isVisible().catch(() => false)) &&
+    (await ruleRow.getByText(/^X-K: 1$/).first().isVisible().catch(() => false));
   // 3) regex(고급) 방식으로 전환 — 실요청 검증
   await waitFormClosed();
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
@@ -1950,8 +1961,13 @@ try {
     .waitFor({ timeout: 5000 })
     .then(() => true, () => false);
   await popup.mouse.move(0, 0);
-  // 툴팁은 키보드 포커스(focus-visible)에 열린다 — 프로그램적 focus()가 아니라 실제 Tab
-  await popup.getByRole('checkbox').first().focus();
+  /*
+   * 툴팁은 키보드 포커스(focus-visible)에 열린다 — 프로그램적 focus()가 아니라 실제 Tab.
+   * 시작점을 **그 행 안의** 스위치로 잡는다 (티켓 05에서 체크박스가 토글 스위치가 됐다):
+   * 페이지 전역에서 첫 스위치를 잡으면 프로필 열의 토글이라, 거기서 Tab 해도 이 행의 편집
+   * 아이콘에 닿지 않는다.
+   */
+  await row.getByRole('switch').first().focus();
   await popup.keyboard.press('Tab');
   const tooltipOnFocus = await popup
     .getByRole('tooltip')
@@ -2293,34 +2309,50 @@ try {
     `saved=${kbdSaved}, popup-only-close=${popupClosedFormKept === 0 && formStillOpen}, form-esc-closed=${escClosed}`);
 
   /*
-   * N19: 조건 배지 줄 + 빈 상태 CTA (ui-refine 05).
+   * N19a: 행 둘째 줄의 칩 구성 + 빈 상태 CTA (ADR 0017, 티켓 05).
    *
-   * 배지 차원은 **살아남는 조건 둘**(메서드·리소스 종류)로 잰다 — 제외 도메인·만료 배지는
-   * 저장소 문이 그 조건을 걷어 가 렌더될 일이 없다 (ADR 0017, 티켓 02). 재는 것은 배지 줄이
-   * 여러 차원을 구별해 그리는가와 조건 없는 행이 높이에 0을 기여하는가로 그대로다.
+   * **재는 계약이 바뀌었다.** 예전에는 "조건 없는 행은 배지 줄이 높이에 0을 기여한다"였다 —
+   * 조건이 있을 때만 줄이 생겼기 때문이다. 시안의 둘째 줄은 **스코프 칩으로 시작**하므로
+   * 조건이 없어도 줄이 선다(story 13: 어디에 걸리는지가 가장 중요하다). 높이 불변을 계속
+   * 재면 그 결정을 되돌리라고 요구하는 테스트가 된다.
+   *
+   * 대신 **무엇이 어느 칩으로 나오는가**를 잰다: 스코프가 맨 앞이고, 조건 칩은 조건 있는
+   * 행에만 붙으며, 리소스는 브라우저 토큰(`script`)이 아니라 묶음 이름(`Script`)이다.
    */
   await seedProfiles([
     baseProfile('p-badge', 'Badges', [
       { kind: 'request-header', id: 'm1', name: 'X-Plain', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
       { kind: 'request-header', id: 'm2', name: 'X-Cond', value: '2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
+        urlFilter: 'cond\\.example', urlMatchType: 'regex',
         conditions: { requestMethods: ['post'], resourceTypes: ['script'] } },
     ]),
   ]);
   await popup.reload();
   const rows = popup.locator('.group').filter({ has: popup.getByRole('button', { name: 'Edit', exact: true }) });
-  // 조건 없는 행의 높이 = 내부 텍스트(제목+요약) + 세로 패딩(py-2=16px). 배지 줄이
-  // 없으므로 높이에 0을 기여해야 한다 — '기존 높이 유지'의 실질 불변식(AC2).
-  const plainRowH = await rows.nth(0).evaluate((el) => el.getBoundingClientRect().height);
-  const plainContentH = await rows.nth(0).locator('.min-w-0').evaluate((el) => el.getBoundingClientRect().height);
-  const condRowH = await rows.nth(1).evaluate((el) => el.getBoundingClientRect().height);
-  const plainHeightIsContentOnly = Math.abs(plainRowH - (plainContentH + 16)) <= 1.5;
-  // 조건 있는 행에만 배지 노출: POST(메서드)와 script(리소스 종류) — 두 차원이 함께 선다
-  const methodBadge = await popup.getByText('POST', { exact: true }).isVisible().catch(() => false);
-  const resourceBadge = await popup.getByText('script', { exact: true }).first().isVisible().catch(() => false);
-  const plainHasNoBadge = (await rows.nth(0).getByText('POST', { exact: true }).count()) === 0;
-  record('N19a: 조건 배지 줄 — 두 차원의 값 배지, 조건 없는 행은 배지 줄이 높이에 0 기여',
-    methodBadge && resourceBadge && plainHasNoBadge && plainHeightIsContentOnly && plainRowH < condRowH,
-    `method=${methodBadge}, resource=${resourceBadge}, plain-no-badge=${plainHasNoBadge}, plainH=${Math.round(plainRowH)}=content(${Math.round(plainContentH)})+16?${plainHeightIsContentOnly}, condH=${Math.round(condRowH)}`);
+  /**
+   * 한 행의 칩 텍스트를 **화면 순서대로** — 스코프가 맨 앞인지는 순서로만 잴 수 있다.
+   *
+   * 칩 줄은 행의 유일한 wrap 컨테이너다. `div:last-child`로 짚던 것을 바꾼 것은 자리로
+   * 짚으면 행에 줄이 하나 늘 때 엉뚱한 것을 겨눈 채 통과하거나 실패하기 때문이다.
+   */
+  const chipTexts = (row) =>
+    row.evaluate((el) =>
+      [...el.querySelectorAll('.min-w-0 .flex-wrap > *')].map((c) => c.textContent.trim()),
+    );
+  const plainChips = await chipTexts(rows.nth(0));
+  const condChips = await chipTexts(rows.nth(1));
+  // 조건이 없어도 스코프 칩은 선다 — 스코프는 조건이 아니라 규칙의 대상이다.
+  const plainOk = plainChips.join('|') === 'All URLs|X-Plain: 1';
+  // 순서: 스코프 → 효과 → 리소스 묶음 → 요청 메서드. 리소스는 묶음 이름이다.
+  const condOk = condChips.join('|') === 'cond\\.example|X-Cond: 2|Script|POST';
+  // 브라우저 토큰이 화면 어디로도 새지 않는다 — 폼과 행이 같은 어휘를 쓴다.
+  const rawTokenGone = (await popup.getByText('script', { exact: true }).count()) === 0;
+  // 정규식 스코프에는 표시가 붙는다 (story 16) — 와일드카드와 헷갈리면 안 걸리는 이유를 모른다.
+  const regexMark = await rows.nth(1).getByLabel('Regex (advanced)').count();
+  const plainHasNoRegexMark = (await rows.nth(0).getByLabel('Regex (advanced)').count()) === 0;
+  record('N19a: 행 칩 줄 — 스코프가 맨 앞, 효과·리소스 묶음(토큰 아님)·메서드 순, 정규식 표시',
+    plainOk && condOk && rawTokenGone && regexMark === 1 && plainHasNoRegexMark,
+    `plain=${JSON.stringify(plainChips)}, cond=${JSON.stringify(condChips)}, raw-token-gone=${rawTokenGone}, regex-mark=${regexMark}, plain-mark-none=${plainHasNoRegexMark}`);
 
   // 빈 상태: 규칙 0개 프로필 → 안내 + CTA로 폼 열림
   await popup.getByRole('button', { name: '+ New profile' }).click();
@@ -3943,7 +3975,17 @@ try {
         const cs = s ? getComputedStyle(s) : null;
         return cs ? { bg: cs.backgroundColor, border: cs.borderTopColor } : null;
       }),
-      switches: [...document.querySelectorAll('[role="switch"]')].map((s) => s.getAttribute('aria-label')),
+      /*
+       * **프로필 토글만** 센다 — 페이지 전역에서, 이름으로 거른다 (티켓 05).
+       *
+       * 이 자리가 지키는 것은 "프로필 하나에 토글 하나 — 편집기 헤더에 같은 이름의 스위치가
+       * 또 서면 안 된다"이고, 그 가드는 **전역**이라야 뜻이 있다. 티켓 05가 규칙 행에 켜고
+       * 끄기 스위치를 세우면서 전역 집계가 그것까지 세게 됐는데, 그렇다고 프로필 열 안으로
+       * 좁히면 열 밖에 생긴 중복을 못 잡는다 — 원래 막으려던 것이 정확히 그 경우다.
+       */
+      switches: [...document.querySelectorAll('[role="switch"]')]
+        .map((s) => s.getAttribute('aria-label'))
+        .filter((label) => label?.startsWith('Toggle ')),
       search: !!document.querySelector('input[aria-label^="Search profiles"]'),
       newProfile: [...document.querySelectorAll('button')].some((b) => b.textContent.trim() === '+ New profile'),
     };
@@ -4200,9 +4242,13 @@ try {
       `재개=${JSON.stringify(wordResumed)}`);
 
   /*
-   * N41b: 아코디언 편집 (티켓 10, 스펙 story 4·5) — 두 번째 규칙의 수정 아이콘을 누르면
-   * 그 규칙이 **맨 위로** 올라오며 폼이 인라인으로 펼쳐지고, 저장하면 접혀 두 줄 요약으로
-   * 돌아온다. 순서는 목록 상태가 아니라 렌더만 바꾸므로 편집이 끝나면 원래대로 돌아온다.
+   * N41b: 아코디언 편집 (ADR 0017, 스펙 story 1–6) — **행이 사라지지 않는다.**
+   *
+   * 예전 계약에서는 편집 중인 규칙의 행이 폼으로 **교체**됐고, 이 자리는 "폼이 남은 행보다
+   * 위에 있다"로 맨 위 정렬만 쟀다. 그 계약이 티켓 05가 고치려던 결함이다 — 무엇을 고치는
+   * 중인지가 화면에서 없어졌다. 이제 행은 그대로 있고 그 **아래로** 폼이 펼쳐지므로,
+   * 편집 중 화면은 `편집 중인 행 → 폼 → 나머지 행` 세 층이어야 한다. 그 세로 순서가 이
+   * 시나리오의 본체이고, 행이 남아 있다는 것과 맨 위로 올라왔다는 것을 한 번에 잰다.
    */
   await seedProfiles([
     baseProfile('acc-1', 'Accordion', [
@@ -4212,34 +4258,173 @@ try {
   ]);
   await popup.reload();
   const ruleRows = popup.locator('.group').filter({ has: popup.getByRole('button', { name: 'Edit', exact: true }) });
-  const orderBefore = await ruleRows.allTextContents();
+  const rowLayout = () =>
+    ruleRows.evaluateAll((els) =>
+      els.map((el) => ({ y: Math.round(el.getBoundingClientRect().y), text: el.textContent.trim() })),
+    );
+  const orderBefore = await rowLayout();
+
   await popup.getByRole('button', { name: 'Edit', exact: true }).nth(1).click();
   const typeField = popup.getByRole('combobox', { name: 'Type', exact: true });
   await typeField.waitFor({ timeout: 5000 });
-  // 펼쳐진 폼이 남은 행보다 **위**에 있다 = 편집 중인 규칙이 맨 위로 올라왔다.
+  // 펼침이 끝나 좌표가 굳을 때까지 — 대기 시간은 ROW_TRANSITION에서 **유도한다**(위 주석).
+  await popup.waitForTimeout(rowSettleMs());
+  const openLayout = await rowLayout();
   const formY = await typeField.evaluate((el) => el.getBoundingClientRect().y);
-  // 퇴장 중인 옛 행이 아직 DOM에 남아 있으면(AnimatePresence) 남은 행을 잘못 짚는다 —
-  // 접힘이 끝나 행이 하나가 될 때까지 기다린 뒤 잰다.
-  await pollUntil(() => ruleRows.count(), (n) => n === 1, 5000, 100);
-  const remaining = await ruleRows.first().evaluate((el) => ({
-    y: el.getBoundingClientRect().y,
-    text: el.textContent.trim(),
-  }));
+  // 편집 중인 행(X-Second)이 맨 위 → 그 아래 폼 → 그 아래 나머지 행(X-First).
+  const stackOk =
+    openLayout.length === 2 &&
+    openLayout[0].text.includes('X-Second') &&
+    openLayout[1].text.includes('X-First') &&
+    openLayout[0].y < formY &&
+    formY < openLayout[1].y;
+
+  // 열린 행의 수정 아이콘이 눌린 상태로 보인다 (story 4) — 어느 행이 열렸는지 아이콘만 봐도 안다.
+  const editIcons = popup.getByRole('button', { name: 'Edit', exact: true });
+  const pressedOpen = await editIcons.nth(0).getAttribute('aria-pressed');
+  const pressedOther = await editIcons.nth(1).getAttribute('aria-pressed');
+
+  // 펼쳐진 카드의 테두리·배경이 접힌 카드와 다르다 (story 6) — 둘 다 달라야 한다.
+  const cardStyles = await popup.evaluate(() => {
+    const cards = [...document.querySelectorAll('[class*="rounded-lg"][class*="border"]')].filter(
+      (el) => el.querySelector('.group'),
+    );
+    return cards.map((el) => {
+      const cs = getComputedStyle(el);
+      return { border: cs.borderTopColor, bg: cs.backgroundColor };
+    });
+  });
+  const cardsDiffer =
+    cardStyles.length === 2 &&
+    cardStyles[0].border !== cardStyles[1].border &&
+    cardStyles[0].bg !== cardStyles[1].bg;
+
+  // 같은 버튼을 다시 누르면 접힌다 (story 5).
+  await editIcons.nth(0).click();
+  const toggledClosed = await pollUntil(() => typeField.count(), (n) => n === 0, 5000, 100);
+
+  /*
+   * 순서 복귀는 **저장이든 취소든** 성립해야 한다 (수용 기준). 저장 경로만 재면 취소가
+   * 목록 순서를 바꿔 놓아도 통과한다 — 사용자가 기억하는 순서를 지키는 것이 이 결정의
+   * 이유이고, 그 이유는 저장 여부와 무관하다. 두 경로를 각각 연다.
+   */
+  const orderAfterCancel = await (async () => {
+    await popup.getByRole('button', { name: 'Edit', exact: true }).nth(1).click();
+    await typeField.waitFor({ timeout: 5000 });
+    await popup.getByRole('button', { name: 'Cancel' }).click();
+    await pollUntil(() => typeField.count(), (n) => n === 0, 5000, 100);
+    return pollUntil(rowLayout, (r) => r.length === 2, 5000, 100);
+  })();
+  const cancelRestoresOrder =
+    orderAfterCancel[0]?.text.includes('X-First') && orderAfterCancel[1]?.text.includes('X-Second');
+
+  // 다시 열어 저장 — 접히고 두 행이 원래 순서로 돌아온다 (story 3).
+  await popup.getByRole('button', { name: 'Edit', exact: true }).nth(1).click();
+  await typeField.waitFor({ timeout: 5000 });
   await popup.getByRole('button', { name: 'Save', exact: true }).click();
-  // 저장하면 폼이 사라지고 두 행이 원래 순서로 돌아온다.
   const collapsed = await pollUntil(() => typeField.count(), (n) => n === 0, 5000, 100);
-  const orderAfter = await pollUntil(() => ruleRows.allTextContents(), (t) => t.length === 2, 5000, 100);
+  const orderAfter = await pollUntil(rowLayout, (r) => r.length === 2, 5000, 100);
   const sameOrder =
-    orderAfter.length === 2 &&
-    orderAfter[0]?.includes('X-First') &&
-    orderAfter[1]?.includes('X-Second');
-  record('N41b: 아코디언 편집 — 수정 시 해당 규칙 맨 위 정렬·인라인 펼침, 저장 시 접힘·순서 복귀',
-    orderBefore.length === 2 && orderBefore[0]?.includes('X-First') &&
-      formY < remaining.y && remaining.text.includes('X-First') &&
-      collapsed === 0 && sameOrder,
-    `before=${orderBefore.length}행(첫 X-First=${orderBefore[0]?.includes('X-First')}), ` +
-      `폼 y=${Math.round(formY)} < 남은 행 y=${Math.round(remaining.y)} (남은 행 X-First=${remaining.text.includes('X-First')}), ` +
-      `저장 후 폼=${collapsed}, 순서=${JSON.stringify(orderAfter.map((t) => t.slice(0, 10)))}`);
+    orderAfter[0]?.text.includes('X-First') && orderAfter[1]?.text.includes('X-Second');
+
+  record('N41b: 아코디언 편집 — 행이 남은 채 아래로 펼쳐지고 맨 위로 오며, 아이콘이 눌리고, 저장·취소 둘 다 순서 복귀',
+    orderBefore.length === 2 && orderBefore[0]?.text.includes('X-First') &&
+      stackOk && pressedOpen === 'true' && pressedOther === 'false' && cardsDiffer &&
+      toggledClosed === 0 && cancelRestoresOrder && collapsed === 0 && sameOrder,
+    `before=${orderBefore.length}행(첫 X-First=${orderBefore[0]?.text.includes('X-First')}), ` +
+      `열림 배치=${JSON.stringify(openLayout.map((r) => ({ y: r.y, first: r.text.includes('X-First') })))} 폼 y=${Math.round(formY)} 세로순서=${stackOk}, ` +
+      `눌림=[${pressedOpen},${pressedOther}], 카드 구별=${cardsDiffer}(${JSON.stringify(cardStyles)}), ` +
+      `재클릭 접힘=${toggledClosed}, 취소 순서복귀=${cancelRestoresOrder}, 저장 후 폼=${collapsed}, 순서복귀=${sameOrder}`);
+
+  /*
+   * N46: 새 규칙 폼 위치 · 흐림 · 응답 쿠키 속성 칩 (ADR 0017, 티켓 05 story 7·12·15).
+   *
+   * 셋 다 **실제로 그려진 것**을 봐야만 잴 수 있다. 순수 테스트는 칩 목록이 맞는지까지만
+   * 말하고, 그 칩이 어느 자리에 어떤 농도로 서는지는 말하지 못한다.
+   */
+  await seedProfiles([
+    baseProfile('p-chip2', 'Chips2', [
+      { kind: 'set-cookie', id: 'sc1', name: 'sid', value: 'abc', path: '/', secure: true,
+        sameSite: 'lax', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+      hdr({ id: 'off1', name: 'X-Off', value: '1', enabled: false }),
+    ]),
+  ]);
+  await popup.reload();
+  const chipRows = popup.locator('.group').filter({ has: popup.getByRole('button', { name: 'Edit', exact: true }) });
+  await chipRows.first().waitFor({ timeout: 5000 });
+
+  // (a) 응답 쿠키 속성 칩 — 나가는 줄을 그대로 가른 것. 비운 Domain·Max-Age는 서지 않는다.
+  const cookieChips = await chipTexts(chipRows.nth(0));
+  const cookieChipsOk = cookieChips.join('|') === 'All URLs|sid=abc|Path=/|SameSite=Lax|Secure';
+
+  /*
+   * (b) 꺼진 규칙과 전역 정지의 흐림. 두 상태가 **같은 흐림**인 것이 의도다 — 사용자가
+   * 알아야 하는 것이 같기 때문이다(이 규칙은 지금 안 건다). 색 값 자체가 아니라 "켜진 것과
+   * 다르다"를 재므로 팔레트가 바뀌어도 이 단언은 살아남는다.
+   *
+   * 표본은 **안정화 폴링**으로 뜬다 (이 파일의 pollStable 주석). `transition-colors`
+   * 보간값을 읽으면 "켜진 것과 다르다"는 즉시 만족되지만 뒤따르는 동일성 단언이 그
+   * 중간값으로 실패한다 — 기댓값을 향해 폴링하지 않고 연속 두 번 같은 값만 기다린다.
+   */
+  const titleColor = (row) => () =>
+    row.evaluate(
+      (el) => getComputedStyle(el.querySelector('.min-w-0 > div:first-child > span:first-child')).color,
+    );
+  const onColor = await pollStable(titleColor(chipRows.nth(0)), 'N46 켜진 행 제목색');
+  const offColor = await pollStable(titleColor(chipRows.nth(1)), 'N46 꺼진 행 제목색');
+  await popup.getByRole('button', { name: 'Pause' }).click();
+  const pausedColor = await pollStable(titleColor(chipRows.nth(0)), 'N46 정지 중 제목색');
+  await popup.getByRole('button', { name: 'Resume' }).click();
+  const resumedColor = await pollStable(titleColor(chipRows.nth(0)), 'N46 재개 후 제목색');
+  const dimOk =
+    offColor !== onColor && pausedColor === offColor && resumedColor === onColor;
+
+  /*
+   * (b2) 삭제 아이콘은 호버에서 붉어진다 (수용 기준) — 되돌릴 수 없어 보이는 동작임을
+   * 색으로 먼저 알린다. 여기도 안정화 폴링이라 전이 중간 프레임을 표본으로 삼지 않는다.
+   */
+  const deleteIcon = chipRows.nth(0).getByRole('button', { name: 'Delete' });
+  const deleteColor = () => deleteIcon.evaluate((el) => getComputedStyle(el).color);
+  const deleteIdle = await pollStable(deleteColor, 'N46 삭제 아이콘 기본색');
+  await deleteIcon.hover();
+  const deleteHover = await pollStable(deleteColor, 'N46 삭제 아이콘 호버색');
+  await popup.mouse.move(0, 0);
+  /*
+   * "붉어졌다"를 팔레트 값을 못박지 않고 잰다. 표기가 둘 다 나온다 — 기본색은 `rgb()`인데
+   * 시맨틱 `--destructive`는 `oklch()`로 계산되어 나온다. 한쪽만 다루면 토큰 표기가 바뀌는
+   * 것만으로 이 단언이 조용히 무너진다.
+   */
+  const isReddish = (color) => {
+    const nums = (color.match(/-?[\d.]+/g) ?? []).map(Number);
+    // oklch(L C H) — 붉은 계열은 색상각 0° 부근에 모여 있고, 채도가 0에 가까우면 회색이다.
+    if (color.startsWith('oklch')) {
+      const [, chroma = 0, hue = 0] = nums;
+      return chroma > 0.05 && (hue < 60 || hue > 340);
+    }
+    const [r = 0, g = 0, b = 0] = nums;
+    return r > g && r > b;
+  };
+  const deleteTurnsRed = deleteHover !== deleteIdle && isReddish(deleteHover);
+
+  /*
+   * (c) 새 규칙 폼이 목록 **맨 위**에 열린다 (story 7). 예전에는 목록 아래라, 규칙이 많으면
+   * 방금 만들기 시작한 것을 찾아 스크롤해야 했다.
+   */
+  await popup.getByRole('button', { name: 'Add rule' }).first().click();
+  const newTypeField = popup.getByRole('combobox', { name: 'Type', exact: true });
+  await newTypeField.waitFor({ timeout: 5000 });
+  await popup.waitForTimeout(rowSettleMs()); // 펼침이 끝나 좌표가 굳을 때까지 (유도값)
+  const newFormY = await newTypeField.evaluate((el) => el.getBoundingClientRect().y);
+  const firstRowY = await chipRows.first().evaluate((el) => el.getBoundingClientRect().y);
+  const newFormOnTop = newFormY < firstRowY;
+  await popup.getByRole('button', { name: 'Cancel' }).click();
+  await newTypeField.waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
+
+  record('N46: 응답 쿠키 속성 칩 · 꺼짐/정지 흐림(같은 농도) · 삭제 호버 붉음 · 새 규칙 폼은 목록 맨 위',
+    cookieChipsOk && dimOk && deleteTurnsRed && newFormOnTop,
+    `쿠키 칩=${JSON.stringify(cookieChips)}, 흐림 on=${onColor} off=${offColor} paused=${pausedColor} resumed=${resumedColor}, ` +
+      `삭제 ${deleteIdle}→${deleteHover}=${deleteTurnsRed}, ` +
+      `새 폼 y=${Math.round(newFormY)} < 첫 행 y=${Math.round(firstRowY)}=${newFormOnTop}`);
 
   /*
    * N38: 백업 sync 스위치 (티켓 07, R-1 단순 계약).
@@ -4485,8 +4670,9 @@ try {
     .filter({ has: popup.getByRole('button', { name: 'Edit', exact: true }) })
     .filter({ hasText: 'X-Act-Dark' })
     .first();
+  // 행의 켜고 끄기는 토글 스위치다 (티켓 05) — 예전 체크박스가 시안의 스위치로 바뀌었다.
   const darkRowOff =
-    (await darkRow.getByRole('checkbox').getAttribute('aria-checked')) === 'false';
+    (await darkRow.getByRole('switch').getAttribute('aria-checked')) === 'false';
 
   // (d) 편집 — 꺼 둔 시드 규칙을 열면 토글도 꺼져 있고, 그대로 저장해도 켜지지 않는다.
   const seededRow = popup

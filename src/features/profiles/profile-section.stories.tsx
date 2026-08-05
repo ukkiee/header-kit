@@ -50,6 +50,7 @@ function InteractiveProfileSection({ initial }: { initial: Profile }) {
   return (
     <ProfileSection
       profile={profile}
+      paused={false}
       onCommand={onCommand}
       onDeleteRule={onDeleteRule}
       onCommandWithResult={onCommandWithResult}
@@ -63,6 +64,7 @@ function InteractiveProfileSection({ initial }: { initial: Profile }) {
 export const Active: Story = {
   args: {
     profile: sampleProfile,
+    paused: false,
     onCommand: () => {},
     onDeleteRule: () => {},
     onCommandWithResult: async () => ({ ok: true }),
@@ -76,6 +78,7 @@ export const Active: Story = {
 export const Inactive: Story = {
   args: {
     profile: { ...sampleProfile, active: false, modifications: [] },
+    paused: false,
     onCommand: () => {},
     onDeleteRule: () => {},
     onCommandWithResult: async () => ({ ok: true }),

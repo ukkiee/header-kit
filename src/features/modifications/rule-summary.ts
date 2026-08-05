@@ -1,27 +1,38 @@
-import type { Translator } from '@/core/i18n';
-import { assembleSetCookie, type Modification, type ModificationKind, type RuleConditions } from '@/core/schema';
-import { formatExpiryBadge } from './expiry-format';
+import type { MessageKey, Translator } from '@/core/i18n';
+import { foldResourceTypes, RESOURCE_GROUP_LABELS } from '@/core/resource-groups';
+import {
+  assembleSetCookie,
+  isRawSetCookie,
+  type Modification,
+  type ModificationKind,
+  type RuleConditions,
+} from '@/core/schema';
 
 /**
- * 규칙의 읽기 요약 (ADR 0006) — 목록은 이걸로만 그린다. 배지는 프로토콜 성격의
- * 기술 토큰(REQ/RES/COOKIE…)이라 지역화하지 않고, 모드·빈 값 같은 의미 표기는
- * 카탈로그를 거친다.
+ * 규칙의 읽기 요약 (ADR 0006, ADR 0017) — 목록은 이걸로만 그린다.
+ *
+ * 티켓 05에서 **한 줄 요약 문자열이 칩 줄로** 바뀌었다. 예전 계약은 `스코프 → 효과` 한
+ * 문자열이었고 조건은 따로 배지 줄이었는데, 시안의 둘째 줄은 스코프 칩으로 시작해
+ * 효과·리소스 묶음·요청 메서드 칩으로 이어진다. 문자열 하나를 잘라 그리는 대신 여기서
+ * 칩 목록으로 내면, 어디를 어떻게 줄바꿈할지는 그리는 쪽이 정할 수 있다.
+ *
+ * 배지는 프로토콜 성격의 기술 토큰(REQ/RES/COOKIE…)이라 지역화하지 않고, 모드·빈 값·리소스
+ * 묶음 같은 의미 표기는 카탈로그를 거친다.
  */
 export interface RuleView {
-  /** 표시 제목 — 메모 우선, 없으면 대표 필드(헤더/쿠키 이름), 그것도 없으면 배지. */
+  /** 표시 제목 — 메모, 없으면 **종류 이름** (story 10). */
   title: string;
   badge: 'REQ' | 'RES' | 'COOKIE' | 'SET-COOKIE' | 'REDIRECT' | 'UA' | 'DEL' | 'BLOCK';
-  /** 한 줄 효과 요약 (mono 렌더 가정). */
-  summary: string;
-  /** 조건 배지 줄 (ADR 0010, ui-refine 05) — 없으면 빈 배열이라 행 높이가 불변. */
-  conditionBadges: ConditionBadge[];
+  /** 둘째 줄 맨 앞 — 이 규칙이 어디에 걸리는가 (story 13). */
+  scope: ScopeChip;
+  /** 스코프 뒤로 이어지는 칩 — 효과 · (응답 쿠키 속성) · 리소스 묶음 · 요청 메서드 순. */
+  chips: string[];
 }
 
-/** 조건 배지 하나 — tone은 제외(부정) 방향을, icon은 만료 시계를 나타낸다. */
-export interface ConditionBadge {
+/** 스코프 칩 — `regex`면 그리는 쪽이 정규식 표시를 붙인다 (story 16). */
+export interface ScopeChip {
   label: string;
-  tone: 'neutral' | 'exclude';
-  icon?: 'clock';
+  regex: boolean;
 }
 
 /**
@@ -39,109 +50,109 @@ const BADGES: Record<ModificationKind, RuleView['badge']> = {
   block: 'BLOCK',
 };
 
-/** 조건을 값 배지 목록으로 (ui-refine 05) — 차원이 구별되는 표기. */
-export function conditionBadges(conditions: RuleConditions | undefined): ConditionBadge[] {
-  if (!conditions) return [];
-  const badges: ConditionBadge[] = [];
-  for (const method of conditions.requestMethods ?? []) {
-    badges.push({ label: method.toUpperCase(), tone: 'neutral' });
-  }
-  for (const type of conditions.resourceTypes ?? []) {
-    badges.push({ label: type, tone: 'neutral' });
-  }
-  for (const domain of conditions.initiatorDomains ?? []) {
-    badges.push({ label: `@${domain}`, tone: 'neutral' });
-  }
-  for (const domain of conditions.tabDomains ?? []) {
-    badges.push({ label: `tab:${domain}`, tone: 'neutral' });
-  }
-  // 제외 도메인은 부정 접두(~)와 exclude 톤으로 방향을 드러낸다.
-  for (const domain of conditions.excludedDomains ?? []) {
-    badges.push({ label: `~${domain}`, tone: 'exclude' });
-  }
-  if (conditions.expiresAt !== undefined && conditions.expiresAt > 0) {
-    badges.push({ label: formatExpiryBadge(conditions.expiresAt), tone: 'neutral', icon: 'clock' });
-  }
-  return badges;
-}
+/**
+ * 종류 → 카탈로그 키. 행 제목과 폼의 종류 선택이 **같은 이름**을 써야 하므로 한 곳에 둔다 —
+ * 예전에는 폼 컴포넌트 안에만 있어서 행이 종류 이름을 말하려면 표가 둘이 될 참이었다.
+ */
+export const KIND_LABELS: Record<ModificationKind, MessageKey> = {
+  'request-header': 'kindRequestHeader',
+  'response-header': 'kindResponseHeader',
+  cookie: 'modCookie',
+  'set-cookie': 'modSetCookie',
+  redirect: 'modRedirect',
+  'user-agent': 'kindUserAgent',
+  'header-removal': 'kindHeaderRemoval',
+  block: 'kindBlock',
+};
 
 export function ruleView(m: Modification, t: Translator): RuleView {
-  const view = bareView(m, t);
-  return { ...view, summary: scopedSummary(m, view.summary, t), conditionBadges: conditionBadges(m.conditions) };
+  return {
+    title: m.comment || t(KIND_LABELS[m.kind]),
+    badge: BADGES[m.kind],
+    scope: scopeChip(m, t),
+    chips: [...effectChips(m, t), ...conditionChips(m.conditions, t)],
+  };
 }
 
 /**
- * 규칙의 **실효** URL 스코프를 효과 앞에 붙인다 — `imtest.me/ → x-test: aaa` (ADR 0007).
+ * 규칙의 **실효** URL 스코프 (ADR 0007).
  *
- * 필터가 비었을 때 아무것도 그리지 않던 것을 "모든 URL"로 바꾼 것이 티켓 04의 요점이다.
- * 빈칸은 "스코프가 없다"와 "아직 안 봤다"를 구별해 주지 않는데, 요청을 통째로 없애는
- * Block에서는 그 차이가 페이지가 깨지는지 아닌지를 가른다.
+ * 필터가 비었을 때 아무것도 그리지 않던 것을 "모든 URL"로 바꾼 것이 티켓 04의 요점이었고,
+ * 칩이 된 뒤에도 그대로다 — 빈칸은 "스코프가 없다"와 "아직 안 봤다"를 구별해 주지 않는데,
+ * 요청을 통째로 없애는 Block에서는 그 차이가 페이지가 깨지는지 아닌지를 가른다.
+ *
+ * **매치 방식이 없으면 정규식이다** (ADR 0008의 하위 호환). 표시를 안 붙이면 화면이
+ * 와일드카드라고 말하는데 실제로는 정규식으로 매칭되어, 안 걸리는 이유를 알 길이 없어진다.
  */
-function scopedSummary(m: Modification, effect: string, t: Translator): string {
-  // Redirect는 자기 pattern이 곧 스코프다 — 앞에 또 붙이면 스코프를 두 번 말한다.
-  if (m.kind === 'redirect') return effect;
-  const scope = ('urlFilter' in m ? m.urlFilter?.trim() : '') || t('scopeAllUrls');
-  // Block은 효과가 뱃지에 이미 다 담겨 있어(BLOCK), 요약 한 줄을 스코프에 온전히 내준다.
-  return m.kind === 'block' ? scope : `${scope} → ${effect}`;
+function scopeChip(m: Modification, t: Translator): ScopeChip {
+  // Redirect는 자기 pattern이 곧 스코프다 — 스코프 칩에 두고 효과 칩은 목적지를 든다.
+  if (m.kind === 'redirect') return { label: m.pattern || '…', regex: true };
+  const filter = ('urlFilter' in m ? m.urlFilter?.trim() : '') ?? '';
+  if (filter === '') return { label: t('scopeAllUrls'), regex: false };
+  return { label: filter, regex: m.urlMatchType === undefined || m.urlMatchType === 'regex' };
 }
 
-/** 조건·스코프를 뺀 기본 뷰 — ruleView가 스코프·조건 배지를 얹는다. */
-type BareView = Omit<RuleView, 'conditionBadges'>;
+/** 이 규칙이 무엇을 하는가 — 종류마다 읽을 거리가 다르다. */
+function effectChips(m: Modification, t: Translator): string[] {
+  if (m.kind === 'redirect') return [`→ ${m.substitution || '…'}`];
 
-function bareView(m: Modification, t: Translator): BareView {
-  const badge = BADGES[m.kind];
+  // 효과는 뱃지(BLOCK)와 스코프가 이미 전부 말한다 — 더 붙이면 같은 말을 두 번 한다.
+  if (m.kind === 'block') return [];
 
-  if (m.kind === 'redirect') {
-    const summary =
-      m.pattern || m.substitution ? `${m.pattern || '^…'} → ${m.substitution || '…'}` : t('emptyMarker');
-    return { title: m.comment || badge, badge, summary };
-  }
+  if (m.kind === 'user-agent') return [m.value || t('emptyMarker')];
 
   /*
-   * 다른 행과 같은 문법으로 읽힌다 — **제목은 대상, 요약은 효과**
-   * (예: `X-Frame-Options [RES] / X-Frame-Options: DENY`).
-   * 뱃지가 이미 종류를 말하므로 제목·요약에서 종류 이름을 되풀이하지 않는다.
+   * Header Removal은 **지울 이름과 방향을 둘 다** 말한다. 제목이 종류 이름이 되면서 헤더
+   * 이름이 제목 자리를 잃었으므로, 효과 칩이 그것을 받지 않으면 행에서 무엇이 지워지는지
+   * 읽을 수 없다. 양쪽에서 지운다는 것은 이 종류의 특징이라 함께 남긴다.
    */
-  if (m.kind === 'user-agent') {
-    // 대상은 고정 헤더, 효과는 보낼 UA 문자열이다.
-    return { title: m.comment || t('kindUserAgent'), badge, summary: m.value || t('emptyMarker') };
-  }
-
-  if (m.kind === 'block') {
-    // 효과는 뱃지와 제목이 말한다 — 요약 자리는 scopedSummary가 스코프로 채운다.
-    return { title: m.comment || t('kindBlock'), badge, summary: '' };
-  }
-
   if (m.kind === 'header-removal') {
-    // 대상은 헤더 이름, 효과는 **양쪽에서** 지운다는 사실이다 — 그것이 이 종류의 특징이라
-    // 이름을 되풀이하는 것보다 방향을 말해 주는 편이 읽는 사람에게 쓸모 있다.
-    return { title: m.comment || m.name || badge, badge, summary: t('removeBothSides') };
+    return [m.name || t('emptyMarker'), t('removeBothSides')];
   }
 
   if (m.kind === 'set-cookie') {
     /*
-     * 행은 **실제로 나가는 한 줄**을 보여 준다 (ADR 0017) — 가를 수 없어 원시로 보존된
-     * 항목은 그 줄이 그대로, 구조화된 항목은 조립한 줄이다. 이름·속성을 따로 늘어놓으면
-     * 행에서 읽는 것과 서버가 받는 것이 달라진다.
+     * 가를 수 없어 **원시로 보존된** 항목은 그 줄이 그대로 효과다 (ADR 0017). 속성 칩이
+     * 붙지 않는 것이 정확하다 — 갈라 두지 않았으므로 어느 속성이 있는지 이 버전은 모른다.
      */
-    const line = m.raw ?? assembleSetCookie(m);
-    return {
-      title: m.comment || m.name || badge,
-      badge,
-      summary: line === '' ? `(${t(m.emptyMeans === 'remove' ? 'remove' : 'sendEmpty')})` : line,
-    };
+    if (isRawSetCookie(m)) return [m.raw === '' ? emptyEffect(m, t) : m.raw];
+    /*
+     * 구조화된 항목은 **실제로 나가는 줄을 그대로 갈라** 칩으로 만든다. 세그먼트 문법을
+     * 여기서 다시 쓰면 조립과 갈라져 행이 보여 주는 것과 서버가 받는 것이 달라진다 —
+     * 비운 속성이 붙지 않는 것도(story 35) 조립이 이미 지키는 규칙이라 공짜로 따라온다.
+     *
+     * 빈 조건은 컴파일과 **같은 술어**를 쓴다: 이름도 값도 비면 조립하지 않는다. 조립하면
+     * `=` 한 글자가 되어 "빈 쿠키를 심는" 다른 규칙이 되고, 행은 그 `=`를 효과라고 말하게 된다.
+     */
+    const line = m.name.trim() === '' && m.value === '' ? '' : assembleSetCookie(m);
+    return line === '' ? [emptyEffect(m, t)] : line.split('; ');
   }
 
-  const name = 'name' in m ? m.name : '';
-  const title = m.comment || name || badge;
-  const empty = `(${t(m.emptyMeans === 'remove' ? 'remove' : 'sendEmpty')})`;
+  // 헤더 계열(요청·응답 헤더, 요청 쿠키) — `이름: 값`.
   const appendMark = m.mode === 'append' ? ` (${t('append')})` : '';
-  const summary = name
-    ? m.value === ''
-      ? `${name}: ${empty}`
-      : `${name}: ${m.value}${appendMark}`
-    : m.value === ''
-      ? empty
-      : `${m.value}${appendMark}`;
-  return { title, badge, summary };
+  const value = m.value === '' ? emptyEffect(m, t) : `${m.value}${appendMark}`;
+  return [m.name ? `${m.name}: ${value}` : value];
+}
+
+/** 빈 값의 뜻 — 제거인지 빈 값 전송인지가 실제로 나가는 것을 가른다. */
+function emptyEffect(m: { emptyMeans: 'remove' | 'send-empty' }, t: Translator): string {
+  return `(${t(m.emptyMeans === 'remove' ? 'remove' : 'sendEmpty')})`;
+}
+
+/**
+ * 조건 칩 — **리소스 묶음과 요청 메서드 둘뿐이다** (ADR 0017).
+ *
+ * 예전의 조건 배지 개념(제외 도메인의 부정 접두 `~`, 만료 시계 아이콘)은 그 조건들이 퇴역하며
+ * 함께 사라졌다. 리소스 종류는 저장된 브라우저 값 그대로가 아니라 **여덟 묶음의 이름으로
+ * 접어서** 낸다 — 폼이 여덟 칩으로 고르게 해 놓고 행이 `main_frame`을 그리면 같은 것을 두
+ * 어휘로 말하게 된다.
+ */
+function conditionChips(conditions: RuleConditions | undefined, t: Translator): string[] {
+  if (!conditions) return [];
+  return [
+    ...foldResourceTypes(conditions.resourceTypes ?? []).map((group) =>
+      t(RESOURCE_GROUP_LABELS[group]),
+    ),
+    ...(conditions.requestMethods ?? []).map((method) => method.toUpperCase()),
+  ];
 }
