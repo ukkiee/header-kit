@@ -24,3 +24,29 @@
 - [ ] 확인 쓰기가 실패하면 공지가 그대로 남는다
 - [ ] 공지가 **규칙이 넓어지기 전에** 이미 존재한다
 - [ ] 가져오기 공지에 퇴역한 종류가 더해진다 (안 하면 기존 "레거시 필터를 규칙 조건으로 옮겼다" 공지가 거짓이 된다)
+
+## 재개 노트 (앞선 착수에서 되돌린 이유 — 범위 경계)
+
+**`RuleConditions` 타입에서 퇴역 필드 넷을 빼지 않는다.** 앞선 착수가 타입째 제거했다가 `compile.ts`의
+`conditionFor` 매핑·expiry·compile-tabs·픽스처 등 15개+ 파일로 번져 되돌렸다. 그 철거는 **티켓 10**의 일이고
+(알람·탭 감시 서브시스템 + 권한), 이 티켓이 요구하는 것은 `normalizeConditions`의 해당 분기 제거뿐이다.
+타입 필드는 남아야 한다 — `migrateProfileFilters`가 레거시 필터에서 그 필드들을 **만들어 내고** 벗기기가
+그것을 걷어 가는 구조라, 타입에서 빼면 실체화 산출물을 표현할 수 없다.
+
+**보존된 자산:** `stash@{0}`에 `src/core/schema-version.test.ts` 계약 테스트 10건(red)이 있다 — 벗기기·집계·
+멱등·레거시 실체화 경로를 못박아 둔 것. `RetirementNotice` 타입과 `StoredState.retirementNotice` 정의도
+그 안에 있다. 재개 시 이 테스트를 먼저 되살려 red로 두고 구현하면 된다.
+
+**구현 순서 (타입은 건드리지 않는다):**
+1. `upgradeProfile`이 `{ profile, retired }`를 돌려준다 — 퇴역 조건 넷 + 메서드 셋(head/connect/other)을
+   벗기고, 조건을 잃은 **규칙 수**를 센다(규칙 하나가 여럿 잃어도 1). 메서드가 전부 사라져 목록이 비면
+   그것도 넓어지는 변경이므로 센다.
+2. `upgradeToCurrent`가 그 합을 모아 `state.retirementNotice = { rules: n }`로 담는다(0이면 담지 않음).
+3. `normalizeConditions`에서 퇴역 넷 분기 제거 — 같은 커밋에.
+4. 확인 명령 `acknowledge-retirement`를 `commands.ts`에 추가 → 필드를 지운다. 쓰기 문을 지나므로 실패하면
+   공지가 남는다(테스트로 단언).
+5. 화면: alerts 자리에 공지 + 확인 버튼. 읽기는 부수효과 없음.
+6. `transfer.ts`의 가져오기 공지에 퇴역 종류 추가.
+7. i18n 키(공지 문구·확인 버튼) en/ko.
+
+**seam:** core `schema-version`/`schema`/`transfer`/`summary` 테스트 + platform `stateStore`(공지 수명) + smoke.
