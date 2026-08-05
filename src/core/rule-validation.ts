@@ -62,6 +62,10 @@ export function fieldIssues(modification: Modification): FieldIssue[] {
 function blockScopeIssues(modification: Extract<Modification, { kind: 'block' }>): FieldIssue[] {
   if ((modification.urlFilter?.trim() ?? '') === '') return [required('urlFilter')];
   const breadth = urlScopeBreadth(modification.urlFilter, modification.urlMatchType);
-  // 'wide'는 여기서 막지 않는다 — 사용자가 정말 원했을 수 있어 폼이 확인을 받는다.
+  /*
+   * **`invalid`만 막는다** (ADR 0017, 티켓 07). `wide`는 여기서도 폼에서도 아무것도 막지
+   * 않는다 — 넓은 것은 틀린 것이 아니라 사용자가 정말 원했을 수 있는 상태다(모든 광고
+   * 도메인을 한 번에 막는 식). 예전에는 폼이 여기에 확인을 한 번 더 받았고 그 단계는 사라졌다.
+   */
   return breadth === 'invalid' ? [{ field: 'urlFilter', reason: 'unsupported-pattern' }] : [];
 }

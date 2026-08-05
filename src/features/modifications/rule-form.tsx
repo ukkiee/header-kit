@@ -1,7 +1,6 @@
 import { useId, useRef, useState, type RefObject } from 'react';
 import { X } from 'lucide-react';
 import { fieldIssues, type FieldIssue, type RequiredField } from '@/core/rule-validation';
-import { urlScopeBreadth } from '@/core/url-scope';
 import {
   ALL_MODIFICATION_KINDS,
   createModification,
@@ -82,12 +81,6 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
   const inFlight = useRef(false);
   // 저장 차단 검증 (ui-refine 04) — Save 시점에 계산, 다음 Save까지 유지.
   const [fieldErrors, setFieldErrors] = useState<readonly FieldIssue[]>([]);
-  /**
-   * 넓은 스코프 Block의 확인 대기 (티켓 04). Save를 눌렀는데 스코프가 어느 도메인에도
-   * 묶여 있지 않으면 여기 불이 켜지고, 사용자가 한 번 더 명시적으로 눌러야 저장된다 —
-   * 요청을 통째로 없애는 종류라 "실수로 눌렀다"와 "정말 원한다"를 구별해야 한다.
-   */
-  const [wideScopePending, setWideScopePending] = useState(false);
 
   /**
    * 필수 필드 → 그 값을 입력하는 요소. 저장이 검증으로 막히면 첫 누락 필드로 포커스를
@@ -111,20 +104,11 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
     value: valueRef,
     urlFilter: urlFilterRef,
   };
-  /** 막힌 이유마다 다른 문구 — "필수"와 "이 패턴은 못 쓴다"는 사용자가 할 일이 다르다. */
-  const fieldError = (field: RequiredField) => {
-    const issue = fieldErrors.find((e) => e.field === field);
-    if (!issue) return undefined;
-    return issue.reason === 'required' ? t('requiredField') : t('unsupportedPattern');
-  };
-
   const switchKind = (kind: ModificationKind) => {
     if (kind === draft.kind) return;
     setDraft(switchDraftKind(draft, kind));
     // 이전 종류의 검증 오류는 새 초안과 무관하다 — 아직 Save한 적 없는데 표시되면 안 된다.
     setFieldErrors([]);
-    // 확인 대기도 이전 종류의 것이다 — Block에서 벗어나면 경고가 남아 있을 이유가 없다.
-    setWideScopePending(false);
   };
 
   /**
@@ -138,6 +122,37 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
    * 판단은 전부 `rule-draft`의 순수 함수가 한다 — 여기서는 부르기만 한다.
    */
   const normalizedDraft = (): Modification => convergeDraft(tidyDraft(draft), visible);
+
+  /**
+   * 브라우저가 이 패턴으로 규칙을 만들지 못하는가 — **매 렌더 다시 판정한다** (티켓 07).
+   *
+   * 저장을 누른 뒤에 알리면 늦다. 못 쓰는 패턴으로 저장된 Block은 목록에 정상으로 보이고
+   * 토글도 켜져 있는데 실제로는 아무것도 막지 않는다 — 차단이 걸렸다고 믿는 채로 광고·추적이
+   * 그대로 지나간다. 그래서 저장 버튼을 **미리** 죽이고, 죽은 이유를 그 자리에 함께 둔다.
+   *
+   * 비어 있음(`required`)은 여기 들어오지 않는다. 그건 아직 다 안 쓴 상태이지 못 쓰는 값이
+   * 아니라, 누르는 순간 그 칸으로 포커스를 옮기는 기존 흐름이 맞다.
+   */
+  const unsupportedPattern = fieldIssues(normalizedDraft()).find(
+    (issue) => issue.reason === 'unsupported-pattern',
+  );
+
+  /**
+   * 막힌 이유마다 다른 문구 — "필수"와 "이 패턴은 못 쓴다"는 사용자가 할 일이 다르다.
+   *
+   * 못 쓰는 패턴은 **누르기 전에** 보인다: 버튼이 죽어 있는 이유가 그것이므로, 저장 시도를
+   * 기다렸다 보여 주면 사용자는 왜 안 눌리는지 모른 채 헤맨다.
+   */
+  const fieldError = (field: RequiredField) => {
+    if (unsupportedPattern?.field === field) return t('unsupportedPattern');
+    /*
+     * 저장 시도가 남긴 것은 **비어 있음뿐**이다. 못 쓰는 패턴을 여기 담아 두면 라이브 판정이
+     * 사라진 뒤에도 그 문구가 남아, 버튼은 살아났는데 "이 패턴은 못 쓴다"가 그대로 서 있는
+     * 화면이 된다 — 사유가 하나뿐이어야 하고, 그 하나는 지금 참인 쪽이다.
+     */
+    const issue = fieldErrors.find((e) => e.field === field && e.reason === 'required');
+    return issue ? t('requiredField') : undefined;
+  };
 
   /**
    * 초안 패치 (structure r1 S-2) — 응답 쿠키의 **재료를 건드리면 원시 보존에서 벗어난다**.
@@ -154,10 +169,18 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
     setDraft({ ...draft, ...patch } as Modification);
   };
 
-  const save = async (confirmedWideScope = false) => {
+  const save = async () => {
     // 이미 보낸 저장이 응답을 기다리는 중이면 아무것도 하지 않는다. 버튼의 disabled는
     // 포인터 경로만 막고, Cmd/Ctrl+Enter는 여기를 직접 부른다.
     if (inFlight.current) return;
+    /*
+     * 못 쓰는 패턴은 **여기서도** 막는다 — 버튼의 disabled는 포인터만 막으므로 키보드
+     * 저장이 그것을 통과해 헛도는 규칙을 저장소에 넣는다. 사유는 이미 그 칸 아래 서 있다.
+     */
+    if (unsupportedPattern) {
+      requiredFieldRefs[unsupportedPattern.field].current?.focus();
+      return;
+    }
     const toSave = normalizedDraft();
     // 빈 필수 필드는 저장을 통과하지 못한다 — 인라인 오류로 그 자리에서 알린다.
     const issues = fieldIssues(toSave);
@@ -170,18 +193,11 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
       return;
     }
     /*
-     * 넓은 스코프 Block은 한 번 더 물어본다 — 검증과 달리 저장을 금지하는 게 아니라,
-     * 무엇이 일어날지 보여 주고 사용자가 다시 누르게 한다. 검증과 **같은 초안**을 보므로
-     * 두 판정이 매치 방식을 다르게 읽는 일이 없다.
+     * **넓다는 이유로 되묻지 않는다** (ADR 0017, 티켓 07). 예전에는 도메인에 묶이지 않은 Block
+     * 스코프에 확인을 한 번 더 받았는데, 넓은 것은 틀린 것이 아니라 사용자가 정말 원했을 수
+     * 있는 상태다 — 모든 광고 도메인을 한 번에 막는 식. 막아야 하는 것은 **헛도는 규칙**이고,
+     * 그건 위의 `fieldIssues`가 `unsupported-pattern`으로 잡아 저장 버튼을 죽인다.
      */
-    if (
-      toSave.kind === 'block' &&
-      !confirmedWideScope &&
-      urlScopeBreadth(toSave.urlFilter, toSave.urlMatchType) === 'wide'
-    ) {
-      setWideScopePending(true);
-      return;
-    }
     inFlight.current = true;
     setSaving(true);
     // onSave는 거부를 `{ ok: false }`로 돌려주기도 하지만, background 왕복이
@@ -303,8 +319,6 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
               value={visible}
               onValueChange={(value) => {
                 setDraft({ ...draft, urlMatchType: value } as Modification);
-                // 같은 문자열도 매치 방식이 달라지면 폭이 달라진다 — 확인을 다시 받는다.
-                setWideScopePending(false);
               }}
               className="shrink-0"
               options={[
@@ -322,9 +336,6 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
                   ...draft,
                   urlFilter: e.target.value === '' ? undefined : e.target.value,
                 } as Modification);
-                // 스코프를 고치는 중이면 경고를 내린다 — 좁히려는 사람에게 낡은 경고를
-                // 계속 보여 주면 확인 버튼을 누르는 쪽으로 떠민다.
-                setWideScopePending(false);
               }}
               placeholder={scopePlaceholder[visible]}
               aria-label={t('urlFilterScope')}
@@ -561,29 +572,6 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
         </AlertBanner>
       )}
 
-      {/*
-        넓은 스코프 Block의 확인 (티켓 04) — 저장을 막는 것이 아니라 **한 번 더 묻는** 자리다.
-        검증 오류(danger)와 톤을 갈라 warn을 쓰는 이유가 여기 있다: 이건 틀린 입력이 아니라
-        되돌리기 비싼 입력이다. 확인 버튼을 Save와 따로 두어, 같은 자리를 두 번 누르다
-        지나치는 일이 없게 한다.
-      */}
-      {wideScopePending && (
-        <AlertBanner severity="warn" role="alert" as="div">
-          <p>{t('wideScopeWarning')}</p>
-          <div className="mt-1.5 flex justify-end">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="px-4"
-              onClick={() => void save(true)}
-              disabled={saving}
-            >
-              {t('confirmWideScope')}
-            </Button>
-          </div>
-        </AlertBanner>
-      )}
-
       {/* 폼 액션 쌍 — 좌우 여백을 넓혀(px-4) 두 버튼이 같은 무게로 서게 한다. 모서리는
           shadcn size="sm"이 이미 8px로 맞춰 준다(`rounded-[min(var(--radius-md),12px)]`,
           이 저장소의 --radius-md가 8px이라 min이 8px). 예전에는 primary만 pill이라
@@ -594,8 +582,16 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
           {t('cancel')}
         </Button>
         {/* 저장 글자가 새 규칙인지 편집인지를 말한다 (story 29) — 같은 자리의 같은 버튼이
-            무엇을 하는지 두 경우에 다르기 때문이다. */}
-        <Button size="sm" className="px-4" onClick={() => void save()} disabled={saving}>
+            무엇을 하는지 두 경우에 다르기 때문이다.
+
+            **못 쓰는 패턴이면 눌리지 않는다** (티켓 07). 그 사유는 패턴 입력 아래 인라인
+            오류로 함께 서 있다 — 이유 없이 죽어 있는 버튼은 왜 안 눌리는지 몰라 헤매게 한다. */}
+        <Button
+          size="sm"
+          className="px-4"
+          onClick={() => void save()}
+          disabled={saving || unsupportedPattern !== undefined}
+        >
           {saving ? t('saving') : t(editing ? 'saveChanges' : 'save')}
         </Button>
       </div>

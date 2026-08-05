@@ -303,3 +303,52 @@ describe('규칙이 만들어지지 않는 패턴은 거부한다', () => {
     expect(urlScopeBreadth('ads.example.com/(?!x)', 'contains')).toBe('narrow');
   });
 });
+
+/**
+ * 폼이 방식을 **둘만 노출한 뒤에도 판정은 그대로다** (수용 기준, 티켓 07).
+ *
+ * 판정은 저장된 `urlMatchType`을 읽으므로 화면이 무엇을 보여 주든 네 가지 모두를 계속
+ * 판정해야 한다 — 폼에서 사라진 `domain`·`prefix`로 저장된 옛 규칙이 이 함수를 그대로 지난다.
+ * 그것들을 잘라 내면 옛 Block 규칙이 판정 없이 통과한다.
+ */
+describe('노출 방식이 둘로 줄어도 네 가지를 그대로 판정한다 (티켓 07)', () => {
+  it.each([
+    ['ads.example.com', 'domain', 'narrow'],
+    ['ads.example.com', 'contains', 'narrow'],
+    ['https://ads.example.com/', 'prefix', 'narrow'],
+    ['^https://ads\\.example\\.com/', 'regex', 'narrow'],
+    ['*://*/*', 'domain', 'wide'],
+    ['/ads/', 'contains', 'wide'],
+    ['ads.example.com', 'prefix', 'wide'],
+    ['^https://[^/]+/ads/', 'regex', 'wide'],
+  ] as const)('%s (%s) → %s', (pattern, matchType, expected) => {
+    expect(urlScopeBreadth(pattern, matchType)).toBe(expected);
+  });
+
+  /*
+   * **접기가 판정을 바꿀 수 있다 — 알고 남긴 결과다.** 수렴 저장이 `prefix`를 와일드카드
+   * (`contains`)로 굳히는데, 스킴에 닿지 못한 접두는 호스트를 특정하지 못해 넓음이고 같은
+   * 문자열이 부분 문자열로는 호스트에 묶여 좁음이다. 판정이 달라지는 것은 **매칭 자체가
+   * 달라지기 때문**이라 정확하다 — 접두는 URL 시작에 앵커되고 부분 문자열은 아니다.
+   *
+   * 티켓 07 이후 이 차이가 사용자에게 하는 일은 없다(넓음은 아무것도 막지 않는다). 여기 적어
+   * 두는 것은 다음 사람이 이것을 버그로 보고 두 방식을 같은 잣대로 묶지 않게 하기 위해서다.
+   */
+  it('접두를 와일드카드로 접으면 판정이 좁아진다 — 매칭이 실제로 달라지기 때문이다', () => {
+    expect(urlScopeBreadth('ads.example.com', 'prefix')).toBe('wide');
+    expect(urlScopeBreadth('ads.example.com', 'contains')).toBe('narrow');
+  });
+
+  /*
+   * 릴리스 게이트가 찾아낸 넓은 정규식들 — 예전에는 폼의 확인 단계가 이것들을 실제 브라우저
+   * 경로에서 한 번 더 잡았다(스모크 N18j·N18k·N18l). 티켓 07이 그 단계를 없애면서 화면에
+   * 관측할 것이 남지 않으므로, 그 패턴들의 **판정**을 여기로 옮겨 붙든다.
+   */
+  it.each([
+    ['^https://.*\\.com/|ads\\.example\\.net', '최상위 대안 하나가 넓다 (release R-2)'],
+    ['^(https://ads\\.example\\.net/|https://.*\\.com/)', '그룹 안 갈래가 넓다 (release R2-1)'],
+    ['^https://[^/]+/ads\\.example\\.com/', '도메인이 경로 자리에 있다 (release R-1)'],
+  ])('%s → wide — %s', (pattern) => {
+    expect(urlScopeBreadth(pattern, 'regex')).toBe('wide');
+  });
+});

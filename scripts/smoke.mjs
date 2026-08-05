@@ -2198,12 +2198,15 @@ try {
       `block: no-name=${blockHidesName} no-value=${blockHidesValue} scope=${blockScopeShown}`);
 
   /*
-   * N18h: 넓은 스코프 Block은 확인 없이 저장되지 않는다 (티켓 04).
+   * N18h: **넓은 스코프 Block은 되묻지 않고 그냥 저장된다** (수용 기준, 티켓 07).
    *
-   * Block은 요청을 통째로 없애는 유일한 종류라, 도메인에 묶이지 않은 스코프는 사용자가
-   * 예상한 것보다 훨씬 넓게 걸린다. 여기서 보는 것은 경고 문구가 떴는지가 아니라
-   * **첫 Save에서 저장이 실제로 일어나지 않았는지**다 — 배너만 띄우고 저장은 그대로
-   * 진행되면 경고는 장식이 된다. 확인을 누른 뒤에야 저장소에 규칙이 생긴다.
+   * 예전에는 도메인에 묶이지 않은 스코프에 확인을 한 번 더 받았고, 이 자리와 N18j·N18k·N18l이
+   * 그 단계를 여러 패턴으로 쟀다. 넓은 것은 **틀린 것이 아니라** 사용자가 정말 원했을 수 있는
+   * 상태라 그 단계를 걷었다 — 모든 광고 도메인을 한 번에 막는 식.
+   *
+   * 그 패턴들의 **판정**(어느 것이 넓은가)은 사라지지 않았다. 화면이 더 이상 반응하지 않아
+   * 실브라우저에서 관측할 것이 없으므로 `url-scope.test.ts`로 옮겨 붙들었다. 여기서 재는 것은
+   * 하나다: 넓다는 이유로 저장이 멈추지 않는가, 그리고 되묻는 UI가 정말 없는가.
    */
   const blockRuleCount = () =>
     sw.evaluate(async () => {
@@ -2211,22 +2214,20 @@ try {
       return state.profiles.flatMap((p) => p.modifications).filter((m) => m.kind === 'block').length;
     });
   await popup.getByLabel('URL filter').fill('*://*/*');
+  /*
+   * 넓은 패턴을 친 **그 자리에서 저장 버튼이 살아 있다** — 되묻는 단계가 없다는 것의 실질.
+   * "확인 버튼이 없다"로 재면 그 문구가 카탈로그에서 사라진 지금 영원히 반증 불가다.
+   */
+  const wideStaysEnabled = !(await popup.getByRole('button', { name: SAVE_BUTTON }).isDisabled());
   await popup.getByRole('button', { name: SAVE_BUTTON }).click();
-  const wideWarned = await popup
-    .getByRole('button', { name: 'Block anyway', exact: true })
-    .waitFor({ timeout: 5000 })
-    .then(() => true, () => false);
-  const notSavedYet = (await blockRuleCount()) === 0;
-  await popup.getByRole('button', { name: 'Block anyway', exact: true }).click();
-  const savedAfterConfirm = await pollUntil(blockRuleCount, (n) => n === 1);
+  const wideSaved = await pollUntil(blockRuleCount, (n) => n === 1);
   await waitFormClosed();
-  record('N18h: 넓은 스코프 Block — 첫 Save는 저장하지 않고 확인을 요구, 확인 후 저장',
-    wideWarned && notSavedYet && savedAfterConfirm === 1,
-    `warned=${wideWarned}, not-saved-before-confirm=${notSavedYet}, saved-after-confirm=${savedAfterConfirm}`);
+  record('N18h: 넓은 스코프 Block — 버튼이 살아 있고 첫 클릭에 저장된다',
+    wideStaysEnabled && wideSaved === 1,
+    `버튼 살아있음=${wideStaysEnabled}, saved=${wideSaved}`);
 
   /*
-   * N18i: 좁은 스코프 Block은 확인을 요구하지 않는다 — 경고가 모든 Block에 뜨면
-   * 사용자는 곧 읽지 않고 누르게 되고, 넓은 스코프 경고의 값이 사라진다.
+   * N18i: 좁은 스코프 Block도 같은 길로 저장되고, 목록이 실효 스코프를 보여 준다.
    */
   await popup.getByRole('button', { name: 'Add rule' }).first().click();
   await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
@@ -2240,93 +2241,9 @@ try {
     .getByText('*://*/*', { exact: true })
     .isVisible()
     .catch(() => false);
-  record('N18i: 좁은 스코프 Block은 바로 저장 + 목록이 실효 스코프를 보여 준다',
+  record('N18i: 좁은 스코프 Block도 바로 저장 + 목록이 실효 스코프를 보여 준다',
     narrowSaved === 2 && wideScopeVisibleInList,
     `narrow-saved=${narrowSaved}, wide-scope-in-list=${wideScopeVisibleInList}`);
-
-  /*
-   * N18j: 무관 호스트 탐침을 피해 가는 광범위 정규식도 확인을 요구한다 (릴리스 R-2).
-   *
-   * `^https://.*\.com/|ads\.example\.net`은 어느 탐침에도 걸리지 않으면서 모든 .com을
-   * 삼킨다 — 대안 하나가 도메인에 묶였다는 이유로 좁다고 읽으면 확인 없이 저장된다.
-   * N18h와 같은 눈으로 본다: 배너가 아니라 **저장이 일어나지 않았는지**.
-   */
-  await popup.getByRole('button', { name: 'Add rule' }).first().click();
-  await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
-  await pickOption(popup, 'Type', 'Block request');
-  await pickOption(popup, 'URL match type', 'Regex');
-  await popup.getByLabel('URL filter').fill('^https://.*\\.com/|ads\\.example\\.net');
-  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
-  const sneakyWarned = await popup
-    .getByRole('button', { name: 'Block anyway', exact: true })
-    .waitFor({ timeout: 5000 })
-    .then(() => true, () => false);
-  const sneakyNotSaved = (await blockRuleCount()) === 2;
-  await popup.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await waitFormClosed();
-  record('N18j: 탐침을 피하는 광범위 정규식 Block도 첫 Save는 저장하지 않는다',
-    sneakyWarned && sneakyNotSaved,
-    `warned=${sneakyWarned}, not-saved=${sneakyNotSaved}`);
-
-  /*
-   * N18k: **그룹 안에** 숨은 갈래도 확인을 요구한다 (릴리스 R2-1).
-   *
-   * N18j를 통과시킨 픽스는 최상위 `|`만 잘랐다. 그래서 `^(https://ads\.example\.net/|
-   * https://.*\.com/)`는 조각이 하나뿐이고, 그 안의 호스트꼴 토큰 하나가 모든 HTTPS
-   * `.com`을 삼키는 둘째 갈래까지 '좁음'으로 증명한다 — 파괴적 Block이 확인 없이 첫
-   * Save에서 켜지는 경로다. N18h/N18j와 같은 눈으로 **둘 다** 본다: 확인 UI의 존재와
-   * 저장된 개수의 불변. 개수만 보면 확인이 사라지고 그냥 실패한 경우와 구분되지 않는다.
-   */
-  await popup.getByRole('button', { name: 'Add rule' }).first().click();
-  await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
-  await pickOption(popup, 'Type', 'Block request');
-  await pickOption(popup, 'URL match type', 'Regex');
-  await popup.getByLabel('URL filter').fill('^(https://ads\\.example\\.net/|https://.*\\.com/)');
-  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
-  const groupWarned = await popup
-    .getByRole('button', { name: 'Block anyway', exact: true })
-    .waitFor({ timeout: 5000 })
-    .then(() => true, () => false);
-  const groupNotSaved = (await blockRuleCount()) === 2;
-  // 취소로 닫는다 — 저장하면 뒤따르는 개수 단언이 흔들린다.
-  await popup.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await waitFormClosed();
-  record('N18k: 그룹 안에 갈래를 숨긴 정규식 Block도 첫 Save는 저장하지 않는다',
-    groupWarned && groupNotSaved,
-    `warned=${groupWarned}, not-saved=${groupNotSaved}`);
-
-  /*
-   * N18l: 도메인이 **경로 자리**에 있는 정규식도 확인을 요구한다 (릴리스 R-1, 티켓 05).
-   *
-   * N18j·N18k를 통과시킨 판정은 패턴 문자열 **전체**를 훑어 호스트꼴 조각을 셌다. 그래서
-   * `^https://[^/]+/ads\.example\.com/`는 호스트 자리가 와일드카드인데도 경로의
-   * `ads.example.com`이 호스트 노릇을 해 '좁음'으로 통과했다 — 사용자는 광고 도메인 하나를
-   * 막았다고 믿지만 방문하는 **모든** 사이트의 그 경로에서 요청이 사라진다.
-   *
-   * 여기서는 확인 UI의 존재와 저장 개수의 불변만 보지 않고, **확인 뒤에 실제로 저장되는지**도
-   * 본다 — `wide`는 "금지"가 아니라 "확인이 필요하다"는 뜻이므로, 확인을 눌러도 저장되지
-   * 않으면 그것은 다른 결함이다.
-   */
-  await popup.getByRole('button', { name: 'Add rule' }).first().click();
-  await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
-  await pickOption(popup, 'Type', 'Block request');
-  await pickOption(popup, 'URL match type', 'Regex');
-  await popup.getByLabel('URL filter').fill('^https://[^/]+/ads\\.example\\.com/');
-  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
-  const pathWarned = await popup
-    .getByRole('button', { name: 'Block anyway', exact: true })
-    .waitFor({ timeout: 5000 })
-    .then(() => true, () => false);
-  const pathNotSaved = (await blockRuleCount()) === 2;
-  // 확인을 누르면 저장된다 — 넓은 스코프는 저장을 막지 않는다. 폼 닫힘은 저장 완료의 신호가
-  // 아니므로(`waitFormClosed`는 Cancel 버튼의 detach만 기다린다) 형제 단언들과 같이
-  // `pollUntil`로 저장을 기다린다 — 한 번만 읽으면 저장이 늦게 착지할 때 간헐 실패한다.
-  await popup.getByRole('button', { name: 'Block anyway', exact: true }).click();
-  const pathSavedAfterConfirm = await pollUntil(blockRuleCount, (n) => n === 3);
-  await waitFormClosed();
-  record('N18l: 경로 자리에 도메인이 있는 정규식 Block도 첫 Save는 확인을 요구한다',
-    pathWarned && pathNotSaved && pathSavedAfterConfirm === 3,
-    `warned=${pathWarned}, not-saved=${pathNotSaved}, saved-after-confirm=${pathSavedAfterConfirm}`);
 
   // 아래 c~e는 열린 폼을 이어서 굴린다 — Block 저장으로 닫혔으니 다시 연다.
   await popup.getByRole('button', { name: 'Add rule' }).first().click();
@@ -4758,6 +4675,96 @@ try {
       `쿠키=${cookieOk}(${JSON.stringify({ v: cookieSaved.value, p: cookieSaved.path, s: cookieSaved.sameSite, sec: cookieSaved.secure, ho: cookieSaved.httpOnly, d: cookieSaved.domain })}), ` +
       `SameSite 안정함=${sameSiteCleared?.has === false}, ` +
       `줄 수 팝업=[${popupLines.firstRow},${popupLines.cookieAttrs}] 탭=[${tabLines.firstRow},${tabLines.cookieAttrs}]`);
+
+  /*
+   * N48: **못 쓰는 패턴이면 저장 버튼이 죽고 그 사유가 함께 보인다** (티켓 07).
+   *
+   * 이 티켓이 존재하는 이유가 여기 있다: 브라우저가 만들지 못하는 패턴으로 Block이 저장되면
+   * 목록에는 정상으로 보이고 토글도 켜져 있는데 실제로는 **아무것도 막히지 않는다** — 차단이
+   * 걸렸다고 믿는 채로 광고·추적이 그대로 지나간다. 그래서 누른 뒤 알리는 것으로는 늦다.
+   *
+   * 부재 단언(다른 종류는 안 걸린다)에는 감도 대조를 건다 — 같은 패턴이 Block에서는 실제로
+   * 막히는 것을 먼저 보여야, 그 단언이 "검증이 통째로 죽어도 통과"로 퇴화하지 않는다.
+   */
+  await seedProfiles([baseProfile('p-block', 'BlockGate', [])]);
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Add rule' }).first().click();
+  await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
+  await pickOption(popup, 'Type', 'Block request');
+  await pickOption(popup, 'URL match type', 'Regex');
+
+  const saveButton = popup.getByRole('button', { name: SAVE_BUTTON });
+  const reasonShown = () =>
+    popup.getByText('The browser cannot build a rule from this pattern.').isVisible().catch(() => false);
+
+  // RE2가 받지 않는 역참조 — 브라우저가 이 패턴으로 규칙을 만들지 못한다.
+  await popup.getByLabel('URL filter').fill('^https://(ads)\\.example\\.com/\\1');
+  const blockedDisabled = await pollUntil(
+    () => saveButton.isDisabled(),
+    (disabled) => disabled === true,
+    5000,
+    100,
+  );
+  const blockedReason = await reasonShown();
+
+  /*
+   * 고치면 **되살아난다.** 죽은 채로 남으면 사용자는 고쳐 놓고도 저장하지 못하고, 이 단언이
+   * 없으면 "버튼을 늘 죽여 두기"라는 가짜 구현도 통과한다.
+   */
+  await popup.getByLabel('URL filter').fill('^https://ads\\.example\\.com/');
+  const revived = await pollUntil(
+    () => saveButton.isDisabled(),
+    (disabled) => disabled === false,
+    5000,
+    100,
+  );
+  const reasonGone = !(await reasonShown());
+
+  // 감도 대조 — 같은 패턴을 다른 종류에 넣으면 걸리지 않는다 (수용 기준).
+  await popup.getByLabel('URL filter').fill('^https://(ads)\\.example\\.com/\\1');
+  const blockedAgain = await pollUntil(
+    () => saveButton.isDisabled(),
+    (disabled) => disabled === true,
+    5000,
+    100,
+  );
+  await pickOption(popup, 'Type', 'Request header');
+  await popup.getByLabel('Header name', { exact: true }).fill('X-Not-Blocked');
+  await closeSuggestions(popup);
+  const otherKindEnabled = !(await pollUntil(
+    () => saveButton.isDisabled(),
+    (disabled) => disabled === false,
+    5000,
+    100,
+  ));
+
+  /*
+   * 고친 정규식 Block이 **실제로 저장소까지 간다.** 이 왕복은 예전에 N18l만 밟고 있었고
+   * (확인 후 저장), 그 시나리오가 사라지면서 스모크에 Block+정규식 저장이 하나도 남지 않았다.
+   */
+  await pickOption(popup, 'Type', 'Block request');
+  // 종류를 바꾸면 초안이 새로 나므로 매치 방식도 초기값(와일드카드)이다 — 다시 고른다.
+  await pickOption(popup, 'URL match type', 'Regex');
+  await popup.getByLabel('URL filter').fill('^https://ads\\.example\\.com/');
+  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
+  const regexBlockSaved = await pollUntil(
+    () => sw.evaluate(async () => {
+      const { state } = await chrome.storage.local.get('state');
+      const m = state.profiles[0]?.modifications.find((x) => x.kind === 'block');
+      return m ? { filter: m.urlFilter, match: m.urlMatchType } : null;
+    }),
+    (m) => m?.match === 'regex',
+  );
+  await waitFormClosed();
+
+  record('N48: 못 쓰는 패턴 — 버튼이 죽고 사유가 보이며, 고치면 되살아나 저장되고 다른 종류는 안 걸린다',
+    blockedDisabled === true && blockedReason && revived === false && reasonGone &&
+      blockedAgain === true && otherKindEnabled &&
+      regexBlockSaved?.filter === '^https://ads\\.example\\.com/' &&
+      regexBlockSaved?.match === 'regex',
+    `막힘=${blockedDisabled}(사유=${blockedReason}), 고치면 되살아남=${revived === false}(사유 사라짐=${reasonGone}), ` +
+      `다시 막힘=${blockedAgain}, 다른 종류 버튼 살아있음=${otherKindEnabled}, ` +
+      `정규식 Block 저장=${JSON.stringify(regexBlockSaved)}`);
 
   /*
    * N38: 백업 sync 스위치 (티켓 07, R-1 단순 계약).
