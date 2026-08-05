@@ -1,5 +1,11 @@
 import { isLocale } from './i18n';
-import { ALL_RESOURCE_TYPES, REQUEST_METHODS, type RequestMethod, type ResourceType } from './rules';
+import {
+  ALL_RESOURCE_TYPES,
+  REQUEST_METHODS,
+  RETIRED_REQUEST_METHODS,
+  type RequestMethod,
+  type ResourceType,
+} from './rules';
 import { DEFAULT_THEME, isThemePreference } from './theme';
 import { hasPlaceholders } from './placeholder';
 import {
@@ -479,13 +485,13 @@ const RETIRED_CONDITION_KEYS = [
 /**
  * 퇴역 요청 메서드 (ADR 0017) — 목록에서 빠지면 그만큼 규칙이 넓어진다.
  *
- * `RequestMethod`에 결속해 둔다: 생 문자열로 두면 오타나 union 변경이 조용히 통과하고,
- * 그때 벗기기가 아무것도 못 찾아 넓어진 규칙이 세어지지 않는다.
+ * 정의는 `rules.ts`에 있다: **폼이 고를 수 있는 여섯**과 **업그레이드가 걷어 가는 셋**이
+ * 같은 목록에서 파생돼야 갈라지지 않는다. 여기서 다시 적으면 한쪽만 고쳐지는 날이 온다.
  *
  * **이 목록과 위의 조건 키 목록은 `transfer.ts`의 가져오기 공지 문장이 함께 열거한다** —
  * 한쪽만 고치면 그 문장이 조용히 거짓이 된다.
  */
-const RETIRED_METHODS = ['head', 'connect', 'other'] as const satisfies readonly RequestMethod[];
+const RETIRED_METHODS = RETIRED_REQUEST_METHODS;
 
 /**
  * 규칙 하나에서 퇴역 조건·메서드를 벗긴다. `widened`는 **넓어졌는가**이지 필드를

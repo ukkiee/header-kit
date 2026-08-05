@@ -73,6 +73,16 @@ async function fetchEchoHeaders(page, path = '/headers', method = 'GET') {
 const rowSettleMs = () => Math.round(ROW_TRANSITION.duration * 1000) + 120;
 
 /**
+ * 폼의 저장 버튼 — 새 규칙이면 `Save`, 편집이면 `Save changes`다 (ADR 0017, story 29).
+ *
+ * 대부분의 시나리오에는 **어느 쪽인지가 관심사가 아니다** — 저장을 누르는 것이 목적이다.
+ * 자리마다 어느 글자인지 적어 두면 그 글자가 바뀔 때 관계없는 시나리오 서른 개가 함께
+ * 무너지고, 정작 "글자가 두 경우에 다르다"는 계약은 아무 데서도 재지 않게 된다. 그 계약은
+ * N47 한 자리가 전담한다.
+ */
+const SAVE_BUTTON = /^Save( changes)?$/;
+
+/**
  * 접이식 패널을 **열린 상태로 만든다** — 이미 열려 있으면 아무것도 하지 않는다.
  *
  * 예전에는 각 시나리오가 토글을 그냥 한 번 눌러 열었다. 그 방식은 "기본은 닫힘"에
@@ -850,7 +860,7 @@ try {
   await tabApp.getByRole('textbox', { name: /Value —/ }).fill(longValue);
   await tabApp.getByRole('button', { name: 'Save large editor' }).click();
   // 에디터는 초안에만 반영 — 폼 Save가 원자 저장한다 (ADR 0006)
-  await tabApp.getByRole('button', { name: 'Save', exact: true }).click();
+  await tabApp.getByRole('button', { name: SAVE_BUTTON }).click();
   const savedValue = await pollUntil(
     () => sw.evaluate(async () => {
       const { state } = await chrome.storage.local.get('state');
@@ -1117,7 +1127,7 @@ try {
       hasDatalist: (await brokenName.getAttribute('list')) !== null,
     };
     await brokenName.fill('X-Fallback-Works');
-    await broken.getByRole('button', { name: 'Save', exact: true }).first().click();
+    await broken.getByRole('button', { name: SAVE_BUTTON }).first().click();
     await broken.waitForTimeout(400);
     const storedName = await sw.evaluate(
       async () => (await chrome.storage.local.get('state')).state.profiles[0].modifications[0].name,
@@ -1315,8 +1325,8 @@ try {
   // M4b: 새 UI 경로(확장 편집)로 치환·패턴 편집 → 실제 리다이렉트 반영 (슬라이스 05)
   await popup.reload();
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
-  await popup.getByLabel('Redirect substitution').fill(`http://127.0.0.1:${port}/redir-alt\\1`);
-  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  await popup.getByLabel('Redirect to').fill(`http://127.0.0.1:${port}/redir-alt\\1`);
+  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   const fetchLanding = (path) => (
     pageB.evaluate(async (p) => {
       const res = await fetch(p, { cache: 'no-store', redirect: 'follow' });
@@ -1328,10 +1338,10 @@ try {
     (v) => /\/redir-alt\?q=1/.test(v),
   );
   // 패턴도 UI로 편집 — 매칭 소스가 /redir-two 로 바뀌어 실제 매칭에 반영된다 (폼 닫힘 대기 후)
-  await popup.getByRole('button', { name: 'Save', exact: true }).waitFor({ state: 'detached', timeout: 5000 });
+  await popup.getByRole('button', { name: SAVE_BUTTON }).waitFor({ state: 'detached', timeout: 5000 });
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
   await popup.getByLabel('Redirect pattern').fill(`^http://127\\.0\\.0\\.1:${port}/redir-two(.*)`);
-  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   const landedPattern = await pollUntil(
     () => fetchLanding('/redir-two?q=2'),
     (v) => /\/redir-alt\?q=2/.test(v),
@@ -1465,6 +1475,29 @@ try {
     await settledListboxes(page, 0);
   };
 
+  /**
+   * 매치 방식 셀렉트가 **무엇을 고르게 하는지** — 열어서 옵션 이름을 읽고 다시 닫는다.
+   *
+   * 개수만 세면 넷 중 둘을 감춘 것과 둘만 남긴 것을 구별하지 못하고, 하나만 확인하면 나머지
+   * 셋이 아직 서 있어도 통과한다. 목록 자체를 읽는 것이 "고를 것이 둘뿐"의 실질이다.
+   */
+  const matchTypeOptionLabels = async (page) => {
+    const trigger = page.getByRole('combobox', { name: 'URL match type', exact: true });
+    await trigger.click();
+    await settledListboxes(page, 1);
+    // `allTextContents`는 기다리지 않는다 — 항목이 하나라도 붙은 뒤에 읽어야 빈 배열을
+    // "선택지가 없다"로 잘못 읽지 않는다.
+    await page.getByRole('option').first().waitFor({ timeout: 5000 });
+    const labels = await page.getByRole('option').allTextContents();
+    /*
+     * 팝업은 **고르는 것으로** 닫는다. Escape로 닫으면 그 키가 폼까지 닿는 경로가 있어
+     * (폼의 Esc는 닫기다) 다음 조작이 사라진 폼을 찾게 된다 — 실제로 그렇게 걸렸다.
+     */
+    await page.getByRole('option', { name: 'Wildcard', exact: true }).click();
+    await settledListboxes(page, 0);
+    return labels.map((label) => label.trim());
+  };
+
   // N5: 통합 목록(ADR 0009) — 규칙 행 + '적용 조건' 캡션 + FILTER 행이 한 화면에
   await seedProfiles([
     baseProfile('n-tab', 'Tabbed',
@@ -1504,24 +1537,27 @@ try {
   const methodChip = (name) =>
     popup.getByRole('group', { name: 'Methods' }).getByRole('button', { name, exact: true });
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
-  await popup.getByRole('button', { name: 'Conditions' }).click(); // disclosure 열기
   await methodChip('POST').click();
-  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   const condAdded = await pollFirstMod((m) => m?.conditions?.requestMethods?.[0] === 'post');
   await waitFormClosed();
-  // 조건은 이제 배지 줄로 표시된다 (ui-refine 05) — 메서드는 대문자 배지
+  // 조건은 행의 칩 줄로 표시된다 (티켓 05) — 메서드는 대문자 칩
   const condSummaryShown = await popup.getByText('POST', { exact: true }).first().isVisible().catch(() => false);
-  // 조건이 있는 규칙의 폼은 disclosure가 열린 채 시작 — 비우면 conditions 자체가 제거된다
+  /*
+   * 조건 칩은 **접히지 않고 폼 본문에 바로 선다** (티켓 06). 예전에는 disclosure를 한 번 더
+   * 눌러야 보였는데, 남은 것이 칩 두 줄뿐이라 접을 값이 없다 — 접어 두면 조건이 걸린 규칙을
+   * 열어도 무엇으로 좁혀져 있는지 한 번 더 눌러야 보인다.
+   */
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
-  const disclosureOpen = await methodChip('POST').isVisible().catch(() => false);
+  const chipsVisibleAtOnce = await methodChip('POST').isVisible().catch(() => false);
   await methodChip('POST').click(); // 선택 해제 → 남는 조건이 없다
-  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   const condCleared = await pollFirstMod((m) => m !== null && m.conditions === undefined);
   await waitFormClosed();
-  record('N6: 폼 조건 편집 — 추가·요약 표기·비우면 제거',
+  record('N6: 폼 조건 편집 — 추가·요약 표기·비우면 제거, 칩은 접지 않고 바로 보인다',
     condAdded?.conditions?.requestMethods?.[0] === 'post' && condSummaryShown
-      && disclosureOpen && condCleared?.conditions === undefined,
-    `added=${JSON.stringify(condAdded?.conditions)}, summary=${condSummaryShown}, open=${disclosureOpen}, cleared=${condCleared?.conditions === undefined}`);
+      && chipsVisibleAtOnce && condCleared?.conditions === undefined,
+    `added=${JSON.stringify(condAdded?.conditions)}, summary=${condSummaryShown}, 바로보임=${chipsVisibleAtOnce}, cleared=${condCleared?.conditions === undefined}`);
 
   // N7: 규칙 폼 편집(ADR 0006) — Edit → 모드·메모 변경 → Save가 원자 반영
   const pollMod = (test, timeoutMs = 5000) =>
@@ -1534,27 +1570,58 @@ try {
       timeoutMs,
       100,
     );
+  /*
+   * 적용 방식(Mode) 컨트롤은 **화면에서 사라졌다** (ADR 0017, 티켓 06) — 이 자리가 재던
+   * "모드를 바꿔 저장한다"는 이제 할 수 없는 조작이다. 남는 것은 폼이 하나만 열린다는 것과
+   * 이름(메모) 편집이 원자적으로 저장된다는 것이고, 숨은 필드가 어떻게 되는지는 바로 아래
+   * N7b가 잰다.
+   */
   await popup.getByRole('button', { name: 'Edit', exact: true }).nth(1).click();
-  // 폼은 한 번에 하나만 열린다
-  const formCount = await popup.getByRole('combobox', { name: 'Mode' }).count();
-  await pickOption(popup, 'Mode', 'Append');
-  await popup.getByLabel('comment').fill('smoke comment');
-  await popup.getByRole('button', { name: 'Save', exact: true }).click();
-  const editedMod = await pollMod((m) => m?.mode === 'append' && m?.comment === 'smoke comment');
-  record('N7: 규칙 폼 편집 — 모드·메모 원자 저장',
-    formCount === 1 && editedMod?.mode === 'append' && editedMod?.comment === 'smoke comment',
-    `forms=${formCount}, mode=${editedMod?.mode}, comment="${editedMod?.comment}"`);
+  const formCount = await popup.getByRole('combobox', { name: 'Type', exact: true }).count();
+  const modeGone = (await popup.getByRole('combobox', { name: 'Mode' }).count()) === 0;
+  await popup.getByLabel('Name', { exact: true }).fill('smoke comment');
+  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
+  const editedMod = await pollMod((m) => m?.comment === 'smoke comment');
+  record('N7: 규칙 폼 편집 — 폼은 하나만, 이름 원자 저장, 적용 방식 컨트롤 부재',
+    formCount === 1 && modeGone && editedMod?.comment === 'smoke comment',
+    `forms=${formCount}, mode-gone=${modeGone}, comment="${editedMod?.comment}"`);
   await waitFormClosed();
 
-  // N7b: 빈 값 처리 — 폼에서 값 비우고 When empty=Send empty 저장
+  /*
+   * N7b: **숨은 필드를 정해 둔 옛 규칙이 폼 저장을 지나도 그대로 동작한다** (수용 기준).
+   *
+   * 예전에는 이 자리가 폼에서 `When empty`를 골랐다. 그 컨트롤이 사라졌으므로 이제 재야 하는
+   * 것은 정반대다: 사용자가 볼 수도 만질 수도 없는 값이 **저장 한 번에 뒤집히지 않는가.**
+   * 수렴이 이 필드까지 기본값으로 덮으면 빈 값을 보내던 헤더가 조용히 제거로 바뀐다.
+   */
+  await pollFirstMod((m) => m !== null);
+  await sw.evaluate(async () => {
+    const { state } = await chrome.storage.local.get('state');
+    const mod = state.profiles[0].modifications[1];
+    mod.emptyMeans = 'send-empty';
+    mod.mode = 'append';
+    mod.value = '';
+    await chrome.storage.local.set({ state });
+  });
+  await popup.reload();
   await popup.getByRole('button', { name: 'Edit', exact: true }).nth(1).click();
-  await popup.getByLabel('Value', { exact: true }).fill('');
-  await pickOption(popup, 'When empty', 'Send empty');
-  await popup.getByRole('button', { name: 'Save', exact: true }).click();
-  const emptyMeansMod = await pollMod((m) => m?.emptyMeans === 'send-empty');
-  record('N7b: 빈 값 → Send empty 저장 반영',
-    emptyMeansMod?.emptyMeans === 'send-empty' && emptyMeansMod?.value === '',
-    `emptyMeans=${emptyMeansMod?.emptyMeans}, value="${emptyMeansMod?.value}"`);
+  await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
+  // 폼에는 그 값을 말하는 것이 아무것도 없다 — 그래도 저장이 지켜야 한다.
+  const hiddenControlsGone =
+    (await popup.getByRole('combobox', { name: 'When empty' }).count()) === 0 &&
+    (await popup.getByRole('combobox', { name: 'Mode' }).count()) === 0;
+  /*
+   * 저장이 **착지한 뒤**를 봐야 한다. 이 폴러의 술어가 저장 전에도 참인 값이면(예: 직전
+   * 시나리오가 이미 써 둔 메모) 저장이 숨은 필드를 덮어써도 통과한다 — 저장으로만 참이
+   * 되는 표식을 새로 심고 그것을 기다린다.
+   */
+  await popup.getByLabel('Name', { exact: true }).fill('hidden-fields-probe');
+  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
+  const preserved = await pollMod((m) => m?.comment === 'hidden-fields-probe');
+  record('N7b: 숨은 필드(적용 방식·빈 값의 뜻)가 폼 저장을 지나도 그대로다',
+    hiddenControlsGone && preserved?.emptyMeans === 'send-empty' && preserved?.mode === 'append',
+    `컨트롤 부재=${hiddenControlsGone}, emptyMeans=${preserved?.emptyMeans}, mode=${preserved?.mode}`);
+  await waitFormClosed();
 
   // N8: 사이드바 드래그·키보드 재정렬 → 목록 순서 + 겹침 승자 실반영, 메뉴엔 이동 없음 (ui-refine 06)
   const seedConf = () => seedProfiles([
@@ -1683,7 +1750,7 @@ try {
   await tabApp.getByLabel('Header name', { exact: true }).fill('X-From-Tab');
   await closeSuggestions(tabApp);
   await tabApp.getByLabel('Value', { exact: true }).fill('yes');
-  await tabApp.getByRole('button', { name: 'Save', exact: true }).click();
+  await tabApp.getByRole('button', { name: SAVE_BUTTON }).click();
   await tabApp.getByRole('switch', { name: 'Toggle Gamma' }).click();
   await pollSessionRuleCount(sw, 1);
   const tabHeader = await pollUntil(
@@ -1708,9 +1775,9 @@ try {
   await pollProfileName((v) => v === 'KeyA');
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().focus();
   await popup.keyboard.press('Enter');
-  // 폼 열림 마커: 'When empty'는 값 종류에서 항상 노출 (Mode는 append 불가 시 숨김 — ui-refine 04)
+  // 폼 열림 마커: 종류 셀렉트는 어느 종류에서든 늘 있다 (숨은 필드 컨트롤은 티켓 06에서 사라졌다)
   const kbFormOpened = await popup
-    .getByRole('combobox', { name: 'When empty' })
+    .getByRole('combobox', { name: 'Type', exact: true })
     .waitFor({ timeout: 5000 })
     .then(() => true, () => false);
   await popup.getByRole('button', { name: 'Cancel' }).click();
@@ -1794,33 +1861,34 @@ try {
     koToggle && koMenu && koSidebarItem && koRowToggle && koDeleteIcon,
     `toggle=${koToggle}, menu=${koMenu}, sidebar=${koSidebarItem}, row=${koRowToggle}, delete-icon=${koDeleteIcon}`);
 
-  // N14b: 조건 편집의 ko 라벨 — Initiator 조건이 '요청 출처 도메인'으로 뜬다 (rule-model-trim 02).
-  // 이 변경의 목적은 "요청 보낸 쪽 vs 보고 있는 탭"의 **구별**이라, 새 라벨 존재만으로는
-  // 목적 달성을 못 본다 — 대조 대상인 '탭 도메인'이 그대로인지, 옛 라벨이 필드 라벨
-  // 자리로 남지 않았는지 함께 건다.
+  /*
+   * N14b: **폼 ko 라벨이 새 구성으로 뜨고, 퇴역한 조건 라벨은 어디에도 없다** (티켓 06).
+   *
+   * 예전 계약은 "Initiator 조건이 '요청 출처 도메인'으로 뜬다"였다. 그 조건 자체가 ADR
+   * 0017에서 퇴역해 입력이 사라졌으므로 그 라벨을 재는 것은 이제 도달할 수 없는 것을 재는
+   * 일이다. 이 자리가 지키던 목적(**폼 라벨이 카탈로그를 거친다**)은 그대로 두고, 대상을
+   * 새 구성으로 옮긴다 — 그리고 퇴역한 라벨 넷이 되살아나지 않는지를 함께 건다.
+   */
   const condKo = await context.newPage();
   await condKo.goto(`chrome-extension://${extensionId}/popup.html?locale=ko`);
   const condKoEdit = condKo.getByRole('button', { name: '편집' }).first();
   await condKoEdit.waitFor({ timeout: 5000 });
   await condKoEdit.click();
-  // 토글을 그냥 누르면 "기본은 닫힘"에 기대게 된다 — 조건이 붙은 규칙의 폼은 열린 채
-  // 시작하므로(N6), 같은 클릭이 패널을 닫아 아래 단언이 통째로 무너진다.
-  await ensurePanelOpen(condKo, '조건');
-  const initiatorKo = await condKo
-    .getByLabel('요청 출처 도메인', { exact: true })
-    .waitFor({ timeout: 5000 })
-    .then(() => true, () => false);
-  // 옛 라벨은 필드 라벨 자리로만 되살아날 수 있다 — 페이지 전역 문자열 검색은 스키마
-  // 용어 initiatorDomains가 어디든 렌더되면 오탐이라, 라벨 스코프로 좁혀 정확히 건다.
-  const oldInitiatorGone = (await condKo.getByLabel('Initiator 도메인', { exact: true }).count()) === 0;
-  const tabDomainKept = await condKo
-    .getByLabel('탭 도메인', { exact: true })
-    .waitFor({ timeout: 5000 })
-    .then(() => true, () => false);
+  await condKo.getByRole('combobox', { name: '종류', exact: true }).waitFor({ timeout: 5000 });
+  // 시안 구성의 ko 라벨 — 이름·규칙 종류·리소스 묶음(여덟 칩의 한국어 이름).
+  const koFormLabels =
+    (await condKo.getByLabel('이름', { exact: true }).count()) === 1 &&
+    (await condKo.getByRole('button', { name: '문서', exact: true }).count()) === 1 &&
+    (await condKo.getByRole('button', { name: '기타', exact: true }).count()) === 1;
+  // 퇴역한 조건 라벨 넷은 필드 라벨 자리로만 되살아날 수 있다 — 라벨 스코프로 좁혀 건다.
+  const retiredLabels = ['제외 도메인', '요청 출처 도메인', '탭 도메인', '자동 해제 시각'];
+  const retiredGone = (
+    await Promise.all(retiredLabels.map((label) => condKo.getByLabel(label, { exact: true }).count()))
+  ).every((count) => count === 0);
   await condKo.close();
-  record('N14b: ko 조건 라벨 — 요청 출처 도메인(옛 라벨 부재) + 탭 도메인 유지',
-    initiatorKo && oldInitiatorGone && tabDomainKept,
-    `initiator=${initiatorKo}, old-gone=${oldInitiatorGone}, tab=${tabDomainKept}`);
+  record('N14b: ko 폼 라벨 — 시안 구성이 카탈로그를 거치고, 퇴역 조건 라벨 넷은 없다',
+    koFormLabels && retiredGone,
+    `새 라벨=${koFormLabels}, 퇴역 라벨 부재=${retiredGone}`);
 
   // N15: 규칙 단위 URL 필터 (ADR 0007/0008) — contains(비정규식)와 regex 두 방식 모두
   // 매칭 URL에만 적용되고, 무스코프 규칙은 전역이며, 프로필 필터는 건드리지 않는다.
@@ -1828,7 +1896,7 @@ try {
   // 1) 기존 규칙(X-K)에 contains 스코프(기본 방식) 부여 — 평문 부분 문자열
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
   await popup.getByLabel('URL filter').fill('scope=1');
-  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   /*
    * 폼이 **접히기를 기다린다** (ADR 0017). 예전에는 하단 추가 버튼이 폼이 있는 동안 감춰져
    * 클릭이 저절로 기다렸는데, 헤더의 추가 버튼은 자리가 고정이라 늘 있다. 기다리지 않으면
@@ -1840,7 +1908,7 @@ try {
   await popup.getByLabel('Header name', { exact: true }).fill('X-U');
   await closeSuggestions(popup);
   await popup.getByLabel('Value', { exact: true }).fill('u');
-  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   await waitFormClosed();
   const kaState = await pollUntil(
     () => sw.evaluate(async () => {
@@ -1870,9 +1938,9 @@ try {
   // 3) regex(고급) 방식으로 전환 — 실요청 검증
   await waitFormClosed();
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
-  await pickOption(popup, 'URL match type', 'Regex (advanced)');
+  await pickOption(popup, 'URL match type', 'Regex');
   await popup.getByLabel('URL filter').fill(`127\\.0\\.0\\.1:${port}/headers\\?scope=2`);
-  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   const regexIn = await pollUntil(
     () => fetchEchoHeaders(pageB, '/headers?scope=2'),
     (h) => h['x-k'] === '1',
@@ -1882,7 +1950,7 @@ try {
   await waitFormClosed();
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
   await popup.getByLabel('URL filter').fill('');
-  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   const cleared = await pollUntil(
     () => sw.evaluate(async () => {
       const { state } = await chrome.storage.local.get('state');
@@ -1909,8 +1977,9 @@ try {
   ]);
   await popup.reload();
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
-  await popup.getByRole('button', { name: 'Conditions' }).click();
-  const firstChip = popup.getByRole('button', { name: 'main_frame', exact: true });
+  // 칩은 접이식 안이 아니라 폼 본문에 바로 선다 (티켓 06). 첫 칩은 브라우저 토큰이 아니라
+  // **묶음 이름**이다 — 폼과 행이 같은 어휘를 쓴다.
+  const firstChip = popup.getByRole('button', { name: 'XHR', exact: true });
   await firstChip.waitFor({ timeout: 5000 });
   const chipBg = () => firstChip.evaluate((el) => getComputedStyle(el).backgroundColor);
   const bgIdle = await chipBg();
@@ -1922,9 +1991,13 @@ try {
   const bgChipHover = await pollUntil(chipBg, (v) => v !== bgIdle, 3000, 100);
   await firstChip.click();
   const pressedAfterClick = await firstChip.getAttribute('aria-pressed');
-  // 다중 선택: 두 번째 칩도 켜서 함께 저장된다
-  await popup.getByRole('button', { name: 'script', exact: true }).click();
-  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  /*
+   * 다중 선택 — 두 번째 묶음도 켜서 함께 저장된다. **묶음 칩 하나가 브라우저 값 여럿으로
+   * 펴진다**(티켓 05의 리소스 묶음 모듈): `문서`는 최상위 문서와 프레임 안 문서를 함께 뜻하고
+   * `XHR`은 값 하나다. 저장된 배열이 그 펴진 결과인지가 이 자리의 새 계약이다.
+   */
+  await popup.getByRole('button', { name: 'Document', exact: true }).click();
+  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   const pollChipConditions = (test) =>
     pollUntil(
       () => sw.evaluate(async () => {
@@ -1933,17 +2006,17 @@ try {
       }),
       test,
     );
-  const chipSaved = await pollChipConditions((c) => c?.resourceTypes?.length === 2);
+  const chipSaved = await pollChipConditions((c) => c?.resourceTypes?.length === 3);
   await waitFormClosed();
-  // 해제: 첫 칩을 끄고 저장하면 배열에서 빠진다
+  // 해제: XHR 칩을 끄고 저장하면 그 값만 배열에서 빠지고 문서 묶음은 남는다.
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
-  await popup.getByRole('button', { name: 'main_frame', exact: true }).click();
-  await popup.getByRole('button', { name: 'Save', exact: true }).click();
-  const chipDeselected = await pollChipConditions((c) => c?.resourceTypes?.length === 1);
-  record('N16: 칩 그룹 — 캡션 호버 비전파, 다중 토글 저장, 해제 반영',
+  await popup.getByRole('button', { name: 'XHR', exact: true }).click();
+  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
+  const chipDeselected = await pollChipConditions((c) => c?.resourceTypes?.length === 2);
+  record('N16: 칩 그룹 — 캡션 호버 비전파, 묶음 토글이 값 여럿으로 펴져 저장, 해제 반영',
     bgIdle === bgCaptionHover && bgChipHover !== bgIdle && pressedAfterClick === 'true'
-      && chipSaved?.resourceTypes?.includes('main_frame') && chipSaved?.resourceTypes?.includes('script')
-      && chipDeselected?.resourceTypes?.join() === 'script',
+      && chipSaved?.resourceTypes?.join() === 'main_frame,sub_frame,xmlhttprequest'
+      && chipDeselected?.resourceTypes?.join() === 'main_frame,sub_frame',
     `idle=${bgIdle}, caption-hover=${bgCaptionHover}, chip-hover=${bgChipHover}, pressed=${pressedAfterClick}, saved=${JSON.stringify(chipSaved?.resourceTypes)}, deselected=${JSON.stringify(chipDeselected?.resourceTypes)}`);
 
   // N17: 아이콘 버튼 — 툴팁(호버·포커스), 행 액션 호버 표시, 환경설정 정리 (ui-refine 03)
@@ -2026,7 +2099,7 @@ try {
       { timeout: 500 },
     )
     .then(() => true, () => false);
-  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   const inlineError = await popup.getByText('Required.', { exact: true }).first()
     .waitFor({ timeout: 5000 }).then(() => true, () => false);
   const ariaInvalid = await nameInput.getAttribute('aria-invalid');
@@ -2082,7 +2155,7 @@ try {
   const noStaleError = (await popup.getByText('Required.', { exact: true }).count()) === 0;
   // Redirect로 바꿔 Save하면 패턴·치환 두 오류가 새로 뜬다
   await pickOption(popup, 'Type', 'Redirect');
-  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   const redirectErrors = await popup.getByText('Required.', { exact: true }).count();
   await pickOption(popup, 'Type', 'Response cookie');
   const setCookieSelected = await popup.getByRole('combobox', { name: 'Type', exact: true }).textContent();
@@ -2138,7 +2211,7 @@ try {
       return state.profiles.flatMap((p) => p.modifications).filter((m) => m.kind === 'block').length;
     });
   await popup.getByLabel('URL filter').fill('*://*/*');
-  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   const wideWarned = await popup
     .getByRole('button', { name: 'Block anyway', exact: true })
     .waitFor({ timeout: 5000 })
@@ -2159,7 +2232,7 @@ try {
   await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
   await pickOption(popup, 'Type', 'Block request');
   await popup.getByLabel('URL filter').fill('ads.example.com');
-  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   const narrowSaved = await pollUntil(blockRuleCount, (n) => n === 2);
   await waitFormClosed();
   // 목록은 실효 스코프를 항상 보여 준다 — 넓은 Block이 여기서 드러난다.
@@ -2181,9 +2254,9 @@ try {
   await popup.getByRole('button', { name: 'Add rule' }).first().click();
   await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
   await pickOption(popup, 'Type', 'Block request');
-  await pickOption(popup, 'URL match type', 'Regex (advanced)');
+  await pickOption(popup, 'URL match type', 'Regex');
   await popup.getByLabel('URL filter').fill('^https://.*\\.com/|ads\\.example\\.net');
-  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   const sneakyWarned = await popup
     .getByRole('button', { name: 'Block anyway', exact: true })
     .waitFor({ timeout: 5000 })
@@ -2207,9 +2280,9 @@ try {
   await popup.getByRole('button', { name: 'Add rule' }).first().click();
   await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
   await pickOption(popup, 'Type', 'Block request');
-  await pickOption(popup, 'URL match type', 'Regex (advanced)');
+  await pickOption(popup, 'URL match type', 'Regex');
   await popup.getByLabel('URL filter').fill('^(https://ads\\.example\\.net/|https://.*\\.com/)');
-  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   const groupWarned = await popup
     .getByRole('button', { name: 'Block anyway', exact: true })
     .waitFor({ timeout: 5000 })
@@ -2237,9 +2310,9 @@ try {
   await popup.getByRole('button', { name: 'Add rule' }).first().click();
   await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
   await pickOption(popup, 'Type', 'Block request');
-  await pickOption(popup, 'URL match type', 'Regex (advanced)');
+  await pickOption(popup, 'URL match type', 'Regex');
   await popup.getByLabel('URL filter').fill('^https://[^/]+/ads\\.example\\.com/');
-  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   const pathWarned = await popup
     .getByRole('button', { name: 'Block anyway', exact: true })
     .waitFor({ timeout: 5000 })
@@ -2259,20 +2332,38 @@ try {
   await popup.getByRole('button', { name: 'Add rule' }).first().click();
   await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
 
-  // c: 모드 숨김 — 비허용 요청 헤더 이름이면 Mode 미노출, 허용(Accept)이면 노출
+  /*
+   * c: **숨은 필드 컨트롤 셋이 화면에 없다** (수용 기준, ADR 0017).
+   *
+   * 예전 계약은 "append 불가 헤더면 Mode를 숨긴다"였다 — 그 컨트롤 자체가 사라졌으므로
+   * 조건부 노출을 재는 것은 이제 뜻이 없다. 대신 셋이 **어느 종류에서도** 서지 않는지를
+   * 잰다: 적용 방식·빈 값의 뜻은 값을 가진 종류에서만 있었으므로 그 종류를 골라 확인해야
+   * 부재 단언이 공허해지지 않는다.
+   */
   await pickOption(popup, 'Type', 'Request header');
-  await popup.getByLabel('Header name', { exact: true }).fill('X-Custom');
+  await popup.getByLabel('Header name', { exact: true }).fill('Accept'); // append 허용 헤더 = 옛 노출 조건
   await closeSuggestions(popup);
-  const modeHidden = (await popup.getByRole('combobox', { name: 'Mode' }).count()) === 0;
-  await popup.getByLabel('Header name', { exact: true }).fill('Accept');
-  await closeSuggestions(popup);
-  const modeShown = (await popup.getByRole('combobox', { name: 'Mode' }).count()) === 1;
-  // d: regex 선택 시 placeholder 분기
-  await pickOption(popup, 'URL match type', 'Regex (advanced)');
+  /*
+   * 감도 대조가 **먼저**다. 헤더 이름 제안 팝업이 열려 있으면 floating-ui가 폼의 나머지를
+   * aria-hidden 처리해 role 조회가 전부 0을 돌려준다 — 그때 아래 부재 단언은 컨트롤이
+   * 살아 있어도 통과한다. 같은 조회 방식으로 **있어야 하는** 것이 잡히는지 먼저 본다.
+   */
+  const probeWorks = (await popup.getByRole('combobox', { name: 'Type', exact: true }).count()) === 1;
+  const hiddenFieldControls = await Promise.all([
+    popup.getByRole('combobox', { name: 'Mode' }).count(),
+    popup.getByRole('combobox', { name: 'When empty' }).count(),
+  ]);
+  // 매치 방식은 남지만 **선택지가 둘뿐**이다 — 넷을 늘어놓던 컨트롤이 아니다 (story 21).
+  const matchOptions = await matchTypeOptionLabels(popup);
+  // d: 정규식을 고르면 예시가 그 문법으로 바뀐다 (story 22)
+  await pickOption(popup, 'URL match type', 'Regex');
   const regexPlaceholder = await popup.getByLabel('URL filter').getAttribute('placeholder');
-  record('N18c: 모드 미노출/노출 + regex placeholder 분기',
-    modeHidden && modeShown && /\^https/.test(regexPlaceholder ?? ''),
-    `hidden=${modeHidden}, shown=${modeShown}, placeholder="${regexPlaceholder}"`);
+  record('N18c: 숨은 필드 컨트롤 부재 + 매치 방식 2지 + regex placeholder 분기',
+    probeWorks &&
+      hiddenFieldControls.every((count) => count === 0) &&
+      matchOptions.join('|') === 'Wildcard|Regex' &&
+      /\^https/.test(regexPlaceholder ?? ''),
+    `감도대조=${probeWorks}, 숨은 컨트롤=${JSON.stringify(hiddenFieldControls)}, 매치 선택지=${JSON.stringify(matchOptions)}, placeholder="${regexPlaceholder}"`);
 
   // e: 키보드 — Cmd/Ctrl+Enter 저장, Esc 닫기
   await popup.getByLabel('Header name', { exact: true }).fill('X-Kbd');
@@ -2299,10 +2390,10 @@ try {
     3000,
     100,
   );
-  const formStillOpen = await popup.getByRole('button', { name: 'Save', exact: true }).isVisible().catch(() => false);
+  const formStillOpen = await popup.getByRole('button', { name: SAVE_BUTTON }).isVisible().catch(() => false);
   // 폼 본문의 Esc는 폼을 닫는다
   await popup.keyboard.press('Escape');
-  const escClosed = await popup.getByRole('button', { name: 'Save', exact: true })
+  const escClosed = await popup.getByRole('button', { name: SAVE_BUTTON })
     .waitFor({ state: 'detached', timeout: 5000 }).then(() => true, () => false);
   record('N18d: Cmd/Ctrl+Enter 저장 + Select 팝업 Esc는 폼 유지 + 폼 Esc는 닫힘',
     kbdSaved === true && popupClosedFormKept === 0 && formStillOpen && escClosed,
@@ -2372,8 +2463,8 @@ try {
   // 브라우저 토큰이 화면 어디로도 새지 않는다 — 폼과 행이 같은 어휘를 쓴다.
   const rawTokenGone = (await popup.getByText('script', { exact: true }).count()) === 0;
   // 정규식 스코프에는 표시가 붙는다 (story 16) — 와일드카드와 헷갈리면 안 걸리는 이유를 모른다.
-  const regexMark = await rows.nth(1).getByLabel('Regex (advanced)').count();
-  const plainHasNoRegexMark = (await rows.nth(0).getByLabel('Regex (advanced)').count()) === 0;
+  const regexMark = await rows.nth(1).getByLabel('Regex').count();
+  const plainHasNoRegexMark = (await rows.nth(0).getByLabel('Regex').count()) === 0;
   record('N19a: 행 — 제목(메모/종류 이름)·뱃지, 칩 줄은 스코프가 맨 앞, 효과·리소스 묶음(토큰 아님)·메서드 순, 정규식 표시',
     headingOk && plainOk && condOk && rawTokenGone && regexMark === 1 && plainHasNoRegexMark,
     `제목·뱃지=${JSON.stringify([plainHeading, condHeading])}=${headingOk}, ` +
@@ -2455,7 +2546,7 @@ try {
   await popup.getByLabel('Header name', { exact: true }).fill('X-M3');
   await closeSuggestions(popup);
   await popup.getByLabel('Value', { exact: true }).fill('3');
-  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   const afterAdd = await pollSessionRuleCount(sw, 3).then(() => true, () => false);
   // 규칙 삭제(행 exit): 삭제 → 실요청 반영 + AnimatePresence exit가 상태를 막지 않음
   await popup.getByRole('button', { name: 'Delete', exact: true }).first().click();
@@ -3165,7 +3256,7 @@ try {
   {
     const page = await openDelayedCommandPopup({ reject: true });
     await fillNewRule(page, 'X-Rejected');
-    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.getByRole('button', { name: SAVE_BUTTON }).click();
     const alertShown = await page.getByRole('alert').filter({ hasText: 'Injected refusal' }).first()
       .waitFor({ timeout: 5000 }).then(() => true, () => false);
     const afterReject = await page.evaluate(() => {
@@ -3199,9 +3290,9 @@ try {
   {
     const page = await openDelayedCommandPopup({ throwInstead: true });
     await fillNewRule(page, 'X-Thrown');
-    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.getByRole('button', { name: SAVE_BUTTON }).click();
     const recovered = await page
-      .getByRole('button', { name: 'Save', exact: true })
+      .getByRole('button', { name: SAVE_BUTTON })
       .waitFor({ timeout: 5000 })
       .then(() => true, () => false);
     const state = await page.evaluate(() => {
@@ -3390,7 +3481,7 @@ try {
     }
     if (setup) await setup();
     await page.getByRole('combobox', { name: 'Type', exact: true }).focus();
-    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.getByRole('button', { name: SAVE_BUTTON }).click();
     await page.waitForTimeout(rowSettleMs());
     // 기대 요소와 **동일한 노드**인지 본다 — 접근성 이름은 aria-label일 수도 <label>
     // 연결일 수도 있어(이 폼은 둘 다 쓴다) 문자열 비교로는 어느 쪽인지 알 수 없다.
@@ -3434,7 +3525,7 @@ try {
     'Redirect 치환(패턴만 채움)': await focusAfterBlockedSave(popup, {
       kind: 'Redirect',
       setup: () => popup.getByLabel('Redirect pattern', { exact: true }).first().fill('^https://a/(.*)'),
-      expected: (page) => page.getByLabel('Redirect substitution', { exact: true }),
+      expected: (page) => page.getByLabel('Redirect to', { exact: true }),
     }),
   };
   const allOnTarget = Object.values(focusCases).every((r) => r.onTarget);
@@ -3692,7 +3783,8 @@ try {
       return { radius: cs.borderRadius, padL: cs.paddingLeft, padR: cs.paddingRight };
     };
     const cancel = pick('Cancel');
-    const save = pick('Save');
+    // 편집 폼의 저장 글자는 'Save changes'다 (티켓 06) — 둘 다 받는다.
+    const save = pick('Save changes') ?? pick('Save');
     return cancel && save ? { cancel: read(cancel), save: read(save) } : null;
   });
   record('N31: 폼 액션 쌍 — 취소·저장이 같은 8px 모서리와 넓은 좌우 여백',
@@ -4357,7 +4449,7 @@ try {
   // 다시 열어 저장 — 접히고 두 행이 원래 순서로 돌아온다 (story 3).
   await popup.getByRole('button', { name: 'Edit', exact: true }).nth(1).click();
   await typeField.waitFor({ timeout: 5000 });
-  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   const collapsed = await pollUntil(() => typeField.count(), (n) => n === 0, 5000, 100);
   const orderAfter = await pollUntil(rowLayout, (r) => r.length === 2, 5000, 100);
   const sameOrder =
@@ -4461,6 +4553,166 @@ try {
     `쿠키 칩=${JSON.stringify(cookieChips)}, 흐림 on=${onColor} off=${offColor} paused=${pausedColor} resumed=${resumedColor}, ` +
       `삭제 ${deleteIdle}→${deleteHover}=${deleteTurnsRed}, ` +
       `새 폼 y=${Math.round(newFormY)} < 첫 행 y=${Math.round(firstRowY)}=${newFormOnTop}`);
+
+  /*
+   * N47: 폼 시안 정합 — 머리글·저장 글자·응답 쿠키 속성·수렴 저장·두 열 (티켓 06).
+   *
+   * 다섯 다 **실제로 그려지고 저장까지 가야** 확인된다. 순수 테스트는 수렴 함수가 무엇을
+   * 돌려주는지까지만 말하고, 그 결과가 폼의 어느 컨트롤에서 나와 저장소에 닿는지는 말하지
+   * 못한다.
+   */
+  await seedProfiles([
+    baseProfile('p-form', 'FormShape', [
+      // 넷 중 **화면에 없는** 방식(domain)으로 저장된 규칙 — 수렴이 여기서 관측된다.
+      { kind: 'request-header', id: 'f1', name: 'X-Conv', value: '1', enabled: true,
+        mode: 'append', emptyMeans: 'send-empty', comment: 'Converge me',
+        urlFilter: 'conv.example', urlMatchType: 'domain',
+        conditions: { resourceTypes: ['sub_frame'] } },
+      // 이웃 — 같은 프로필에 있지만 폼을 열지 않는다. 수렴은 저장한 규칙에만 붙어야 한다.
+      { kind: 'request-header', id: 'f2', name: 'X-Untouched', value: '2', enabled: true,
+        mode: 'append', emptyMeans: 'send-empty', comment: 'Leave me',
+        urlFilter: 'untouched.example', urlMatchType: 'prefix',
+        conditions: { resourceTypes: ['sub_frame'] } },
+    ]),
+  ]);
+  await popup.reload();
+
+  // (a) 새 규칙 폼의 머리글과 저장 글자 (story 19·29)
+  await popup.getByRole('button', { name: 'Add rule' }).first().click();
+  await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
+  const newFormHeading = await popup.getByText('New rule', { exact: true }).isVisible().catch(() => false);
+  const newSaveLabel = (await popup.getByRole('button', { name: 'Save', exact: true }).count()) === 1;
+  // 닫기 버튼이 폼을 접는다 — 취소와 같은 일을 하는 두 번째 문이다.
+  await popup.getByRole('button', { name: 'Close rule form' }).click();
+  const closedByX = await popup
+    .getByRole('combobox', { name: 'Type', exact: true })
+    .waitFor({ state: 'detached', timeout: 5000 })
+    .then(() => true, () => false);
+
+  // (b) 편집 폼의 머리글과 저장 글자 — 같은 자리의 같은 버튼이 다른 일을 한다
+  await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
+  await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
+  const editFormHeading = await popup.getByText('Edit rule', { exact: true }).isVisible().catch(() => false);
+  const editSaveLabel = (await popup.getByRole('button', { name: 'Save changes', exact: true }).count()) === 1;
+  // 저장된 방식(domain)은 화면에 없다 — 와일드카드로 접혀 보인다 (story 21).
+  const foldedMatch = await popup
+    .getByRole('combobox', { name: 'URL match type', exact: true })
+    .textContent();
+
+  /*
+   * (c) **수렴 저장** — 손대지 않고 저장만 해도 폼이 보여 준 값으로 굳는다 (수용 기준).
+   * 매치 방식 domain → 와일드카드(contains), 리소스 sub_frame → 문서 묶음 전체.
+   * 반대로 폼이 보여 주지 않은 적용 방식·빈 값의 뜻은 그대로여야 한다.
+   */
+  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
+  const converged = await pollUntil(
+    () => sw.evaluate(async () => {
+      const { state } = await chrome.storage.local.get('state');
+      return state.profiles[0]?.modifications[0] ?? null;
+    }),
+    (m) => m?.urlMatchType === 'contains',
+  );
+  const convergeOk =
+    converged.urlMatchType === 'contains' &&
+    converged.conditions?.resourceTypes?.join() === 'main_frame,sub_frame' &&
+    converged.mode === 'append' &&
+    converged.emptyMeans === 'send-empty';
+  /*
+   * **손대지 않은 규칙은 바뀌지 않는다** (수용 기준). 같은 프로필의 이웃은 폼을 지나지
+   * 않았으므로 `prefix`도 `sub_frame`도 그대로여야 한다 — 넓히는 변경이 사용자가 스스로
+   * 저장한 규칙에만 붙는다는 것이 수렴의 조건이다.
+   */
+  const untouched = await sw.evaluate(async () => {
+    const { state } = await chrome.storage.local.get('state');
+    const m = state.profiles[0].modifications.find((x) => x.name === 'X-Untouched');
+    return { match: m?.urlMatchType, types: m?.conditions?.resourceTypes?.join() };
+  });
+  const untouchedIntact = untouched.match === 'prefix' && untouched.types === 'sub_frame';
+  await waitFormClosed();
+
+  /*
+   * (d) 응답 쿠키 속성 — 세 입력과 세 칩 그룹이 서고, 고른 값이 저장된다 (story 32~34).
+   * 비운 Domain·Max-Age는 조립에 붙지 않으므로 저장에도 남지 않는다 (story 35).
+   */
+  await popup.getByRole('button', { name: 'Add rule' }).first().click();
+  await pickOption(popup, 'Type', 'Response cookie');
+  await popup.getByLabel('Cookie name', { exact: true }).fill('sid');
+  await popup.getByLabel('Cookie value', { exact: true }).fill('abc');
+  await popup.getByLabel('Path', { exact: true }).fill('/app');
+  await popup.getByRole('button', { name: 'Lax', exact: true }).click();
+  const secureGroup = popup.getByRole('group', { name: 'Secure' });
+  await secureGroup.getByRole('button', { name: 'On', exact: true }).click();
+  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
+  const cookieSaved = await pollUntil(
+    () => sw.evaluate(async () => {
+      const { state } = await chrome.storage.local.get('state');
+      return state.profiles[0]?.modifications.find((m) => m.kind === 'set-cookie') ?? null;
+    }),
+    (m) => m?.name === 'sid',
+  );
+  const cookieOk =
+    cookieSaved.value === 'abc' && cookieSaved.path === '/app' &&
+    cookieSaved.sameSite === 'lax' && cookieSaved.secure === true &&
+    cookieSaved.domain === undefined && cookieSaved.maxAge === undefined;
+  await waitFormClosed();
+
+  /*
+   * (e) 팝업은 한 열, 탭은 두 열 (story 30). 컨테이너 폭이 정하므로 표면을 묻지 않는다 —
+   * 첫 줄(이름·종류)의 두 칸이 같은 y에 서는지가 두 열의 실질이다.
+   */
+  /**
+   * 같은 줄에 놓일 칸들이 **몇 개의 서로 다른 y**에 서는가 — 1이면 나란히, N이면 쌓였다.
+   *
+   * "열 수"라고 부르지 않는 이유는 그것이 아니기 때문이다. 세는 것은 **줄 수**이고, 두 열
+   * 배치는 줄이 하나라는 뜻이다. 칸은 라벨로 짚는다 — 그리드 부모를 DOM에서 거슬러 올라가
+   * 찾으면 배치 방식을 바꾸는 것만으로 조용히 빗나간다.
+   */
+  const distinctTops = async (cells) => {
+    const tops = [];
+    for (const cell of cells) {
+      const box = await cell.boundingBox();
+      if (!box) return null;
+      tops.push(Math.round(box.y));
+    }
+    return new Set(tops).size;
+  };
+  const openFormAndMeasure = async (page) => {
+    await page.getByRole('button', { name: 'Add rule' }).first().click();
+    await page.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
+    // 응답 쿠키 속성 세 칸도 같은 규칙을 따른다 (story 30) — 그 칸들은 이 종류에서만 선다.
+    await pickOption(page, 'Type', 'Response cookie');
+    await page.getByLabel('Domain', { exact: true }).waitFor({ timeout: 5000 });
+    await page.waitForTimeout(rowSettleMs());
+    return {
+      firstRow: await distinctTops([
+        page.getByLabel('Name', { exact: true }),
+        page.getByRole('combobox', { name: 'Type', exact: true }),
+      ]),
+      cookieAttrs: await distinctTops([
+        page.getByLabel('Domain', { exact: true }),
+        page.getByLabel('Path', { exact: true }),
+        page.getByLabel('Max-Age', { exact: true }),
+      ]),
+    };
+  };
+  const popupLines = await openFormAndMeasure(popup);
+  await popup.getByRole('button', { name: 'Cancel' }).click();
+  const tabForm = await context.newPage();
+  await tabForm.setViewportSize({ width: 1100, height: 700 });
+  await tabForm.goto(`chrome-extension://${extensionId}/app.html?locale=en`);
+  const tabLines = await openFormAndMeasure(tabForm);
+  await tabForm.close();
+
+  record('N47: 폼 — 머리글·저장 글자(새/편집)·닫기, 수렴 저장(손대지 않은 규칙은 불변), 응답 쿠키 속성, 팝업 1열·탭 2열',
+    newFormHeading && newSaveLabel && closedByX && editFormHeading && editSaveLabel &&
+      /Wildcard/.test(foldedMatch ?? '') && convergeOk && untouchedIntact && cookieOk &&
+      popupLines.firstRow === 2 && popupLines.cookieAttrs === 3 &&
+      tabLines.firstRow === 1 && tabLines.cookieAttrs === 1,
+    `새 폼=[${newFormHeading},${newSaveLabel}] X닫기=${closedByX}, 편집=[${editFormHeading},${editSaveLabel}] 접힌 방식="${(foldedMatch ?? '').trim()}", ` +
+      `수렴=${convergeOk}(${converged.urlMatchType}/${JSON.stringify(converged.conditions?.resourceTypes)}/${converged.mode}/${converged.emptyMeans}), ` +
+      `이웃 불변=${untouchedIntact}(${JSON.stringify(untouched)}), ` +
+      `쿠키=${cookieOk}(${JSON.stringify({ v: cookieSaved.value, p: cookieSaved.path, s: cookieSaved.sameSite, sec: cookieSaved.secure, d: cookieSaved.domain })}), ` +
+      `줄 수 팝업=[${popupLines.firstRow},${popupLines.cookieAttrs}] 탭=[${tabLines.firstRow},${tabLines.cookieAttrs}]`);
 
   /*
    * N38: 백업 sync 스위치 (티켓 07, R-1 단순 계약).
@@ -4676,7 +4928,7 @@ try {
   await popup.getByLabel('Value', { exact: true }).fill('dark');
   await activateSwitch().click();
   const offBeforeSave = (await activateSwitch().getAttribute('aria-checked')) === 'false';
-  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   await waitFormClosed();
   const darkMod = await pollUntil(readMod('X-Act-Dark'), (m) => m !== null);
   const savedOff = darkMod?.enabled === false;
@@ -4687,7 +4939,7 @@ try {
   await popup.getByLabel('Header name', { exact: true }).fill('X-Act-Default');
   await closeSuggestions(popup);
   await popup.getByLabel('Value', { exact: true }).fill('default');
-  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   await waitFormClosed();
   const defaultMod = await pollUntil(readMod('X-Act-Default'), (m) => m !== null);
   const savedOn = defaultMod?.enabled === true;
@@ -4719,7 +4971,7 @@ try {
   await seededRow.getByRole('button', { name: 'Edit', exact: true }).click();
   await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
   const editReflectsOff = (await activateSwitch().getAttribute('aria-checked')) === 'false';
-  await popup.getByRole('button', { name: 'Save', exact: true }).click();
+  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   await waitFormClosed();
   const seededAfterEdit = await pollUntil(readMod('X-Act-Seeded'), (m) => m !== null);
   const editKeptOff = seededAfterEdit?.enabled === false;

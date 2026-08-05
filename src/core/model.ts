@@ -345,6 +345,24 @@ export function placeholderTemplate(modification: Modification): string | null {
 export type ModificationKind = Modification['kind'];
 
 /**
+ * 규칙 종류 여덟 가지 — **표시 순서이자 전수 목록**이다.
+ *
+ * `satisfies`가 union과 맞물려 있어, 종류를 더하고 여기 안 적으면 타입이 먼저 깨진다.
+ * 폼의 종류 셀렉트와 "여덟 종류를 빠짐없이 돈다"를 재는 테스트가 같은 목록을 봐야 하므로
+ * 타입이 사는 곳에 둔다 — 화면 쪽에 두면 테스트가 UI를 import하게 된다.
+ */
+export const ALL_MODIFICATION_KINDS = [
+  'request-header',
+  'response-header',
+  'cookie',
+  'set-cookie',
+  'redirect',
+  'user-agent',
+  'header-removal',
+  'block',
+] as const satisfies readonly ModificationKind[];
+
+/**
  * 레거시 프로필 Filter (ADR 0010 이전). 저장·import 마이그레이션의 입력
  * 검증에만 쓰인다 — 새 데이터는 규칙별 RuleConditions로 표현된다.
  */
