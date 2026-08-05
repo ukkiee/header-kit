@@ -12,7 +12,7 @@ import {
   updateModification,
   updateProfileMeta,
 } from './commands';
-import type { RequestHeaderModification, StoredState } from './schema';
+import type { Modification, RequestHeaderModification, StoredState } from './schema';
 import { readStoredState, SCHEMA_VERSION } from './schema';
 
 function modification(id: string, name = 'X-A'): RequestHeaderModification {
@@ -32,6 +32,8 @@ function state(): StoredState {
     ],
     materialized: {},
     customHeaderNames: [],
+    customCookieNames: [],
+    customUserAgents: [],
   };
 }
 
@@ -242,5 +244,131 @@ describe('state transition commands', () => {
     removeModification(original, 'p1', 'm1');
 
     expect(original).toEqual(snapshot);
+  });
+
+  /*
+   * 제안 이력 (티켓 08) — **저장이 자동으로 남긴다.**
+   *
+   * 헤더 이름은 환경설정에서 사람이 등록하지만 쿠키 이름·User-Agent에는 그런 화면이 없다.
+   * 그래서 규칙을 저장하는 전이 **안에서** 남긴다 — 명령을 하나 더 보내면 두 번의 쓰기가
+   * 되고, 그 사이에 워커가 죽으면 규칙은 저장됐는데 이력은 비는 상태가 생긴다.
+   */
+  describe('제안 이력 기록', () => {
+    const cookie = (name: string): Modification =>
+      ({ kind: 'cookie', id: 'c1', name, value: 'v', enabled: true,
+         mode: 'append', emptyMeans: 'remove', comment: '' }) as Modification;
+    const ua = (value: string): Modification =>
+      ({ kind: 'user-agent', id: 'u1', value, enabled: true, comment: '' }) as Modification;
+
+    it('쿠키 규칙을 저장하면 그 이름이 다음 제안에 남는다', () => {
+      const next = applyCommand(state(), {
+        type: 'add-modification', profileId: 'p1', modification: cookie('my_sid'),
+      });
+      expect(next.customCookieNames).toEqual(['my_sid']);
+    });
+
+    it('User-Agent 규칙을 저장하면 그 값이 남는다', () => {
+      const next = applyCommand(state(), {
+        type: 'add-modification', profileId: 'p1', modification: ua('MyBot/1.0'),
+      });
+      expect(next.customUserAgents).toEqual(['MyBot/1.0']);
+    });
+
+    it('편집 저장도 남긴다 — 이름을 고쳐 저장한 값이 다음에 제안된다', () => {
+      const added = applyCommand(state(), {
+        type: 'add-modification', profileId: 'p1', modification: cookie('first'),
+      });
+      const edited = applyCommand(added, {
+        type: 'update-modification', profileId: 'p1', modification: cookie('second'),
+      });
+      expect(edited.customCookieNames).toEqual(['first', 'second']);
+    });
+
+    // 프리셋에 없는 이름으로 잰다 — 프리셋에 있는 것은 아래 규칙에 먼저 걸려 중복을 못 본다.
+    it('같은 값은 두 번 남지 않는다 (대소문자 무시)', () => {
+      const once = applyCommand(state(), {
+        type: 'add-modification', profileId: 'p1', modification: cookie('My_Sid'),
+      });
+      const twice = applyCommand(once, {
+        type: 'add-modification', profileId: 'p1', modification: cookie('my_sid'),
+      });
+      expect(twice.customCookieNames).toEqual(['My_Sid']);
+    });
+
+    /*
+     * 프리셋에 이미 있는 값은 남기지 않는다 — 남기면 목록에 같은 이름이 두 번 서고, 그 중복은
+     * 사용자가 지울 화면이 없어 영구히 남는다.
+     */
+    it('프리셋에 있는 이름은 이력에 남기지 않는다', () => {
+      const next = applyCommand(state(), {
+        type: 'add-modification', profileId: 'p1', modification: cookie('session_id'),
+      });
+      expect(next.customCookieNames).toEqual([]);
+    });
+
+    it('빈 값은 남기지 않는다', () => {
+      const next = applyCommand(state(), {
+        type: 'add-modification', profileId: 'p1', modification: cookie('   '),
+      });
+      expect(next.customCookieNames).toEqual([]);
+    });
+
+    it('다른 종류는 이력을 건드리지 않는다', () => {
+      const next = applyCommand(state(), {
+        type: 'add-modification', profileId: 'p1', modification: modification('m9', 'X-Zed'),
+      });
+      expect(next.customCookieNames).toEqual([]);
+      expect(next.customUserAgents).toEqual([]);
+      // 헤더 이름 이력은 환경설정이 관리한다 — 저장이 자동으로 남기지 않는다.
+      expect(next.customHeaderNames).toEqual([]);
+    });
+
+    /*
+     * **저장이 실제로 일어났을 때만 남긴다.** 없는 프로필에 더하거나 없는 규칙을 고치는 명령은
+     * 상태를 바꾸지 않는데, 그때도 남기면 저장된 적 없는 값이 제안에 뜬다. 화면 둘이 열린 채
+     * 한쪽이 지운 규칙을 다른 쪽이 저장하면 실제로 도달하는 경로다.
+     */
+    it('없는 프로필에 더하면 이력도 남지 않는다', () => {
+      const next = applyCommand(state(), {
+        type: 'add-modification', profileId: 'no-such-profile', modification: cookie('ghost'),
+      });
+      expect(next.profiles.flatMap((p) => p.modifications).some((m) => m.id === 'c1')).toBe(false);
+      expect(next.customCookieNames).toEqual([]);
+    });
+
+    it('없는 규칙을 고치면 이력도 남지 않는다', () => {
+      const next = applyCommand(state(), {
+        type: 'update-modification', profileId: 'p1', modification: cookie('never_saved'),
+      });
+      expect(next.profiles[0]?.modifications.some((m) => m.id === 'c1')).toBe(false);
+      expect(next.customCookieNames).toEqual([]);
+    });
+
+    /** 응답 쿠키의 이름도 쿠키 이름이다 — 두 종류가 같은 목록에 남는다. */
+    it('응답 쿠키 규칙의 이름도 이력에 남는다', () => {
+      const setCookie: Modification = {
+        kind: 'set-cookie', id: 's1', name: 'sc_smoke', value: 'v',
+        enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
+      };
+      const next = applyCommand(state(), {
+        type: 'add-modification', profileId: 'p1', modification: setCookie,
+      });
+      expect(next.customCookieNames).toEqual(['sc_smoke']);
+    });
+
+    /*
+     * **상한을 두지 않는다.** 자동으로 쌓이는 목록에 상한을 뒀다가 걷었다 — 티켓이 요구한 것은
+     * "직접 친 값은 다음에도 제안된다"이고, 상한은 그것을 어느 지점부터 조용히 어긴다.
+     */
+    it('많이 쌓여도 버리지 않는다 — 직접 친 값은 다음에도 제안된다', () => {
+      let current = state();
+      for (let i = 0; i < 30; i += 1) {
+        current = applyCommand(current, {
+          type: 'add-modification', profileId: 'p1', modification: cookie(`name_${i}`),
+        });
+      }
+      expect(current.customCookieNames).toHaveLength(30);
+      expect(current.customCookieNames[0]).toBe('name_0');
+    });
   });
 });

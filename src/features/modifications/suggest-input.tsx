@@ -1,15 +1,14 @@
 import { useId, useRef, useState, useSyncExternalStore, type ComponentType, type Ref } from 'react';
-import { suggestHeaderNames } from '@/core/autocomplete';
+import type { Suggestion } from '@/core/autocomplete';
 import { Input, type InputProps } from '@/ui/text-field';
-import { useT } from '@/ui/i18n-context';
-import type { HeaderNameAutocompleteProps } from './header-name-autocomplete';
+import type { SuggestAutocompleteProps } from './suggest-autocomplete';
 
 /**
  * Base UI Autocomplete는 이 동적 import 청크에만 있다 — 규칙 폼을 열어야 보이는 UI라
  * 팝업 초기 번들에서 제외된다(실측 26.5KB). 선행 예: sortable-profile-list의 dnd-kit.
  *
  * **`React.lazy`를 쓰지 않는다.** lazy는 첫 렌더에서 한 번 서스펜드했다가 재시도하는데,
- * 모듈이 이미 도착해 있어도 그 왕복이 실측 ~250ms였다. 헤더 이름 필드는 autoFocus라
+ * 모듈이 이미 도착해 있어도 그 왕복이 실측 ~250ms였다. 첫 필드는 autoFocus라
  * 사용자가 폼을 열자마자 타이핑하고, 그 250ms 동안 브라우저 기본 datalist를 보게 된다 —
  * story 4가 없애려는 바로 그 경험이다. 그래서 받아 둔 컴포넌트를 모듈 스코프에 두고
  * 곧바로 동기 렌더한다. 이 방식에서는 교체까지 실측 0~7ms다.
@@ -19,12 +18,12 @@ import type { HeaderNameAutocompleteProps } from './header-name-autocomplete';
  * 교체가 이미 눈에 띄지 않는 이상, story 31이 지키려는 시작 속도를 내주면서까지 앞당길
  * 이유가 없다.
  */
-let loadedComponent: ComponentType<HeaderNameAutocompleteProps> | null = null;
+let loadedComponent: ComponentType<SuggestAutocompleteProps> | null = null;
 let pending: Promise<void> | null = null;
 const subscribers = new Set<() => void>();
 
 function loadAutocomplete(): Promise<void> {
-  pending ??= import('./header-name-autocomplete')
+  pending ??= import('./suggest-autocomplete')
     .then((module) => {
       loadedComponent = module.default;
       for (const notify of subscribers) notify();
@@ -63,14 +62,19 @@ const getLoadedComponent = () => loadedComponent;
  * 도착하는 창이 생기고, 그 사이에 도착하면 구독 시점에 이미 값이 있어 알림이 오지 않아
  * 그 입력만 datalist에 갇힌다. 이 훅은 구독 직후 스냅샷을 다시 읽어 그 창을 닫는다.
  */
-function useAutocompleteComponent(): ComponentType<HeaderNameAutocompleteProps> | null {
+function useAutocompleteComponent(): ComponentType<SuggestAutocompleteProps> | null {
   return useSyncExternalStore(subscribeToAutocomplete, getLoadedComponent, getLoadedComponent);
 }
 
-export interface HeaderNameInputProps extends Pick<InputProps, 'variant' | 'size' | 'autoFocus'> {
+export interface SuggestInputProps extends Pick<InputProps, 'variant' | 'size' | 'autoFocus'> {
   value: string;
   onChange: (next: string) => void;
-  userHeaders: readonly string[];
+  /** 이미 산출된 후보 — 어느 사전에서 왔는지는 호출부가 안다. */
+  suggestions: readonly Suggestion[];
+  /** 접근성 이름. */
+  label: string;
+  /** 입력이 비었을 때의 예시 — 없으면 라벨이 대신 선다. */
+  placeholder?: string;
   className?: string;
   /**
    * 실제 입력 요소로 가는 ref — 검증 실패 시 포커스를 옮기는 데 쓴다(티켓 08).
@@ -81,24 +85,26 @@ export interface HeaderNameInputProps extends Pick<InputProps, 'variant' | 'size
 }
 
 /**
- * 헤더 이름 입력 — 표준 사전 + 사용자 항목으로 제안한다.
+ * 제안이 붙는 입력 — 헤더 이름·쿠키 이름·User-Agent 셋이 함께 쓴다 (티켓 08).
  *
- * 후보 산출은 여기(정확히는 core의 `suggestHeaderNames`)서 끝난다. 아래 두 표현 모두
- * 같은 배열을 받아 그리기만 하므로 어느 쪽이 렌더되든 제안 내용은 동일하다.
+ * **후보를 만들지 않는다.** 어느 사전에서 어떻게 골랐는지는 core의 `suggest*` 함수들이 정하고
+ * 호출부가 그 결과를 넘긴다 — 이 컴포넌트가 맡는 것은 지연 청크 교체·폴백·포커스뿐이다.
+ * 그 기제가 만만치 않아(아래 주석들) 세 필드가 각자 갖게 두면 곧 셋이 갈라진다.
+ *
+ * 아래 두 표현 모두 같은 배열을 받아 그리기만 하므로 어느 쪽이 렌더되든 제안 내용은 같다.
  */
-export function HeaderNameInput({
+export function SuggestInput({
   value,
   onChange,
-  userHeaders,
+  suggestions,
+  label,
+  placeholder,
   className,
   variant,
   size,
   autoFocus,
   ref,
-}: HeaderNameInputProps) {
-  const t = useT();
-  const label = t('headerName');
-  const suggestions = suggestHeaderNames(value, userHeaders);
+}: SuggestInputProps) {
   const Autocomplete = useAutocompleteComponent();
 
   /**
@@ -106,7 +112,7 @@ export function HeaderNameInput({
    *
    * 두 표현은 컴포넌트 타입이 달라 교체가 **리마운트**다. 새 입력에 `autoFocus`를 그대로
    * 넘기면 마운트 시점에 포커스를 가져가는데, 청크 도착이 늦으면 그 사이 다른 필드로 옮긴
-   * 사용자가 헤더 이름으로 끌려온다. 청크 응답을 900ms 늦춰 실측 재현했다.
+   * 사용자가 그 필드로 끌려온다. 청크 응답을 900ms 늦춰 실측 재현했다.
    *
    * 그렇다고 교체 때 `autoFocus`를 무조건 끄면 안 된다 — 정상 경로(0~7ms)에서는 폴백이
    * 포커스를 쥔 채 사라지고 새 입력이 받지 않아 폼을 열어도 포커스가 아무 데도 없다.
@@ -119,12 +125,12 @@ export function HeaderNameInput({
    */
   const fallbackFocus = useRef<boolean | null>(null);
 
-  const shared = { value, onChange, suggestions, label, className, variant, size, ref };
+  const shared = { value, onChange, suggestions, label, placeholder, className, variant, size, ref };
 
   return Autocomplete ? (
     <Autocomplete {...shared} autoFocus={fallbackFocus.current ?? autoFocus} />
   ) : (
-    <PlainHeaderNameInput
+    <PlainSuggestInput
       {...shared}
       autoFocus={autoFocus}
       onFocusedChange={(focused) => {
@@ -139,18 +145,19 @@ export function HeaderNameInput({
  * 교체 시 시각 점프가 없고, 제안 목록도 위와 같은 배열이다. 도착이 0~7ms라 이 표현이
  * 보이는 시간은 사실상 없지만, 보이더라도 기능이 끊기지는 않는다.
  */
-function PlainHeaderNameInput({
+function PlainSuggestInput({
   value,
   onChange,
   suggestions,
   label,
+  placeholder,
   className,
   variant,
   size,
   autoFocus,
   ref,
   onFocusedChange,
-}: HeaderNameAutocompleteProps & {
+}: SuggestAutocompleteProps & {
   /** 교체 시 포커스 판단에 쓰인다 — 위 `fallbackFocus` 참고. */
   onFocusedChange: (focused: boolean) => void;
 }) {
@@ -172,14 +179,20 @@ function PlainHeaderNameInput({
         onChange={(e) => onChange(e.target.value)}
         onFocus={() => reportFocus(true)}
         onBlur={() => reportFocus(false)}
-        placeholder={label}
+        placeholder={placeholder ?? label}
         aria-label={label}
         list={listId}
         autoComplete="off"
         className={className}
       />
       <datalist id={listId}>
-        {focused && suggestions.map((name) => <option key={name} value={name} />)}
+        {/* 값이 들어가고 라벨은 설명으로 붙는다 — UA처럼 둘이 다를 때 폴백에서도 읽힌다. */}
+        {focused &&
+          suggestions.map((item) => (
+            <option key={item.value} value={item.value}>
+              {item.label === item.value ? undefined : item.label}
+            </option>
+          ))}
       </datalist>
     </>
   );

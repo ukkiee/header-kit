@@ -41,6 +41,8 @@ const sampleState: StoredState = {
   ],
   materialized: {},
   customHeaderNames: [],
+  customCookieNames: [],
+  customUserAgents: [],
 };
 
 function InteractiveTransferPanel() {

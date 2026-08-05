@@ -1,5 +1,12 @@
 import { useId, useRef, useState, type RefObject } from 'react';
 import { X } from 'lucide-react';
+import {
+  EMPTY_SUGGESTION_HISTORY,
+  suggestCookieNames,
+  suggestHeaderNames,
+  suggestUserAgents,
+  type SuggestionHistory,
+} from '@/core/autocomplete';
 import { fieldIssues, type FieldIssue, type RequiredField } from '@/core/rule-validation';
 import {
   ALL_MODIFICATION_KINDS,
@@ -34,7 +41,7 @@ import { FieldLabeled, fieldCaption, InlineFieldError } from '@/ui/field-labeled
 import { SelectOptions } from '@/ui/select-options';
 import { ToggleSwitch } from '@/ui/toggle-switch';
 import { useT } from '@/ui/i18n-context';
-import { HeaderNameInput } from './header-name-input';
+import { SuggestInput } from './suggest-input';
 
 export interface RuleFormProps {
   /** 편집이면 기존 규칙, 생성이면 undefined. */
@@ -42,7 +49,8 @@ export interface RuleFormProps {
   /** 저장 — 권위 실행 결과를 돌려받아 거부(예: invalid regex)를 폼 안에서 보여준다. */
   onSave: (modification: Modification) => Promise<{ ok: boolean; error?: string }>;
   onCancel: () => void;
-  userHeaders?: readonly string[];
+  /** 제안이 쓰는 사용 이력 셋 (티켓 08) — 프리셋 사전은 core가 든다. */
+  history?: SuggestionHistory;
 }
 
 /**
@@ -63,7 +71,12 @@ const SAME_SITE_POLICIES = Object.keys(SAME_SITE_LABEL) as SameSitePolicy[];
  * 규칙 폼 (ADR 0006) — 종류를 고르면 그 종류의 필드가 나타나고, Save가 규칙
  * 전체를 원자적으로 저장한다. 초안은 로컬 — 취소가 아무것도 흘리지 않는다.
  */
-export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFormProps) {
+export function RuleForm({
+  initial,
+  onSave,
+  onCancel,
+  history = EMPTY_SUGGESTION_HISTORY,
+}: RuleFormProps) {
   const t = useT();
   const [draft, setDraft] = useState<Modification>(() => initial ?? createModification('request-header'));
   /*
@@ -368,12 +381,15 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
       */}
       {draft.kind === 'user-agent' && (
         <FieldLabeled label={t('userAgentValue')} error={fieldError('value')}>
-          <Input
+          {/* 라벨로 찾고 값을 넣는다 (story 39) — 긴 문자열을 외우거나 복사해 오지 않게. */}
+          <SuggestInput
             ref={valueRef}
             autoFocus
             className="font-mono"
             value={draft.value}
-            onChange={(e) => setDraft({ ...draft, value: e.target.value })}
+            onChange={(value) => setDraft({ ...draft, value })}
+            suggestions={suggestUserAgents(draft.value, history.userAgents)}
+            label={t('userAgentValue')}
             placeholder="Mozilla/5.0 …"
           />
         </FieldLabeled>
@@ -385,12 +401,13 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
       */}
       {draft.kind === 'header-removal' && (
         <FieldLabeled label={t('headerName')} error={fieldError('name')}>
-          <HeaderNameInput
+          <SuggestInput
             ref={nameRef}
             autoFocus
             value={draft.name}
             onChange={(name) => setDraft({ ...draft, name })}
-            userHeaders={userHeaders}
+            suggestions={suggestHeaderNames(draft.name, history.headerNames)}
+            label={t('headerName')}
           />
         </FieldLabeled>
       )}
@@ -403,24 +420,23 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
                 label={isCookieKind ? t('cookieName') : t('headerName')}
                 error={fieldError('name')}
               >
-                {isCookieKind ? (
-                  // 쿠키 이름은 헤더 사전 자동완성 대상이 아니다 — 평문 입력.
-                  <Input
-                    ref={nameRef}
-                    autoFocus
-                    value={draft.name ?? ''}
-                    onChange={(e) => patchDraft({ name: e.target.value })}
-                    placeholder="session_id"
-                  />
-                ) : (
-                  <HeaderNameInput
-                    ref={nameRef}
-                    autoFocus
-                    value={draft.name ?? ''}
-                    onChange={(name) => patchDraft({ name })}
-                    userHeaders={userHeaders}
-                  />
-                )}
+                {/*
+                  쿠키 이름도 제안을 받는다 (티켓 08) — 사전이 다를 뿐 구조는 헤더와 같다.
+                  예전에는 평문 입력이었고, 그래서 자주 쓰는 이름을 매번 다시 쳐야 했다.
+                */}
+                <SuggestInput
+                  ref={nameRef}
+                  autoFocus
+                  value={draft.name ?? ''}
+                  onChange={(name) => patchDraft({ name })}
+                  suggestions={
+                    isCookieKind
+                      ? suggestCookieNames(draft.name ?? '', history.cookieNames)
+                      : suggestHeaderNames(draft.name ?? '', history.headerNames)
+                  }
+                  label={isCookieKind ? t('cookieName') : t('headerName')}
+                  placeholder={isCookieKind ? 'session_id' : undefined}
+                />
               </FieldLabeled>
             ) : (
               <span />

@@ -44,6 +44,8 @@ function Interactive({ incognitoAllowed }: { incognitoAllowed: boolean }) {
         profiles: [],
         materialized: {},
         customHeaderNames: names,
+        customCookieNames: [],
+        customUserAgents: [],
       },
       command,
     );

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Ellipsis, Plus } from 'lucide-react';
+import type { SuggestionHistory } from '@/core/autocomplete';
 import type { Command } from '@/core/commands';
 import type { Modification, Profile } from '@/core/schema';
 import { Button } from '@/ui/press-button';
@@ -32,8 +33,8 @@ export interface ProfileSectionProps {
   onCommand: (command: Command) => void;
   /** 규칙 삭제 — 스냅샷을 잡아 Undo 토스트를 띄운다 (ui-refine 07). */
   onDeleteRule: (profileId: string, modificationId: string) => void;
-  /** 헤더 이름 autocomplete 사용자 항목. */
-  userHeaders?: readonly string[];
+  /** 제안이 쓰는 사용 이력 셋 (티켓 08). */
+  history?: SuggestionHistory;
   /** 규칙 저장 — 권위 실행 결과를 폼이 돌려받아 거부를 인라인으로 보여준다. */
   onCommandWithResult: (command: Command) => Promise<{ ok: boolean; error?: string }>;
   /**
@@ -51,7 +52,7 @@ export function ProfileSection({
   paused,
   onCommand,
   onDeleteRule,
-  userHeaders,
+  history,
   onCommandWithResult,
   editingRule,
   onEditingRuleChange,
@@ -196,7 +197,7 @@ export function ProfileSection({
               <div className={`${expandedCard} p-2`}>
                 {RuleForm ? (
                   <RuleForm
-                    userHeaders={userHeaders}
+                    history={history}
                     onCancel={() => setEditingRule(null)}
                     onSave={(next) => saveItem(next, 'add')}
                   />
@@ -243,7 +244,7 @@ export function ProfileSection({
                           {RuleForm ? (
                             <RuleForm
                               initial={modification}
-                              userHeaders={userHeaders}
+                              history={history}
                               onCancel={() => setEditingRule(null)}
                               onSave={(next) => saveItem(next, 'update')}
                             />

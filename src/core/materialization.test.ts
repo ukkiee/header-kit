@@ -48,7 +48,7 @@ function profile(overrides: Partial<Profile> = {}): Profile {
 }
 
 function state(profiles: Profile[], materialized: Record<string, string> = {}): StoredState {
-  return { schemaVersion: SCHEMA_VERSION, paused: false, theme: 'system', badgeVisible: true, syncBackup: true, profiles, materialized, customHeaderNames: [] };
+  return { schemaVersion: SCHEMA_VERSION, paused: false, theme: 'system', badgeVisible: true, syncBackup: true, profiles, materialized, customHeaderNames: [], customCookieNames: [], customUserAgents: [] };
 }
 
 describe('실체화 수명주기 (활성화 경계)', () => {

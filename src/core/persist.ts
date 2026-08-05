@@ -621,9 +621,16 @@ function validateStoredState(value: Record<string, unknown>): StoredState | null
   const retirementNotice = readRetirementNotice(rawNotice);
   const profiles = value.profiles.map(backfillProfile);
   const materialized = value.materialized ?? {};
-  const customHeaderNames = Array.isArray(value.customHeaderNames)
-    ? value.customHeaderNames.filter((n): n is string => typeof n === 'string')
-    : [];
+  /*
+   * 제안 이력 셋은 **검증보다 먼저** 기본값을 받는다 (티켓 08). 순서가 계약이다 — 검증이 먼저
+   * 보면 없던 필드 하나 때문에 상태 전체가 기본값으로 교체되어 프로필이 사라진다. 문자열이
+   * 아닌 항목은 조용히 걸러 낸다: 목록 하나가 프로필을 날릴 이유가 없다.
+   */
+  const stringList = (raw: unknown): string[] =>
+    Array.isArray(raw) ? raw.filter((n): n is string => typeof n === 'string') : [];
+  const customHeaderNames = stringList(value.customHeaderNames);
+  const customCookieNames = stringList(value.customCookieNames);
+  const customUserAgents = stringList(value.customUserAgents);
   /*
    * 테마는 백필·치유 대상이다 (ADR 0015). 필드가 없는 예전 상태나 알 수 없는 값 때문에
    * 검증을 실패시키면 상태 **전체**가 기본값으로 리셋되어 프로필이 사라진다 — 명암 하나가
@@ -656,6 +663,8 @@ function validateStoredState(value: Record<string, unknown>): StoredState | null
     profiles,
     materialized,
     customHeaderNames,
+    customCookieNames,
+    customUserAgents,
   } as unknown as StoredState;
 }
 

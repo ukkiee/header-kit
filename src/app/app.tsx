@@ -265,7 +265,11 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
       paused={state.paused}
       onCommand={dispatch}
       onDeleteRule={deleteRuleWithUndo}
-      userHeaders={state.customHeaderNames}
+      history={{
+        headerNames: state.customHeaderNames,
+        cookieNames: state.customCookieNames,
+        userAgents: state.customUserAgents,
+      }}
       onCommandWithResult={dispatchWithResult}
       editingRule={editingRule}
       onEditingRuleChange={setEditingRule}

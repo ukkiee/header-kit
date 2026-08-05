@@ -150,7 +150,38 @@ describe('parseStoredState', () => {
       customHeaderNames: ['X-Custom'],
     };
 
-    expect(parseStoredState(state)).toEqual(state);
+    /*
+     * 제안 이력 셋은 **없어도 읽힌다** (티켓 08 수용 기준). 검증보다 먼저 빈 배열을 받으므로
+     * 없던 상태가 통째로 기본값으로 교체되지 않는다 — 프로필도 실체화 값도 그대로 살아 있다.
+     */
+    const parsed = parseStoredState(state);
+    expect(parsed).toMatchObject({ ...state, customCookieNames: [], customUserAgents: [] });
+    expect(parsed.profiles).toHaveLength(1);
+    expect(parsed.materialized).toEqual({ m1: 'trace-abc' });
+  });
+
+  it('제안 이력에 문자열 아닌 항목이 섞여 있어도 상태 전체가 살아남는다', () => {
+    const parsed = parseStoredState({
+      schemaVersion: SCHEMA_VERSION,
+      paused: false,
+      theme: 'system',
+      badgeVisible: true,
+      syncBackup: true,
+      profiles: [
+        {
+          id: 'p1', name: 'P', active: true, shortLabel: 'P', color: '#2563eb',
+          modifications: [],
+        },
+      ],
+      materialized: {},
+      customHeaderNames: [],
+      customCookieNames: ['ok', 42, null],
+      customUserAgents: 'not-an-array',
+    });
+
+    expect(parsed.profiles).toHaveLength(1);
+    expect(parsed.customCookieNames).toEqual(['ok']);
+    expect(parsed.customUserAgents).toEqual([]);
   });
 
   function expectDefaultState(actual: unknown) {

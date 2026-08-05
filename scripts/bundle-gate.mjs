@@ -60,7 +60,7 @@ const ENTRY_HTML = join(OUT_DIR, 'popup.html');
 const MUST_BE_DEFERRED = [
   'sortable-profile-list',
   'motion',
-  'header-name-autocomplete',
+  'suggest-autocomplete',
   // 규칙 폼 (scope-race-hardening 07). 목록을 보는 동안에는 그려지지 않는 UI인데 첫 페인트
   // 컴포넌트가 정적으로 import해 폼 전용 프리미티브까지 즉시 내려받고 있었다 — 실측 59.9KB.
   // 이 줄이 없으면 누군가 `rule-form`을 다시 정적 import해도 크기 한도 안에 들어오는 한

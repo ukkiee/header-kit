@@ -449,6 +449,18 @@ export interface StoredState {
   materialized: Record<string, string>;
   /** 헤더 이름 autocomplete에 더할 사용자 등록 항목. */
   customHeaderNames: string[];
+  /**
+   * 직접 친 쿠키 이름·User-Agent의 **사용 이력** (티켓 08) — 다음에도 제안된다.
+   *
+   * `customHeaderNames`와 같은 계열의 **더해지는** 필드라 포맷 버전을 올리지 않는다: 없던
+   * 상태는 검증 **전에** 빈 배열을 받으므로 그대로 읽힌다. 그 순서가 계약이다 — 검증이 먼저
+   * 보면 없는 필드 하나 때문에 상태 전체가 기본값으로 교체되어 프로필이 사라진다.
+   *
+   * 헤더 이름과 달리 **저장이 자동으로 남긴다**. 지우는 화면이 따로 없으므로 목록이 무한히
+   * 자라지 않도록 상한을 둔다(`commands`의 기록 지점).
+   */
+  customCookieNames: string[];
+  customUserAgents: string[];
 }
 
 /** 배지는 기본으로 켜져 있다 — 끄지 않은 사용자는 지금까지처럼 본다. */
@@ -542,5 +554,7 @@ export function createDefaultState(): StoredState {
     profiles: [{ ...createProfile('Default Profile'), active: true }],
     materialized: {},
     customHeaderNames: [],
+    customCookieNames: [],
+    customUserAgents: [],
   };
 }

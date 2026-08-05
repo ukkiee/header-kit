@@ -1,4 +1,4 @@
-import { STANDARD_HEADERS } from './autocomplete';
+import { COMMON_COOKIE_NAMES, STANDARD_HEADERS, USER_AGENT_PRESETS } from './autocomplete';
 import { isRuleExpired } from './expiry';
 import { normalizeImportedProfiles } from './transfer';
 import {
@@ -107,6 +107,61 @@ export function toggleProfile(
   };
 }
 
+/**
+ * 제안 이력에 값 하나를 더한다 — 세 목록이 함께 쓰는 규칙.
+ *
+ * 빈 값·이미 있는 값(대소문자 무시)·프리셋에 있는 값은 담지 않는다. 프리셋 중복을 거르는
+ * 이유는 목록에 같은 이름이 두 번 서기 때문이다(환경설정의 쌍둥이 pill — ui-refine 03).
+ *
+ * **상한을 두지 않는다.** 자동으로 쌓이는 쿠키·UA 이력에 상한을 뒀다가 걷었다: 티켓이
+ * 요구한 것은 "직접 친 값은 다음에도 제안된다"이고, 상한은 그것을 21번째부터 조용히 어긴다.
+ * 목록이 자라는 것이 문제가 되면 그건 지우는 화면을 주는 결정이지 값을 몰래 버리는 결정이 아니다.
+ */
+function remember(
+  history: readonly string[],
+  preset: readonly string[],
+  value: string,
+): string[] {
+  const trimmed = value.trim();
+  if (trimmed === '') return [...history];
+  const lower = trimmed.toLowerCase();
+  const known = (list: readonly string[]) => list.some((n) => n.toLowerCase() === lower);
+  if (known(history) || known(preset)) return [...history];
+  return [...history, trimmed];
+}
+
+/**
+ * 규칙이 담은 값을 **다음 제안에 남긴다** (티켓 08) — 규칙 저장과 같은 전이 안에서.
+ *
+ * 명령을 하나 더 보내지 않는 이유가 이것이다: 두 번의 쓰기가 되면 그 사이에 워커가 죽었을 때
+ * 규칙은 저장됐는데 이력은 빈 상태가 남는다. 한 전이면 그 창이 없다.
+ *
+ * **저장이 실제로 일어났을 때만 부른다.** 반대 방향의 어긋남도 똑같이 나쁘다: 없는 프로필에
+ * 더하거나 없는 규칙을 고치는 명령은 상태를 바꾸지 않는데, 그때도 남기면 저장된 적 없는 값이
+ * 제안에 뜬다. 화면 둘이 열린 채 한쪽이 지운 규칙을 다른 쪽이 저장하면 실제로 도달한다.
+ *
+ * 헤더 이름은 여기 들어오지 않는다 — 환경설정에서 사람이 등록하고 지우는 목록이라 저장이
+ * 몰래 늘리면 그 화면이 자기가 만들지 않은 항목을 들게 된다. 복원·가져오기도 마찬가지다:
+ * 복원은 이미 남긴 값이고, 가져오기는 남의 파일에 있던 값이라 내 제안 목록에 섞일 이유가 없다.
+ */
+function withRememberedValues(state: StoredState, modification: Modification): StoredState {
+  if (modification.kind === 'cookie' || modification.kind === 'set-cookie') {
+    const name = modification.name ?? '';
+    return { ...state, customCookieNames: remember(state.customCookieNames, COMMON_COOKIE_NAMES, name) };
+  }
+  if (modification.kind === 'user-agent') {
+    return {
+      ...state,
+      customUserAgents: remember(
+        state.customUserAgents,
+        USER_AGENT_PRESETS.map((preset) => preset.value),
+        modification.value,
+      ),
+    };
+  }
+  return state;
+}
+
 export function addModification(
   state: StoredState,
   profileId: string,
@@ -121,16 +176,18 @@ export function addModification(
 
   // 활성 Profile에 들어오는 Placeholder는 불변식 유지를 위해 즉시 실체화한다.
   const template = templateWithPlaceholders(modification);
+  // 없는 프로필이면 `withProfile`이 무동작이라 규칙이 들어가지 않았다 — 이력도 남기지 않는다.
+  const withHistory = profile ? withRememberedValues(base, modification) : base;
   if (profile?.active && template !== null) {
     return {
-      ...base,
+      ...withHistory,
       materialized: {
-        ...base.materialized,
+        ...withHistory.materialized,
         [modification.id]: materializeValue(template, deps),
       },
     };
   }
-  return base;
+  return withHistory;
 }
 
 export function updateModification(
@@ -146,26 +203,28 @@ export function updateModification(
     modifications: p.modifications.map((m) => (m.id === next.id ? next : m)),
   }));
 
-  if (!profile?.active || !previous) return base;
+  // 고칠 규칙이 없으면 아무것도 바뀌지 않았다 — 그때 이력만 자라면 저장된 적 없는 값이 뜬다.
+  const withHistory = previous ? withRememberedValues(base, next) : base;
+  if (!profile?.active || !previous) return withHistory;
 
   // 활성 중 템플릿 편집: 그 Modification만 재실체화. Placeholder가 사라지면 정리.
   const nextTemplate = templateWithPlaceholders(next);
   if (nextTemplate !== null) {
     const prevTemplate = placeholderTemplate(previous);
     const templateChanged = prevTemplate !== nextTemplate;
-    const missing = !(next.id in base.materialized);
+    const missing = !(next.id in withHistory.materialized);
     if (templateChanged || missing) {
       return {
-        ...base,
+        ...withHistory,
         materialized: {
-          ...base.materialized,
+          ...withHistory.materialized,
           [next.id]: materializeValue(nextTemplate, deps),
         },
       };
     }
-    return base;
+    return withHistory;
   }
-  return { ...base, materialized: withoutKey(base.materialized, next.id) };
+  return { ...withHistory, materialized: withoutKey(withHistory.materialized, next.id) };
 }
 
 export function removeModification(
@@ -334,18 +393,11 @@ export function resetToDefaults(): StoredState {
 }
 
 export function addCustomHeaderName(state: StoredState, name: string): StoredState {
-  const trimmed = name.trim();
-  const lower = trimmed.toLowerCase();
-  // 표준 사전과의 중복도 거른다 — 환경설정이 기본 사전을 노출하므로(ui-refine 03)
-  // 같은 이름이 제거 가능/불가 쌍둥이 pill로 나란히 서는 것을 막는다.
-  if (
-    trimmed === '' ||
-    state.customHeaderNames.some((n) => n.toLowerCase() === lower) ||
-    STANDARD_HEADERS.some((n) => n.toLowerCase() === lower)
-  ) {
-    return state;
-  }
-  return { ...state, customHeaderNames: [...state.customHeaderNames, trimmed] };
+  // 쿠키·UA 이력과 **같은 규칙**을 쓴다 — 빈 값·중복·프리셋 중복을 거르는 네 단계가 한 곳이다.
+  const customHeaderNames = remember(state.customHeaderNames, STANDARD_HEADERS, name);
+  return customHeaderNames.length === state.customHeaderNames.length
+    ? state
+    : { ...state, customHeaderNames };
 }
 
 export function removeCustomHeaderName(state: StoredState, name: string): StoredState {

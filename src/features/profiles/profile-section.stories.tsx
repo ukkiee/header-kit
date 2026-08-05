@@ -35,6 +35,8 @@ function InteractiveProfileSection({ initial }: { initial: Profile }) {
     profiles: [initial],
     materialized: {},
     customHeaderNames: [],
+  customCookieNames: [],
+  customUserAgents: [],
   });
   const profile = state.profiles[0];
   if (!profile) return <p className="text-sm">Profile deleted.</p>;

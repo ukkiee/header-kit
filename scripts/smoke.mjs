@@ -1045,7 +1045,7 @@ try {
   // 두 방향을 함께 건다 — 한쪽만 있으면 반대쪽으로 퇴화한다. 교체 때 autoFocus를 무조건
   // 끄면 L2e는 통과하고 L2f가 깨지고(폼을 열어도 포커스가 아무 데도 없음), 무조건 넘기면
   // L2f는 통과하고 L2e가 깨진다(사용자가 옮긴 포커스를 도로 뺏음).
-  const AUTOCOMPLETE_CHUNK = '**/header-name-autocomplete-*.js';
+  const AUTOCOMPLETE_CHUNK = '**/suggest-autocomplete-*.js';
   const CHUNK_DELAY_MS = 900;
   const waitForCombobox = (page, timeout = 8000) =>
     page
@@ -1112,7 +1112,7 @@ try {
     const broken = await context.newPage();
     const chunkRequests = [];
     broken.on('request', (r) => {
-      if (r.url().includes('header-name-autocomplete')) chunkRequests.push(r.url());
+      if (r.url().includes('suggest-autocomplete')) chunkRequests.push(r.url());
     });
     let blockChunk = true;
     await broken.route(AUTOCOMPLETE_CHUNK, async (route) => {
@@ -4819,6 +4819,94 @@ try {
       `다시 막힘=${blockedAgain}, 키보드 저장 막힘=${keyboardBlocked}, ` +
       `사유 하나=[필수=${requiredAfterSave}, 라이브 우선=${liveWins}, 고치면 둘 다 사라짐=${bothGone}], ` +
       `다른 종류 버튼 살아있음=${otherKindEnabled}, 정규식 Block 저장=${JSON.stringify(regexBlockSaved)}`);
+
+  /*
+   * N49: 쿠키 이름·User-Agent 제안 (티켓 08).
+   *
+   * 헤더 이름 제안(L2 계열)은 그대로 살아 있고, 여기서 재는 것은 **새로 붙은 둘**이다.
+   * 특히 UA는 나머지와 갈린다: 사람이 아는 이름으로 찾고 들어가는 것은 전체 문자열이라,
+   * "고른 것과 들어간 것이 다르다"를 실제로 봐야 확인된다.
+   *
+   * 사용 이력은 **저장이 자동으로 남긴다** — 헤더 이름처럼 등록하는 화면이 없다. 그래서
+   * 저장 → 새 폼 → 제안에 뜬다는 왕복 전체를 밟아야 그 계약이 확인된다.
+   */
+  await seedProfiles([baseProfile('p-sugg', 'Suggest', [])]);
+  await popup.reload();
+
+  // (a) 쿠키 이름 — 프리셋 사전에서 제안된다
+  await popup.getByRole('button', { name: 'Add rule' }).first().click();
+  await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
+  await pickOption(popup, 'Type', 'Request cookie');
+  const cookieNameInput = popup.getByLabel('Cookie name', { exact: true });
+  await cookieNameInput.fill('sess');
+  const cookiePresetOption = popup.getByRole('option', { name: 'session_id', exact: true });
+  const cookiePresetShown = await cookiePresetOption
+    .waitFor({ timeout: 5000 })
+    .then(() => true, () => false);
+  await cookiePresetOption.click();
+  const cookiePicked = await cookieNameInput.inputValue();
+
+  // 직접 친 이름으로 바꿔 저장한다 — 이력에 남는지는 아래 (c)가 본다.
+  await cookieNameInput.fill('my_smoke_cookie');
+  await closeSuggestions(popup);
+  await popup.getByLabel('Cookie value', { exact: true }).fill('1');
+  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
+  await waitFormClosed();
+
+  /*
+   * (b) User-Agent — **라벨로 찾고 값이 들어간다.** 값에는 'iPhone'이라는 말이 그대로 있지만
+   * 사용자가 치는 것은 그 이름이고, 들어가는 것은 `Mozilla/5.0 …`로 시작하는 전체 문자열이다.
+   */
+  await popup.getByRole('button', { name: 'Add rule' }).first().click();
+  await pickOption(popup, 'Type', 'User-Agent');
+  const uaInput = popup.getByLabel('User-Agent', { exact: true });
+  await uaInput.fill('iPhone');
+  const uaOption = popup.getByRole('option', { name: 'Safari (iPhone)', exact: true });
+  const uaLabelShown = await uaOption.waitFor({ timeout: 5000 }).then(() => true, () => false);
+  await uaOption.click();
+  const uaValue = await uaInput.inputValue();
+  const uaInsertedFullString = /^Mozilla\/5\.0 \(iPhone/.test(uaValue);
+
+  // 직접 친 UA로 바꿔 저장 — 이것도 다음에 제안돼야 한다.
+  await uaInput.fill('SmokeBot/9.9');
+  await closeSuggestions(popup);
+  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
+  await waitFormClosed();
+
+  /*
+   * (c) **직접 친 값이 다음에도 제안된다** (수용 기준). 저장이 남긴 이력이 새 폼의 제안에
+   * 뜨는지 — 저장소까지 갔는지도 함께 본다.
+   */
+  const history = await sw.evaluate(async () => {
+    const { state } = await chrome.storage.local.get('state');
+    return { cookies: state.customCookieNames, agents: state.customUserAgents };
+  });
+  await popup.getByRole('button', { name: 'Add rule' }).first().click();
+  await pickOption(popup, 'Type', 'Request cookie');
+  await popup.getByLabel('Cookie name', { exact: true }).fill('my_smoke');
+  const rememberedCookie = await popup
+    .getByRole('option', { name: 'my_smoke_cookie', exact: true })
+    .waitFor({ timeout: 5000 })
+    .then(() => true, () => false);
+  await closeSuggestions(popup);
+  await pickOption(popup, 'Type', 'User-Agent');
+  await popup.getByLabel('User-Agent', { exact: true }).fill('SmokeBot');
+  const rememberedUa = await popup
+    .getByRole('option', { name: 'SmokeBot/9.9', exact: true })
+    .waitFor({ timeout: 5000 })
+    .then(() => true, () => false);
+  await closeSuggestions(popup);
+  await popup.getByRole('button', { name: 'Cancel' }).click();
+  await waitFormClosed();
+
+  record('N49: 쿠키 이름·UA 제안 — 프리셋에서 고르고, UA는 라벨로 찾아 값이 들어가며, 직접 친 값이 다음에도 뜬다',
+    cookiePresetShown && cookiePicked === 'session_id' &&
+      uaLabelShown && uaInsertedFullString &&
+      history.cookies?.includes('my_smoke_cookie') && history.agents?.includes('SmokeBot/9.9') &&
+      rememberedCookie && rememberedUa,
+    `쿠키 프리셋=${cookiePresetShown}(고른 값="${cookiePicked}"), ` +
+      `UA 라벨=${uaLabelShown} 값 삽입=${uaInsertedFullString}("${uaValue.slice(0, 28)}…"), ` +
+      `이력 저장=${JSON.stringify(history)}, 다음 제안=[쿠키 ${rememberedCookie}, UA ${rememberedUa}]`);
 
   /*
    * N38: 백업 sync 스위치 (티켓 07, R-1 단순 계약).
