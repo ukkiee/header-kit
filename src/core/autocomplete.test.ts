@@ -26,9 +26,16 @@ describe('suggestHeaderNames', () => {
     expect(values(suggestHeaderNames('AUTHOR'))).toContain('Authorization');
   });
 
+  /*
+   * 사용자 항목이 표준보다 **앞선다**. 그 안에서의 차례는 최근에 등록한 것이 먼저다 —
+   * 상한에 걸릴 때 잘려 나가야 하는 쪽이 오래된 쪽이기 때문이다(아래 '이력 순서' 참고).
+   */
   it('사용자 항목이 표준보다 앞서고 중복은 제거된다', () => {
     const result = values(suggestHeaderNames('x-', ['X-My-Header', 'X-Requested-With']));
-    expect(result[0]).toBe('X-My-Header');
+    // 사용자 항목 둘이 표준 전용 항목(X-Forwarded-For)보다 앞이다.
+    expect(result.indexOf('X-My-Header')).toBeLessThan(result.indexOf('X-Forwarded-For'));
+    expect(result.indexOf('X-Requested-With')).toBeLessThan(result.indexOf('X-Forwarded-For'));
+    // 사용자·표준 양쪽에 있어도 한 번만.
     expect(result.filter((h) => h === 'X-Requested-With')).toHaveLength(1);
   });
 
@@ -84,10 +91,22 @@ describe('suggestCookieNames', () => {
  * (`Chrome (Windows)`)으로 찾게 하고 넣는 것은 전체 문자열이다.
  */
 describe('suggestUserAgents', () => {
+  /*
+   * **값에는 없는 말로 찾는다** — 이것이 "라벨로 찾는다"의 실질이다.
+   *
+   * `iPhone` 같은 쿼리로는 이 계약을 잴 수 없다: 그 말이 값 문자열에도 들어 있어, 필터를
+   * 값 기준으로 바꿔도 통과한다(실측 확인). `macOS`는 값에 `Mac OS X`·`Macintosh`로만
+   * 나타나므로 라벨을 보지 않으면 하나도 걸리지 않는다.
+   */
   it('라벨로 찾는다 — 값에는 없는 말로도 찾힌다', () => {
-    const result = suggestUserAgents('iphone');
-    expect(result.length).toBeGreaterThan(0);
-    expect(labels(result).every((l) => l.toLowerCase().includes('iphone'))).toBe(true);
+    expect(labels(suggestUserAgents('macos'))).toEqual(['Chrome (macOS)', 'Safari (macOS)']);
+    // 감도 대조 — 그 쿼리가 값에는 정말 없다.
+    expect(USER_AGENT_PRESETS.every((p) => !p.value.toLowerCase().includes('macos'))).toBe(true);
+  });
+
+  it('값에만 있는 말로는 찾히지 않는다 — 거르는 대상이 라벨이기 때문이다', () => {
+    // `AppleWebKit`은 여러 값에 있지만 어느 라벨에도 없다.
+    expect(suggestUserAgents('applewebkit')).toEqual([]);
   });
 
   it('고르면 들어가는 것은 전체 UA 문자열이다', () => {
@@ -156,7 +175,7 @@ describe('값이 겹치는 항목', () => {
     expect(matching[0]!.label).toBe(preset.label);
   });
 
-  it('그 항목은 이력 자리(맨 앞)를 지킨다 — 최근에 쓴 것이 먼저다', () => {
+  it('그 항목은 이력 자리(맨 앞)를 지킨다', () => {
     const preset = USER_AGENT_PRESETS[2]!;
     expect(suggestUserAgents('', [preset.value], 20)[0]).toEqual(preset);
   });
@@ -165,5 +184,29 @@ describe('값이 겹치는 항목', () => {
     const preset = USER_AGENT_PRESETS[0]!;
     const found = suggestUserAgents(preset.label.slice(0, 6), [preset.value], 20);
     expect(found.some((s) => s.value === preset.value)).toBe(true);
+  });
+});
+
+/**
+ * 이력은 **최근에 쓴 것부터** 제안된다 (code-review).
+ *
+ * 저장은 뒤에 덧붙이므로 배열은 오래된 것이 앞이다. 그대로 쓰면 상한에 걸릴 때 방금 친 값이
+ * 먼저 잘려 나가 "직접 친 값은 다음에도 제안된다"가 어긋난다.
+ */
+describe('이력 순서', () => {
+  const many = Array.from({ length: 12 }, (_, i) => `hist_${i}`);
+
+  it('가장 최근 값이 맨 앞에 온다', () => {
+    expect(values(suggestCookieNames('hist_', many))[0]).toBe('hist_11');
+  });
+
+  it('상한에 걸려도 최근 값이 살아남는다 — 잘리는 것은 오래된 쪽이다', () => {
+    const shown = values(suggestCookieNames('hist_', many, 3));
+    expect(shown).toEqual(['hist_11', 'hist_10', 'hist_9']);
+  });
+
+  it('UA도 같다', () => {
+    const agents = ['ua_old', 'ua_mid', 'ua_new'];
+    expect(values(suggestUserAgents('ua_', agents))[0]).toBe('ua_new');
   });
 });

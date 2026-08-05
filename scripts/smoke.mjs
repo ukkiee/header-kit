@@ -4854,18 +4854,21 @@ try {
   await waitFormClosed();
 
   /*
-   * (b) User-Agent — **라벨로 찾고 값이 들어간다.** 값에는 'iPhone'이라는 말이 그대로 있지만
-   * 사용자가 치는 것은 그 이름이고, 들어가는 것은 `Mozilla/5.0 …`로 시작하는 전체 문자열이다.
+   * (b) User-Agent — **라벨로 찾고 값이 들어간다.**
+   *
+   * 쿼리를 `macOS`로 잡은 것이 요점이다. `iPhone`으로는 이 계약을 못 잰다 — 그 말이 UA 값
+   * 문자열에도 들어 있어 필터를 값 기준으로 바꿔도 같은 항목이 뜬다(단위에서 실측 확인).
+   * `macOS`는 값에 `Mac OS X`·`Macintosh`로만 나타나므로 라벨을 보지 않으면 하나도 안 걸린다.
    */
   await popup.getByRole('button', { name: 'Add rule' }).first().click();
   await pickOption(popup, 'Type', 'User-Agent');
   const uaInput = popup.getByLabel('User-Agent', { exact: true });
-  await uaInput.fill('iPhone');
-  const uaOption = popup.getByRole('option', { name: 'Safari (iPhone)', exact: true });
+  await uaInput.fill('macOS');
+  const uaOption = popup.getByRole('option', { name: 'Safari (macOS)', exact: true });
   const uaLabelShown = await uaOption.waitFor({ timeout: 5000 }).then(() => true, () => false);
   await uaOption.click();
   const uaValue = await uaInput.inputValue();
-  const uaInsertedFullString = /^Mozilla\/5\.0 \(iPhone/.test(uaValue);
+  const uaInsertedFullString = /^Mozilla\/5\.0 \(Macintosh/.test(uaValue);
 
   // 직접 친 UA로 바꿔 저장 — 이것도 다음에 제안돼야 한다.
   await uaInput.fill('SmokeBot/9.9');

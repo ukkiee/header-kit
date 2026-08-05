@@ -171,13 +171,23 @@ function suggestFrom(query: string, pool: readonly Suggestion[], limit: number):
 const asSuggestions = (names: readonly string[]): Suggestion[] =>
   names.map((name) => ({ label: name, value: name }));
 
+/**
+ * 이력을 **최근에 쓴 것부터** 늘어놓는다 (code-review).
+ *
+ * 저장은 뒤에 덧붙이므로 배열은 오래된 것이 앞이다. 그대로 제안 풀에 넣으면 상한(8)에 걸릴 때
+ * **가장 최근에 친 값이 먼저 잘려 나간다** — 방금 쓴 값이 다음에 제안되지 않는다는 뜻이라
+ * 이 기능이 약속한 것과 정확히 반대다. 저장 순서 자체는 뒤집지 않는다: 환경설정의 헤더 이름
+ * 목록은 사람이 등록한 순서로 읽히는 별개의 화면이다.
+ */
+const recentFirst = (history: readonly string[]): string[] => [...history].reverse();
+
 /** 쿼리에 맞는 헤더 이름 후보 — 사용자 항목이 표준보다 앞선다. */
 export function suggestHeaderNames(
   query: string,
   userHeaders: readonly string[] = [],
   limit = 8,
 ): Suggestion[] {
-  return suggestFrom(query, asSuggestions([...userHeaders, ...STANDARD_HEADERS]), limit);
+  return suggestFrom(query, asSuggestions([...recentFirst(userHeaders), ...STANDARD_HEADERS]), limit);
 }
 
 /** 쿼리에 맞는 쿠키 이름 후보 — 사용 이력이 사전보다 앞선다. */
@@ -186,7 +196,7 @@ export function suggestCookieNames(
   userCookieNames: readonly string[] = [],
   limit = 8,
 ): Suggestion[] {
-  return suggestFrom(query, asSuggestions([...userCookieNames, ...COMMON_COOKIE_NAMES]), limit);
+  return suggestFrom(query, asSuggestions([...recentFirst(userCookieNames), ...COMMON_COOKIE_NAMES]), limit);
 }
 
 /**
@@ -200,5 +210,5 @@ export function suggestUserAgents(
   userAgents: readonly string[] = [],
   limit = 8,
 ): Suggestion[] {
-  return suggestFrom(query, [...asSuggestions(userAgents), ...USER_AGENT_PRESETS], limit);
+  return suggestFrom(query, [...asSuggestions(recentFirst(userAgents)), ...USER_AGENT_PRESETS], limit);
 }
