@@ -26,6 +26,14 @@ const en = {
   kindRequestHeader: 'Request header',
   kindResponseHeader: 'Response header',
   kindUserAgent: 'User-Agent',
+  /**
+   * User-Agent 규칙의 **값 칸 라벨** (story 24) — 종류 이름과 역할이 다르다.
+   *
+   * 종류 이름(`kindUserAgent`)은 "User-Agent를 바꾸는 규칙"이라 ko에서 '변경'이 붙는데,
+   * 값 칸은 무엇을 넣는 자리인지를 말해야 하므로 두 로케일 모두 헤더 이름 그대로다.
+   * 한 키를 두 자리에 쓰다가 ko 폼이 "User-Agent 변경"을 값 칸 라벨로 내걸었다.
+   */
+  userAgentValue: 'User-Agent',
   kindHeaderRemoval: 'Remove header',
   kindBlock: 'Block request',
   removeBothSides: 'Removed from request and response',
@@ -273,6 +281,7 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     kindRequestHeader: '요청 헤더',
     kindResponseHeader: '응답 헤더',
     kindUserAgent: 'User-Agent 변경',
+    userAgentValue: 'User-Agent',
     kindHeaderRemoval: '헤더 삭제',
     kindBlock: '요청 차단',
     removeBothSides: '요청·응답에서 삭제',

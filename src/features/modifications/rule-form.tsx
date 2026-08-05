@@ -352,7 +352,7 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
         (물으면 오타로 조용히 동작하지 않는 규칙이 생긴다, ADR 0015).
       */}
       {draft.kind === 'user-agent' && (
-        <FieldLabeled label={t('kindUserAgent')} error={fieldError('value')}>
+        <FieldLabeled label={t('userAgentValue')} error={fieldError('value')}>
           <Input
             ref={valueRef}
             autoFocus

@@ -4642,6 +4642,20 @@ try {
   await popup.getByRole('button', { name: 'Lax', exact: true }).click();
   const secureGroup = popup.getByRole('group', { name: 'Secure' });
   await secureGroup.getByRole('button', { name: 'On', exact: true }).click();
+  /*
+   * HttpOnly는 **켰다 끈다** — 끔이 기본이라 그냥 두면 "칩 그룹이 통째로 없어도 통과"가 된다.
+   * 켠 값이 저장에 실리는지와, 다시 끄면 필드가 **부재로 돌아가는지**를 함께 본다: 비운 속성이
+   * 조립에 붙지 않는다는 계약(story 35)은 `false`로 남는 것과 다르다.
+   */
+  const httpOnlyGroup = popup.getByRole('group', { name: 'HttpOnly' });
+  await httpOnlyGroup.getByRole('button', { name: 'On', exact: true }).click();
+  const httpOnlyOnPressed =
+    (await httpOnlyGroup.getByRole('button', { name: 'On', exact: true }).getAttribute('aria-pressed')) === 'true';
+  await httpOnlyGroup.getByRole('button', { name: 'Off', exact: true }).click();
+  // SameSite도 같은 왕복 — 'Not set'을 고르면 필드가 지워져야 한다(None을 고른 것과 다르다).
+  const sameSiteGroup = popup.getByRole('group', { name: 'SameSite' });
+  await sameSiteGroup.getByRole('button', { name: 'Strict', exact: true }).click();
+  await sameSiteGroup.getByRole('button', { name: 'Lax', exact: true }).click();
   await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   const cookieSaved = await pollUntil(
     () => sw.evaluate(async () => {
@@ -4653,7 +4667,36 @@ try {
   const cookieOk =
     cookieSaved.value === 'abc' && cookieSaved.path === '/app' &&
     cookieSaved.sameSite === 'lax' && cookieSaved.secure === true &&
+    // 끔으로 되돌린 HttpOnly와 비운 Domain·Max-Age는 **부재**다 — false로 남지 않는다.
+    httpOnlyOnPressed && cookieSaved.httpOnly === undefined &&
     cookieSaved.domain === undefined && cookieSaved.maxAge === undefined;
+  await waitFormClosed();
+
+  /*
+   * (d2) 'Not set'은 **필드를 지운다** — None을 고른 것과 다른 쿠키가 나간다. 저장된 값이
+   * 있는 규칙을 다시 열어 그 칩을 고르고, 부재로 돌아가는지 본다.
+   */
+  /*
+   * **그 규칙의 행을 짚는다** — `.first()`는 목록의 첫 규칙이지 방금 만든 응답 쿠키가 아니다
+   * (같은 프로필에 헤더 규칙 둘이 먼저 있다). 잘못 짚으면 SameSite 칩이 없는 폼이 열린다.
+   */
+  const cookieRow = popup
+    .locator('.group')
+    .filter({ has: popup.getByRole('button', { name: 'Edit', exact: true }) })
+    .filter({ hasText: 'sid=abc' })
+    .first();
+  await cookieRow.getByRole('button', { name: 'Edit', exact: true }).click();
+  await popup.getByRole('group', { name: 'SameSite' })
+    .getByRole('button', { name: 'Not set', exact: true }).click();
+  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
+  const sameSiteCleared = await pollUntil(
+    () => sw.evaluate(async () => {
+      const { state } = await chrome.storage.local.get('state');
+      const m = state.profiles[0]?.modifications.find((x) => x.kind === 'set-cookie');
+      return m ? { has: 'sameSite' in m, name: m.name } : null;
+    }),
+    (s) => s?.has === false,
+  );
   await waitFormClosed();
 
   /*
@@ -4706,12 +4749,14 @@ try {
   record('N47: 폼 — 머리글·저장 글자(새/편집)·닫기, 수렴 저장(손대지 않은 규칙은 불변), 응답 쿠키 속성, 팝업 1열·탭 2열',
     newFormHeading && newSaveLabel && closedByX && editFormHeading && editSaveLabel &&
       /Wildcard/.test(foldedMatch ?? '') && convergeOk && untouchedIntact && cookieOk &&
+      sameSiteCleared?.has === false &&
       popupLines.firstRow === 2 && popupLines.cookieAttrs === 3 &&
       tabLines.firstRow === 1 && tabLines.cookieAttrs === 1,
     `새 폼=[${newFormHeading},${newSaveLabel}] X닫기=${closedByX}, 편집=[${editFormHeading},${editSaveLabel}] 접힌 방식="${(foldedMatch ?? '').trim()}", ` +
       `수렴=${convergeOk}(${converged.urlMatchType}/${JSON.stringify(converged.conditions?.resourceTypes)}/${converged.mode}/${converged.emptyMeans}), ` +
       `이웃 불변=${untouchedIntact}(${JSON.stringify(untouched)}), ` +
-      `쿠키=${cookieOk}(${JSON.stringify({ v: cookieSaved.value, p: cookieSaved.path, s: cookieSaved.sameSite, sec: cookieSaved.secure, d: cookieSaved.domain })}), ` +
+      `쿠키=${cookieOk}(${JSON.stringify({ v: cookieSaved.value, p: cookieSaved.path, s: cookieSaved.sameSite, sec: cookieSaved.secure, ho: cookieSaved.httpOnly, d: cookieSaved.domain })}), ` +
+      `SameSite 안정함=${sameSiteCleared?.has === false}, ` +
       `줄 수 팝업=[${popupLines.firstRow},${popupLines.cookieAttrs}] 탭=[${tabLines.firstRow},${tabLines.cookieAttrs}]`);
 
   /*
