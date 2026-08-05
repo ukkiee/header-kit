@@ -2215,16 +2215,19 @@ try {
     });
   await popup.getByLabel('URL filter').fill('*://*/*');
   /*
-   * 넓은 패턴을 친 **그 자리에서 저장 버튼이 살아 있다** — 되묻는 단계가 없다는 것의 실질.
-   * "확인 버튼이 없다"로 재면 그 문구가 카탈로그에서 사라진 지금 영원히 반증 불가다.
+   * 하중을 지는 것은 **첫 클릭에 저장됐는가** 하나다. 버튼이 죽어 있었다면 클릭이 아무 일도
+   * 하지 않아 이 폴러가 0에서 끝난다 — 그것이 "되묻는 단계가 없다"의 실질이다.
+   *
+   * 여기에 "버튼이 살아 있다"를 따로 재던 줄은 걷었다: 채우기 **전에도** 살아 있으므로
+   * (빈 스코프는 `required`이지 못 쓰는 값이 아니다) 어느 상태에서든 참이라 반증력이 없었다.
+   * 죽었다 살아나는 전이는 N48이 잰다.
    */
-  const wideStaysEnabled = !(await popup.getByRole('button', { name: SAVE_BUTTON }).isDisabled());
   await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   const wideSaved = await pollUntil(blockRuleCount, (n) => n === 1);
   await waitFormClosed();
-  record('N18h: 넓은 스코프 Block — 버튼이 살아 있고 첫 클릭에 저장된다',
-    wideStaysEnabled && wideSaved === 1,
-    `버튼 살아있음=${wideStaysEnabled}, saved=${wideSaved}`);
+  record('N18h: 넓은 스코프 Block — 되묻지 않고 첫 클릭에 저장된다',
+    wideSaved === 1,
+    `saved=${wideSaved}`);
 
   /*
    * N18i: 좁은 스코프 Block도 같은 길로 저장되고, 목록이 실효 스코프를 보여 준다.
@@ -3409,6 +3412,12 @@ try {
     const onTarget = present
       ? await target.evaluate((el) => document.activeElement === el).catch(() => false)
       : false;
+    /*
+     * 오류는 **막힌 그 순간**에 보여야 한다 — 포커스가 옮겨 가는 것만으로 문구가 사라지면
+     * 사용자는 무엇이 막았는지 읽을 새가 없다. 그래서 타이핑 **전에** 잰다.
+     */
+    const errorsBefore = await page.getByText('Required.', { exact: true }).count();
+    const errorShown = errorsBefore > 0;
     // story 13: 포커스만이 아니라 **바로 타이핑**돼야 한다. 버튼에 포커스가 가면
     // 포커스 단언은 통과하지만 여기서 걸린다.
     let typeable = false;
@@ -3416,10 +3425,19 @@ try {
       await page.keyboard.type('zz');
       typeable = (await target.inputValue().catch(() => '')) === 'zz';
     }
-    const errorShown = (await page.getByText('Required.', { exact: true }).count()) > 0;
+    /*
+     * 그리고 **채운 칸의 것만** 사라진다 (티켓 07). 예전에는 다음 저장까지 남아, 칸을 채워
+     * 버튼이 살아난 뒤에도 "필수입니다"가 그대로 서 있었다 — 화면이 스스로를 반박하는 상태다.
+     * 이 자리가 예전에 재던 "타이핑 뒤에도 남는다"가 바로 그 낡은 동작이었다.
+     *
+     * 0이 되는지가 아니라 **줄었는지**를 본다: Redirect는 패턴·치환 둘 다 필수라, 하나를
+     * 채워도 다른 하나의 오류는 남아 있는 것이 맞다. 0을 요구하면 그 정상 동작을 실패로 읽는다.
+     */
+    const errorsAfter = await page.getByText('Required.', { exact: true }).count();
+    const errorClears = onTarget && errorsAfter === errorsBefore - 1;
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
     await page.waitForTimeout(rowSettleMs());
-    return { onTarget, typeable, errorShown };
+    return { onTarget, typeable, errorShown, errorClears };
   };
 
   await seedProfiles([baseProfile('p-focus', 'Focus', [])]);
@@ -3448,11 +3466,12 @@ try {
   const allOnTarget = Object.values(focusCases).every((r) => r.onTarget);
   const allTypeable = Object.values(focusCases).every((r) => r.typeable);
   const allErrorsShown = Object.values(focusCases).every((r) => r.errorShown);
-  record('N26: 검증 차단 시 첫 누락 입력으로 포커스 — 종류별 매핑·즉시 타이핑·오류 유지',
-    allOnTarget && allTypeable && allErrorsShown,
+  const allErrorsCleared = Object.values(focusCases).every((r) => r.errorClears);
+  record('N26: 검증 차단 시 첫 누락 입력으로 포커스 — 종류별 매핑·즉시 타이핑·오류는 막힐 때 뜨고 채우면 사라진다',
+    allOnTarget && allTypeable && allErrorsShown && allErrorsCleared,
     Object.entries(focusCases)
       .map(([k, r]) => `${k}=${r.onTarget ? (r.typeable ? 'ok' : '포커스만') : 'MISS'}`)
-      .join(' ') + `, 오류표시=${allErrorsShown}`);
+      .join(' ') + `, 막힐 때 표시=${allErrorsShown}, 채우면 사라짐=${allErrorsCleared}`);
 
   // N27: 아코디언 헤더 전체가 클릭 대상 (ui-polish 09, stories 24~27).
   // 예전에는 오른쪽 끝 아이콘 버튼만 눌렸다 — 제목·여백을 눌러도 같은 동작이어야 하고,
@@ -4720,7 +4739,6 @@ try {
   );
   const reasonGone = !(await reasonShown());
 
-  // 감도 대조 — 같은 패턴을 다른 종류에 넣으면 걸리지 않는다 (수용 기준).
   await popup.getByLabel('URL filter').fill('^https://(ads)\\.example\\.com/\\1');
   const blockedAgain = await pollUntil(
     () => saveButton.isDisabled(),
@@ -4728,9 +4746,42 @@ try {
     5000,
     100,
   );
+
+  /*
+   * **키보드 저장도 같은 판정에서 막힌다.** `disabled`는 포인터 경로만 막으므로, Cmd/Ctrl+Enter가
+   * `save()`를 직접 부르는 길이 열려 있으면 헛도는 규칙이 그대로 저장소에 들어간다.
+   */
+  const blockCountBefore = await blockRuleCount();
+  await popup.keyboard.press(process.platform === 'darwin' ? 'Meta+Enter' : 'Control+Enter');
+  await popup.waitForTimeout(rowSettleMs());
+  const keyboardBlocked = (await blockRuleCount()) === blockCountBefore;
+
+  /*
+   * 사유는 **하나뿐이고 지금 참인 쪽**이다. 빈 스코프로 저장을 눌러 `required`를 남긴 뒤
+   * 못 쓰는 패턴을 치면 그쪽 문구가 서고, 고치면 둘 다 사라져야 한다 — 저장이 남긴 문구가
+   * 폴백으로 살아남으면 버튼은 눌리는데 "이 패턴은 못 쓴다"가 그대로 서 있는 화면이 된다.
+   */
+  const requiredShown = () => popup.getByText('Required.').isVisible().catch(() => false);
+  await popup.getByLabel('URL filter').fill('');
+  await saveButton.click(); // 빈 스코프 = required — 저장 시도가 그 문구를 남긴다
+  const requiredAfterSave = await pollUntil(requiredShown, (v) => v === true, 5000, 100);
+  await popup.getByLabel('URL filter').fill('^https://(ads)\\.example\\.com/\\1');
+  const liveWins = (await reasonShown()) && !(await requiredShown());
+  await popup.getByLabel('URL filter').fill('^https://ads\\.example\\.com/');
+  await pollUntil(() => saveButton.isDisabled(), (d) => d === false, 5000, 100);
+  const bothGone = !(await reasonShown()) && !(await requiredShown());
+
+  /*
+   * **같은 패턴을 다른 종류에 넣으면 걸리지 않는다** (수용 기준). 종류를 바꾸면 초안이 새로
+   * 나면서 스코프가 통째로 비므로, 다시 채워야 "같은 패턴"이 성립한다 — 안 채우면 빈 스코프가
+   * 버튼을 살려 두는 것을 보고 "다른 종류는 안 걸린다"고 잘못 읽게 된다.
+   */
+  await popup.getByLabel('URL filter').fill('^https://(ads)\\.example\\.com/\\1');
+  await pollUntil(() => saveButton.isDisabled(), (d) => d === true, 5000, 100);
   await pickOption(popup, 'Type', 'Request header');
   await popup.getByLabel('Header name', { exact: true }).fill('X-Not-Blocked');
   await closeSuggestions(popup);
+  await popup.getByLabel('URL filter').fill('^https://(ads)\\.example\\.com/\\1');
   const otherKindEnabled = !(await pollUntil(
     () => saveButton.isDisabled(),
     (disabled) => disabled === false,
@@ -4757,14 +4808,17 @@ try {
   );
   await waitFormClosed();
 
-  record('N48: 못 쓰는 패턴 — 버튼이 죽고 사유가 보이며, 고치면 되살아나 저장되고 다른 종류는 안 걸린다',
+  record('N48: 못 쓰는 패턴 — 버튼·키보드 둘 다 막히고 사유가 하나뿐이며, 고치면 저장되고 다른 종류는 안 걸린다',
     blockedDisabled === true && blockedReason && revived === false && reasonGone &&
-      blockedAgain === true && otherKindEnabled &&
+      blockedAgain === true && keyboardBlocked &&
+      requiredAfterSave === true && liveWins && bothGone &&
+      otherKindEnabled &&
       regexBlockSaved?.filter === '^https://ads\\.example\\.com/' &&
       regexBlockSaved?.match === 'regex',
     `막힘=${blockedDisabled}(사유=${blockedReason}), 고치면 되살아남=${revived === false}(사유 사라짐=${reasonGone}), ` +
-      `다시 막힘=${blockedAgain}, 다른 종류 버튼 살아있음=${otherKindEnabled}, ` +
-      `정규식 Block 저장=${JSON.stringify(regexBlockSaved)}`);
+      `다시 막힘=${blockedAgain}, 키보드 저장 막힘=${keyboardBlocked}, ` +
+      `사유 하나=[필수=${requiredAfterSave}, 라이브 우선=${liveWins}, 고치면 둘 다 사라짐=${bothGone}], ` +
+      `다른 종류 버튼 살아있음=${otherKindEnabled}, 정규식 Block 저장=${JSON.stringify(regexBlockSaved)}`);
 
   /*
    * N38: 백업 sync 스위치 (티켓 07, R-1 단순 계약).

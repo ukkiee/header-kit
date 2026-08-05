@@ -133,9 +133,8 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
    * 비어 있음(`required`)은 여기 들어오지 않는다. 그건 아직 다 안 쓴 상태이지 못 쓰는 값이
    * 아니라, 누르는 순간 그 칸으로 포커스를 옮기는 기존 흐름이 맞다.
    */
-  const unsupportedPattern = fieldIssues(normalizedDraft()).find(
-    (issue) => issue.reason === 'unsupported-pattern',
-  );
+  const liveIssues = fieldIssues(normalizedDraft());
+  const unsupportedPattern = liveIssues.find((issue) => issue.reason === 'unsupported-pattern');
 
   /**
    * 막힌 이유마다 다른 문구 — "필수"와 "이 패턴은 못 쓴다"는 사용자가 할 일이 다르다.
@@ -146,12 +145,17 @@ export function RuleForm({ initial, onSave, onCancel, userHeaders = [] }: RuleFo
   const fieldError = (field: RequiredField) => {
     if (unsupportedPattern?.field === field) return t('unsupportedPattern');
     /*
-     * 저장 시도가 남긴 것은 **비어 있음뿐**이다. 못 쓰는 패턴을 여기 담아 두면 라이브 판정이
-     * 사라진 뒤에도 그 문구가 남아, 버튼은 살아났는데 "이 패턴은 못 쓴다"가 그대로 서 있는
-     * 화면이 된다 — 사유가 하나뿐이어야 하고, 그 하나는 지금 참인 쪽이다.
+     * 저장 시도가 남긴 것은 **비어 있음뿐**이고, 그것도 **아직 비어 있을 때만** 보여 준다.
+     *
+     * 두 조건이 따로 있는 이유가 다르다. 저장을 눌렀는지(`fieldErrors`)는 "아직 다 안 썼는데
+     * 미리 나무라지 않는다"를 지키고, 지금도 비어 있는지(`liveIssues`)는 "고친 뒤에도 남아
+     * 있지 않다"를 지킨다. 뒤쪽이 없으면 사용자가 칸을 채운 뒤에도 '필수'가 그대로 서서,
+     * 버튼은 눌리는데 화면은 아직 문제가 있다고 말한다 — 못 쓰는 패턴 쪽에서 리뷰가 짚은
+     * 그 실패의 나머지 반쪽이다.
      */
-    const issue = fieldErrors.find((e) => e.field === field && e.reason === 'required');
-    return issue ? t('requiredField') : undefined;
+    const reportedOnSave = fieldErrors.some((e) => e.field === field && e.reason === 'required');
+    const stillMissing = liveIssues.some((e) => e.field === field && e.reason === 'required');
+    return reportedOnSave && stillMissing ? t('requiredField') : undefined;
   };
 
   /**

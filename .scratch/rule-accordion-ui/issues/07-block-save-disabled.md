@@ -8,7 +8,7 @@
 
 **Blocked by:** 06 (규칙 폼)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] 못 쓰는 패턴이면 저장 버튼이 비활성화된다
 - [ ] 비활성화된 이유가 폼 안에서 함께 보인다
