@@ -8,7 +8,7 @@
 
 **Blocked by:** 01 (v3 경계 + 마이그레이션 체인)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] 퇴역 Condition 넷이 v2→v3에서 벗겨지고 세어진다
 - [ ] HEAD·CONNECT·OTHER가 같은 변환에서 벗겨지고 세어진다
