@@ -6,7 +6,7 @@
 
 **Blocked by:** 03 (셸 — 이 화면들은 프로필 열이 사라진 넓은 본문에 그려진다)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] 백업 화면이 시안의 카드 넷 구성이다
 - [ ] JSON 내보내기·가져오기가 한 카드에 있다
