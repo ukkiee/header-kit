@@ -149,7 +149,13 @@ const richState = {
       shortLabel: 'ST',
       color: '#d97706',
       modifications: [
-        // 조건이 붙은 규칙 (ADR 0010) — 요약의 'Conditions: n' 표기와 폼 disclosure를 감사한다.
+        /*
+         * 조건이 붙은 규칙 (ADR 0010) — 요약의 조건 칩과 폼 구성을 감사한다.
+         *
+         * `tabDomains`·`expiresAt`가 **일부러** 섞여 있다 (티켓 10): 둘 다 퇴역했지만
+         * 옛 파일 가져오기로 저장소에 도달할 수 있는 값이라, 화면이 그것을 조용히 그리거나
+         * 규칙을 걸러 버리지 않는지 눈으로 보는 것이 이 진단 시드의 일이다.
+         */
         { kind: 'request-header', id: 'm1', name: 'Authorization', value: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.veryLongTokenValueThatShouldNotBreakTheRowLayoutAtAll.{{uuid}}', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '스테이징 토큰',
           urlFilter: 'api\\.staging\\.example\\.com',
           conditions: { resourceTypes: ['xmlhttprequest', 'script'], tabDomains: ['example.com'], expiresAt: Date.now() + 3_600_000 } },

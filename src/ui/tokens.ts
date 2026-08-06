@@ -3,8 +3,6 @@
  * 테마 변경(예: accent 색, 필드 표면)은 이 파일만 고치면 전 프리미티브에 반영된다.
  */
 
-/** 실선 필드 표면 — Input.solid / Select.bordered 가 공유한다. */
-
 /**
  * 필드 포커스 — Input / Select 가 공유한다.
  * 보더 색이 툭 바뀌지 않도록 전이를 함께 둔다 — Button이 `transition-colors`로 하는 것과
@@ -58,6 +56,12 @@ export const badgePill = 'rounded px-1 py-px text-[10px] font-medium';
  * 스크롤바 트랙 — ScrollArea가 쓴다. 스크롤바는 오버레이라 콘텐츠 폭을 잠식하지 않는다
  * (팝업이 760×580 고정이라 폭을 뺏기면 곧바로 좁아진다, ADR 0005).
  *
+ * **이 둘은 지금 아무도 부르지 않는다** (티켓 10에서 실측). `scroll-area.tsx`가 자기 클래스를
+ * 직접 쓰므로(`transition-colors` + `bg-border`) 아래 설계가 실제로 그려지는 것과 같은지
+ * 확인되지 않았다. 지우면 그 어긋남의 증거까지 사라져 남긴다 — 살릴지(scroll-area가 이 토큰을
+ * 쓰게) 지울지(문서를 실물에 맞추게)는 스크롤바 설계를 다시 보는 결정이라 철거 티켓이 조용히
+ * 고를 일이 아니고, 릴리스 게이트로 넘겨 두었다(티켓 10 파일).
+ *
  * 기본이 투명이 아니라 opacity-60인 이유 — Base UI는 스크롤 불가일 때 스크롤바를 DOM에서
  * 아예 뺀다(keepMounted 기본 false). 즉 이 트랙이 보인다는 것 자체가 "넘치는 내용이 있다"는
  * 신호라, 숨겨 두면 스크롤 가능하다는 어포던스를 잃는다. 호버·스크롤 중에만 진해진다.
@@ -65,14 +69,6 @@ export const badgePill = 'rounded px-1 py-px text-[10px] font-medium';
  * `motion-reduce:transition-none` — opacity 전이는 reduced-motion 계약 안이다(ADR 0012의
  * 경계: 색 전이는 밖, 움직임·opacity는 안). 전이만 끄고 opacity 값 자체(60→100)는 남긴다 —
  * 어포던스는 유지하되 페이드만 없앤다. smoke N33이 감도 대조와 함께 못박는다.
- */
-/*
- * **아래 둘은 소비자가 없다** (티켓 10에서 실측). `scroll-area.tsx`는 자기 클래스를 직접 쓰고
- * (`transition-colors` + `bg-border`) 이 토큰들을 부르지 않는다 — 즉 여기 적힌 설계(기본
- * opacity-60, 호버·스크롤 중 진해짐, reduced-motion에서 전이만 끄기)가 **실제로 그려지는
- * 것과 같은지 확인되지 않았다.** 지우면 그 어긋남의 증거까지 사라지므로 이번에는 남기고
- * 릴리스 게이트로 넘긴다: 살릴지(scroll-area가 이 토큰을 쓰게) 지울지(문서를 실물에 맞추게)는
- * 스크롤바 설계를 다시 보는 결정이지, 철거 티켓이 조용히 고를 일이 아니다.
  */
 export const scrollbarTrack =
   'flex w-1.5 justify-center rounded-full opacity-60 transition-opacity duration-150 motion-reduce:transition-none data-[hovering]:opacity-100 data-[scrolling]:opacity-100';

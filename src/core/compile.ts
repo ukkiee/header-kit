@@ -79,19 +79,6 @@ const TOTAL_RULE_LIMIT = 5000;
 /** regex 조건 규칙의 타입별 한도. */
 const REGEX_RULE_LIMIT = 1000;
 
-function hostnameOf(url: string | undefined): string | null {
-  if (!url) return null;
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return null;
-  }
-}
-
-function domainMatches(hostname: string, domain: string): boolean {
-  return hostname === domain || hostname.endsWith(`.${domain}`);
-}
-
 interface Emitter {
   rules: NetRule[];
   warnings: CompileWarning[];
@@ -136,12 +123,12 @@ function emitRule(
 
 /**
  * 규칙의 conditions + URL 스코프를 DNR 조건으로 조립한다 (ADR 0010).
- * tabIds는 호출자가 전개해 넘긴다(빈 배열이면 애초에 방출하지 않으므로 여기 오지 않는다).
+ *
+ * `tabIds`를 받던 인자가 사라졌다 (티켓 10) — 탭 도메인 조건이 퇴역해 전개할 것이 없다.
  */
 function conditionFor(
   conditions: RuleConditions | undefined,
   scope: { regexFilter?: string; urlFilter?: string },
-  tabIds: number[] | undefined,
 ): NetRule['condition'] {
   const initiatorDomains = (conditions?.initiatorDomains ?? [])
     .map((d) => d.trim())
@@ -161,7 +148,6 @@ function conditionFor(
       : {}),
     ...(initiatorDomains.length > 0 ? { initiatorDomains } : {}),
     ...(excludedRequestDomains.length > 0 ? { excludedRequestDomains } : {}),
-    ...(tabIds !== undefined ? { tabIds } : {}),
   };
 }
 
@@ -295,28 +281,26 @@ function emitModification(
   /*
    * **탭 전개가 없다** (티켓 10). 예전에는 규칙의 탭 도메인 조건을 열린 탭으로 펼쳐
    * `tabIds`를 만들고, 매칭 탭이 없으면 그 규칙을 통째로 건너뛰었다. 그 조건이 퇴역해
-   * (ADR 0017) 펼칠 것이 없어졌고, 아래 방출들도 `tabIds`를 받지 않는다.
+   * (ADR 0017) 펼칠 것이 없어졌고, 방출 쪽 시그니처에서도 그 인자가 사라졌다.
    */
-  const tabIds = undefined;
-
   switch (modification.kind) {
     case 'request-header':
     case 'response-header':
     case 'cookie':
     case 'set-cookie':
-      emitHeaderRule(modification, priority, profileId, tabIds, emitter);
+      emitHeaderRule(modification, priority, profileId, emitter);
       return;
     case 'redirect':
-      emitRedirectRule(modification, priority, profileId, tabIds, emitter);
+      emitRedirectRule(modification, priority, profileId, emitter);
       return;
     case 'user-agent':
-      emitUserAgentRule(modification, priority, profileId, tabIds, emitter);
+      emitUserAgentRule(modification, priority, profileId, emitter);
       return;
     case 'header-removal':
-      emitHeaderRemovalRule(modification, priority, profileId, tabIds, emitter);
+      emitHeaderRemovalRule(modification, priority, profileId, emitter);
       return;
     case 'block':
-      emitBlockRule(modification, priority, profileId, tabIds, emitter);
+      emitBlockRule(modification, priority, profileId, emitter);
       return;
     default:
       modification satisfies never;
@@ -327,7 +311,6 @@ function emitHeaderRule(
   modification: ValueModification,
   priority: number,
   profileId: string,
-  tabIds: number[] | undefined,
   emitter: Emitter,
 ): void {
   const plan = planHeaderish(modification, emitter);
@@ -353,7 +336,7 @@ function emitHeaderRule(
         type: 'modifyHeaders',
         ...(plan.isRequest ? { requestHeaders: [info] } : { responseHeaders: [info] }),
       },
-      condition: conditionFor(modification.conditions, own ?? {}, tabIds),
+      condition: conditionFor(modification.conditions, own ?? {}),
     },
     { profileId, modificationId: modification.id },
   );
@@ -392,7 +375,6 @@ function emitRedirectRule(
   modification: Extract<Modification, { kind: 'redirect' }>,
   priority: number,
   profileId: string,
-  tabIds: number[] | undefined,
   emitter: Emitter,
 ): void {
   const pattern = modification.pattern.trim();
@@ -407,7 +389,7 @@ function emitRedirectRule(
         type: 'redirect',
         redirect: { regexSubstitution: modification.substitution },
       },
-      condition: conditionFor(modification.conditions, { regexFilter: pattern }, tabIds),
+      condition: conditionFor(modification.conditions, { regexFilter: pattern }),
     },
     { profileId, modificationId: modification.id },
   );
@@ -423,7 +405,6 @@ function emitUserAgentRule(
   modification: Extract<Modification, { kind: 'user-agent' }>,
   priority: number,
   profileId: string,
-  tabIds: number[] | undefined,
   emitter: Emitter,
 ): void {
   const own = ownScope(modification, profileId, emitter);
@@ -437,7 +418,7 @@ function emitUserAgentRule(
         type: 'modifyHeaders',
         requestHeaders: [{ header: USER_AGENT_HEADER, operation: 'set', value }],
       },
-      condition: conditionFor(modification.conditions, own ?? {}, tabIds),
+      condition: conditionFor(modification.conditions, own ?? {}),
     },
     { profileId, modificationId: modification.id },
   );
@@ -453,7 +434,6 @@ function emitHeaderRemovalRule(
   modification: Extract<Modification, { kind: 'header-removal' }>,
   priority: number,
   profileId: string,
-  tabIds: number[] | undefined,
   emitter: Emitter,
 ): void {
   const header = modification.name.trim();
@@ -477,7 +457,7 @@ function emitHeaderRemovalRule(
         requestHeaders: [{ header, operation: 'remove' }],
         responseHeaders: [{ header, operation: 'remove' }],
       },
-      condition: conditionFor(modification.conditions, own ?? {}, tabIds),
+      condition: conditionFor(modification.conditions, own ?? {}),
     },
     { profileId, modificationId: modification.id },
   );
@@ -493,7 +473,6 @@ function emitBlockRule(
   modification: Extract<Modification, { kind: 'block' }>,
   priority: number,
   profileId: string,
-  tabIds: number[] | undefined,
   emitter: Emitter,
 ): void {
   if ((modification.urlFilter?.trim() ?? '') === '') {
@@ -513,7 +492,7 @@ function emitBlockRule(
     {
       priority,
       action: { type: 'block' },
-      condition: conditionFor(modification.conditions, own ?? {}, tabIds),
+      condition: conditionFor(modification.conditions, own ?? {}),
     },
     { profileId, modificationId: modification.id },
   );

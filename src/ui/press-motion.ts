@@ -20,7 +20,7 @@ export type MotionButtonAttributes = Omit<
 /**
  * 누름·호버 마이크로 인터랙션 (ADR 0012) — Button·IconButton·SwitcherChip이 공유한다.
  * 셋이 각자 reduced-motion 분기를 반복하지 않도록 여기 한 곳에 둔다. (넷째였던 메뉴 항목은
- * ADR 0017이 앱의 마지막 메뉴를 걷어내면서 함께 사라졌다 — ADR 0012의 in-file 개정.)
+ * ADR 0017이 앱의 마지막 메뉴를 걷어내면서 함께 사라졌다 — 근거는 ADR 0012의 개정 절.)
  *
  * **reduced-motion이면 애니메이션 prop을 아예 돌려주지 않는다.** 지속시간 0짜리 전이로
  * 대체하지 않는 이유는, motion이 인라인 스타일을 쓰지 않아야 "모션 없음"이 계산 스타일로

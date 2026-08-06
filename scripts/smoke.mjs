@@ -113,9 +113,13 @@ async function pollUntil(probe, test, timeoutMs = 8000, intervalMs = 200) {
  * D 구간의 지역 상수였는데 F3도 같은 것을 쓰게 되어 파일 스코프로 올렸다 (티켓 10):
  * 배지 수 회귀를 재는 표본이 만료 규칙 하나뿐이 아니게 됐다는 뜻이다.
  */
-function pollBadgeTextOf(sw) {
-  return (expected, timeoutMs = 3000) =>
-    pollUntil(() => sw.evaluate(() => chrome.action.getBadgeText({})), (t) => t === expected, timeoutMs, 100);
+function pollBadgeText(sw, expected, timeoutMs = 3000) {
+  return pollUntil(
+    () => sw.evaluate(() => chrome.action.getBadgeText({})),
+    (t) => t === expected,
+    timeoutMs,
+    100,
+  );
 }
 
 async function pollSessionRuleCount(sw, expected, timeoutMs = 15000) {
@@ -390,8 +394,7 @@ try {
   record('D1: 두 활성 Profile이 같은 헤더 수정 시 목록 위쪽이 승리', headers['x-conf'] === 'top-wins',
     `x-conf=${headers['x-conf']}`);
 
-  const pollBadgeText = pollBadgeTextOf(sw);
-  const multiBadge = await pollBadgeText('2');
+  const multiBadge = await pollBadgeText(sw, '2');
   record('D2: 다중 활성 시 배지에 활성 개수 표시', multiBadge === '2', `badge="${multiBadge}"`);
 
   await popup.reload();
@@ -399,7 +402,7 @@ try {
   await popup.getByRole('button', { name: 'Pause' }).click();
   await pollSessionRuleCount(sw, 0);
   headers = await fetchEchoHeaders(page);
-  const pausedBadge = await pollBadgeText('II');
+  const pausedBadge = await pollBadgeText(sw, 'II');
   record('D3: 팝업 Pause → 즉시 전체 중단 + 배지 II',
     headers['x-conf'] === undefined && pausedBadge === 'II',
     `x-conf=${headers['x-conf']}, badge="${pausedBadge}"`);
@@ -620,7 +623,7 @@ try {
     const { state } = await chrome.storage.local.get('state');
     return state.profiles[0].modifications[0].enabled;
   });
-  const badgeAfter = await pollBadgeText('2');
+  const badgeAfter = await pollBadgeText(sw, '2');
   record('F3: 퇴역 조건(지난 해제 시각·탭 도메인)이 남아 있어도 규칙이 그대로 걸린다',
     pastExpiry['x-timed'] === 'on' && pastExpiry['x-stays'] === 'on'
       && stillEnabled === true && badgeAfter === '2',

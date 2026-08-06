@@ -216,9 +216,7 @@ interface Harness {
   command(command: Command): Promise<StoredState>;
   /** 전역 Pause 토글 (브라우저 커맨드) */
   togglePause(): void;
-  /** 만료 알람 */
-  expiryAlarm(): void;
-  /** 저장소 변경 — 재조정을 촉발한다(재조정 중 발견된 지난 만료가 여기서 나온다). */
+  /** 저장소 변경 — 재조정을 촉발한다. */
   stateChanged(): void;
   /** 자동 Backup 디바운스 타이머를 터뜨린다 — 걸려 있는 것 전부. */
   fireBackupTimers(): void;
@@ -288,7 +286,6 @@ async function runOnce(scenario: Scenario, prefix: readonly number[]): Promise<S
     throw new Error('onCommand 핸들러가 등록되지 않았다');
   };
   let togglePause = (): void => {};
-  let expiryAlarm = (): void => {};
   let stateChanged = (): void => {};
   const backupTimers: (() => void)[] = [];
   let mutateRequest: (mutation: BackupMutation) => Promise<BackupMutationResult> = async () => {
@@ -336,7 +333,6 @@ async function runOnce(scenario: Scenario, prefix: readonly number[]): Promise<S
   const harness: Harness = {
     command: (c) => command(c),
     togglePause: () => togglePause(),
-    expiryAlarm: () => expiryAlarm(),
     stateChanged: () => stateChanged(),
     fireBackupTimers: () => {
       for (const fire of backupTimers.splice(0)) fire();
@@ -521,35 +517,6 @@ function v1StateTwoProfiles(): StoredV1 {
     profiles: [
       ...base.profiles,
       { ...base.profiles[0]!, id: 'p2', name: 'Legacy Two', modifications: [] },
-    ],
-  };
-}
-
-/** p1은 활성이고 지난 만료를 하나 들고 있다 — 만료 전이가 실제로 무언가를 바꾸도록. */
-function expiredRuleState(): StoredState {
-  return {
-    ...createDefaultState(),
-    profiles: [
-      {
-        id: 'p1',
-        name: 'One',
-        active: true,
-        color: '#2563eb',
-        modifications: [
-          {
-            kind: 'request-header',
-            id: 'm1',
-            name: 'X-Debug',
-            value: '1',
-            enabled: true,
-            mode: 'override',
-            emptyMeans: 'remove',
-            comment: '',
-            conditions: { expiresAt: 500 },
-          },
-        ],
-      },
-      { id: 'p2', name: 'Two', active: false, color: '#16a34a', modifications: [] },
     ],
   };
 }
@@ -763,12 +730,17 @@ describe('S3 — 서비스워커 통합 시임', () => {
    * R-1이었다. 아래 것은 명령 채널을 거치지 않고 실행자를 직접 부르던 자리이고, 다른 상태
    * 쓰기와 겹쳐 세워 겹친 편집이 살아남는지 본다.
    *
-   * **만료 알람 두 행이 여기서 빠졌다** (티켓 10) — 그 서브시스템이 철거됐다. 증명은 지우지
-   * 않고 **마이그레이션 커밋 쪽으로 옮겼다**: 위 두 시나리오(`마이그레이션이 먼저면…`,
-   * `명령이 먼저면…`)가 프로필 **둘**짜리 v1을 심고 다른 프로필의 편집이 커밋을 살아남는지
-   * 본다. 여기에 행으로 얹지 않은 이유는 그러면 헛돌기 때문이다 — 커밋은 부트스트랩이 스스로
-   * 태우므로 `fire`로 두드릴 손잡이가 없고, `start`가 명령을 내는 시점엔 커밋이 이미 끝나 있어
-   * 어떤 순서에서도 겹치지 않는다(행으로 넣어 보고 실측했다: 레인을 벗어나게 만들어도 통과했다).
+   * **만료 알람 두 행이 여기서 빠졌다** (티켓 10) — 그 서브시스템이 철거됐다.
+   *
+   * 그래서 이 표는 한 행이 됐지만 불변식의 증거가 하나로 줄지는 않는다: **마이그레이션 커밋**이
+   * 같은 성질(상태 전체를 되쓰는 직접 경로가 겹친 편집을 지우지 않는다)을 위 두 시나리오에서
+   * 이미 들고 있었다 — 레인을 벗어나게 만들면 그 둘이 죽는다(실측). 이 티켓이 더한 것은 그
+   * 표본을 프로필 **둘**로 넓혀 *다른* 프로필의 편집까지 보게 한 것이지, 없던 증거를 새로
+   * 만든 것이 아니다 (code-review가 지적한 대로 처음 주석은 델타를 과장했다).
+   *
+   * 커밋을 여기 행으로 얹지 않은 이유는 그러면 **헛돌기** 때문이다 — 커밋은 부트스트랩이 스스로
+   * 태우므로 `fire`로 두드릴 손잡이가 없고, `start`가 명령을 내는 시점엔 이미 끝나 있어 어떤
+   * 순서에서도 겹치지 않는다(행으로 넣어 보고 실측했다: 레인을 벗어나게 만들어도 통과했다).
    * 겹치게 하는 손잡이는 `commandBeforeMigration`이고, 그것을 쓰는 자리가 위 두 시나리오다.
    *
    * 남는 직접 경로 넷의 증거: **전역 Pause 토글**은 아래 표, **마이그레이션 커밋**은 위 둘,

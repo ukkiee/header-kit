@@ -21,15 +21,13 @@ const RESET_STOP_MESSAGE: Record<ResetStep, MessageKey> = {
   'clear-summary': 'resetStoppedAtSummary',
 };
 
-/**
- * 재조정이 한 세대 동안 붙잡는 것 — **저장 상태 하나뿐**이다 (티켓 10).
+/*
+ * **재조정 스냅샷이 곧 저장 상태다** (티켓 10).
  *
- * 예전에는 열린 탭 목록과 현재 시각도 함께 잡았다. 컴파일이 그 둘을 더 이상 읽지 않으므로
- * (ADR 0002 개정) 스냅샷도 그만큼 얇아졌다 — 세대 보증이 지켜야 할 값이 줄었다는 뜻이다.
+ * 예전에는 상태 + 열린 탭 목록 + 현재 시각을 한 덩이(`Snapshot`)로 묶어 세대 보증 아래 두었다.
+ * 컴파일이 뒤의 둘을 더 이상 읽지 않으므로(ADR 0002 개정) 남은 필드가 하나뿐이라, 그 랩퍼는
+ * `snapshot.state.…`로 한 칸 더 걷게 만들 뿐이었다 — `StoredState`를 그대로 세대에 싣는다.
  */
-interface Snapshot {
-  state: StoredState;
-}
 
 /**
  * background 컴포지션 루트가 의존하는 플랫폼 효과·리스너·시계.
@@ -100,15 +98,12 @@ export function bootstrap(deps: BackgroundDeps): void {
     void writer.execute(command).catch((error) => deps.logError(context, error));
   };
 
-  const reconciler = createReconciler<Snapshot>({
-    loadSnapshot: async () => ({ state: await deps.loadState() }),
-    compile: (snapshot) =>
-      compile(snapshot.state.profiles, {
-        paused: snapshot.state.paused,
-        materialized: snapshot.state.materialized,
-      }),
+  const reconciler = createReconciler<StoredState>({
+    loadSnapshot: () => deps.loadState(),
+    compile: (state) =>
+      compile(state.profiles, { paused: state.paused, materialized: state.materialized }),
     // 규칙·배지·상태 요약을 같은 스냅샷·같은 세대 보증 아래 반영한다.
-    apply: async (result, snapshot) => {
+    apply: async (result, state) => {
       // 규칙 적용은 실패해도(예: quota) 나머지 반영·요약을 막지 않는다 —
       // 실패는 삼키지 않고 요약의 applyError로 노출한다.
       let applyError: string | null = null;
@@ -119,14 +114,14 @@ export function bootstrap(deps: BackgroundDeps): void {
       }
       // 요약은 background가 실제 적용한 그 결과·스냅샷에서 만든다.
       const summary = summarizeCompile(result, {
-        profiles: snapshot.state.profiles,
-        paused: snapshot.state.paused,
+        profiles: state.profiles,
+        paused: state.paused,
         applyError,
       });
       // 배지도 같은 요약을 본다 — 화면의 "적용 중인 규칙 수"와 툴바가 갈라지지 않는다.
       // 적용이 실패했으면 직전 규칙 세트가 그대로 걸려 있으므로 배지도 직전 값을 유지한다.
-      if (drawsBadge(summary, snapshot.state.badgeVisible)) {
-        await deps.applyBadge(computeBadge(summary, snapshot.state.badgeVisible));
+      if (drawsBadge(summary, state.badgeVisible)) {
+        await deps.applyBadge(computeBadge(summary, state.badgeVisible));
       }
       await deps.publishSummary(summary);
     },

@@ -131,11 +131,29 @@ describe('실체화 수명주기 (활성화 경계)', () => {
   });
 
   /*
-   * **만료 경로 테스트가 없다** (티켓 10). 이 자리는 "규칙을 끄는 것은 활성화 경계가 아니다 —
-   * 실체화 값이 보존된다"를 만료로 재고 있었다. 그 전이가 철거됐지만 성질은 남아 있고, 같은
-   * 것을 재는 자리가 이미 둘 있다: 프로필을 끄면 지우고(활성화 경계), 규칙 하나를 끄는
-   * `update-modification`은 지우지 않는다. 아래 Undo 테스트가 후자를 그대로 든다.
+   * **규칙 하나를 끄는 것은 활성화 경계가 아니다** — 실체화 값이 그대로 남는다.
+   *
+   * 이 성질은 만료 전이가 표본으로 들고 있었는데(그 규칙을 끄고 값은 보존) 그 전이가
+   * 철거됐다 (티켓 10). 성질 자체는 남아 있으므로 **남은 경로로 옮겨 온다**: 사용자가 폼에서
+   * 규칙을 끄는 `update-modification`이다. 아래 Undo 테스트는 삭제→복원을 재는 다른 것이라
+   * 이 자리를 대신하지 못한다(code-review).
+   *
+   * 경계는 **프로필** 단위다: 프로필을 끄면 그 값들이 지워진다(위 토글 테스트). 규칙 하나를
+   * 끄는 것으로 지워지면, 다시 켰을 때 같은 Placeholder가 새 값을 받아 사용자가 추적하던
+   * 값이 조용히 바뀐다.
    */
+  it('규칙 하나를 꺼도 실체화 값은 남는다 — 경계는 프로필 단위다', () => {
+    const deps = stubDeps();
+    const on = toggleProfile(state([profile()]), 'p1', true, deps);
+    expect(on.materialized).toEqual({ 'm-ph': 'trace-uuid-1' });
+
+    const target = on.profiles[0]!.modifications.find((m) => m.id === 'm-ph')!;
+    const off = updateModification(on, 'p1', { ...target, enabled: false }, deps);
+
+    expect(off.profiles[0]?.modifications.find((m) => m.id === 'm-ph')?.enabled).toBe(false);
+    expect(off.materialized).toEqual({ 'm-ph': 'trace-uuid-1' });
+  });
+
   it('삭제-Undo(restoreModification): 원위치·원상태 복원, Placeholder는 재실체화 없이 값 보존 (ui-refine 07)', () => {
     const deps = stubDeps();
     // 활성 프로필: m-ph(placeholder)=uuid-1, m-plain=static. m-ph를 삭제했다 되돌린다.
