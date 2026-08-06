@@ -8,6 +8,7 @@ import {
   chunkKey,
   chunkString,
   decodeSnapshotText,
+  lastBackupAt,
   listSnapshots,
   planBackup,
   planSnapshotDelete,
@@ -15,6 +16,7 @@ import {
   verifyBackupsCleared,
   verifySnapshotDeleted,
   type BackupTarget,
+  type SnapshotStatus,
   type SyncKV,
 } from './backup';
 import { applyCommand } from './commands';
@@ -379,5 +381,43 @@ describe('listSnapshots / decodeSnapshotText', () => {
     delete kv[chunkKey('s1', 0)];
 
     expect(listSnapshots(kv)[0]).toMatchObject({ status: 'corrupt' });
+  });
+});
+
+/**
+ * 마지막으로 백업된 시각 (티켓 09) — 동기화 카드가 "지금 어디에 저장되는지" 옆에 말하는 값.
+ *
+ * **자리가 아니라 최댓값이다.** 매니페스트의 배열 순서는 시간순이 아니다 — `planBackup`이
+ * 링 슬롯을 재사용하며 남긴 순서라, 맨 앞이나 맨 뒤를 집으면 실제로는 더 최근인 스냅샷이
+ * 있는데도 옛 시각을 말하게 된다.
+ */
+describe('lastBackupAt (티켓 09)', () => {
+  const entry = (id: string, createdAt: number): SnapshotStatus => ({
+    id,
+    createdAt,
+    chunkCount: 1,
+    checksum: 'c',
+    profileCount: 1,
+    status: 'ok',
+  });
+
+  it('스냅샷이 없으면 null이다 — 0은 1970년을 뜻하는 진짜 시각이다', () => {
+    expect(lastBackupAt([])).toBeNull();
+  });
+
+  it('배열 순서와 무관하게 가장 최근 시각을 고른다', () => {
+    expect(lastBackupAt([entry('a', 300), entry('b', 900), entry('c', 100)])).toBe(900);
+    // 뒤집어도 같은 답 — 자리를 집는 구현이면 여기서 갈린다.
+    expect(lastBackupAt([entry('c', 100), entry('b', 900), entry('a', 300)])).toBe(900);
+  });
+
+  /*
+   * 손상 스냅샷도 **시각은 센다**. 그때 백업이 실제로 일어났기 때문이다 — 읽을 수 있는지는
+   * 히스토리 카드의 손상 표식이 따로 말한다. 여기서 빼면 "마지막 백업: 없음"이라 적힌 화면
+   * 아래에 백업 목록이 서는 모순이 생긴다.
+   */
+  it('손상 스냅샷의 시각도 센다 — 백업은 그때 일어났다', () => {
+    const corrupt = { ...entry('bad', 900), status: 'corrupt' as const, reason: 'missing chunk' };
+    expect(lastBackupAt([entry('ok', 100), corrupt])).toBe(900);
   });
 });

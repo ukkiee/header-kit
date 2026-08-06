@@ -86,22 +86,6 @@ describe('state transition commands', () => {
     expect(next.profiles.map((p) => p.id)).toEqual(['p2', 'p1']);
   });
 
-  it('add/removeCustomHeaderName은 중복 없이 사용자 항목을 관리한다', () => {
-    const added = applyCommand(state(), { type: 'add-custom-header-name', name: 'X-My' });
-    expect(added.customHeaderNames).toEqual(['X-My']);
-
-    // 대소문자 무시 중복은 무시
-    const dup = applyCommand(added, { type: 'add-custom-header-name', name: 'x-my' });
-    expect(dup.customHeaderNames).toEqual(['X-My']);
-
-    // 표준 사전 항목도 중복으로 거른다 — 환경설정의 쌍둥이 pill 방지 (ui-refine 03)
-    const std = applyCommand(added, { type: 'add-custom-header-name', name: 'accept' });
-    expect(std.customHeaderNames).toEqual(['X-My']);
-
-    const removed = applyCommand(added, { type: 'remove-custom-header-name', name: 'X-My' });
-    expect(removed.customHeaderNames).toEqual([]);
-  });
-
   it('togglePause는 권위 상태 기준으로 Pause를 뒤집는다 (lost-update 방지)', () => {
     const off = applyCommand(state(), { type: 'toggle-pause' });
     expect(off.paused).toBe(true);
@@ -257,14 +241,50 @@ describe('state transition commands', () => {
       expect(next.customCookieNames).toEqual([]);
     });
 
-    it('다른 종류는 이력을 건드리지 않는다', () => {
+    /*
+     * **헤더 이름도 저장이 기억한다** (티켓 09). 티켓 08까지는 이 셋 중 헤더만 예외였고
+     * 환경설정 화면에서 손으로 등록해야 했는데, 시안에 그 화면이 없어 카드가 사라졌다.
+     * 여기서 남기지 않으면 그 목록은 영영 자라지 못한다.
+     */
+    it('헤더 규칙을 저장하면 그 이름이 다음 제안에 남는다', () => {
       const next = applyCommand(state(), {
         type: 'add-modification', profileId: 'p1', modification: modification('m9', 'X-Zed'),
       });
+      expect(next.customHeaderNames).toEqual(['X-Zed']);
+      // 헤더는 헤더 목록에만 — 세 이력이 서로를 오염시키지 않는다.
       expect(next.customCookieNames).toEqual([]);
       expect(next.customUserAgents).toEqual([]);
-      // 헤더 이름 이력은 환경설정이 관리한다 — 저장이 자동으로 남기지 않는다.
+    });
+
+    it('헤더 이름도 같은 네 단계를 지난다 — 빈 값·중복·표준 사전은 남지 않는다', () => {
+      const once = applyCommand(state(), {
+        type: 'add-modification', profileId: 'p1', modification: modification('m9', 'X-Zed'),
+      });
+      // 대소문자 무시 중복
+      const twice = applyCommand(once, {
+        type: 'add-modification', profileId: 'p1', modification: modification('m10', 'x-zed'),
+      });
+      expect(twice.customHeaderNames).toEqual(['X-Zed']);
+      // 표준 사전에 있는 이름은 남기지 않는다 — 목록에 같은 이름이 두 번 서는 것을 막는다.
+      const std = applyCommand(once, {
+        type: 'add-modification', profileId: 'p1', modification: modification('m11', 'accept'),
+      });
+      expect(std.customHeaderNames).toEqual(['X-Zed']);
+      // 빈 이름
+      const blank = applyCommand(state(), {
+        type: 'add-modification', profileId: 'p1', modification: modification('m12', '   '),
+      });
+      expect(blank.customHeaderNames).toEqual([]);
+    });
+
+    it('이름이 없는 종류는 어느 이력도 건드리지 않는다', () => {
+      const block: Modification = { kind: 'block', id: 'b1', enabled: true, comment: '' };
+      const next = applyCommand(state(), {
+        type: 'add-modification', profileId: 'p1', modification: block,
+      });
       expect(next.customHeaderNames).toEqual([]);
+      expect(next.customCookieNames).toEqual([]);
+      expect(next.customUserAgents).toEqual([]);
     });
 
     /*

@@ -146,6 +146,27 @@ function remember(
  * 복원은 이미 남긴 값이고, 가져오기는 남의 파일에 있던 값이라 내 제안 목록에 섞일 이유가 없다.
  */
 function withRememberedValues(state: StoredState, modification: Modification): StoredState {
+  /*
+   * 헤더 이름도 **저장이 기억한다** (티켓 09).
+   *
+   * 티켓 08까지는 이 셋 중 헤더만 예외였다 — 환경설정 화면에서 손으로 등록해야 했다. 시안에
+   * 그 화면이 없어 카드가 사라졌으므로, 그대로 두면 이 목록은 영영 자라지 못하고 "직접 친 값은
+   * 다음에도 제안된다"가 세 필드 중 하나에서만 거짓이 된다. 셋이 한 구조를 쓴다는 말이 이제
+   * 저장 경로에서도 참이다.
+   *
+   * `header-removal`도 포함한다: 지우려고 친 이름도 사용자가 친 이름이고, 다음에 같은 헤더를
+   * 다시 다룰 때 제안돼야 한다.
+   */
+  if (
+    modification.kind === 'request-header' ||
+    modification.kind === 'response-header' ||
+    modification.kind === 'header-removal'
+  ) {
+    return {
+      ...state,
+      customHeaderNames: remember(state.customHeaderNames, STANDARD_HEADERS, modification.name),
+    };
+  }
   if (modification.kind === 'cookie' || modification.kind === 'set-cookie') {
     const name = modification.name ?? '';
     return { ...state, customCookieNames: remember(state.customCookieNames, COMMON_COOKIE_NAMES, name) };
@@ -362,20 +383,12 @@ export function resetToDefaults(): StoredState {
   return createDefaultState();
 }
 
-export function addCustomHeaderName(state: StoredState, name: string): StoredState {
-  // 쿠키·UA 이력과 **같은 규칙**을 쓴다 — 빈 값·중복·프리셋 중복을 거르는 네 단계가 한 곳이다.
-  const customHeaderNames = remember(state.customHeaderNames, STANDARD_HEADERS, name);
-  return customHeaderNames.length === state.customHeaderNames.length
-    ? state
-    : { ...state, customHeaderNames };
-}
-
-export function removeCustomHeaderName(state: StoredState, name: string): StoredState {
-  return {
-    ...state,
-    customHeaderNames: state.customHeaderNames.filter((n) => n !== name),
-  };
-}
+/*
+ * **헤더 이름을 손으로 등록·삭제하는 명령이 없다** (ADR 0017, 티켓 09). 시안에 그 화면이
+ * 없어 환경설정의 자동완성 카드가 사라졌고, 호출부를 잃은 `add-custom-header-name`·
+ * `remove-custom-header-name`이 함께 퇴역했다. 목록을 채우는 일은 이제 규칙 저장이 한다
+ * (`withRememberedValues`) — 쿠키 이름·User-Agent와 같은 경로다.
+ */
 
 /**
  * 퇴역 공지를 확인해 지운다 (티켓 02, ADR 0017) — **보는 것으로는 지워지지 않는다**.
@@ -438,8 +451,6 @@ export type Command =
   | { type: 'expire-rules'; now: number }
   /** 퇴역 공지 확인 — 쓰기 문을 지나 성공했을 때만 공지가 사라진다 (티켓 02). */
   | { type: 'acknowledge-retirement' }
-  | { type: 'add-custom-header-name'; name: string }
-  | { type: 'remove-custom-header-name'; name: string }
   | { type: 'add-modification'; profileId: string; modification: Modification }
   | { type: 'update-modification'; profileId: string; modification: Modification }
   | { type: 'remove-modification'; profileId: string; modificationId: string }
@@ -512,10 +523,6 @@ export function applyCommand(
       return expireRules(state, command.now);
     case 'acknowledge-retirement':
       return acknowledgeRetirement(state);
-    case 'add-custom-header-name':
-      return addCustomHeaderName(state, command.name);
-    case 'remove-custom-header-name':
-      return removeCustomHeaderName(state, command.name);
     case 'import-profiles':
       return importProfiles(state, command.profiles, deps);
     case 'restore-profiles':

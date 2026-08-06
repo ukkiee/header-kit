@@ -1,21 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import { applyCommand, type Command } from '@/core/commands';
 import type { Locale } from '@/core/i18n';
-import { SCHEMA_VERSION } from '@/core/schema';
-import type { RegisteredCommand } from '@/core/shortcuts';
 import type { ThemePreference } from '@/core/theme';
 import { PreferencesPanel } from './preferences-panel';
-
-/**
- * 스토리북에는 확장 API가 없다 — 등록된 커맨드는 manifest가 선언한 그대로 흉내 낸다.
- * 목록이 읽기 전용이라 이 고정값으로도 화면이 하는 일을 전부 보여 준다.
- */
-const storyShortcuts = (): Promise<RegisteredCommand[]> =>
-  Promise.resolve([
-    { name: '_execute_action', shortcut: 'Alt+Shift+H' },
-    { name: 'toggle-pause', shortcut: 'Alt+Shift+P' },
-  ]);
 
 const meta = {
   title: 'Popup/PreferencesPanel',
@@ -25,65 +12,44 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-function Interactive({ incognitoAllowed }: { incognitoAllowed: boolean }) {
-  const [names, setNames] = useState<string[]>(['X-Team-Token']);
-  // 테마 칩도 실제로 눌러 볼 수 있어야 한다 — 고정값이면 스토리에서 선택이 죽어 보인다.
+/**
+ * 세 컨트롤이 **전부 살아 있어야** 한다 — 고정값을 주면 스토리에서 칩과 스위치가 죽어 보이고,
+ * 고른 값이 화면에 어떻게 되비치는지가 이 스토리가 보여 줄 수 있는 유일한 것이다.
+ */
+function Interactive({ initialLocale = 'en' }: { initialLocale?: Locale }) {
   const [theme, setTheme] = useState<ThemePreference>('system');
   const [badgeVisible, setBadgeVisible] = useState(true);
-  // 언어 칩도 같은 이유로 살아 있어야 한다 — 스토리는 en에서 시작한다.
-  const [locale, setLocale] = useState<Locale>('en');
-  const onCommand = (command: Command) => {
-    const state = applyCommand(
-      {
-        schemaVersion: SCHEMA_VERSION,
-        paused: false,
-        theme,
-        locale,
-        badgeVisible,
-        syncBackup: true,
-        profiles: [],
-        materialized: {},
-        customHeaderNames: names,
-        customCookieNames: [],
-        customUserAgents: [],
-      },
-      command,
-    );
-    setNames(state.customHeaderNames);
-    setTheme(state.theme);
-    setBadgeVisible(state.badgeVisible);
-    if (state.locale) setLocale(state.locale);
-  };
+  const [locale, setLocale] = useState<Locale>(initialLocale);
   return (
     <div className="w-96">
       <PreferencesPanel
-        customHeaderNames={names}
         theme={theme}
         locale={locale}
         badgeVisible={badgeVisible}
-        onCommand={onCommand}
-        incognitoAllowed={incognitoAllowed}
-        loadShortcuts={storyShortcuts}
+        onCommand={(command) => {
+          if (command.type === 'set-theme') setTheme(command.theme);
+          if (command.type === 'set-badge-visible') setBadgeVisible(command.visible);
+          if (command.type === 'set-locale') setLocale(command.locale);
+        }}
       />
     </div>
   );
 }
 
 const baseArgs = {
-  customHeaderNames: [],
   theme: 'system',
   locale: 'en',
   badgeVisible: true,
   onCommand: () => {},
-  loadShortcuts: storyShortcuts,
-} satisfies Partial<React.ComponentProps<typeof PreferencesPanel>>;
+} satisfies React.ComponentProps<typeof PreferencesPanel>;
 
-export const IncognitoBlocked: Story = {
-  args: { ...baseArgs, incognitoAllowed: false },
-  render: () => <Interactive incognitoAllowed={false} />,
+export const Default: Story = {
+  args: baseArgs,
+  render: () => <Interactive />,
 };
 
-export const IncognitoAllowed: Story = {
-  args: { ...baseArgs, incognitoAllowed: true },
-  render: () => <Interactive incognitoAllowed={true} />,
+/** ko에서도 칩 라벨이 각 언어 자신의 이름이라, 지금 화면이 무슨 언어든 알아볼 수 있다. */
+export const Korean: Story = {
+  args: { ...baseArgs, locale: 'ko' },
+  render: () => <Interactive initialLocale="ko" />,
 };

@@ -6,7 +6,7 @@ import { AlertBanner } from '@/ui/alert-banner';
 import { Button } from '@/ui/press-button';
 import { Checkbox } from '@/ui/checkbox';
 import { TextArea } from '@/ui/text-field';
-import { PanelSection } from '@/ui/panel-section';
+import { Card, CardAction, CardHeader, CardContent, CardTitle } from '@/ui/card';
 import { useT } from '@/ui/i18n-context';
 
 export interface TransferPanelProps {
@@ -73,20 +73,25 @@ export function TransferPanel({ state, onCommand, download = browserDownload }: 
     setMode('idle');
   };
 
+  /*
+   * 백업 화면의 **첫 카드** (티켓 09, 스펙 story 73) — 내보내기와 가져오기가 한 자리에 있다.
+   * 둘 다 "프로필 전체를 파일로 두고 되찾는" 같은 일이라, 갈라 두면 백업하러 온 사람이 반쪽만
+   * 찾는다. 나머지 셋(동기화·히스토리·초기화)은 `BackupPanel`이 같은 `Card` 셸로 그린다.
+   */
   return (
-    <PanelSection
-      title={t('profiles')}
-      actions={
-        <>
+    <Card size="sm" className="gap-2 text-xs">
+      <CardHeader>
+        <CardTitle>{t('transferJson')}</CardTitle>
+        <CardAction className="flex gap-1">
           <Button variant="ghost" size="sm" onClick={() => enterMode(mode === 'export' ? 'idle' : 'export')}>
             {t('export')}
           </Button>
           <Button variant="ghost" size="sm" onClick={() => enterMode(mode === 'import' ? 'idle' : 'import')}>
             {t('import')}
           </Button>
-        </>
-      }
-    >
+        </CardAction>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-2">
       {notices.length > 0 && (
         <AlertBanner as="ul" severity="info" size="xs">
           {notices.map((notice) => (
@@ -160,6 +165,7 @@ export function TransferPanel({ state, onCommand, download = browserDownload }: 
           </div>
         </div>
       )}
-    </PanelSection>
+      </CardContent>
+    </Card>
   );
 }

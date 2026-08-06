@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react';
-import { backupTarget, decodeSnapshotText, type BackupTarget, type SnapshotStatus } from '@/core/backup';
+import {
+  backupTarget,
+  decodeSnapshotText,
+  lastBackupAt,
+  type BackupTarget,
+  type SnapshotStatus,
+} from '@/core/backup';
 import type { Command } from '@/core/commands';
 import { parseImport } from '@/core/transfer';
 import { format, MESSAGES, type MessageKey, type Translator } from '@/core/i18n';
@@ -9,7 +15,7 @@ import { requestBackupMutation } from '@/platform/stateStore';
 import { RotateCcw, Trash2 } from 'lucide-react';
 import { AlertBanner } from '@/ui/alert-banner';
 import { Button } from '@/ui/press-button';
-import { CollapsiblePanel } from '@/ui/collapsible-panel';
+import { Card, CardContent, CardHeader, CardTitle } from '@/ui/card';
 import { IconButton } from '@/ui/icon-button';
 import { Pill } from '@/ui/pill';
 import { ToggleSwitch } from '@/ui/toggle-switch';
@@ -88,6 +94,30 @@ type CloudPresence = 'unknown' | 'present' | 'none';
  */
 type Confirming = { id: string; action: 'restore' | 'delete' };
 
+/**
+ * 백업 화면의 카드 하나 — 셋이 같은 셸을 쓴다 (티켓 09).
+ *
+ * `Card` 프리미티브를 그대로 조립한다. 예전에는 이 화면 전체가 접히는 패널 하나였는데, 시안이
+ * 카드 넷으로 나눠 그렸다 — 접기는 없어졌다: 레일에서 이 화면으로 온 사람은 이미 백업을 보러
+ * 온 것이라, 도착하자마자 펼치는 클릭이 하는 일이 없었다.
+ */
+function BackupCard({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Card size="sm" className="gap-2 text-xs">
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-2">{children}</CardContent>
+    </Card>
+  );
+}
+
 export function BackupPanel({
   syncBackup,
   onCommand,
@@ -104,15 +134,20 @@ export function BackupPanel({
     requestBackupMutation({ op: 'delete-snapshot', snapshotId: entry.id, target }),
 }: BackupPanelProps) {
   const t = useT();
-  // 처음부터 펼쳐 둔다 — 환경설정 패널과 같은 이유(레일에서 이 화면으로 온 사람은
-  // 이미 백업을 보러 온 것이다).
-  const [open, setOpen] = useState(true);
   const [snapshots, setSnapshots] = useState<SnapshotStatus[]>([]);
   const [confirming, setConfirming] = useState<Confirming | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cloudPresence, setCloudPresence] = useState<CloudPresence>('unknown');
   const [confirmingClear, setConfirmingClear] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  /**
+   * 알림은 **목록**이다 (티켓 02에서 이월).
+   *
+   * 예전에는 문자열 하나였고, 복원은 `parseImport`가 돌려준 `notices`를 통째로 버렸다 —
+   * 스냅샷이 퇴역 조건이나 레거시 필터를 담고 있으면 복원이 그것을 조용히 걷어 가고 사용자는
+   * 아무 설명도 받지 못했다. 가져오기 경로는 같은 배열을 이미 배너로 올리고 있었으므로,
+   * 없던 것은 자리뿐이었다.
+   */
+  const [notices, setNotices] = useState<string[]>([]);
   /** 전체 초기화의 2단계 확인 (R-3) — 파괴적이므로 한 번 더 눌러야 실행된다. */
   const [confirmingReset, setConfirmingReset] = useState(false);
   /** 삭제 후 잔존 여부를 다시 읽게 하는 카운터 — 화면이 지운 사실을 스스로 확인한다. */
@@ -123,13 +158,12 @@ export function BackupPanel({
   const target = backupTarget({ syncBackup });
 
   useEffect(() => {
-    if (open) void loadSnapshots(target).then(setSnapshots, (reason) => setError(reasonText(reason)));
-  }, [open, loadSnapshots, target]);
+    void loadSnapshots(target).then(setSnapshots, (reason) => setError(reasonText(reason)));
+  }, [loadSnapshots, target]);
 
   // 조회 실패를 삼키지 않는다 — 배너로 표면화하고 'unknown'으로 남겨 문구가 "없습니다"를
   // 말하지 않게 한다. deps에 활성 대상·히스토리를 넣어 토글이나 새 스냅샷 뒤에도 다시 읽는다.
   useEffect(() => {
-    if (!open) return;
     void loadCloudPresence().then(
       (present) => setCloudPresence(present ? 'present' : 'none'),
       (reason) => {
@@ -137,7 +171,7 @@ export function BackupPanel({
         setError(reasonText(reason));
       },
     );
-  }, [open, loadCloudPresence, cloudRevision, target, snapshots]);
+  }, [loadCloudPresence, cloudRevision, target, snapshots]);
 
   const deleteCloud = async () => {
     if (!confirmingClear) {
@@ -145,7 +179,7 @@ export function BackupPanel({
       return;
     }
     setConfirmingClear(false);
-    setNotice(null);
+    setNotices([]);
 
     const result = await settledMutation(clearCloud);
     // 삭제는 성공을 **검증한** 결과만 성공으로 표시한다 — 실패는 배너로 드러난다.
@@ -154,7 +188,7 @@ export function BackupPanel({
         ? null
         : `${t('cloudDeleteFailed')}: ${verifiedDeleteDetail(result, 'cloudDeleteRemaining', t)}`,
     );
-    setNotice(result.ok ? t('cloudBackupsDeleted') : null);
+    setNotices(result.ok ? [t('cloudBackupsDeleted')] : []);
     setCloudRevision((n) => n + 1);
     if (target === 'sync') void loadSnapshots(target).then(setSnapshots);
   };
@@ -170,11 +204,11 @@ export function BackupPanel({
       return;
     }
     setConfirmingReset(false);
-    setNotice(null);
+    setNotices([]);
 
     const result = await onCommand({ type: 'full-reset' });
     setError(result.ok ? null : `${t('resetFailed')}: ${resetFailureDetail(result.error, t)}`);
-    setNotice(result.ok ? t('resetDone') : null);
+    setNotices(result.ok ? [t('resetDone')] : []);
     setCloudRevision((n) => n + 1);
     void loadSnapshots(target).then(setSnapshots, (reason) => setError(reasonText(reason)));
   };
@@ -196,7 +230,7 @@ export function BackupPanel({
     setConfirming(null);
     // 앞선 일괄 삭제·초기화의 성공 문구를 먼저 지운다 — 남겨 두면 이번 실패 배너 옆에
     // "삭제했습니다"가 그대로 서서, 지우지 못한 것이 지워진 것처럼 읽힌다.
-    setNotice(null);
+    setNotices([]);
 
     const result = await settledMutation(() => deleteSnapshot(entry, target));
     setError(
@@ -213,6 +247,7 @@ export function BackupPanel({
       return;
     }
     setConfirming(null);
+    setNotices([]);
 
     const decoded = await loadSnapshotText(entry, target);
     if (!decoded.ok) {
@@ -226,31 +261,46 @@ export function BackupPanel({
     }
     const result = await onCommand({ type: 'restore-profiles', profiles: parsed.profiles });
     setError(result.ok ? null : (result.error ?? 'Restore rejected.'));
+    /*
+     * 복원이 실제로 착지했을 때만 공지를 올린다 (티켓 02에서 이월). 거부된 복원의 공지를
+     * 올리면 "이것들이 걷혔습니다"라고 말해 놓고 저장소는 그대로인 화면이 된다.
+     */
+    if (result.ok) setNotices(parsed.notices);
   };
 
+  const backedUpAt = lastBackupAt(snapshots);
+
   return (
-    <CollapsiblePanel
-      title={t('backups')}
-      open={open}
-      onOpenChange={setOpen}
-      toggleAriaLabel={t('ariaToggleBackups')}
-      banner={
-        error && (
-          <AlertBanner as="p" severity="danger" size="xs" role="alert">
-            {error}
-          </AlertBanner>
-        )
-      }
-    >
-      <div className="mb-2 flex flex-col gap-1 text-xs">
-        {/* 클라우드 동기화 (R-1) — 스위치는 **앞으로의** 위치만 정한다. 상태 문구가
-            켜짐/꺼짐과 클라우드 잔존 여부를 함께 말해, 끄는 것만으로 "이 브라우저에만"이
-            되었다고 읽히지 않게 한다. */}
+    <>
+      {error && (
+        <AlertBanner as="p" severity="danger" size="xs" role="alert">
+          {error}
+        </AlertBanner>
+      )}
+      {notices.length > 0 && (
+        <AlertBanner as="ul" severity="info" size="xs">
+          {notices.map((notice) => (
+            <li key={notice}>{notice}</li>
+          ))}
+        </AlertBanner>
+      )}
+
+      {/* 카드 2 — 클라우드 동기화 (R-1). 스위치는 **앞으로의** 위치만 정한다. 문구가 저장
+          위치와 마지막 시각을 말하고, 클라우드 잔존 여부를 함께 붙여 끄는 것만으로 "이
+          브라우저에만"이 되었다고 읽히지 않게 한다.
+
+          **기기 수는 말하지 않는다** (티켓 AC3): 브라우저가 알려 주지 않는 값이라 셀 방법이
+          없다. 말할 수 있는 것은 어디에 두는지와 마지막이 언제였는지뿐이다. */}
+      <BackupCard title={t('cloudSync')}>
         <div className="flex items-start justify-between gap-2">
           <div className="flex flex-col">
-            <span className="font-medium">{t('cloudSync')}</span>
             <span className="text-muted-foreground">
               {syncBackup ? t('cloudSyncOn') : t('cloudSyncOff')}
+            </span>
+            <span className="text-muted-foreground">
+              {backedUpAt === null
+                ? t('noBackupsYet')
+                : format(t('lastBackupAt'), { time: new Date(backedUpAt).toLocaleString() })}
             </span>
             <span className="text-muted-foreground">
               {cloudPresence === 'present'
@@ -280,33 +330,16 @@ export function BackupPanel({
             {confirmingClear ? t('confirmDeleteCloudBackups') : t('deleteCloudBackups')}
           </Button>
         </div>
-        {notice && <p className="text-muted-foreground">{notice}</p>}
+      </BackupCard>
 
-        {/* 전체 초기화 (R-3) — 되돌릴 수 없으므로 2단계 확인을 거친다. 무엇이 지워지는지와
-            "실패해도 되돌아오지 않는다"를 누르기 전에 말한다. */}
-        <div className="mt-2 flex flex-col gap-1 border-t border-border pt-2">
-          <span className="font-medium">{t('resetEverything')}</span>
-          <p className="text-muted-foreground">{t('resetEverythingNote')}</p>
-          <p className="text-muted-foreground">{t('resetRetryNote')}</p>
-          <div className="flex justify-end">
-            <Button
-              variant={confirmingReset ? 'destructive' : 'ghost'}
-              size="sm"
-              aria-label={confirmingReset ? t('confirmResetEverything') : t('resetEverything')}
-              onClick={() => void resetEverything()}
-            >
-              {confirmingReset ? t('confirmResetEverything') : t('resetEverything')}
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {snapshots.length === 0 ? (
-        <p className="text-xs text-muted-foreground">{t('noBackupsYet')}</p>
-      ) : (
-        <ul className="flex flex-col gap-1">
-          {snapshots.map((snapshot) => (
-              <li key={snapshot.id} className="flex items-center gap-2 text-xs">
+      {/* 카드 3 — 백업 히스토리 (스펙 story 76). 각 행이 시각·요약을 말하고 복원·삭제를 든다. */}
+      <BackupCard title={t('backupHistory')}>
+        {snapshots.length === 0 ? (
+          <p className="text-muted-foreground">{t('noBackupsYet')}</p>
+        ) : (
+          <ul className="flex flex-col gap-1">
+            {snapshots.map((snapshot) => (
+              <li key={snapshot.id} className="flex items-center gap-2">
                 <span className="flex-1">
                   {new Date(snapshot.createdAt).toLocaleString()} · {snapshot.profileCount}{' '}
                   {snapshot.profileCount === 1 ? t('activeProfile') : t('activeProfiles')}
@@ -357,6 +390,24 @@ export function BackupPanel({
             ))}
           </ul>
         )}
-    </CollapsiblePanel>
+      </BackupCard>
+
+      {/* 카드 4 — 전체 초기화 (R-3, 스펙 story 77). 되돌릴 수 없으므로 2단계 확인을 거친다.
+          무엇이 지워지는지와 "실패해도 되돌아오지 않는다"를 누르기 전에 말한다. */}
+      <BackupCard title={t('resetEverything')}>
+        <p className="text-muted-foreground">{t('resetEverythingNote')}</p>
+        <p className="text-muted-foreground">{t('resetRetryNote')}</p>
+        <div className="flex justify-end">
+          <Button
+            variant={confirmingReset ? 'destructive' : 'ghost'}
+            size="sm"
+            aria-label={confirmingReset ? t('confirmResetEverything') : t('resetEverything')}
+            onClick={() => void resetEverything()}
+          >
+            {confirmingReset ? t('confirmResetEverything') : t('resetEverything')}
+          </Button>
+        </div>
+      </BackupCard>
+    </>
   );
 }

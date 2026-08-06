@@ -447,12 +447,10 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
               )}
               {railView === 'preferences' && (
                 <PreferencesPanel
-                  customHeaderNames={state.customHeaderNames}
                   theme={state.theme}
                   locale={localePreference}
                   badgeVisible={state.badgeVisible}
                   onCommand={dispatch}
-                  incognitoAllowed={incognitoAllowed}
                 />
               )}
             </MotionView>

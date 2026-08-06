@@ -83,17 +83,16 @@ const rowSettleMs = () => Math.round(ROW_TRANSITION.duration * 1000) + 120;
 const SAVE_BUTTON = /^Save( changes)?$/;
 
 /**
- * 접이식 패널을 **열린 상태로 만든다** — 이미 열려 있으면 아무것도 하지 않는다.
+ * 레일 화면이 실제로 그려질 때까지 기다린다 (티켓 09).
  *
- * 예전에는 각 시나리오가 토글을 그냥 한 번 눌러 열었다. 그 방식은 "기본은 닫힘"에
- * 의존하는데, 기본값이 열림으로 바뀌자 같은 클릭이 패널을 **닫아** 뒤따르는 단언이
- * 전부 무너졌다. 여는 것이 목적인 자리에서는 목적을 그대로 적는다.
+ * 예전에는 접이식 패널을 열린 상태로 만드는 `ensurePanelOpen`이었다. 백업·설정이 시안의
+ * **카드**가 되면서 접기가 없어졌으므로 열 것이 없다 — 기다릴 것은 그 화면의 카드 제목이다.
+ * 명시적으로 기다리는 목적 자체는 그대로다: 레일 전환이 cross-fade라, 누른 직후에 안쪽을
+ * 만지면 아직 이전 화면이 서 있다.
  */
-async function ensurePanelOpen(page, label) {
-  const toggle = page.getByRole('button', { name: label });
-  await toggle.waitFor({ timeout: 5000 });
-  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
-  await page.waitForTimeout(300); // 높이 전환이 끝난 뒤에 안쪽을 만진다
+async function settleScreen(page, cardTitle) {
+  await page.getByText(cardTitle, { exact: true }).first().waitFor({ timeout: 5000 });
+  await page.waitForTimeout(150);
 }
 
 /** 범용 폴러 — probe를 test가 참일 때까지 재시도하고 마지막 값을 돌려준다. */
@@ -741,11 +740,14 @@ try {
    *
    * H2의 단언은 백업 화면에 패널이 둘 서면서 "첫 배너"로 넓어졌다 — 전송 경고가 통째로
    * 사라지고 백업 패널 배너가 우연히 JSON을 언급하기만 해도 통과한다. 여기서 잃은 특정성을
-   * 되찾는다: Import 토글을 가진 섹션(=전송 패널) 안으로 범위를 좁혀, 거부를 말하는 것이
+   * 되찾는다: Import 토글을 가진 카드(=전송 패널) 안으로 범위를 좁혀, 거부를 말하는 것이
    * 거부한 패널인지 본다. H2가 방금 남긴 화면을 읽기만 하고 상태는 더 건드리지 않는다.
+   *
+   * 셀렉터가 `section`에서 카드로 바뀐 것은 티켓 09이다 — 백업 화면이 시안의 카드 넷이 되면서
+   * 전송 패널도 같은 `Card` 셸을 쓴다. 재는 것은 그대로다: **거부한 패널 안에** 배너가 있는가.
    */
   const transferSection = popup
-    .locator('section')
+    .locator('[data-slot="card"]')
     .filter({ has: popup.getByRole('button', { name: 'Import…' }) });
   const transferSectionCount = await transferSection.count();
   const transferAlerts = transferSection.getByRole('alert');
@@ -792,7 +794,7 @@ try {
   await popup.reload();
   // 단일 셸(ADR 0005): 백업은 팝업에서도 레일 화면 경유
   await popup.getByRole('button', { name: 'Show backups' }).click();
-  await ensurePanelOpen(popup, 'Toggle backups');
+  await settleScreen(popup, 'Backup history');
   const restoreRow = popup.locator('li').filter({ hasText: 'profile' }).first();
   await restoreRow.getByRole('button', { name: 'Restore backup' }).click();
   await restoreRow.getByRole('button', { name: 'Confirm restore' }).click();
@@ -957,21 +959,31 @@ try {
   record('L1: Pause 단축키 등록 + set-paused가 전체 중단', shortcutRegistered,
     `toggle-pause 등록=${shortcutRegistered}, 규칙=0`);
 
-  // L2: autocomplete 사용자 항목 등록 → datalist 제안에 노출
+  /*
+   * L2: 사용자 헤더 이름이 제안에 오른다.
+   *
+   * **등록하는 길이 바뀌었다** (티켓 09). 예전에는 환경설정의 자동완성 카드에서 손으로
+   * 더했는데, 시안에 그 카드가 없어 사라졌다 — 이제 그 일은 **규칙 저장**이 한다
+   * (`withRememberedValues`), 쿠키 이름·User-Agent가 이미 그랬던 것과 같은 경로다.
+   * 그래서 여기서도 규칙 하나를 그 이름으로 저장하는 것이 등록이다.
+   */
   await seedProfiles([
     baseProfile('p-ac', 'Ac', [hdr({ id: 'm1', name: '', value: 'v' })]),
   ]);
   await popup.reload();
-  // 단일 셸(ADR 0005): 환경설정은 레일 화면 경유, datalist 검사는 프로필 화면 복귀 후
-  await popup.getByRole('button', { name: 'Show settings' }).click();
-  await ensurePanelOpen(popup, 'Toggle preferences');
-  await popup.getByLabel('New autocomplete header').fill('X-Team-Custom');
-  await popup.getByRole('button', { name: 'Add autocomplete header' }).click();
-  const savedCustom = await sw.evaluate(async () =>
-    (await chrome.storage.local.get('state')).state.customHeaderNames,
+  await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
+  const seedName = popup.getByLabel('Header name', { exact: true }).first();
+  await seedName.waitFor({ timeout: 5000 });
+  await seedName.fill('X-Team-Custom');
+  // 제안 팝업이 열려 있으면 floating-ui가 바깥을 aria-hidden 처리해 Save를 못 조준한다.
+  // (`closeSuggestions`는 아래 N 구간에서 정의되므로 같은 일을 여기서 직접 한다.)
+  if ((await popup.getByRole('option').count()) > 0) await popup.keyboard.press('Escape');
+  await popup.getByRole('button', { name: SAVE_BUTTON }).click();
+  const savedCustom = await pollUntil(
+    () => sw.evaluate(async () => (await chrome.storage.local.get('state')).state.customHeaderNames),
+    (names) => Array.isArray(names) && names.includes('X-Team-Custom'),
   );
-  await popup.getByRole('button', { name: 'Show profiles' }).click();
-  // 이름 입력은 규칙 폼 안에만 있다 — Edit로 폼을 연다 (ADR 0006)
+  // 이름 입력은 규칙 폼 안에만 있다 — Edit로 폼을 다시 연다 (ADR 0006)
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
   const acNameInput = popup.getByLabel('Header name', { exact: true }).first();
   await acNameInput.waitFor({ timeout: 5000 });
@@ -987,10 +999,13 @@ try {
     .then(() => true, () => false);
 
   await acNameInput.click();
+  // 필드를 먼저 비운다 — 이제 이 규칙은 방금 저장한 이름을 **이미 들고 있어서**, 지우지 않고
+  // 치면 쿼리가 `X-Team-CustomX`가 되어 아무것도 안 걸린다.
+  await acNameInput.fill('');
   await acNameInput.pressSequentially('X', { delay: 20 });
   await popup.getByRole('option').first().waitFor({ timeout: 5000 });
   const options = await popup.getByRole('option').allTextContents();
-  record('L2a: autocomplete — 앱 팝업으로 제안, 사용자 항목 우선, 접두 필터',
+  record('L2a: autocomplete — 규칙 저장이 기억한 이름이 앱 팝업 제안에 앞서 뜬다',
     isCombobox &&
       Array.isArray(savedCustom) && savedCustom.includes('X-Team-Custom') &&
       options[0] === 'X-Team-Custom' &&
@@ -1773,10 +1788,11 @@ try {
   );
   // 레일 전환은 fade-in(ui-refine 08)이라 대상 화면 렌더를 기다린다(즉시 isVisible 아님).
   await tabApp.getByRole('button', { name: 'Show backups' }).click();
-  const backupsShown = await tabApp.getByRole('button', { name: 'Toggle backups' })
+  // 랜드마크가 패널 토글에서 **카드 제목**으로 바뀌었다 (티켓 09) — 접히는 패널이 없어졌다.
+  const backupsShown = await tabApp.getByText('Backup history', { exact: true })
     .waitFor({ timeout: 5000 }).then(() => true, () => false);
   await tabApp.getByRole('button', { name: 'Show settings' }).click();
-  const prefsShown = await tabApp.getByRole('button', { name: 'Toggle preferences' })
+  const prefsShown = await tabApp.getByText('Theme', { exact: true })
     .waitFor({ timeout: 5000 }).then(() => true, () => false);
   await tabApp.getByRole('button', { name: 'Show profiles' }).click();
   record('N9: 탭 앱 셸 — 검색 필터·사이드바 선택·레일 전환',
@@ -2086,24 +2102,40 @@ try {
     opacityIdle === '0.6' && opacityRowHover === '1' && tooltipOnHover && tooltipOnFocus,
     `idle=${opacityIdle}, row-hover=${opacityRowHover}, tooltip-hover=${tooltipOnHover}, tooltip-focus=${tooltipOnFocus}`);
 
-  // 환경설정: 단축키 문구 없음, 기본 사전 비제거 pill, 사용자 항목만 X
+  /*
+   * N17b: **설정은 셋뿐이다** — 테마 · 배지 표시 · 언어 (티켓 09 AC6·AC7, 스펙 story 78–80).
+   *
+   * 예전에는 여기서 단축키 문구 부재와 자동완성 사전 pill의 제거 가능 여부를 쟀다. 시안에
+   * 그 카드들이 없어 셋 다 걷혔으므로, 재는 것을 뒤집는다: 남아야 하는 셋이 서 있고 걷힌
+   * 것들이 하나도 되살아나지 않았는지 본다. 부재만 세면 "화면이 통째로 안 그려졌다"도
+   * 통과하므로 존재와 부재를 같은 호흡에서 함께 건다.
+   */
   await popup.getByRole('button', { name: 'Show settings' }).click();
-  await ensurePanelOpen(popup, 'Toggle preferences');
-  const hintGone = !(await popup.getByText(/chrome:\/\/extensions\/shortcuts/).isVisible().catch(() => false));
-  const acceptPill = popup.locator('li').filter({ hasText: /^Accept$/ }).first();
-  const stdShown = await acceptPill.waitFor({ timeout: 5000 }).then(() => true, () => false);
-  const stdNoRemove = (await acceptPill.getByRole('button').count()) === 0;
-  // 사용자 항목은 시드로 초기화됐으므로 여기서 추가해 X 버튼을 확인한다
-  await popup.getByLabel('New autocomplete header').fill('X-Team-Custom');
-  await popup.getByRole('button', { name: 'Add autocomplete header' }).click();
-  const userRemovable = await popup
-    .getByRole('button', { name: 'Remove X-Team-Custom' })
-    .waitFor({ timeout: 5000 })
-    .then(() => true, () => false);
+  await settleScreen(popup, 'Theme');
+  const prefsPresent = {
+    theme: await popup.getByRole('button', { name: 'System', exact: true }).count(),
+    dark: await popup.getByRole('button', { name: 'Dark', exact: true }).count(),
+    light: await popup.getByRole('button', { name: 'Light', exact: true }).count(),
+    badge: await popup.getByRole('switch', { name: 'Applied rule count' }).count(),
+    langEn: await popup.getByRole('button', { name: 'English', exact: true }).count(),
+    langKo: await popup.getByRole('button', { name: '한국어', exact: true }).count(),
+  };
+  const prefsGone = {
+    // 단축키 목록 (스펙 Out of Scope) — 등록된 커맨드는 살아 있고, 없어진 것은 이 화면뿐이다.
+    shortcuts: await popup.getByText('Keyboard shortcuts', { exact: true }).count(),
+    // 자동완성 사전 관리 — 그 일은 이제 규칙 저장이 한다(L2a).
+    autocomplete: await popup.getByText('Autocomplete header names', { exact: true }).count(),
+    addField: await popup.getByLabel('New autocomplete header').count(),
+    // 일본어 (스펙 Out of Scope) — 번역과 검토자가 없다.
+    japanese: await popup.getByRole('button', { name: /日本語|Japanese/ }).count(),
+    // 디버그 토글 (스펙 Out of Scope)
+    debug: await popup.getByText(/Debug/i).count(),
+  };
   await popup.getByRole('button', { name: 'Show profiles' }).click();
-  record('N17b: 환경설정 — 단축키 문구 제거, 기본 사전 비제거, 사용자 항목만 제거 가능',
-    hintGone && stdShown && stdNoRemove && userRemovable,
-    `hint-gone=${hintGone}, std=${stdShown}, std-no-x=${stdNoRemove}, user-x=${userRemovable}`);
+  record('N17b: 설정 — 테마·배지·언어 셋만 서고 단축키·자동완성 사전·일본어·디버그는 없다',
+    Object.values(prefsPresent).every((n) => n === 1) &&
+      Object.values(prefsGone).every((n) => n === 0),
+    `있음=${JSON.stringify(prefsPresent)}, 없음=${JSON.stringify(prefsGone)}`);
 
   // N18: 저장 검증 + 폼 정리 + 폼 키보드 (ui-refine 04)
   await seedProfiles([
@@ -2502,7 +2534,7 @@ try {
   const afterDelete = await pollSessionRuleCount(sw, 2).then(() => true, () => false);
   // 레일 화면 전환(cross-fade) 후 대상 화면이 뜬다
   await popup.getByRole('button', { name: 'Show settings' }).click();
-  const prefsAfterFade = await popup.getByRole('button', { name: 'Toggle preferences' })
+  const prefsAfterFade = await popup.getByText('Theme', { exact: true })
     .waitFor({ timeout: 5000 }).then(() => true, () => false);
   await popup.getByRole('button', { name: 'Show profiles' }).click();
   await popup.emulateMedia({ reducedMotion: null });
@@ -2738,7 +2770,7 @@ try {
    */
   await popup.emulateMedia({ colorScheme: 'dark' });
   await popup.getByRole('button', { name: 'Show settings' }).click();
-  await ensurePanelOpen(popup, 'Toggle preferences');
+  await settleScreen(popup, 'Theme');
   const canvasBg = () =>
     popup.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--background').trim());
   const rootTheme = () => popup.evaluate(() => document.documentElement.dataset.theme ?? '');
@@ -2769,7 +2801,7 @@ try {
    */
   // 위에서 새로고침했으므로 화면은 프로필로 돌아가 있다 — 칩을 다시 꺼내 온다.
   await popup.getByRole('button', { name: 'Show settings' }).click();
-  await ensurePanelOpen(popup, 'Toggle preferences');
+  await settleScreen(popup, 'Theme');
   await popup.getByRole('button', { name: 'System', exact: true }).click();
   await popup.emulateMedia({ colorScheme: 'dark' });
   const followsSystemDark = await pollUntil(rootTheme, (v) => v === 'dark', 3000, 100);
@@ -2809,7 +2841,7 @@ try {
 
   await popup.reload();
   await popup.getByRole('button', { name: 'Show settings' }).click();
-  await ensurePanelOpen(popup, 'Toggle preferences');
+  await settleScreen(popup, 'Theme');
   const keptOff = await badgeText();
   const switchOff = await badgeSwitch().getAttribute('aria-checked');
   await badgeSwitch().click();
@@ -3352,110 +3384,13 @@ try {
       .map(([k, r]) => `${k}=${r.onTarget ? (r.typeable ? 'ok' : '포커스만') : 'MISS'}`)
       .join(' ') + `, 막힐 때 표시=${allErrorsShown}, 채우면 사라짐=${allErrorsCleared}`);
 
-  // N27: 아코디언 헤더 전체가 클릭 대상 (ui-polish 09, stories 24~27).
-  // 예전에는 오른쪽 끝 아이콘 버튼만 눌렸다 — 제목·여백을 눌러도 같은 동작이어야 하고,
-  // 그러면서 포커스 대상은 하나로 남아야 한다(Tab 정지가 늘면 키보드 사용자가 손해다).
-  await popup.reload();
-  await popup.getByRole('button', { name: 'Show settings' }).click();
-  const prefsHeader = popup.getByRole('button', { name: 'Toggle preferences', exact: true });
-  // 헤더가 버튼이 아니게 되는 것이 이 테스트가 잡으려는 회귀다 — waitFor가 던져
-  // 스위트를 중단시키면 FAIL로 기록되지 않는다(N22c·N24c에서 이미 겪었다).
-  const headerIsButton = await prefsHeader
-    .waitFor({ timeout: 5000 })
-    .then(() => true, () => false);
-
-  const headerState = () =>
-    prefsHeader.evaluate((el) => ({
-      expanded: el.getAttribute('aria-expanded'),
-      // 헤더 안에 포커스 가능한 것이 또 있으면 Tab 정지가 늘어난다.
-      innerFocusables: el.querySelectorAll('button, a, input, select, textarea, [tabindex]').length,
-      // 아이콘은 트리거 안의 시각 표시로만 남는다 — 회전으로 상태를 보인다.
-      // Tailwind v4의 rotate-180은 `transform`이 아니라 CSS `rotate` 속성을 쓴다 —
-      // transform만 읽으면 둘 다 'none'이라 회전 여부를 못 본다.
-      iconRotate: el.querySelector('svg')
-        ? getComputedStyle(el.querySelector('svg')).rotate
-        : 'no-icon',
-      // 클릭 대상이 정말 행 전체인지 — 부모 섹션 폭과 같아야 한다. 절대 px로 재면
-      // 레이아웃이 바뀌었을 때 무엇을 보는지 알 수 없다.
-      spansRow:
-        Math.abs(
-          el.getBoundingClientRect().width -
-            (el.closest('section')?.getBoundingClientRect().width ?? 0),
-        ) <= 1,
-      // 폭만 넓히고 높이를 줄이면 "조준하지 않아도 된다"가 세로로는 나빠진다.
-      // WCAG 2.5.8의 최소 타깃 24px.
-      height: Math.round(el.getBoundingClientRect().height),
-    })).catch(() => ({ expanded: 'missing', innerFocusables: -1, iconRotate: 'missing', spansRow: false, height: 0 }));
-
-  // 패널은 이제 **열린 채로 시작한다** — 그래서 첫 상태가 expanded=true이고, 아래 세
-  // 클릭은 닫힘→열림→닫힘으로 교대한다. 이 값을 하드코딩된 false로 두면 기본값이 바뀔 때
-  // "토글이 동작한다"가 아니라 "처음이 닫힘이다"를 검사하는 테스트가 된다.
-  const opened = await headerState();
-  // 1) 제목 텍스트를 눌러 닫는다
-  await popup.getByText('Preferences', { exact: true }).first().click().catch(() => {});
-  await popup.waitForTimeout(250);
-  const afterTitle = await headerState();
-  // 2) 여백(아이콘 왼쪽)을 눌러 다시 연다
-  // 클릭 지점을 아이콘의 **실제 사각형**에서 유도한다 — 매직 px로 잡으면 아이콘이
-  // 커지거나 패딩이 바뀌었을 때 "여백"이 조용히 두 번째 아이콘 클릭이 된다.
-  const geometry = await prefsHeader
-    .evaluate((el) => {
-      const header = el.getBoundingClientRect();
-      const icon = el.querySelector('svg')?.getBoundingClientRect();
-      if (!icon) return null;
-      return {
-        iconX: icon.x + icon.width / 2,
-        iconY: icon.y + icon.height / 2,
-        // 아이콘 왼쪽 가장자리와 제목 오른쪽 사이의 빈 구간 한가운데
-        gapX: (icon.x + header.x + header.width * 0.55) / 2,
-        gapY: header.y + header.height / 2,
-        gapIsLeftOfIcon: (icon.x + header.x + header.width * 0.55) / 2 < icon.x - 2,
-      };
-    })
-    .catch(() => null);
-  const clickedGap = geometry !== null && geometry.gapIsLeftOfIcon;
-  if (clickedGap) {
-    await popup.mouse.click(geometry.gapX, geometry.gapY);
-    await popup.waitForTimeout(250);
-  }
-  const afterGap = await headerState();
-  // 3) 아이콘 자체를 눌러도 같은 동작
-  if (geometry) {
-    await popup.mouse.click(geometry.iconX, geometry.iconY);
-    await popup.waitForTimeout(250);
-  }
-  const afterIcon = await headerState();
-
-  // 백업 패널도 같은 셸을 쓴다 — 한쪽만 고쳐 두는 일이 없게 함께 본다.
-  await popup.getByRole('button', { name: 'Show backups' }).click();
-  const backupsHeader = popup.getByRole('button', { name: 'Toggle backups', exact: true });
-  const backupsIsFullRow = await backupsHeader
-    .waitFor({ timeout: 5000 })
-    .then(() =>
-      backupsHeader.evaluate(
-        (el) =>
-          el.tagName === 'BUTTON' &&
-          el.querySelectorAll('button').length === 0 &&
-          Math.abs(el.getBoundingClientRect().width - (el.closest('section')?.getBoundingClientRect().width ?? 0)) <= 1,
-      ),
-    )
-    .catch(() => false);
-
-  record('N27: 아코디언 헤더 — 제목·여백·아이콘 어디를 눌러도 토글, 포커스 대상은 하나',
-    headerIsButton &&
-      opened.expanded === 'true' &&
-      afterTitle.expanded === 'false' &&
-      afterGap.expanded === 'true' &&
-      afterIcon.expanded === 'false' &&
-      [opened, afterTitle, afterGap, afterIcon].every((s) => s.innerFocusables === 0) &&
-      opened.iconRotate !== 'none' && afterTitle.iconRotate === 'none' &&
-      opened.spansRow &&
-      opened.height >= 24 &&
-      clickedGap &&
-      backupsIsFullRow,
-    `헤더=버튼:${headerIsButton}, expanded=${opened.expanded}→제목:${afterTitle.expanded}→여백:${afterGap.expanded}→아이콘:${afterIcon.expanded}, ` +
-    `내부 focusable=${opened.innerFocusables}, 행 전체=${opened.spansRow}, 높이=${opened.height}px, ` +
-    `아이콘 회전=${opened.iconRotate}→${afterTitle.iconRotate}, 백업도 전체행=${backupsIsFullRow}`);
+  /*
+   * **N27(아코디언 헤더 전체가 클릭 대상)이 없다** (티켓 09).
+   *
+   * 그 시나리오는 `CollapsiblePanel`의 헤더 트리거를 쟀다 — 백업·설정이 시안의 카드가 되면서
+   * 접기가 사라졌고, 그 셸을 쓰는 화면이 하나도 남지 않아 컴포넌트와 함께 걷혔다. 규칙 폼의
+   * 아코디언은 다른 물건이다(행이 그대로 있고 그 아래로 폼이 펼쳐진다) — N41b가 잰다.
+   */
 
   // ---------- N29~N32: ui-polish 후속 다듬기 ----------
   //
@@ -3463,64 +3398,16 @@ try {
   // 조용히 사라져도 기능 테스트는 통과한다. 티켓 09에서 아코디언 헤더의 누름 계약이
   // 목록에 없어 게이트를 그냥 지나간 적이 있어, 새로 만든 계약은 곧바로 목록에 올린다.
 
-  // N29: 접이식 패널 — 기본 열림 + 닫힘 전환. reduced-motion이면 전이가 **없다**.
-  //
-  // **시간으로 잰다.** 처음에는 중간 높이의 개수를 셌는데, 그 단언은 전이가 20회 중 6~9회
-  // 통째로 사라지는 결함을 통과시켰다 — 한 번 돌려서 운 좋게 애니메이션이 걸리면 초록이었다.
-  // 닫히기까지 걸린 시간은 전이가 없으면 한 자릿수 ms로 떨어져 운에 기대지 않는다.
-  // 상한은 `ROW_TRANSITION`에서 유도한다(패널도 MotionRow를 탄다) — 값을 손으로 적으면
-  // 토큰이 바뀔 때 조용히 어긋난다.
-  const panelCloseMs = async (page, label) =>
-    page.evaluate(async (name) => {
-      const trigger = document.querySelector(`button[aria-label="${name}"]`);
-      const panelId = trigger.getAttribute('aria-controls');
-      let goneAt = null;
-      trigger.click();
-      const t0 = performance.now();
-      while (performance.now() - t0 < 600) {
-        const panel = document.getElementById(panelId);
-        const height = panel ? Math.round(panel.getBoundingClientRect().height) : 0;
-        if (height === 0 && goneAt === null) goneAt = Math.round(performance.now() - t0);
-        await new Promise((r) => requestAnimationFrame(r));
-      }
-      return goneAt;
-    }, label);
-
-  // 이 블록은 상태를 직접 심는다 — 앞 시나리오가 남긴 프로필에 기대면 순서가 바뀔 때
-  // 조용히 깨진다. 아래 N30·N31이 규칙 폼을 열어야 하므로 규칙 하나를 함께 심는다.
+  /*
+   * **N29(접이식 패널)가 없다** (티켓 09). 기본 열림과 닫힘 전이를 재던 시나리오인데, 백업·설정이
+   * 시안의 카드가 되면서 접기 자체가 사라졌고 `CollapsiblePanel`도 함께 걷혔다. 같은 묶음이
+   * 지키던 나머지 셋(N30·N31·N33)은 그대로다.
+   *
+   * 시드는 남는다 — 뒤따르는 셋이 이 프로필(`X-P` 규칙 하나) 위에서 돈다.
+   */
   await seedProfiles([baseProfile('p-tune', 'Tune', [hdr({ id: 'm1', name: 'X-P', value: '1' })])]);
-
   await popup.emulateMedia({ reducedMotion: null });
   await popup.reload();
-  await popup.getByRole('button', { name: 'Show settings' }).click();
-  await popup.getByRole('button', { name: 'Toggle preferences', exact: true }).waitFor({ timeout: 5000 });
-  const prefsDefaultOpen = await popup
-    .getByRole('button', { name: 'Toggle preferences', exact: true })
-    .getAttribute('aria-expanded');
-  const livelyCloseMs = await panelCloseMs(popup, 'Toggle preferences');
-
-  await popup.emulateMedia({ reducedMotion: 'reduce' });
-  await popup.reload();
-  await popup.getByRole('button', { name: 'Show settings' }).click();
-  await popup.getByRole('button', { name: 'Toggle preferences', exact: true }).waitFor({ timeout: 5000 });
-  const reducedCloseMs = await panelCloseMs(popup, 'Toggle preferences');
-  await popup.emulateMedia({ reducedMotion: null });
-  await popup.reload();
-
-  await popup.getByRole('button', { name: 'Show backups' }).click();
-  const backupsDefaultOpen = await popup
-    .getByRole('button', { name: 'Toggle backups', exact: true })
-    .getAttribute('aria-expanded');
-
-  // 전이가 있으면 최소한 그 길이의 절반은 걸린다(마운트 지연·프레임 정렬 여유를 남긴다).
-  // 없으면 한 자릿수 ms다 — 둘 사이가 넓어 경계가 흔들리지 않는다.
-  const closeFloorMs = Math.round(ROW_TRANSITION.duration * 1000 * 0.5);
-  record('N29: 접이식 패널 — 기본 열림 + 닫힘 전환(reduced-motion에서는 없음)',
-    prefsDefaultOpen === 'true' && backupsDefaultOpen === 'true' &&
-      livelyCloseMs !== null && livelyCloseMs >= closeFloorMs &&
-      reducedCloseMs !== null && reducedCloseMs < closeFloorMs,
-    `기본열림 환경설정=${prefsDefaultOpen}·백업=${backupsDefaultOpen}, ` +
-    `닫힘 기본=${livelyCloseMs}ms reduced=${reducedCloseMs}ms (하한 ${closeFloorMs}ms)`);
 
   // N30: Select 팝업 — 트리거 **아래**로 떨어지고 좌변이 맞는다 + 위에서 아래로 내려온다.
   // 기본값(alignItemWithTrigger)은 선택된 항목을 트리거 위에 겹쳐 띄우므로, 이 단언이
@@ -4847,7 +4734,7 @@ try {
    */
   await popup.reload();
   await popup.getByRole('button', { name: 'Show backups' }).click();
-  await ensurePanelOpen(popup, 'Toggle backups');
+  await settleScreen(popup, 'Backup history');
   const syncSwitch = () => popup.getByRole('switch', { name: 'Cloud sync' });
   const cloudKeys = () => sw.evaluate(async () => Object.keys(await chrome.storage.sync.get(null)).sort());
   const manifestCount = (areaName) =>
@@ -4873,7 +4760,7 @@ try {
   await popup.waitForTimeout(4000);
   await popup.reload();
   await popup.getByRole('button', { name: 'Show backups' }).click();
-  await ensurePanelOpen(popup, 'Toggle backups');
+  await settleScreen(popup, 'Backup history');
   const switchOffAfterReopen = await syncSwitch().getAttribute('aria-checked');
   const localSnapshots = await manifestCount('local');
   const rowsWhileOff = await pollUntil(historyRows, (n) => n === localSnapshots, 5000, 200);
@@ -4960,7 +4847,7 @@ try {
     .waitFor({ timeout: 5000 })
     .then(() => true, () => false);
   await langPage.getByRole('button', { name: 'Show settings' }).click();
-  await ensurePanelOpen(langPage, 'Toggle preferences');
+  await settleScreen(langPage, 'Theme');
   await langPage.getByRole('button', { name: '한국어' }).click();
   // 고른 즉시 바뀌는지 — 헤더의 Pause는 어느 화면에서나 보이는 문구다.
   const switchedToKo = await langPage
@@ -4974,23 +4861,16 @@ try {
     .waitFor({ timeout: 5000 })
     .then(() => true, () => false);
 
-  // (c) 단축키 목록 — ko 라벨로 두 커맨드가 서고, 그 행에는 누를 것이 없다(읽기 전용).
+  /*
+   * (c) **단축키 목록을 재지 않는다** (티켓 09). 스펙이 그 화면을 범위 밖에 뒀고
+   * ("시안에 목록이 있지만 넣지 않는다") 시안에도 없어 카드가 걷혔다. 등록된 커맨드 자체는
+   * 그대로 살아 있고 — L1이 `toggle-pause` 등록을 재고 있다 — 없어진 것은 그것을 옮겨 적던
+   * 화면뿐이다. 설정 화면에 그 카드가 되살아나지 않았는지는 N17b가 본다.
+   */
+
+  // 새로고침이 레일을 프로필 화면으로 되돌려 놨다 — 언어 칩으로 돌아가려면 다시 들어간다.
   await langPage.getByRole('button', { name: '환경설정 화면' }).click();
-  await ensurePanelOpen(langPage, '환경설정 펼치기/접기');
-  const openRow = langPage.locator('li').filter({ hasText: 'HeaderKit 열기' }).first();
-  const shortcutOpenShown = await openRow
-    .waitFor({ timeout: 5000 })
-    .then(() => true, () => false);
-  const shortcutPauseShown = await langPage
-    .locator('li')
-    .filter({ hasText: '모든 수정을 일시정지하거나 재개' })
-    .first()
-    .isVisible()
-    .catch(() => false);
-  const shortcutReadOnly = shortcutOpenShown
-    ? (await openRow.getByRole('button').count()) === 0 &&
-      (await openRow.getByRole('textbox').count()) === 0
-    : false;
+  await settleScreen(langPage, '테마');
 
   // 되돌아오는 길도 있어야 한다 — 한 번 고르면 갇히는 선택이면 안 된다.
   await langPage.getByRole('button', { name: 'English' }).click();
@@ -5000,12 +4880,10 @@ try {
     .then(() => true, () => false);
   await langPage.close();
 
-  record('N40: 백업 화면 JSON 왕복 + 언어 선택(유지·복귀) + 읽기 전용 단축키 목록',
-    roundTripped && startedEn && switchedToKo && keptKo && switchedBackToEn &&
-      shortcutOpenShown && shortcutPauseShown && shortcutReadOnly,
+  record('N40: 백업 화면 JSON 왕복 + 언어 선택(유지·복귀)',
+    roundTripped && startedEn && switchedToKo && keptKo && switchedBackToEn,
     `왕복=${roundTripped}(${rtProfile?.name}/${rtMod?.name}=${rtMod?.value}), ` +
-      `en시작=${startedEn} → ko=${switchedToKo} → 재열람 ko=${keptKo} → en복귀=${switchedBackToEn}, ` +
-      `단축키 열기=${shortcutOpenShown}, 일시정지=${shortcutPauseShown}, 읽기전용=${shortcutReadOnly}`);
+      `en시작=${startedEn} → ko=${switchedToKo} → 재열람 ko=${keptKo} → en복귀=${switchedBackToEn}`);
 
   /*
    * N42: "저장 후 바로 활성화" 토글 (티켓 11, story 17).
@@ -5220,7 +5098,7 @@ try {
 
   await popup.reload();
   await popup.getByRole('button', { name: 'Show backups' }).click();
-  await ensurePanelOpen(popup, 'Toggle backups');
+  await settleScreen(popup, 'Backup history');
   const delRow = popup.locator('li').filter({ hasText: '7 active profiles' }).first();
   const corruptRow = popup.locator('li').filter({ hasText: '9 active profiles' }).first();
   await delRow.waitFor({ timeout: 5000 });
@@ -5363,7 +5241,7 @@ try {
 
   await popup.reload();
   await popup.getByRole('button', { name: 'Show backups' }).click();
-  await ensurePanelOpen(popup, 'Toggle backups');
+  await settleScreen(popup, 'Backup history');
   const keepRow = popup.locator('li').filter({ hasText: '13 active profiles' }).first();
   await keepRow.waitFor({ timeout: 5000 });
   const raceBefore = await bkView(snapArea);
@@ -5440,7 +5318,7 @@ try {
    */
   await popup.reload();
   await popup.getByRole('button', { name: 'Show backups' }).click();
-  await ensurePanelOpen(popup, 'Toggle backups');
+  await settleScreen(popup, 'Backup history');
   const snapRows = popup.locator('li').filter({ hasText: /active profiles?/ });
   const keepRowAfter = snapRows.filter({ hasText: '13 active profiles' }).first();
   const keptRowVisible = await keepRowAfter
@@ -5534,7 +5412,7 @@ try {
 
   await popup.reload();
   await popup.getByRole('button', { name: 'Show backups' }).click();
-  await ensurePanelOpen(popup, 'Toggle backups');
+  await settleScreen(popup, 'Backup history');
 
   // 1단계: 첫 클릭은 확인만 켠다 — 아직 아무것도 지워지지 않는다.
   await popup.getByRole('button', { name: 'Reset everything' }).click();
@@ -5576,6 +5454,108 @@ try {
       `2클릭: 프로필 ${stateAfterConfirm.profiles.length}개(${stateAfterConfirm.profiles[0]?.name}), ` +
       `theme=${stateAfterConfirm.theme}, badge=${stateAfterConfirm.badgeVisible}, sync=${stateAfterConfirm.syncBackup}, ` +
       `표식 잔재=${dumpAfterConfirm.includes(RESET_MARKER)}, 세션 규칙=${rulesAfter}`);
+
+  /*
+   * N50: **백업 화면이 시안의 카드 넷이다** (티켓 09 AC1·AC2·AC3·AC4).
+   *
+   * 넷을 한 자리에서 세는 이유는 이 화면의 계약이 "무엇이 어느 카드에 있는가"이기 때문이다 —
+   * 개별 동작(복원·삭제·초기화)은 N39·N43·N44가 이미 재고, 여기서 잃기 쉬운 것은 **구성**이다.
+   *
+   * 동기화 카드는 저장 위치와 마지막 시각을 말하고 **기기 수는 말하지 않는다**: 브라우저가
+   * 알려 주지 않는 값이라 셀 방법이 없고, 세는 척하면 화면이 조용히 거짓을 말한다.
+   */
+  await seedProfiles([baseProfile('p-cards', 'Cards', [hdr({ id: 'm1', name: 'X-Cards', value: '1' })])]);
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Show backups' }).click();
+  await settleScreen(popup, 'Backup history');
+  const backupCards = await popup.evaluate(() =>
+    [...document.querySelectorAll('[data-slot="card"]')].map(
+      (c) => c.querySelector('[data-slot="card-title"]')?.textContent?.trim() ?? '',
+    ),
+  );
+  const syncCard = popup
+    .locator('[data-slot="card"]')
+    .filter({ has: popup.getByRole('switch', { name: 'Cloud sync' }) });
+  const syncText = (await syncCard.textContent()) ?? '';
+  // 저장 위치는 말한다. 마지막 시각은 스냅샷이 있으면 시각을, 없으면 "아직 없다"를 말한다.
+  const saysLocation = /new backups (go to your browser account|stay in this browser)/i.test(syncText);
+  const saysWhen = /Last backup: /.test(syncText) || /No backups yet/.test(syncText);
+  // 기기 수 — `N devices`·`2 browsers` 같은 표현이 하나도 없어야 한다.
+  const saysDeviceCount = /\d+\s*(devices?|browsers?|기기|브라우저)/i.test(syncText);
+  record('N50: 백업 화면 — 카드 넷(JSON·동기화·히스토리·초기화), 동기화는 위치·시각만 말하고 기기 수는 말하지 않는다',
+    backupCards.length === 4 &&
+      backupCards[0] === 'JSON export & import' &&
+      backupCards[1] === 'Cloud sync' &&
+      backupCards[2] === 'Backup history' &&
+      backupCards[3] === 'Reset everything' &&
+      saysLocation && saysWhen && !saysDeviceCount,
+    `카드=${JSON.stringify(backupCards)}, 위치=${saysLocation}, 시각=${saysWhen}, 기기수=${saysDeviceCount}`);
+
+  /*
+   * N51: **복원이 걷어 간 것을 말한다** (티켓 02에서 이월한 빚).
+   *
+   * `restore`는 `parseImport`가 돌려준 `notices`를 통째로 버리고 있었다 — 스냅샷이 레거시
+   * 필터나 퇴역 조건을 담고 있으면 복원이 그것을 조용히 걷어 가고, 사용자는 자기 규칙이
+   * 왜 넓어졌는지 알 길이 없었다. 가져오기 경로는 같은 배열을 이미 배너로 올리고 있었으므로
+   * 없던 것은 자리뿐이다.
+   *
+   * 스냅샷을 손으로 만든다 — 지금 버전이 만드는 백업에는 레거시 필터가 없다(저장소 문이
+   * 읽는 즉시 걷어낸다). 체크섬은 제품과 같은 FNV-1a라 페이지 안에서 그대로 계산한다.
+   */
+  const legacyPayload = JSON.stringify({
+    headerkit: 1,
+    profiles: [
+      {
+        id: 'legacy-restore', name: 'LegacyRestore', active: false, color: '#2563eb',
+        modifications: [
+          { kind: 'request-header', id: 'lm1', name: 'X-Legacy-Restore', value: 'lr',
+            enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+        ],
+        filters: [{ kind: 'url', id: 'lf1', enabled: true, pattern: 'legacy\\.example' }],
+      },
+    ],
+  });
+  const seeded = await sw.evaluate(async ([payload]) => {
+    // 제품의 `checksum`과 같은 FNV-1a — 다르면 스냅샷이 손상으로 읽혀 복원이 막힌다.
+    const sum = (text) => {
+      let hash = 0x811c9dc5;
+      for (let i = 0; i < text.length; i += 1) {
+        hash ^= text.charCodeAt(i);
+        hash = Math.imul(hash, 0x01000193);
+      }
+      return (hash >>> 0).toString(16).padStart(8, '0');
+    };
+    const area = (await chrome.storage.local.get('state')).state?.syncBackup ?? true ? 'sync' : 'local';
+    const entry = {
+      id: 'legacy-snap', createdAt: Date.UTC(2021, 4, 6, 7, 8),
+      chunkCount: 1, checksum: sum(payload), profileCount: 1,
+    };
+    await chrome.storage[area].set({
+      'bk:legacy-snap:0': payload,
+      'bk:manifest': { snapshots: [entry] },
+    });
+    return area;
+  }, [legacyPayload]);
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Show backups' }).click();
+  await settleScreen(popup, 'Backup history');
+  // 2단계 확인 — 첫 클릭은 확인만 켠다.
+  await popup.getByRole('button', { name: 'Restore backup' }).first().click();
+  await popup.getByRole('button', { name: 'Confirm restore' }).first().click();
+  const restoreNotice = await pollUntil(
+    () => popup.locator('[role="status"], ul li').allTextContents(),
+    (texts) => texts.some((x) => /legacy profile filters were migrated/i.test(x)),
+    8000,
+    200,
+  );
+  const noticeShown = restoreNotice.some((x) => /legacy profile filters were migrated/i.test(x));
+  const restoredProfile = await pollUntil(
+    () => sw.evaluate(async () => (await chrome.storage.local.get('state')).state.profiles.map((p) => p.name)),
+    (names) => names.includes('LegacyRestore'),
+  );
+  record('N51: 복원이 걷어 간 것을 말한다 — 레거시 필터 공지가 화면에 선다 (티켓 02 이월)',
+    noticeShown && restoredProfile.includes('LegacyRestore'),
+    `저장소=${seeded}, 공지=${noticeShown}, 복원된 프로필=${JSON.stringify(restoredProfile)}`);
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

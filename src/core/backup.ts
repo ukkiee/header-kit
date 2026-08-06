@@ -447,6 +447,26 @@ export function verifySnapshotDeleteComplete(
 }
 
 /** 복원 목록 — 손상 스냅샷도 사유와 함께 표시한다 (조용히 숨기지 않는다). */
+/**
+ * 마지막으로 백업된 시각 — 없으면 `null` (티켓 09, 스펙 story 75).
+ *
+ * **자리가 아니라 최댓값을 고른다.** 매니페스트의 배열 순서는 시간순이 아니다 — `planBackup`이
+ * 링 슬롯을 재사용하며 남긴 순서라, 맨 앞이나 맨 뒤를 집으면 더 최근인 스냅샷이 있는데도 옛
+ * 시각을 말하게 된다.
+ *
+ * 손상 스냅샷도 센다: 백업은 **그때 실제로 일어났고**, 읽을 수 있는지는 히스토리의 손상 표식이
+ * 따로 말한다. 빼면 "마지막 백업: 없음" 아래에 백업 목록이 서는 모순이 생긴다.
+ *
+ * 없음을 `0`이 아니라 `null`로 내는 이유는 `0`이 1970년을 뜻하는 **진짜 시각**이기 때문이다 —
+ * 화면이 그것을 그대로 그리면 아무도 만든 적 없는 백업의 날짜가 뜬다.
+ */
+export function lastBackupAt(snapshots: readonly SnapshotStatus[]): number | null {
+  return snapshots.reduce<number | null>(
+    (latest, entry) => (latest === null || entry.createdAt > latest ? entry.createdAt : latest),
+    null,
+  );
+}
+
 export function listSnapshots(kv: SyncKV): SnapshotStatus[] {
   return readManifest(kv).snapshots.map((entry) => {
     const decoded = decodeSnapshotText(kv, entry);
