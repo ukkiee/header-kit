@@ -3,8 +3,7 @@ import type { BackupTarget } from '@/core/backup';
 import type { Command } from '@/core/commands';
 import type { MessageKey } from '@/core/i18n';
 import type { ResetStep } from '@/core/reset';
-import { compile, type TabInfo } from '@/core/compile';
-import { hasExpiredRules } from '@/core/expiry';
+import { compile } from '@/core/compile';
 import type { NetRule } from '@/core/rules';
 import type { StoredState } from '@/core/schema';
 import { summarizeCompile, type StatusSummary } from '@/core/summary';
@@ -22,10 +21,14 @@ const RESET_STOP_MESSAGE: Record<ResetStep, MessageKey> = {
   'clear-summary': 'resetStoppedAtSummary',
 };
 
+/**
+ * 재조정이 한 세대 동안 붙잡는 것 — **저장 상태 하나뿐**이다 (티켓 10).
+ *
+ * 예전에는 열린 탭 목록과 현재 시각도 함께 잡았다. 컴파일이 그 둘을 더 이상 읽지 않으므로
+ * (ADR 0002 개정) 스냅샷도 그만큼 얇아졌다 — 세대 보증이 지켜야 할 값이 줄었다는 뜻이다.
+ */
 interface Snapshot {
   state: StoredState;
-  tabs: TabInfo[];
-  now: number;
 }
 
 /**
@@ -46,7 +49,6 @@ export interface BackgroundDeps {
    */
   stateWriter: StateWriter;
   publishSummary(summary: StatusSummary): Promise<void>;
-  queryTabInfos(): Promise<TabInfo[]>;
   /**
    * 렌더러가 시작한 백업 변이 요청을 받는다 — **문은 하나**이고 무슨 동작인지는 판별 유니온의
    * 가지가 정한다 (D6, 티켓 03). 핸들러의 결과가 그대로 응답이 된다.
@@ -62,17 +64,14 @@ export interface BackgroundDeps {
    * (quota·컴파일로 빠진 규칙이 있다). 계산은 요약을 가진 이 컴포지션 루트가 한다.
    */
   applyBadge(badge: BadgeSpec): Promise<void>;
-  scheduleExpiryAlarm(state: StoredState, now: number): Promise<void>;
   now(): number;
   /** 백업 디바운스 타이머 — fire-and-forget(코얼레싱은 부트스트랩이 관리). */
   setTimer(callback: () => void, delayMs: number): void;
   onStateChanged(callback: () => void): void;
   onCommand(handler: (command: Command) => Promise<StoredState>): void;
-  onTabsChanged(callback: () => void): void;
   onStartup(callback: () => void): void;
   onInstalled(callback: () => void): void;
   onTogglePause(callback: () => void): void;
-  onExpiryAlarm(callback: () => void): void;
   logError(context: string, error: unknown): void;
 }
 
@@ -102,19 +101,13 @@ export function bootstrap(deps: BackgroundDeps): void {
   };
 
   const reconciler = createReconciler<Snapshot>({
-    loadSnapshot: async () => ({
-      state: await deps.loadState(),
-      tabs: await deps.queryTabInfos(),
-      now: deps.now(),
-    }),
+    loadSnapshot: async () => ({ state: await deps.loadState() }),
     compile: (snapshot) =>
       compile(snapshot.state.profiles, {
         paused: snapshot.state.paused,
-        tabs: snapshot.tabs,
-        now: snapshot.now,
         materialized: snapshot.state.materialized,
       }),
-    // 규칙·배지·만료 알람·상태 요약을 같은 스냅샷·같은 세대 보증 아래 반영한다.
+    // 규칙·배지·상태 요약을 같은 스냅샷·같은 세대 보증 아래 반영한다.
     apply: async (result, snapshot) => {
       // 규칙 적용은 실패해도(예: quota) 나머지 반영·요약을 막지 않는다 —
       // 실패는 삼키지 않고 요약의 applyError로 노출한다.
@@ -135,13 +128,7 @@ export function bootstrap(deps: BackgroundDeps): void {
       if (drawsBadge(summary, snapshot.state.badgeVisible)) {
         await deps.applyBadge(computeBadge(summary, snapshot.state.badgeVisible));
       }
-      await deps.scheduleExpiryAlarm(snapshot.state, snapshot.now);
       await deps.publishSummary(summary);
-      // 이미 지난 만료는 알람을 기다리지 않고 즉시 만료 전이를 태운다 — 재조정은 레인 밖에서
-      // 도는 읽기 경로이므로, 이 전이는 여기서 레인을 새로 잡아 올린다(진입점).
-      if (hasExpiredRules(snapshot.state, snapshot.now)) {
-        runCommand('expiry failed', { type: 'expire-rules', now: snapshot.now });
-      }
     },
     onError: (error) => deps.logError('reconcile failed', error),
   });
@@ -266,16 +253,11 @@ export function bootstrap(deps: BackgroundDeps): void {
     converge();
     scheduleBackup();
   });
-  deps.onTabsChanged(converge);
   deps.onStartup(converge);
   deps.onInstalled(converge);
   // Pause 토글은 명령 채널이 아니라 브라우저 커맨드로 들어온다 — 권위 상태 기준으로 뒤집는
   // 전이를 레인에 태우므로 연타 안전.
   deps.onTogglePause(() => runCommand('toggle-pause failed', { type: 'toggle-pause' }));
-  // 만료 알람도 명령 채널을 거치지 않는다 — 같은 진입점을 지난다.
-  deps.onExpiryAlarm(() =>
-    runCommand('expiry failed', { type: 'expire-rules', now: deps.now() }),
-  );
 
   // SW가 깨어날 때마다 저장소 기준으로 수렴 + 디바운스 중 유실된 백업 catch-up.
   //

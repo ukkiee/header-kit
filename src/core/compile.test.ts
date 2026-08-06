@@ -22,7 +22,7 @@ describe('compile', () => {
           conditions: { excludedDomains: ['skip.io'], resourceTypes: ['script'], requestMethods: ['post'], initiatorDomains: ['init.io'] } },
         { kind: 'request-header', id: 'm2', name: 'X-Free', value: '2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
       ] })],
-      { paused: false, tabs: [], now: 0, materialized: {} },
+      { paused: false, materialized: {} },
     );
     expect(warnings).toEqual([]);
     const c = rules.find((r) => r.action.requestHeaders?.[0]?.header === 'X-C')?.condition;
@@ -34,47 +34,42 @@ describe('compile', () => {
     expect(free?.requestMethods).toBeUndefined();
   });
 
-  it('tabDomains는 매칭 탭으로 전개되고, 매칭 탭이 없으면 그 규칙만 방출되지 않는다', () => {
-    const tabs = [
-      { tabId: 7, url: 'https://app.example.com/x' },
-      { tabId: 9, url: 'https://other.io/' },
-    ];
+  /*
+   * **퇴역한 조건 넷은 방출을 막지 않는다** (ADR 0017, 티켓 10).
+   *
+   * 예전에는 이 자리에 셋이 있었다 — 탭 도메인이 열린 탭으로 전개되는지, 지난 자동 해제
+   * 시각이 규칙을 막는지, 미설정 0은 만료로 치지 않는지. 그 조건들이 퇴역해 컴파일이 더는
+   * 읽지 않으므로 재는 것을 뒤집는다: 저장소에 남아 있더라도(옛 파일 가져오기·손편집)
+   * **규칙이 그대로 나오는지**. 여기서 조용히 걸러지면 사용자는 만든 규칙이 안 걸리는데
+   * 화면에는 멀쩡히 서 있는 상태를 겪는다.
+   */
+  it('저장소에 남은 퇴역 조건은 방출을 막지 않는다', () => {
     const { rules } = compile(
       [profile({ modifications: [
-        { kind: 'request-header', id: 'm1', name: 'X-Tab', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
-          conditions: { tabDomains: ['example.com'] } },
-        { kind: 'request-header', id: 'm2', name: 'X-NoTab', value: '2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
-          conditions: { tabDomains: ['closed.io'] } },
+        { kind: 'request-header', id: 'm1', name: 'X-Stale', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
+          conditions: { expiresAt: 100, tabDomains: ['closed.io'] } },
       ] })],
-      { paused: false, tabs, now: 0, materialized: {} },
+      { paused: false, materialized: {} },
     );
-    const tab = rules.find((r) => r.action.requestHeaders?.[0]?.header === 'X-Tab');
-    expect(tab?.condition.tabIds).toEqual([7]);
-    expect(rules.some((r) => r.action.requestHeaders?.[0]?.header === 'X-NoTab')).toBe(false);
+    expect(rules.map((r) => r.action.requestHeaders?.[0]?.header)).toEqual(['X-Stale']);
+    // 탭 조건이 규칙으로 새어 나가지도 않는다 — 읽지 않으니 방출에도 없다.
+    expect(rules[0]?.condition.tabIds).toBeUndefined();
   });
 
-  it('만료된 규칙(conditions.expiresAt <= now)은 방출되지 않는다', () => {
-    const { rules } = compile(
-      [profile({ modifications: [
-        { kind: 'request-header', id: 'm1', name: 'X-Old', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
-          conditions: { expiresAt: 100 } },
-        { kind: 'request-header', id: 'm2', name: 'X-Live', value: '2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
-          conditions: { expiresAt: 900 } },
-      ] })],
-      { paused: false, tabs: [], now: 500, materialized: {} },
-    );
-    expect(rules.map((r) => r.action.requestHeaders?.[0]?.header)).toEqual(['X-Live']);
-  });
-
-  it('미설정(expiresAt 0)은 만료로 치지 않는다 — 방출 가드와 알람 술어가 같은 정의를 쓴다', () => {
-    const { rules } = compile(
-      [profile({ modifications: [
-        { kind: 'request-header', id: 'm1', name: 'X-Unset', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
-          conditions: { expiresAt: 0 } },
-      ] })],
-      { paused: false, tabs: [], now: 500, materialized: {} },
-    );
-    expect(rules.map((r) => r.action.requestHeaders?.[0]?.header)).toEqual(['X-Unset']);
+  /*
+   * **같은 상태면 같은 결과다** (티켓 10 AC3). 컴파일이 현재 시각을 받지 않게 됐다는 것의
+   * 관측 가능한 뜻이 이것이다 — 언제 불러도, 몇 번을 불러도 같은 규칙이 나온다. 시각을
+   * 다시 끌어들이면(예: 만료 가드를 되살리면) 이 단언이 먼저 깨진다.
+   */
+  it('같은 상태를 두 번 컴파일하면 같은 규칙이 나온다 — 시각에 의존하지 않는다', () => {
+    const state = [profile({ modifications: [
+      { kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+      { kind: 'request-header', id: 'm2', name: 'X-B', value: '2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+    ] })];
+    const first = compile(state, { paused: false, materialized: {} });
+    const second = compile(state, { paused: false, materialized: {} });
+    expect(second.rules).toEqual(first.rules);
+    expect(second.warnings).toEqual(first.warnings);
   });
 
   it('redirect도 conditions를 상속하되 regexFilter는 자기 pattern이다', () => {
@@ -83,7 +78,7 @@ describe('compile', () => {
         { kind: 'redirect', id: 'r1', pattern: '^https://a/(.*)', substitution: 'https://b/\\1', enabled: true, comment: '',
           conditions: { requestMethods: ['get'] } },
       ] })],
-      { paused: false, tabs: [], now: 0, materialized: {} },
+      { paused: false, materialized: {} },
     );
     expect(rules[0]?.condition.regexFilter).toBe('^https://a/(.*)');
     expect(rules[0]?.condition.requestMethods).toEqual(['get']);
@@ -96,7 +91,7 @@ describe('compile', () => {
     });
     const { rules, warnings } = compile(
       [profile({ modifications: [mk('d', 'example.com', 'domain'), mk('c', '/api/', 'contains'), mk('p', 'https://a.io/', 'prefix')] })],
-      { paused: false, tabs: [], now: 0, materialized: {} },
+      { paused: false, materialized: {} },
     );
     expect(warnings).toEqual([]);
     const by = (h: string) => rules.find((r) => r.action.requestHeaders?.[0]?.header === h)?.condition;
@@ -111,7 +106,7 @@ describe('compile', () => {
       [profile({ modifications: [
         { kind: 'request-header', id: 'm1', name: 'X', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '', urlFilter: 'legacy\\.regex' },
       ] })],
-      { paused: false, tabs: [], now: 0, materialized: {} },
+      { paused: false, materialized: {} },
     );
     expect(rules[0]?.condition.regexFilter).toBe('legacy\\.regex');
     expect(rules[0]?.condition.urlFilter).toBeUndefined();
@@ -122,7 +117,7 @@ describe('compile', () => {
       [profile({ modifications: [
         { kind: 'request-header', id: 'm1', name: 'X', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '', urlFilter: 'a'.repeat(3000), urlMatchType: 'contains' },
       ] })],
-      { paused: false, tabs: [], now: 0, materialized: {} },
+      { paused: false, materialized: {} },
     );
     expect(rules).toHaveLength(0);
     expect(warnings.some((w) => w.code === 'regex-too-long' && w.modificationId === 'm1')).toBe(true);
@@ -138,7 +133,7 @@ describe('compile', () => {
           ],
         }),
       ],
-      { paused: false, tabs: [], now: 0, materialized: {} },
+      { paused: false, materialized: {} },
     );
 
     expect(warnings).toEqual([]);
@@ -157,7 +152,7 @@ describe('compile', () => {
           ],
         }),
       ],
-      { paused: false, tabs: [], now: 0, materialized: {} },
+      { paused: false, materialized: {} },
     );
     expect(rules).toHaveLength(0);
     expect(warnings.some((w) => w.code === 'regex-too-long' && w.modificationId === 'm1')).toBe(true);
@@ -172,7 +167,7 @@ describe('compile', () => {
           ],
         }),
       ],
-      { paused: false, tabs: [], now: 0, materialized: {} },
+      { paused: false, materialized: {} },
     );
     expect(rules).toHaveLength(1);
     expect(rules[0]?.condition.regexFilter).toBeUndefined();
@@ -188,7 +183,7 @@ describe('compile', () => {
           ],
         }),
       ],
-      { paused: false, tabs: [], now: 0, materialized: {} },
+      { paused: false, materialized: {} },
     );
 
     expect(warnings).toEqual([]);
@@ -221,7 +216,7 @@ describe('compile', () => {
           modifications: [{ kind: 'request-header', id: 'm2', name: 'X-B', value: '2', enabled: false, mode: 'override', emptyMeans: 'remove', comment: '' }],
         }),
       ],
-      { paused: false, tabs: [], now: 0, materialized: {} },
+      { paused: false, materialized: {} },
     );
 
     expect(rules).toEqual([]);
@@ -230,7 +225,7 @@ describe('compile', () => {
   it('Pause 상태에서는 규칙이 없다', () => {
     const { rules } = compile(
       [profile({ modifications: [{ kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }] })],
-      { paused: true, tabs: [], now: 0, materialized: {} },
+      { paused: true, materialized: {} },
     );
 
     expect(rules).toEqual([]);
@@ -246,7 +241,7 @@ describe('compile', () => {
           ],
         }),
       ],
-      { paused: false, tabs: [], now: 0, materialized: {} },
+      { paused: false, materialized: {} },
     );
 
     expect(rules).toHaveLength(1);
@@ -262,7 +257,7 @@ describe('compile', () => {
   it('빈 값은 기본(emptyMeans=remove)으로 제거 연산이 된다 (이슈 02에서 세분화)', () => {
     const { rules } = compile(
       [profile({ modifications: [{ kind: 'request-header', id: 'm1', name: 'X-Empty', value: '', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }] })],
-      { paused: false, tabs: [], now: 0, materialized: {} },
+      { paused: false, materialized: {} },
     );
 
     expect(rules[0]?.action.requestHeaders).toEqual([{ header: 'X-Empty', operation: 'remove' }]);
@@ -285,7 +280,7 @@ describe('compile', () => {
           ],
         }),
       ],
-      { paused: false, tabs: [], now: 0, materialized: {} },
+      { paused: false, materialized: {} },
     );
 
     expect(rules).toHaveLength(3);
@@ -315,7 +310,7 @@ describe('compile', () => {
           ],
         }),
       ],
-      { paused: false, tabs: [], now: 0, materialized: {} },
+      { paused: false, materialized: {} },
     );
     const alone = compile(
       [
@@ -326,7 +321,7 @@ describe('compile', () => {
           ],
         }),
       ],
-      { paused: false, tabs: [], now: 0, materialized: {} },
+      { paused: false, materialized: {} },
     );
 
     expect(active.rules.map((r) => r.priority)).toEqual(alone.rules.map((r) => r.priority));
@@ -348,7 +343,7 @@ describe('compile', () => {
           ],
         }),
       ],
-      { paused: false, tabs: [], now: 0, materialized: {} },
+      { paused: false, materialized: {} },
     );
 
     expect(warnings).toHaveLength(1);
@@ -384,7 +379,7 @@ describe('compile', () => {
           ],
         }),
       ],
-      { paused: false, tabs: [], now: 0, materialized: {} },
+      { paused: false, materialized: {} },
     );
 
     expect(warnings).toEqual([]);
@@ -394,8 +389,8 @@ describe('compile', () => {
     const profiles = [
       profile({ modifications: [{ kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }] }),
     ];
-    const a = compile(profiles, { paused: false, tabs: [], now: 0, materialized: {} });
-    const b = compile(profiles, { paused: false, tabs: [], now: 0, materialized: {} });
+    const a = compile(profiles, { paused: false, materialized: {} });
+    const b = compile(profiles, { paused: false, materialized: {} });
 
     expect(a).toEqual(b);
   });

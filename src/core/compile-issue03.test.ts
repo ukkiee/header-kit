@@ -12,7 +12,7 @@ function profile(mods: Modification[]): Profile {
   };
 }
 
-const env: CompileEnv = { paused: false, tabs: [], now: 0, materialized: {} };
+const env: CompileEnv = { paused: false, materialized: {} };
 
 describe('compile — Cookie', () => {
   it('append는 Cookie 요청 헤더에 name=value로 누적된다', () => {

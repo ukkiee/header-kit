@@ -24,7 +24,7 @@ function summary(overrides: Partial<StatusSummary> = {}): StatusSummary {
   };
 }
 
-const env: CompileEnv = { paused: false, tabs: [], now: 0, materialized: {} };
+const env: CompileEnv = { paused: false, materialized: {} };
 
 function mod(id: string, name: string): Modification {
   return { kind: 'request-header', id, name, value: 'v', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' };

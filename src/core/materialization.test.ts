@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   addModification,
   addProfile,
-  expireRules,
   removeModification,
   restoreModification,
   toggleProfile,
@@ -131,19 +130,12 @@ describe('실체화 수명주기 (활성화 경계)', () => {
     expect(next.materialized).toEqual({ 'm-ph': 'trace-uuid-1' });
   });
 
-  it('만료 경로(expireRules)는 규칙만 끄고 실체화 값은 보존한다 — 활성화 경계가 아니다', () => {
-    const timed = profile({
-      active: true,
-      modifications: [{ ...mod('m-ph', 'trace-{{uuid}}'), conditions: { expiresAt: 100 } }],
-    });
-    const withValues = state([timed], { 'm-ph': 'trace-old' });
-
-    const expired = expireRules(withValues, 200);
-    expect(expired.profiles[0]?.active).toBe(true);
-    expect(expired.profiles[0]?.modifications[0]?.enabled).toBe(false);
-    expect(expired.materialized).toEqual({ 'm-ph': 'trace-old' });
-  });
-
+  /*
+   * **만료 경로 테스트가 없다** (티켓 10). 이 자리는 "규칙을 끄는 것은 활성화 경계가 아니다 —
+   * 실체화 값이 보존된다"를 만료로 재고 있었다. 그 전이가 철거됐지만 성질은 남아 있고, 같은
+   * 것을 재는 자리가 이미 둘 있다: 프로필을 끄면 지우고(활성화 경계), 규칙 하나를 끄는
+   * `update-modification`은 지우지 않는다. 아래 Undo 테스트가 후자를 그대로 든다.
+   */
   it('삭제-Undo(restoreModification): 원위치·원상태 복원, Placeholder는 재실체화 없이 값 보존 (ui-refine 07)', () => {
     const deps = stubDeps();
     // 활성 프로필: m-ph(placeholder)=uuid-1, m-plain=static. m-ph를 삭제했다 되돌린다.
@@ -201,8 +193,6 @@ describe('재시작 유지 (persist → parse → compile)', () => {
 
     const { rules } = compile(revived.profiles, {
       paused: false,
-      tabs: [],
-      now: 0,
       materialized: revived.materialized,
     });
     expect(rules[0]?.action.requestHeaders?.[0]?.value).toBe('trace-uuid-1');
@@ -212,8 +202,6 @@ describe('재시작 유지 (persist → parse → compile)', () => {
 describe('compile — 실체화 값 소비와 방어선', () => {
   const compileEnv = (materialized: Record<string, string>) => ({
     paused: false,
-    tabs: [],
-    now: 0,
     materialized,
   });
 
@@ -242,13 +230,20 @@ describe('compile — 실체화 값 소비와 방어선', () => {
     );
   });
 
-  it('탭 이벤트·알람 재컴파일(같은 실체화 구역)은 값을 갈지 않는다 — Compile은 소비만', async () => {
+  /*
+   * 재컴파일이 실체화 값을 갈지 않는다 — Compile은 **소비만** 한다.
+   *
+   * 예전에는 탭 이벤트와 만료 알람이 재컴파일의 트리거라 그 둘을 흉내 냈다(`now`를 바꿔
+   * 가며). 둘 다 철거됐지만(티켓 10) 재컴파일 자체는 남아 있다 — 상태 변경·시작·설치가
+   * 부른다. 지켜야 할 성질도 그대로다: 같은 구역을 여러 번 컴파일해도 값이 새로 나지 않는다.
+   */
+  it('재컴파일(같은 실체화 구역)은 값을 갈지 않는다 — Compile은 소비만', async () => {
     const { compile } = await import('./compile');
     const active = profile({ active: true });
     const env = compileEnv({ 'm-ph': 'stable-value' });
 
-    const first = compile([active], { ...env, now: 1 });
-    const second = compile([active], { ...env, now: 2, tabs: [] });
+    const first = compile([active], env);
+    const second = compile([active], env);
 
     expect(first.rules[0]?.action.requestHeaders?.[0]?.value).toBe('stable-value');
     expect(second.rules[0]?.action.requestHeaders?.[0]?.value).toBe('stable-value');

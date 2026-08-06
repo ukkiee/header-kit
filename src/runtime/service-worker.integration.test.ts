@@ -304,13 +304,11 @@ async function runOnce(scenario: Scenario, prefix: readonly number[]): Promise<S
     stateWriter: createStateWriter({ validateCommand: async () => null }),
     publishSummary,
     // ── 저장소 밖 효과 — 이 티켓의 불변식과 무관하다 ──
-    queryTabInfos: async () => [],
     onBackupMutation: (handler) => {
       mutateRequest = handler;
     },
     replaceSessionRules: async () => {},
     applyBadge: async () => {},
-    scheduleExpiryAlarm: async () => {},
     now: () => scenario.now ?? 1000,
     // 백업 타이머는 시나리오가 터뜨릴 때만 발화한다 — 예약 정책은 부트스트랩의 몫이므로
     // 그 발화 시점을 시나리오가 정해야 겹침을 세울 수 있다.
@@ -327,13 +325,9 @@ async function runOnce(scenario: Scenario, prefix: readonly number[]): Promise<S
     onTogglePause: (callback) => {
       togglePause = callback;
     },
-    onExpiryAlarm: (callback) => {
-      expiryAlarm = callback;
-    },
     onStateChanged: (callback) => {
       stateChanged = callback;
     },
-    onTabsChanged: () => {},
     onStartup: () => {},
     onInstalled: () => {},
     logError: (context) => errors.push(context),
@@ -511,6 +505,23 @@ function v1State(): StoredV1 {
     ],
     materialized: {},
     customHeaderNames: ['X-Custom'],
+  };
+}
+
+/**
+ * 프로필 **둘**을 담은 v1 (티켓 10) — 만료 알람이 표본으로 들고 있던 성질이 여기로 옮겨 온다.
+ *
+ * 겹치는 편집이 `toggle-profile p2`이므로 p2가 있어야 한다. 한 프로필짜리로는 커밋이 지울
+ * 편집 자체가 없어 "겹친 편집이 살아남는다"를 물을 수 없다.
+ */
+function v1StateTwoProfiles(): StoredV1 {
+  const base = v1State();
+  return {
+    ...base,
+    profiles: [
+      ...base.profiles,
+      { ...base.profiles[0]!, id: 'p2', name: 'Legacy Two', modifications: [] },
+    ],
   };
 }
 
@@ -698,17 +709,21 @@ describe('S3 — 서비스워커 통합 시임', () => {
    */
   it('마이그레이션이 먼저면 명령이 올라간 상태 위에서 계산된다', async () => {
     const orderings = await forEachInterleaving({
-      seed: () => ({ [STATE_KEY]: v1State() }),
+      // 프로필 **둘**이다 (티켓 10) — 만료 알람이 표본으로 들고 있던 성질이 여기로 옮겨 왔다:
+      // 상태 전체를 되쓰는 직접 실행 경로가 **다른 프로필의 편집**을 지우지 않는지.
+      seed: () => ({ [STATE_KEY]: v1StateTwoProfiles() }),
       onStateWrite: noLostEdits,
       start: (harness) => ({
-        toggle: harness.command({ type: 'toggle-profile', profileId: 'p1', active: true }),
+        toggle: harness.command({ type: 'toggle-profile', profileId: 'p2', active: true }),
       }),
       check: (outcomes, harness) => {
         expect(outcomes.toggle?.status).toBe('fulfilled');
         const stored = harness.local[STATE_KEY] as StoredState;
-        // 커밋이 굳혔고, 명령은 그 v2 위에서 계산됐다 — 규칙도 편집도 남는다.
+        // 커밋이 굳혔고, 명령은 그 v3 위에서 계산됐다 — 규칙도 편집도 남는다.
         expect(stored.schemaVersion).toBe(SCHEMA_VERSION);
-        expect(activeIds(stored)).toEqual(['p1']);
+        expect(activeIds(stored)).toEqual(['p2']);
+        // 커밋이 올린 p1도 그대로다 — 명령이 자기가 읽은 옛 상태로 되쓰지 않았다.
+        expect(stored.profiles.map((profile) => profile.id)).toEqual(['p1', 'p2']);
         expect(stored.profiles[0]?.modifications.map((m) => m.id)).toEqual(['m1']);
         // 두 글자 라벨은 굳힌 v3에 **남아 있지 않다** (티켓 04) — 권위 저장소에서 실측한다.
         expect('shortLabel' in stored.profiles[0]!).toBe(false);
@@ -720,15 +735,18 @@ describe('S3 — 서비스워커 통합 시임', () => {
 
   it('명령이 먼저면 커밋이 "할 일 없음"으로 물러나고 편집이 최종값으로 남는다', async () => {
     const orderings = await forEachInterleaving({
-      seed: () => ({ [STATE_KEY]: v1State() }),
+      seed: () => ({ [STATE_KEY]: v1StateTwoProfiles() }),
       onStateWrite: noLostEdits,
-      commandBeforeMigration: { type: 'toggle-profile', profileId: 'p1', active: true },
+      // 겹치게 하는 **유일한 손잡이** — 커밋은 부트스트랩이 스스로 태우므로 리스너 등록
+      // 시점에 명령을 밀어 넣어야 둘이 실제로 겹친다.
+      commandBeforeMigration: { type: 'toggle-profile', profileId: 'p2', active: true },
       start: () => ({}),
       check: (outcomes, harness) => {
         expect(outcomes.early?.status).toBe('fulfilled');
         const stored = harness.local[STATE_KEY] as StoredState;
         expect(stored.schemaVersion).toBe(SCHEMA_VERSION);
-        expect(activeIds(stored)).toEqual(['p1']);
+        expect(activeIds(stored)).toEqual(['p2']);
+        expect(stored.profiles.map((profile) => profile.id)).toEqual(['p1', 'p2']);
         expect(stored.profiles[0]?.modifications.map((m) => m.id)).toEqual(['m1']);
         // 커밋은 굳힐 것이 없어 아무것도 쓰지 않는다 — 저장소에 착지한 쓰기는 명령의 것 하나뿐.
         expect(harness.stateWrites()).toBe(1);
@@ -742,9 +760,19 @@ describe('S3 — 서비스워커 통합 시임', () => {
    * 진입점 전수 확인 (수용 기준 2, 플랜 게이트 r1 R-1).
    *
    * "명령 수신"만 레인에 넣으면 **실행자를 직접 부르던 경로들**이 목록 밖에 남는다 — 그것이
-   * R-1이었다. 아래 셋은 명령 채널을 거치지 않고 실행자를 직접 부르던 자리이고, 각각을 다른
-   * 상태 쓰기와 겹쳐 세워 겹친 편집이 살아남는지 본다. 나머지 셋(전이 명령 수신 · 부트스트랩
-   * 마이그레이션 커밋 · 전체 초기화)은 위·아래 시나리오가 각각 덮는다.
+   * R-1이었다. 아래 것은 명령 채널을 거치지 않고 실행자를 직접 부르던 자리이고, 다른 상태
+   * 쓰기와 겹쳐 세워 겹친 편집이 살아남는지 본다.
+   *
+   * **만료 알람 두 행이 여기서 빠졌다** (티켓 10) — 그 서브시스템이 철거됐다. 증명은 지우지
+   * 않고 **마이그레이션 커밋 쪽으로 옮겼다**: 위 두 시나리오(`마이그레이션이 먼저면…`,
+   * `명령이 먼저면…`)가 프로필 **둘**짜리 v1을 심고 다른 프로필의 편집이 커밋을 살아남는지
+   * 본다. 여기에 행으로 얹지 않은 이유는 그러면 헛돌기 때문이다 — 커밋은 부트스트랩이 스스로
+   * 태우므로 `fire`로 두드릴 손잡이가 없고, `start`가 명령을 내는 시점엔 커밋이 이미 끝나 있어
+   * 어떤 순서에서도 겹치지 않는다(행으로 넣어 보고 실측했다: 레인을 벗어나게 만들어도 통과했다).
+   * 겹치게 하는 손잡이는 `commandBeforeMigration`이고, 그것을 쓰는 자리가 위 두 시나리오다.
+   *
+   * 남는 직접 경로 넷의 증거: **전역 Pause 토글**은 아래 표, **마이그레이션 커밋**은 위 둘,
+   * **전체 초기화**와 **백업 변이**는 각자의 시나리오.
    *
    * 겹치는 쪽을 `toggle-profile p2`로 두는 이유: 이 진입점들의 쓰기는 자기가 읽은 상태를
    * **통째로** 되쓰므로, 레인 밖에 있으면 p2 편집을 그대로 지운다.
@@ -760,19 +788,6 @@ describe('S3 — 서비스워커 통합 시임', () => {
       seed: () => ({ [STATE_KEY]: twoProfiles() }),
       fire: (harness) => harness.togglePause(),
       verify: (stored) => expect(stored.paused).toBe(true),
-    },
-    {
-      name: '만료 알람',
-      seed: () => ({ [STATE_KEY]: expiredRuleState() }),
-      fire: (harness) => harness.expiryAlarm(),
-      verify: (stored) => expect(stored.profiles[0]?.modifications[0]?.enabled).toBe(false),
-    },
-    {
-      name: '재조정 중 발견된 지난 만료',
-      seed: () => ({ [STATE_KEY]: expiredRuleState() }),
-      // 부트스트랩의 첫 converge가 스스로 찾아 태운다 — 두드릴 손잡이가 따로 없는 진입점이다.
-      fire: () => {},
-      verify: (stored) => expect(stored.profiles[0]?.modifications[0]?.enabled).toBe(false),
     },
   ];
 

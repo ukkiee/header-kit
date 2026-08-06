@@ -71,20 +71,16 @@ function fakeDeps(overrides: Partial<BackgroundDeps> = {}): BackgroundDeps {
     loadState: async () => createDefaultState(),
     stateWriter: fakeWriter(),
     publishSummary: async () => {},
-    queryTabInfos: async () => [],
     onBackupMutation: () => {},
     replaceSessionRules: async () => {},
     applyBadge: async () => {},
-    scheduleExpiryAlarm: async () => {},
     now: () => 1000,
     setTimer: () => {},
     onStateChanged: () => {},
     onCommand: () => {},
-    onTabsChanged: () => {},
     onStartup: () => {},
     onInstalled: () => {},
     onTogglePause: () => {},
-    onExpiryAlarm: () => {},
     logError: () => {},
     ...overrides,
   };
@@ -469,38 +465,10 @@ describe('background bootstrap', () => {
    * 기다렸다. 새 코드도 같다 — 회귀가 아니라 같은 계약이다.
    */
 
-  it('onExpiryAlarm이 실행자를 지나 만료 전이를 태운다 (persist)', async () => {
-    let expiryAlarm = () => {};
-    let persistCalls = 0;
-    bootstrap(
-      fakeDeps({
-        onExpiryAlarm: (cb) => {
-          expiryAlarm = cb;
-        },
-        stateWriter: fakeWriter({
-          execute: async () => {
-            persistCalls += 1;
-            return createDefaultState();
-          },
-        }),
-      }),
-    );
-    await flush();
-    const before = persistCalls;
-    expiryAlarm();
-    await flush();
-    expect(persistCalls).toBeGreaterThan(before);
-  });
-
   /*
-   * 마이그레이션 커밋은 **재조정 바깥에서** 한 번만 돈다 (티켓 14) — 메커니즘 잠금.
-   *
-   * 커밋이 loadSnapshot 안(=loadState)에서 일어나면 그 storage 쓰기가 onStateChanged를 때려
-   * 새 세대를 만들고, 쓰기를 수행한 그 세대 자신이 post-loadSnapshot 가드에서 물러나
-   * apply(replaceSessionRules)를 부르지 못한다 — 규칙이 저장소 왕복 한 번 뒤로 밀린다.
-   * 스모크가 시드 직후 관측하면 "수정이 아직 안 걸린" 상태를 본다(M2b `cookie=existing=preset`).
-   * 표본 수와 무관하게 잠그려면 그 순서를 여기서 못 박아야 한다: 커밋이 첫 apply보다 앞서고,
-   * 커밋이 발화시킨 onStateChanged에도 apply가 시드 프로필의 규칙으로 실제 일어난다.
+   * **onExpiryAlarm 시나리오가 없다** (티켓 10) — 알람 서브시스템이 철거됐다. 이 자리가
+   * 지키던 것("명령 채널을 거치지 않는 진입점도 실행자를 지난다")은 남은 직접 경로들이
+   * 계속 든다: 전역 Pause 토글은 아래, 마이그레이션 커밋·전체 초기화·백업 변이는 통합 시임.
    */
   it('v1 커밋이 첫 converge 앞에서 돌고, 그 쓰기의 onStateChanged에도 규칙이 걸린다', async () => {
     const seeded: StoredState = {

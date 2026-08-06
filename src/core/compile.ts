@@ -1,4 +1,3 @@
-import { isRuleExpired } from './expiry';
 import { hasPlaceholders } from './placeholder';
 import type { HeaderMode, Modification, Profile, RuleConditions, UrlMatchType } from './schema';
 import { assembleSetCookie, placeholderTemplate } from './schema';
@@ -13,18 +12,15 @@ import {
   type NetRule,
 } from './rules';
 
-/** 탭 상태 스냅샷 — 어댑터가 tabs API에서 만들어 env로 주입한다. */
-export interface TabInfo {
-  tabId: number;
-  url?: string;
-}
-
+/**
+ * 컴파일 입력 — **저장 상태 말고는 아무것도 없다** (ADR 0002 개정, 티켓 10).
+ *
+ * 예전에는 열린 탭 스냅샷과 현재 시각도 받았다. 탭 도메인 조건과 자동 해제 시각이 퇴역하면서
+ * (ADR 0017) 둘 다 읽는 곳이 없어졌고, 그래서 컴파일은 이제 **같은 상태에 같은 결과**를 낸다 —
+ * 시각에 의존하지 않으므로 언제 불러도, 몇 번을 불러도 같은 규칙 집합이 나온다.
+ */
 export interface CompileEnv {
   paused: boolean;
-  /** 열린 탭 스냅샷 — 규칙 tabDomains 조건의 전개에 쓰인다. */
-  tabs: TabInfo[];
-  /** 현재 시각(ms) — 규칙 자동 해제(expiresAt)의 방출 가드에 쓰인다. */
-  now: number;
   /** Placeholder 실체화 구역 — Compile은 소비만 하고 절대 생성하지 않는다. */
   materialized: Record<string, string>;
 }
@@ -95,22 +91,6 @@ function hostnameOf(url: string | undefined): string | null {
 function domainMatches(hostname: string, domain: string): boolean {
   return hostname === domain || hostname.endsWith(`.${domain}`);
 }
-
-/**
- * 규칙의 tabDomains 조건을 열린 탭으로 전개한다 (ADR 0010).
- * undefined = 조건 없음, 빈 배열 = 매칭 탭 없음(그 규칙은 방출되지 않는다).
- */
-function expandTabDomains(conditions: RuleConditions | undefined, tabs: TabInfo[]): number[] | undefined {
-  const domains = (conditions?.tabDomains ?? []).map((d) => d.trim()).filter((d) => d !== '');
-  if (domains.length === 0) return undefined;
-  return tabs
-    .filter((t) => {
-      const hostname = hostnameOf(t.url);
-      return hostname !== null && domains.some((d) => domainMatches(hostname, d));
-    })
-    .map((t) => t.tabId);
-}
-
 
 interface Emitter {
   rules: NetRule[];
@@ -310,12 +290,14 @@ function emitModification(
   modification: Modification,
   priority: number,
   profileId: string,
-  tabs: TabInfo[],
   emitter: Emitter,
 ): void {
-  // 규칙 tabDomains 조건 — 매칭 탭이 없으면 이 규칙만 어디에도 적용되지 않는다.
-  const tabIds = expandTabDomains(modification.conditions, tabs);
-  if (tabIds !== undefined && tabIds.length === 0) return;
+  /*
+   * **탭 전개가 없다** (티켓 10). 예전에는 규칙의 탭 도메인 조건을 열린 탭으로 펼쳐
+   * `tabIds`를 만들고, 매칭 탭이 없으면 그 규칙을 통째로 건너뛰었다. 그 조건이 퇴역해
+   * (ADR 0017) 펼칠 것이 없어졌고, 아래 방출들도 `tabIds`를 받지 않는다.
+   */
+  const tabIds = undefined;
 
   switch (modification.kind) {
     case 'request-header':
@@ -574,16 +556,12 @@ export function compile(profiles: Profile[], env: CompileEnv): CompileResult {
     return { rules: emitter.rules, warnings: emitter.warnings };
   }
 
-  const { tabs, now } = env;
   const active = profiles.filter((p) => p.active);
 
-  // 방출 대상: enabled이고 만료되지 않은 규칙 — 대역 폭도 이 기준으로 센다.
+  // 방출 대상: enabled인 규칙 — 대역 폭도 이 기준으로 센다.
   const emittable = new Map<string, Modification[]>();
   for (const profile of active) {
-    emittable.set(
-      profile.id,
-      profile.modifications.filter((m) => m.enabled && !isRuleExpired(m, now)),
-    );
+    emittable.set(profile.id, profile.modifications.filter((m) => m.enabled));
   }
 
   const bandBase = new Map<string, number>();
@@ -611,7 +589,7 @@ export function compile(profiles: Profile[], env: CompileEnv): CompileResult {
     const base = bandBase.get(profile.id)!;
 
     enabled.forEach((modification, index) => {
-      emitModification(modification, base + enabled.length - 1 - index, profile.id, tabs, emitter);
+      emitModification(modification, base + enabled.length - 1 - index, profile.id, emitter);
       // 겹침 경고 — **헤더를 건드리는 모든 종류**가 참여한다. 종류가 달라도 같은 헤더를
       // 만지면 충돌이므로, 방향+이름으로 키를 맞춘다(예: User-Agent 종류와 이름이
       // 'User-Agent'인 요청 헤더 규칙은 서로 겹친다).

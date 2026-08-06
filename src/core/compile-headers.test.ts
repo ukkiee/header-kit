@@ -24,7 +24,7 @@ function profile(mods: Modification[]): Profile {
   };
 }
 
-const env: CompileEnv = { paused: false, tabs: [], now: 0, materialized: {} };
+const env: CompileEnv = { paused: false, materialized: {} };
 
 describe('compile — 헤더 target / mode / empty', () => {
   it('request-header는 requestHeaders로, response-header는 responseHeaders로 간다', () => {

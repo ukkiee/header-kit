@@ -4,7 +4,6 @@
  */
 
 /** 실선 필드 표면 — Input.solid / Select.bordered 가 공유한다. */
-export const fieldSolid = 'border border-zinc-300 bg-white dark:border-zinc-700 dark:bg-zinc-900';
 
 /**
  * 필드 포커스 — Input / Select 가 공유한다.
@@ -32,7 +31,7 @@ export const accentBg = 'bg-primary';
 export const popupSurface = 'rounded-lg border border-border bg-popover p-1';
 
 /** 팝업 항목 — Menu / Select / Autocomplete 항목이 공유한다 (하이라이트는 data-highlighted). */
-export const popupItem =
+const popupItem =
   'flex cursor-pointer items-center rounded-md px-2 py-1.5 text-xs outline-none select-none data-[highlighted]:bg-accent';
 
 /** 팝업 포지셔너 — 앵커에 붙는 떠 있는 레이어. Select / Autocomplete 가 공유한다. */
@@ -66,6 +65,14 @@ export const badgePill = 'rounded px-1 py-px text-[10px] font-medium';
  * `motion-reduce:transition-none` — opacity 전이는 reduced-motion 계약 안이다(ADR 0012의
  * 경계: 색 전이는 밖, 움직임·opacity는 안). 전이만 끄고 opacity 값 자체(60→100)는 남긴다 —
  * 어포던스는 유지하되 페이드만 없앤다. smoke N33이 감도 대조와 함께 못박는다.
+ */
+/*
+ * **아래 둘은 소비자가 없다** (티켓 10에서 실측). `scroll-area.tsx`는 자기 클래스를 직접 쓰고
+ * (`transition-colors` + `bg-border`) 이 토큰들을 부르지 않는다 — 즉 여기 적힌 설계(기본
+ * opacity-60, 호버·스크롤 중 진해짐, reduced-motion에서 전이만 끄기)가 **실제로 그려지는
+ * 것과 같은지 확인되지 않았다.** 지우면 그 어긋남의 증거까지 사라지므로 이번에는 남기고
+ * 릴리스 게이트로 넘긴다: 살릴지(scroll-area가 이 토큰을 쓰게) 지울지(문서를 실물에 맞추게)는
+ * 스크롤바 설계를 다시 보는 결정이지, 철거 티켓이 조용히 고를 일이 아니다.
  */
 export const scrollbarTrack =
   'flex w-1.5 justify-center rounded-full opacity-60 transition-opacity duration-150 motion-reduce:transition-none data-[hovering]:opacity-100 data-[scrolling]:opacity-100';

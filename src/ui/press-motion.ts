@@ -18,8 +18,9 @@ export type MotionButtonAttributes = Omit<
 >;
 
 /**
- * 누름·호버 마이크로 인터랙션 (ADR 0012) — Button·IconButton·SwitcherChip·메뉴 항목이
- * 공유한다. 넷이 각자 reduced-motion 분기를 반복하지 않도록 여기 한 곳에 둔다.
+ * 누름·호버 마이크로 인터랙션 (ADR 0012) — Button·IconButton·SwitcherChip이 공유한다.
+ * 셋이 각자 reduced-motion 분기를 반복하지 않도록 여기 한 곳에 둔다. (넷째였던 메뉴 항목은
+ * ADR 0017이 앱의 마지막 메뉴를 걷어내면서 함께 사라졌다 — ADR 0012의 in-file 개정.)
  *
  * **reduced-motion이면 애니메이션 prop을 아예 돌려주지 않는다.** 지속시간 0짜리 전이로
  * 대체하지 않는 이유는, motion이 인라인 스타일을 쓰지 않아야 "모션 없음"이 계산 스타일로
@@ -40,10 +41,12 @@ export function usePressMotion(disabled?: boolean) {
 
 /**
  * 위 계약을 실제로 집행하는 한 곳 — 모션이 꺼져야 하면 **빈 객체**를 돌려준다.
- * 누름·호버 말고 다른 모션(메뉴 항목 등장 등)도 이 함수를 거쳐야 각 컴포넌트가
- * reduced-motion 분기를 제 나름대로 반복하지 않는다.
+ *
+ * export하지 않는다 (티켓 10): 지금 부르는 곳은 위 `usePressMotion` 하나뿐이다. 예전에는
+ * 메뉴 항목 등장도 이 문을 지났는데 그 모션이 사라졌다 — 파일 밖 소비자가 없는데 열어 두면
+ * 다음 사람이 "여러 모션이 공유하는 문"으로 읽는다.
  */
-export function useMotionProps<T extends object>(props: T, off?: boolean): T | Record<string, never> {
+function useMotionProps<T extends object>(props: T, off?: boolean): T | Record<string, never> {
   const reduce = useReducedMotion();
   return reduce || off ? {} : props;
 }

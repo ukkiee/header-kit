@@ -22,7 +22,7 @@ function profile(overrides: Partial<Profile> = {}): Profile {
   };
 }
 
-const env: CompileEnv = { paused: false, tabs: [], now: 0, materialized: {} };
+const env: CompileEnv = { paused: false, materialized: {} };
 
 function conditionOf(rules: ReturnType<typeof compile>['rules'], header: string) {
   return rules.find((r) => r.action.requestHeaders?.[0]?.header === header)?.condition;

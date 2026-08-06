@@ -1,5 +1,4 @@
 import { COMMON_COOKIE_NAMES, STANDARD_HEADERS, USER_AGENT_PRESETS } from './autocomplete';
-import { isRuleExpired } from './expiry';
 import { normalizeImportedProfiles } from './transfer';
 import {
   defaultMaterializeDeps,
@@ -411,32 +410,11 @@ export function acknowledgeRetirement(state: StoredState): StoredState {
   return rest;
 }
 
-/**
- * 만료된 규칙을 끄고 expiresAt을 소비한다 (ADR 0010) — 알람은 일회성이다.
- * 규칙만 꺼지고 프로필은 그대로다.
+/*
+ * **만료 전이가 없다** (ADR 0017, 티켓 10). 자동 해제 시각이 퇴역하면서(티켓 02) 그것을
+ * 소비하던 전이도 갈 곳을 잃었다 — 그 안의 `normalizeConditions` 호출은 이미 도달해도 뜻이
+ * 없는 죽은 경로였다(퇴역 넷을 통과시키지 않는다). 알람 예약·리스너와 함께 걷혔다.
  */
-export function expireRules(state: StoredState, now: number): StoredState {
-  return {
-    ...state,
-    profiles: state.profiles.map((profile) => {
-      if (!profile.active || !profile.modifications.some((m) => isRuleExpired(m, now))) {
-        return profile;
-      }
-      return {
-        ...profile,
-        modifications: profile.modifications.map((m) => {
-          if (!isRuleExpired(m, now)) return m;
-          const conditions = normalizeConditions({ ...m.conditions, expiresAt: undefined });
-          const next = { ...m, enabled: false } as typeof m;
-          if (conditions) return { ...next, conditions };
-          const { conditions: _empty, ...bare } = next;
-          return bare as typeof m;
-        }),
-      };
-    }),
-  };
-}
-
 /**
  * UI·Import·Restore가 background(단일 writer)로 보내는 직렬화 가능한 명령.
  * 전이 로직은 위의 순수 함수들이고, 이 union은 그 메시지 표현이다.
@@ -453,7 +431,6 @@ export type Command =
   | { type: 'set-sync-backup'; enabled: boolean }
   /** 전체 초기화의 상태 부분 — 저장소 삭제·자동 백업 중단은 런타임이 이 명령 주변에서 조율한다. */
   | { type: 'full-reset' }
-  | { type: 'expire-rules'; now: number }
   /** 퇴역 공지 확인 — 쓰기 문을 지나 성공했을 때만 공지가 사라진다 (티켓 02). */
   | { type: 'acknowledge-retirement' }
   | { type: 'add-modification'; profileId: string; modification: Modification }
@@ -524,8 +501,6 @@ export function applyCommand(
       return setSyncBackup(state, command.enabled);
     case 'full-reset':
       return resetToDefaults();
-    case 'expire-rules':
-      return expireRules(state, command.now);
     case 'acknowledge-retirement':
       return acknowledgeRetirement(state);
     case 'import-profiles':

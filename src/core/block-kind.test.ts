@@ -26,7 +26,7 @@ const withRules = (modifications: Modification[]): Profile => ({
 });
 
 const compileOne = (m: Modification, env: Partial<Parameters<typeof compile>[1]> = {}) =>
-  compile([withRules([m])], { paused: false, tabs: [], now: 0, materialized: {}, ...env });
+  compile([withRules([m])], { paused: false, materialized: {}, ...env });
 
 const block = (over: Record<string, unknown> = {}): Modification =>
   ({ ...createModification('block'), urlFilter: 'ads.example.com', urlMatchType: 'domain', ...over }) as Modification;

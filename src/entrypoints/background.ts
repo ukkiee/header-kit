@@ -1,6 +1,5 @@
 import type { BadgeSpec } from '@/core/badge';
 import type { Command } from '@/core/commands';
-import { nextExpiry } from '@/core/expiry';
 import type { NetRule } from '@/core/rules';
 import type { StoredState } from '@/core/schema';
 import { createStateWriter } from '@/platform/state-writer';
@@ -11,10 +10,8 @@ import {
   onStateChanged,
   publishSummary,
 } from '@/platform/stateStore';
-import { onTabsChanged, queryTabInfos } from '@/platform/tabs';
 import { bootstrap } from '@/runtime/background-bootstrap';
 
-const EXPIRY_ALARM = 'headerkit-expiry';
 
 // ── browser 효과 래퍼 — browser.* 를 만지는 유일한 지점. 배선 자체는 bootstrap이 한다. ──
 
@@ -78,16 +75,6 @@ async function applyBadge(badge: BadgeSpec): Promise<void> {
   await browser.action.setBadgeBackgroundColor({ color: badge.color });
 }
 
-/** 다음 Time Filter 만료에 알람을 건다 — 만료 예정이 없으면 알람을 지운다. */
-async function scheduleExpiryAlarm(state: StoredState, now: number): Promise<void> {
-  const when = nextExpiry(state, now);
-  if (when === null) {
-    await browser.alarms.clear(EXPIRY_ALARM);
-  } else {
-    await browser.alarms.create(EXPIRY_ALARM, { when });
-  }
-}
-
 export default defineBackground(() => {
   bootstrap({
     loadState,
@@ -95,10 +82,8 @@ export default defineBackground(() => {
     // 등장하지 않는다 (ADR 0016).
     stateWriter: createStateWriter({ validateCommand }),
     publishSummary,
-    queryTabInfos,
     replaceSessionRules,
     applyBadge,
-    scheduleExpiryAlarm,
     now: () => Date.now(),
     setTimer: (callback, delayMs) => {
       setTimeout(callback, delayMs);
@@ -106,16 +91,11 @@ export default defineBackground(() => {
     onStateChanged,
     onCommand,
     onBackupMutation,
-    onTabsChanged,
     onStartup: (callback) => browser.runtime.onStartup.addListener(callback),
     onInstalled: (callback) => browser.runtime.onInstalled.addListener(callback),
     onTogglePause: (callback) =>
       browser.commands.onCommand.addListener((command) => {
         if (command === 'toggle-pause') callback();
-      }),
-    onExpiryAlarm: (callback) =>
-      browser.alarms.onAlarm.addListener((alarm) => {
-        if (alarm.name === EXPIRY_ALARM) callback();
       }),
     logError: (context, error) => console.error(`[HeaderKit] ${context}`, error),
   });

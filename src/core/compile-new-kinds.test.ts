@@ -25,7 +25,7 @@ const withRules = (modifications: Modification[]): Profile => ({
 });
 
 const compileOne = (m: Modification) =>
-  compile([withRules([m])], { paused: false, tabs: [], now: 0, materialized: {} });
+  compile([withRules([m])], { paused: false, materialized: {} });
 
 describe('User-Agent 종류', () => {
   it('User-Agent 요청 헤더를 값으로 덮어쓴다', () => {
@@ -91,7 +91,7 @@ describe('겹침 경고는 헤더를 만지는 모든 종류를 본다', () => {
         { ...createProfile('A'), id: 'pa', active: true, modifications: [a] },
         { ...createProfile('B'), id: 'pb', active: true, modifications: [b] },
       ],
-      { paused: false, tabs: [], now: 0, materialized: {} },
+      { paused: false, materialized: {} },
     );
 
   it('두 프로필이 함께 UA를 바꾸면 겹침으로 알린다', () => {

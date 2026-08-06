@@ -107,6 +107,17 @@ async function pollUntil(probe, test, timeoutMs = 8000, intervalMs = 200) {
   return value;
 }
 
+/**
+ * 배지 문구가 기대값이 될 때까지 기다린다 — 배지는 재조정 **뒤에** 그려진다.
+ *
+ * D 구간의 지역 상수였는데 F3도 같은 것을 쓰게 되어 파일 스코프로 올렸다 (티켓 10):
+ * 배지 수 회귀를 재는 표본이 만료 규칙 하나뿐이 아니게 됐다는 뜻이다.
+ */
+function pollBadgeTextOf(sw) {
+  return (expected, timeoutMs = 3000) =>
+    pollUntil(() => sw.evaluate(() => chrome.action.getBadgeText({})), (t) => t === expected, timeoutMs, 100);
+}
+
 async function pollSessionRuleCount(sw, expected, timeoutMs = 15000) {
   const count = await pollUntil(
     () => sw.evaluate(async () => {
@@ -379,10 +390,8 @@ try {
   record('D1: 두 활성 Profile이 같은 헤더 수정 시 목록 위쪽이 승리', headers['x-conf'] === 'top-wins',
     `x-conf=${headers['x-conf']}`);
 
-  const pollBadge = (expected, timeoutMs = 3000) =>
-    pollUntil(() => sw.evaluate(() => chrome.action.getBadgeText({})), (t) => t === expected, timeoutMs, 100);
-
-  const multiBadge = await pollBadge('2');
+  const pollBadgeText = pollBadgeTextOf(sw);
+  const multiBadge = await pollBadgeText('2');
   record('D2: 다중 활성 시 배지에 활성 개수 표시', multiBadge === '2', `badge="${multiBadge}"`);
 
   await popup.reload();
@@ -390,7 +399,7 @@ try {
   await popup.getByRole('button', { name: 'Pause' }).click();
   await pollSessionRuleCount(sw, 0);
   headers = await fetchEchoHeaders(page);
-  const pausedBadge = await pollBadge('II');
+  const pausedBadge = await pollBadgeText('II');
   record('D3: 팝업 Pause → 즉시 전체 중단 + 배지 II',
     headers['x-conf'] === undefined && pausedBadge === 'II',
     `x-conf=${headers['x-conf']}, badge="${pausedBadge}"`);
@@ -583,46 +592,39 @@ try {
   await pageB.goto(origin);
 
   /*
-   * F3: 자동 해제 시각 퇴역 — **이미 지난** 시각을 심는다. 예전 계약에서는 방출 가드가 그
-   * 규칙을 걸러 개수가 1이었고, 알람이 저장소의 enabled를 false로 뒤집었다. 둘 다 일어나지
-   * 않아야 한다.
+   * F3: 퇴역한 조건이 저장소에 남아 있어도 **방출을 막지 않는다** (ADR 0017, 티켓 10).
    *
-   * 이 시나리오가 부수적으로 지키던 것이 하나 더 있다: 쓰기 문을 거치지 않는 **직접 실행
-   * 경로**(알람 리스너)도 쓰기 줄에서 직렬화된다는 증거였다. 조건이 걷히면서 그 증거가 여기서
-   * 사라진다 — 티켓 10이 그 증명을 다른 경로로 옮기기로 되어 있고, 지금부터 그 빚이 열려 있다.
+   * 옛 파일 가져오기나 손편집으로 도달 가능한 상태다. 예전 계약에서는 방출 가드가 지난
+   * 자동 해제 시각의 규칙을 걸러 개수가 1이었고, 알람이 저장소의 enabled를 뒤집었다.
+   * 둘 다 일어나지 않아야 한다 — 걸러지면 사용자는 만든 규칙이 안 걸리는데 화면에는 멀쩡히
+   * 서 있는 상태를 겪는다.
+   *
+   * **알람 부재를 재던 프로브가 사라졌다** (티켓 10). `chrome.alarms` 자체가 없어졌으므로
+   * (권한이 빠졌다) 그 API로는 아무것도 물을 수 없다 — 권한 부재는 N52가 매니페스트에서
+   * 직접 잰다. 배지 수 확인은 여기 남는다: 이 표본은 만료와 무관한 **켜진 규칙 둘**이다.
    */
   await seedProfiles([
     baseProfile('p-time', 'Ti',
       [
         { kind: 'request-header', id: 'm1', name: 'X-Timed', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
-          conditions: { expiresAt: Date.now() - 1000 } },
+          conditions: { expiresAt: Date.now() - 1000, tabDomains: ['closed.example'] } },
         { kind: 'request-header', id: 'm2', name: 'X-Stays', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
       ]),
   ]);
-  await pollSessionRuleCount(sw, 2); // 예전이면 지난 시각의 규칙이 걸러져 1이었다
+  await pollSessionRuleCount(sw, 2); // 예전이면 지난 시각·닫힌 탭의 규칙이 걸러져 1이었다
   const pastExpiry = await pollUntil(
     () => fetchEchoHeaders(pageB, '/headers'),
     (h) => h['x-timed'] === 'on' && h['x-stays'] === 'on',
-  );
-  /*
-   * "알람이 규칙을 끄지 않는다"는 음성 단언이라 **기다려서 재면 안 된다** — 이 파일이 세 곳에서
-   * 명문화한 규약이다(매직 넘버 대기 금지). 대신 끌 주체가 **애초에 예약되지 않았음**을 양성으로
-   * 관측한다: 재조정이 만료 예정을 보면 알람을 걸고, 없으면 지운다. 알람 부재가 곧 "끌 것이
-   * 스케줄되지 않았다"이고, 그것이 도달할 수 없는 상태다.
-   */
-  const expiryAlarmGone = await pollUntil(
-    () => sw.evaluate(async () => (await chrome.alarms.get('headerkit-expiry')) ?? null),
-    (alarm) => alarm === null,
   );
   const stillEnabled = await sw.evaluate(async () => {
     const { state } = await chrome.storage.local.get('state');
     return state.profiles[0].modifications[0].enabled;
   });
-  const badgeAfter = await sw.evaluate(() => chrome.action.getBadgeText({}));
-  record('F3: 자동 해제 시각 퇴역 — 만료 알람이 예약되지 않고 규칙이 계속 적용된다',
+  const badgeAfter = await pollBadgeText('2');
+  record('F3: 퇴역 조건(지난 해제 시각·탭 도메인)이 남아 있어도 규칙이 그대로 걸린다',
     pastExpiry['x-timed'] === 'on' && pastExpiry['x-stays'] === 'on'
-      && expiryAlarmGone === null && stillEnabled === true && badgeAfter === '2',
-    `적용=[${pastExpiry['x-timed']},${pastExpiry['x-stays']}], 알람부재=${expiryAlarmGone === null}, enabled=${stillEnabled}, badge="${badgeAfter}"`);
+      && stillEnabled === true && badgeAfter === '2',
+    `적용=[${pastExpiry['x-timed']},${pastExpiry['x-stays']}], enabled=${stillEnabled}, badge="${badgeAfter}"`);
 
   // ---------- G. 이슈 07: Placeholder 실체화 수명주기 ----------
   const UUID_RE = /^req-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -5575,6 +5577,51 @@ try {
   record('N51: 복원이 걷어 간 것을 말한다 — 레거시 필터 공지가 화면에 선다 (티켓 02 이월)',
     noticeShown && restoredProfile.includes('LegacyRestore'),
     `저장소=${seeded}, 공지=${noticeShown}, 복원된 프로필=${JSON.stringify(restoredProfile)}`);
+
+  /*
+   * N52: **권한이 실제로 줄었다** (티켓 10 AC4·AC5, ADR 0002 개정).
+   *
+   * 매니페스트에서 빠진 것을 세는 것만으로는 부족하다 — 권한을 빼서 **무언가 조용히
+   * 망가졌는지**가 진짜 물음이고, 티켓이 "확인 없이 빼면 다른 곳이 조용히 망가진다"고
+   * 못박은 지점이다. 그래서 셋을 함께 잰다:
+   *
+   *  (a) 매니페스트에 `alarms`·`tabs`가 없다 — 요구하는 권한이 실제로 줄었다.
+   *  (b) `chrome.alarms`가 서비스워커에서 **아예 없다** — 알람 코드가 남아 있으면 여기서 드러난다.
+   *  (c) 그런데도 `tabs.create`를 쓰는 '탭에서 열기'가 여전히 탭을 연다 — **이 메서드가 애초에
+   *      권한을 요구하지 않는다**는 것이 근거다. 기억이 아니라 이 브라우저에서 실측해 남긴다.
+   *
+   * `chrome.tabs`는 권한 없이도 **객체가 존재하고 `query`도 함수로 잡힌다** — `tabs` 권한이
+   * 지키는 것은 API 표면이 아니라 탭의 특권 속성(url·title·favIconUrl)이기 때문이다. 그래서
+   * 부재를 단언하지 않고 관측만 상세에 남긴다: 여기서 부재를 요구했다면 브라우저가 그렇게
+   * 동작하지 않는다는 이유로 이 시나리오가 거짓 실패를 냈을 것이다.
+   */
+  const manifest = await sw.evaluate(() => chrome.runtime.getManifest());
+  const perms = manifest.permissions ?? [];
+  const alarmsApiGone = await sw.evaluate(() => typeof chrome.alarms === 'undefined');
+  const tabsQueryGone = await sw.evaluate(
+    () => typeof chrome.tabs === 'undefined' || typeof chrome.tabs.query !== 'function',
+  );
+
+  await seedProfiles([baseProfile('p-perm', 'Perm', [])]);
+  await popup.reload();
+  const beforeTabs = context.pages().length;
+  await popup.getByRole('button', { name: 'Open in tab' }).click();
+  const openedTab = await pollUntil(
+    () => Promise.resolve(context.pages().length),
+    (n) => n > beforeTabs,
+    5000,
+    100,
+  );
+  const appTab = context.pages().find((pg) => pg.url().includes('/app.html'));
+  if (appTab && appTab !== tabApp) await appTab.close();
+
+  record('N52: 권한 축소 — alarms·tabs가 매니페스트와 런타임 양쪽에서 사라졌고, 탭 열기는 그대로 된다',
+    !perms.includes('alarms') && !perms.includes('tabs') &&
+      perms.includes('declarativeNetRequest') && perms.includes('storage') &&
+      alarmsApiGone && openedTab > beforeTabs,
+    `permissions=${JSON.stringify(perms)}, host=${JSON.stringify(manifest.host_permissions)}, ` +
+      `alarms API 부재=${alarmsApiGone}, tabs.query 부재=${tabsQueryGone}, ` +
+      `탭 열림=${openedTab > beforeTabs} (${beforeTabs}→${openedTab})`);
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);

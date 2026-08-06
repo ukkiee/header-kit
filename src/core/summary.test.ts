@@ -18,7 +18,7 @@ function profile(overrides: Partial<Profile> = {}): Profile {
   };
 }
 
-const env: CompileEnv = { paused: false, tabs: [], now: 0, materialized: {} };
+const env: CompileEnv = { paused: false, materialized: {} };
 
 describe('summarizeCompile', () => {
   it('활성 규칙 수와 활성 Profile 수를 센다', () => {
