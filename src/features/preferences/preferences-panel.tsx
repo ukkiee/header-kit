@@ -2,7 +2,7 @@ import type { Command } from '@/core/commands';
 import { LOCALES, type Locale, type MessageKey } from '@/core/i18n';
 import { THEME_PREFERENCES, type ThemePreference } from '@/core/theme';
 import { ChoiceChips } from '@/ui/chip-group';
-import { Card } from '@/ui/card';
+import { Card, CardContent } from '@/ui/card';
 import { ToggleSwitch } from '@/ui/toggle-switch';
 import { useT } from '@/ui/i18n-context';
 
@@ -59,7 +59,7 @@ export function PreferencesPanel({
 
   return (
     <Card className="gap-3 text-xs">
-      <div className="flex flex-col gap-3 px-(--card-spacing)">
+      <CardContent className="flex flex-col gap-3">
         {/* 테마 (ADR 0015) — '시스템'을 맨 앞에 둔다. 기본값이고, 대부분의 사용자가
             머무는 자리라 목록의 첫 칸이 맞다. */}
         <div className="flex flex-col gap-1">
@@ -102,7 +102,7 @@ export function PreferencesPanel({
             options={LOCALES.map((value) => ({ value, label: t(LOCALE_LABELS[value]) }))}
           />
         </div>
-      </div>
+      </CardContent>
     </Card>
   );
 }

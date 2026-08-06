@@ -94,7 +94,19 @@ const en = {
    * 마지막으로 백업된 시각 (스펙 story 75) — 동기화 카드가 저장 **위치** 옆에 말하는 값.
    * 기기 수는 말하지 않는다: 브라우저가 알려 주지 않는 값이라 셀 방법이 없다.
    */
-  lastBackupAt: 'Last backup: {time}',
+  /*
+   * 시각 문구는 **어느 저장소인지 말한다** (code-review).
+   *
+   * `lastBackupAt`은 지금 활성 저장소의 목록만 본다 — 히스토리 카드가 보여 주는 그 목록이다.
+   * 저장소를 밝히지 않으면 동기화를 끈 직후 로컬이 비었을 때 "아직 백업 없음" 바로 아래에
+   * "클라우드에 백업이 남아 있습니다"가 나란히 서서 카드가 자기모순을 말한다.
+   * 히스토리 카드의 빈 상태(`noBackupsYet`)와도 다른 문장이라 같은 화면에 같은 문구가
+   * 두 번 서지 않는다.
+   */
+  lastBackupAt: 'Last backup in {store}: {time}',
+  lastBackupNever: 'Nothing backed up in {store} yet.',
+  storeCloud: 'your browser account',
+  storeLocal: 'this browser',
   preferences: 'Preferences',
   add: 'Add',
   cancel: 'Cancel',
@@ -333,7 +345,10 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     backups: '백업',
     transferJson: 'JSON 내보내기·가져오기',
     backupHistory: '백업 히스토리',
-    lastBackupAt: '마지막 백업: {time}',
+    lastBackupAt: '{store}의 마지막 백업: {time}',
+    lastBackupNever: '{store}에는 아직 백업이 없습니다.',
+    storeCloud: '브라우저 계정',
+    storeLocal: '이 브라우저',
     preferences: '환경설정',
     add: '추가',
     cancel: '취소',

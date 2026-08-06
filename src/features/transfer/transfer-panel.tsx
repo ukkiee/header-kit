@@ -6,7 +6,7 @@ import { AlertBanner } from '@/ui/alert-banner';
 import { Button } from '@/ui/press-button';
 import { Checkbox } from '@/ui/checkbox';
 import { TextArea } from '@/ui/text-field';
-import { Card, CardAction, CardHeader, CardContent, CardTitle } from '@/ui/card';
+import { SectionCard } from '@/ui/section-card';
 import { useT } from '@/ui/i18n-context';
 
 export interface TransferPanelProps {
@@ -79,23 +79,23 @@ export function TransferPanel({ state, onCommand, download = browserDownload }: 
    * 찾는다. 나머지 셋(동기화·히스토리·초기화)은 `BackupPanel`이 같은 `Card` 셸로 그린다.
    */
   return (
-    <Card size="sm" className="gap-2 text-xs">
-      <CardHeader>
-        <CardTitle>{t('transferJson')}</CardTitle>
-        <CardAction className="flex gap-1">
+    <SectionCard
+      title={t('transferJson')}
+      actions={
+        <>
           <Button variant="ghost" size="sm" onClick={() => enterMode(mode === 'export' ? 'idle' : 'export')}>
             {t('export')}
           </Button>
           <Button variant="ghost" size="sm" onClick={() => enterMode(mode === 'import' ? 'idle' : 'import')}>
             {t('import')}
           </Button>
-        </CardAction>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-2">
+        </>
+      }
+    >
       {notices.length > 0 && (
         <AlertBanner as="ul" severity="info" size="xs">
-          {notices.map((notice) => (
-            <li key={notice}>{notice}</li>
+          {notices.map((notice, index) => (
+            <li key={`${index}-${notice}`}>{notice}</li>
           ))}
         </AlertBanner>
       )}
@@ -165,7 +165,6 @@ export function TransferPanel({ state, onCommand, download = browserDownload }: 
           </div>
         </div>
       )}
-      </CardContent>
-    </Card>
+    </SectionCard>
   );
 }

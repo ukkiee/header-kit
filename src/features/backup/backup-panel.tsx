@@ -15,7 +15,7 @@ import { requestBackupMutation } from '@/platform/stateStore';
 import { RotateCcw, Trash2 } from 'lucide-react';
 import { AlertBanner } from '@/ui/alert-banner';
 import { Button } from '@/ui/press-button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/ui/card';
+import { SectionCard } from '@/ui/section-card';
 import { IconButton } from '@/ui/icon-button';
 import { Pill } from '@/ui/pill';
 import { ToggleSwitch } from '@/ui/toggle-switch';
@@ -26,6 +26,11 @@ export interface BackupPanelProps {
   syncBackup: boolean;
   /** 권위 실행 결과를 돌려받는다 — 거부된 복원을 성공처럼 표시하지 않기 위해. */
   onCommand: (command: Command) => Promise<{ ok: boolean; error?: string }>;
+  /**
+   * 주입 지점 넷은 **안정된 참조**여야 한다 (code-review). 렌더마다 새로 만든 함수를 넘기면
+   * 목록 로드가 매번 다시 돌고, 그 결과가 새 배열이라 잔존 여부 effect까지 함께 돌아 루프가 된다.
+   * 기본값은 모듈 최상위 임포트라 그 조건을 이미 만족한다.
+   */
   loadSnapshots?: (target: BackupTarget) => Promise<SnapshotStatus[]>;
   loadSnapshotText?: (
     entry: SnapshotStatus,
@@ -93,30 +98,6 @@ type CloudPresence = 'unknown' | 'present' | 'none';
  * 하나만 담기 때문에 다른 파괴적 동작을 켜는 것이 앞의 확인을 그대로 취소한다.
  */
 type Confirming = { id: string; action: 'restore' | 'delete' };
-
-/**
- * 백업 화면의 카드 하나 — 셋이 같은 셸을 쓴다 (티켓 09).
- *
- * `Card` 프리미티브를 그대로 조립한다. 예전에는 이 화면 전체가 접히는 패널 하나였는데, 시안이
- * 카드 넷으로 나눠 그렸다 — 접기는 없어졌다: 레일에서 이 화면으로 온 사람은 이미 백업을 보러
- * 온 것이라, 도착하자마자 펼치는 클릭이 하는 일이 없었다.
- */
-function BackupCard({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <Card size="sm" className="gap-2 text-xs">
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-2">{children}</CardContent>
-    </Card>
-  );
-}
 
 export function BackupPanel({
   syncBackup,
@@ -269,6 +250,13 @@ export function BackupPanel({
   };
 
   const backedUpAt = lastBackupAt(snapshots);
+  /*
+   * 시각은 **지금 활성 저장소**의 것이다 — 히스토리 카드가 보여 주는 그 목록에서 나온다.
+   * 그래서 문구가 저장소를 밝힌다: 밝히지 않으면 동기화를 끈 직후 로컬이 비었을 때
+   * "아직 백업 없음" 아래에 "클라우드에 백업이 남아 있습니다"가 나란히 서서 카드가
+   * 자기모순을 말한다 (code-review).
+   */
+  const storeName = t(target === 'sync' ? 'storeCloud' : 'storeLocal');
 
   return (
     <>
@@ -279,8 +267,9 @@ export function BackupPanel({
       )}
       {notices.length > 0 && (
         <AlertBanner as="ul" severity="info" size="xs">
-          {notices.map((notice) => (
-            <li key={notice}>{notice}</li>
+          {notices.map((notice, index) => (
+            // 같은 문구가 둘일 수 있다 — 프로필 이름이 같은 두 항목이 같은 공지를 낸다.
+            <li key={`${index}-${notice}`}>{notice}</li>
           ))}
         </AlertBanner>
       )}
@@ -291,7 +280,7 @@ export function BackupPanel({
 
           **기기 수는 말하지 않는다** (티켓 AC3): 브라우저가 알려 주지 않는 값이라 셀 방법이
           없다. 말할 수 있는 것은 어디에 두는지와 마지막이 언제였는지뿐이다. */}
-      <BackupCard title={t('cloudSync')}>
+      <SectionCard title={t('cloudSync')}>
         <div className="flex items-start justify-between gap-2">
           <div className="flex flex-col">
             <span className="text-muted-foreground">
@@ -299,8 +288,11 @@ export function BackupPanel({
             </span>
             <span className="text-muted-foreground">
               {backedUpAt === null
-                ? t('noBackupsYet')
-                : format(t('lastBackupAt'), { time: new Date(backedUpAt).toLocaleString() })}
+                ? format(t('lastBackupNever'), { store: storeName })
+                : format(t('lastBackupAt'), {
+                    store: storeName,
+                    time: new Date(backedUpAt).toLocaleString(),
+                  })}
             </span>
             <span className="text-muted-foreground">
               {cloudPresence === 'present'
@@ -330,10 +322,10 @@ export function BackupPanel({
             {confirmingClear ? t('confirmDeleteCloudBackups') : t('deleteCloudBackups')}
           </Button>
         </div>
-      </BackupCard>
+      </SectionCard>
 
       {/* 카드 3 — 백업 히스토리 (스펙 story 76). 각 행이 시각·요약을 말하고 복원·삭제를 든다. */}
-      <BackupCard title={t('backupHistory')}>
+      <SectionCard title={t('backupHistory')}>
         {snapshots.length === 0 ? (
           <p className="text-muted-foreground">{t('noBackupsYet')}</p>
         ) : (
@@ -390,11 +382,11 @@ export function BackupPanel({
             ))}
           </ul>
         )}
-      </BackupCard>
+      </SectionCard>
 
       {/* 카드 4 — 전체 초기화 (R-3, 스펙 story 77). 되돌릴 수 없으므로 2단계 확인을 거친다.
           무엇이 지워지는지와 "실패해도 되돌아오지 않는다"를 누르기 전에 말한다. */}
-      <BackupCard title={t('resetEverything')}>
+      <SectionCard title={t('resetEverything')}>
         <p className="text-muted-foreground">{t('resetEverythingNote')}</p>
         <p className="text-muted-foreground">{t('resetRetryNote')}</p>
         <div className="flex justify-end">
@@ -407,7 +399,7 @@ export function BackupPanel({
             {confirmingReset ? t('confirmResetEverything') : t('resetEverything')}
           </Button>
         </div>
-      </BackupCard>
+      </SectionCard>
     </>
   );
 }

@@ -1791,14 +1791,22 @@ try {
   // 랜드마크가 패널 토글에서 **카드 제목**으로 바뀌었다 (티켓 09) — 접히는 패널이 없어졌다.
   const backupsShown = await tabApp.getByText('Backup history', { exact: true })
     .waitFor({ timeout: 5000 }).then(() => true, () => false);
+  // 넓은 본문에서 **넘치지 않는지**까지 본다 (티켓 09 AC8) — 팝업은 N41g가 재고, 탭은 여기다.
+  const backupsOverflow = await tabApp.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
   await tabApp.getByRole('button', { name: 'Show settings' }).click();
   const prefsShown = await tabApp.getByText('Theme', { exact: true })
     .waitFor({ timeout: 5000 }).then(() => true, () => false);
+  const prefsOverflow = await tabApp.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
   await tabApp.getByRole('button', { name: 'Show profiles' }).click();
-  record('N9: 탭 앱 셸 — 검색 필터·사이드바 선택·레일 전환',
+  record('N9: 탭 앱 셸 — 검색 필터·사이드바 선택·레일 전환, 넓은 본문에서 넘치지 않는다',
     searchResult.length === 1 && searchResult[0]?.startsWith('Beta') && sidebarSelected === 'Gamma'
-      && backupsShown && prefsShown,
-    `search=[${searchResult.join('|')}], selected=${sidebarSelected}, backups=${backupsShown}, prefs=${prefsShown}`);
+      && backupsShown && prefsShown && backupsOverflow === 0 && prefsOverflow === 0,
+    `search=[${searchResult.join('|')}], selected=${sidebarSelected}, backups=${backupsShown}, ` +
+      `prefs=${prefsShown}, overflow 백업=${backupsOverflow}·설정=${prefsOverflow}`);
 
   // N10: 표면 동일성 — 탭 앱에서 규칙 폼으로 추가 → 실제 요청 반영 (ADR 0006 원자 저장)
   /*
@@ -5479,7 +5487,17 @@ try {
   const syncText = (await syncCard.textContent()) ?? '';
   // 저장 위치는 말한다. 마지막 시각은 스냅샷이 있으면 시각을, 없으면 "아직 없다"를 말한다.
   const saysLocation = /new backups (go to your browser account|stay in this browser)/i.test(syncText);
-  const saysWhen = /Last backup: /.test(syncText) || /No backups yet/.test(syncText);
+  /*
+   * 시각 문구가 **어느 저장소인지 밝히는지**까지 본다 (code-review). 예전 단언은
+   * `Last backup: ` 또는 `No backups yet` 아무거나 통과시켰는데, 그 느슨함이 정확히
+   * 이 카드의 자기모순을 놓쳤다 — 동기화를 끈 직후 로컬이 비면 "백업 없음" 바로 아래에
+   * "클라우드에 백업이 남아 있습니다"가 나란히 선다.
+   */
+  const saysWhen =
+    /Last backup in (your browser account|this browser): /.test(syncText) ||
+    /Nothing backed up in (your browser account|this browser) yet\./.test(syncText);
+  // 히스토리 카드의 빈 상태 문장이 동기화 카드에까지 번지지 않는다 — 같은 화면에 두 번 서면 안 된다.
+  const borrowsHistoryEmpty = /No backups yet/.test(syncText);
   // 기기 수 — `N devices`·`2 browsers` 같은 표현이 하나도 없어야 한다.
   const saysDeviceCount = /\d+\s*(devices?|browsers?|기기|브라우저)/i.test(syncText);
   record('N50: 백업 화면 — 카드 넷(JSON·동기화·히스토리·초기화), 동기화는 위치·시각만 말하고 기기 수는 말하지 않는다',
@@ -5488,8 +5506,9 @@ try {
       backupCards[1] === 'Cloud sync' &&
       backupCards[2] === 'Backup history' &&
       backupCards[3] === 'Reset everything' &&
-      saysLocation && saysWhen && !saysDeviceCount,
-    `카드=${JSON.stringify(backupCards)}, 위치=${saysLocation}, 시각=${saysWhen}, 기기수=${saysDeviceCount}`);
+      saysLocation && saysWhen && !saysDeviceCount && !borrowsHistoryEmpty,
+    `카드=${JSON.stringify(backupCards)}, 위치=${saysLocation}, 시각(저장소 명시)=${saysWhen}, ` +
+      `기기수=${saysDeviceCount}, 히스토리 문장 차용=${borrowsHistoryEmpty}`);
 
   /*
    * N51: **복원이 걷어 간 것을 말한다** (티켓 02에서 이월한 빚).

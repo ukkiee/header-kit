@@ -447,6 +447,15 @@ export function verifySnapshotDeleteComplete(
 }
 
 /** 복원 목록 — 손상 스냅샷도 사유와 함께 표시한다 (조용히 숨기지 않는다). */
+export function listSnapshots(kv: SyncKV): SnapshotStatus[] {
+  return readManifest(kv).snapshots.map((entry) => {
+    const decoded = decodeSnapshotText(kv, entry);
+    return decoded.ok
+      ? { ...entry, status: 'ok' as const }
+      : { ...entry, status: 'corrupt' as const, reason: decoded.reason };
+  });
+}
+
 /**
  * 마지막으로 백업된 시각 — 없으면 `null` (티켓 09, 스펙 story 75).
  *
@@ -465,13 +474,4 @@ export function lastBackupAt(snapshots: readonly SnapshotStatus[]): number | nul
     (latest, entry) => (latest === null || entry.createdAt > latest ? entry.createdAt : latest),
     null,
   );
-}
-
-export function listSnapshots(kv: SyncKV): SnapshotStatus[] {
-  return readManifest(kv).snapshots.map((entry) => {
-    const decoded = decodeSnapshotText(kv, entry);
-    return decoded.ok
-      ? { ...entry, status: 'ok' as const }
-      : { ...entry, status: 'corrupt' as const, reason: decoded.reason };
-  });
 }

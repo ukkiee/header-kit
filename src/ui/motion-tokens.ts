@@ -15,7 +15,6 @@ export const PRESS_SPRING = { type: 'spring', stiffness: 420, damping: 26, mass:
  * 0.18s는 동작이 끝난 것을 눈이 따라가기 전에 사라져 "툭 끊긴다"는 인상이었다.
  */
 export const ROW_TRANSITION = { duration: 0.26, ease: 'easeOut' } as const;
-// 접이식 패널(CollapsiblePanel)도 이 값을 쓴다 — 같은 MotionRow를 타므로 따로 두지 않는다.
 
 /**
  * 떠 있는 팝업 열림/닫힘 — Select 팝업. 열릴 때 위에서 아래로 내려오고 닫힐 때 위로 접힌다.
@@ -27,7 +26,7 @@ export const POPUP_FADE_S = 0.18;
  * 팝업 열림 이징 — 끝에서 살짝 지나쳤다 돌아오는 spring 느낌의 CSS 곡선.
  *
  * 여기만 motion의 spring이 아니라 CSS인 이유는 팝업의 마운트를 Base UI가 소유하기
- * 때문이다(`collapsible-panel.tsx`와 같은 사정). 대신 곡선을 여기 한 곳에 둔다.
+ * 때문이다 — 마운트를 우리가 쥐지 않으면 motion의 enter/exit을 걸 자리가 없다. 대신 곡선을 여기 한 곳에 둔다.
  * 닫힘에는 쓰지 않는다 — 사라지는 것이 되돌아오는 인상은 어색하다.
  */
 export const POPUP_SPRING_EASE = 'cubic-bezier(0.34, 1.56, 0.64, 1)';
