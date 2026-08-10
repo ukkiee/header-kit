@@ -21,6 +21,10 @@ import {
  *    스모크 N20a가 이 버튼을 이름으로 찾는다.
  * 2. **닫기 버튼 없음**: shadcn은 항상 X를 붙이지만 이 앱은 두지 않는다 — 자동 소멸과
  *    실행 취소 클릭이 닫음을 겸한다(원래 toast 주석의 결정).
+ *
+ * `cursor-pointer`를 여기서 한 번 더 주는 이유: 앱의 버튼 커서는 `press-button`이 지는데
+ * (Tailwind v4 preflight가 버튼을 기본 커서로 되돌렸다) shadcn `toast.tsx`는 그 조합을
+ * 거치지 않고 shadcn `Button`을 직접 렌더한다. 이 앱이 손댈 수 있는 마지막 자리가 여기다.
  */
 function AppToastList() {
   const { toasts } = useToastManager();
@@ -28,7 +32,9 @@ function AppToastList() {
     <Toast key={item.id} toast={item}>
       <ToastContent>
         <ToastTitle className="min-w-0 flex-1 truncate" />
-        {item.actionProps && <ToastAction>{actionLabel(item.data)}</ToastAction>}
+        {item.actionProps && (
+          <ToastAction className="cursor-pointer">{actionLabel(item.data)}</ToastAction>
+        )}
       </ToastContent>
     </Toast>
   ));
