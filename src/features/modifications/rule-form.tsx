@@ -300,7 +300,18 @@ export function RuleForm({
       {/* 첫 줄은 이름(메모)과 규칙 종류다 (story 20). */}
       <div className="grid grid-cols-1 gap-2 @xl:grid-cols-2">
         <FieldLabeled label={t('ruleName')}>
+          {/*
+            **새 규칙은 여기서 시작한다.** 예전에는 종류마다 다른 칸(헤더 이름·값·패턴·URL)이
+            열리자마자 포커스를 가져갔다 — 폼의 첫 칸을 건너뛰고 중간에 커서가 놓이는 셈이라,
+            이름을 적으려면 위로 되돌아가야 했고 그 칸이 있다는 것도 잘 보이지 않았다.
+
+            **편집은 그대로 종류별 첫 칸이다.** 고치러 들어오는 사람은 이미 이름을 아는 규칙을
+            열었고, 고칠 것은 대개 값 쪽이다 — 스모크 L2f가 그 계약을 못박는다. 그래서 이
+            `autoFocus`와 아래 종류별 `autoFocus` 들이 `editing`으로 정확히 갈린다: 둘이 함께
+            켜지면 같은 커밋에서 두 번 focus()가 불려 승자가 트리 순서에 달린다.
+          */}
           <Input
+            autoFocus={!editing}
             value={draft.comment}
             onChange={(e) => setDraft({ ...draft, comment: e.target.value } as Modification)}
           />
@@ -344,8 +355,9 @@ export function RuleForm({
             />
             <Input
               ref={urlFilterRef}
-              // Block에서는 이 입력이 규칙의 전부라, 폼을 열면 여기부터 채우게 한다.
-              autoFocus={draft.kind === 'block'}
+              // 편집으로 연 Block에서는 이 입력이 규칙의 전부라, 여기부터 고치게 한다.
+              // 새 규칙은 이름이 먼저다(위).
+              autoFocus={editing && draft.kind === 'block'}
               value={'urlFilter' in draft ? (draft.urlFilter ?? '') : ''}
               onChange={(e) => {
                 setDraft({
@@ -383,7 +395,7 @@ export function RuleForm({
           {/* 라벨로 찾고 값을 넣는다 (story 39) — 긴 문자열을 외우거나 복사해 오지 않게. */}
           <SuggestInput
             ref={valueRef}
-            autoFocus
+            autoFocus={editing}
             className="font-mono"
             value={draft.value}
             onChange={(value) => setDraft({ ...draft, value })}
@@ -402,7 +414,7 @@ export function RuleForm({
         <FieldLabeled label={t('headerName')} error={fieldError('name')}>
           <SuggestInput
             ref={nameRef}
-            autoFocus
+            autoFocus={editing}
             value={draft.name}
             onChange={(name) => setDraft({ ...draft, name })}
             suggestions={suggestHeaderNames(draft.name, history.headerNames)}
@@ -425,7 +437,7 @@ export function RuleForm({
                 */}
                 <SuggestInput
                   ref={nameRef}
-                  autoFocus
+                  autoFocus={editing}
                   value={draft.name ?? ''}
                   onChange={(name) => patchDraft({ name })}
                   suggestions={
@@ -443,7 +455,7 @@ export function RuleForm({
             <FieldLabeled label={isCookieKind ? t('cookieValue') : t('value')}>
               <div className="flex items-center gap-1">
                 <Input
-                  autoFocus={draft.kind === 'set-cookie'}
+                  autoFocus={editing && draft.kind === 'set-cookie'}
                   value={draft.value}
                   onChange={(e) => patchDraft({ value: e.target.value })}
                   className="min-w-0 flex-1"
@@ -531,7 +543,7 @@ export function RuleForm({
             <FieldLabeled label={t('redirectPattern')} error={fieldError('pattern')}>
               <Input
                 ref={patternRef}
-                autoFocus
+                autoFocus={editing}
                 className="font-mono"
                 value={draft.pattern}
                 onChange={(e) => setDraft({ ...draft, pattern: e.target.value })}
