@@ -11,7 +11,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
-import { ROW_TRANSITION } from '../src/ui/motion-tokens.ts';
+import { POPUP_FADE_S, ROW_TRANSITION } from '../src/ui/motion-tokens.ts';
 import { EXPORT_FORMAT_VERSION } from '../src/core/format-version.ts';
 
 const EXT_PATH = path.resolve(
@@ -866,6 +866,10 @@ try {
   const longValue = 'x'.repeat(300);
   await tabApp.getByRole('textbox', { name: /Value —/ }).fill(longValue);
   await tabApp.getByRole('button', { name: 'Save large editor' }).click();
+  // 닫힘을 **명시적으로** 기다린다. 다이얼로그가 퇴장 전이를 갖게 되면서(ADR 0012의 CSS
+  // 전이) 닫는 중에도 `fixed inset-0` 백드롭이 잠시 살아 있고, 그 사이에 들어간 다음
+  // 클릭은 백드롭이 삼킨다 — 셀렉트 팝업에서 이미 겪은 실패 모양이다(N25의 대기 규율).
+  await tabApp.getByRole('dialog').waitFor({ state: 'detached', timeout: 5000 });
   // 에디터는 초안에만 반영 — 폼 Save가 원자 저장한다 (ADR 0006)
   await tabApp.getByRole('button', { name: SAVE_BUTTON }).click();
   const savedValue = await pollUntil(
@@ -1065,6 +1069,11 @@ try {
   // 두 방향을 함께 건다 — 한쪽만 있으면 반대쪽으로 퇴화한다. 교체 때 autoFocus를 무조건
   // 끄면 L2e는 통과하고 L2f가 깨지고(폼을 열어도 포커스가 아무 데도 없음), 무조건 넘기면
   // L2f는 통과하고 L2e가 깨진다(사용자가 옮긴 포커스를 도로 뺏음).
+  //
+  // **두 시나리오 모두 편집 경로다** — `openRuleFormAt`이 Edit를 누른다. 헤더 이름의
+  // autoFocus는 이제 편집에만 남고, 추가 경로의 첫 포커스는 맨 위 이름 칸이다(N18a).
+  // 그래서 여기서 지키는 것은 "편집으로 연 폼에서 종류별 첫 칸이 포커스를 갖고, 지연
+  // 교체가 그것을 흔들지 않는다"이다.
   const AUTOCOMPLETE_CHUNK = '**/suggest-autocomplete-*.js';
   const CHUNK_DELAY_MS = 900;
   const waitForCombobox = (page, timeout = 8000) =>
@@ -2160,14 +2169,22 @@ try {
   // a: 빈 헤더 이름 Save → 인라인 오류 + aria-invalid + 저장 안 됨(폼 유지)
   await popup.getByRole('button', { name: 'Add rule' }).first().click();
   const nameInput = popup.getByLabel('Header name', { exact: true }).first();
-  // 클릭 직후 한 번만 읽으면 레이스다 — 헤더 이름 입력은 지연 청크가 도착하며 한 번
-  // 교체되고(ui-polish 03), 그 찰나에 읽으면 이전 노드나 body를 보게 된다. 사용자에게
-  // 보이는 계약은 "폼이 열리면 이 필드에 포커스가 있다"이므로 정착을 기다려 단언한다.
+  /*
+   * **새 규칙은 맨 위 '이름'(메모) 칸에서 시작한다.** 예전에는 종류별 첫 칸(여기서는 헤더
+   * 이름)이 포커스를 가져갔는데, 그러면 폼의 첫 칸을 건너뛰고 중간에 커서가 놓여 이름을
+   * 적으려면 위로 되돌아가야 했다. **편집** 경로는 그대로 종류별 첫 칸이고 그쪽 계약은
+   * L2f가 지킨다 — 두 경로가 갈린다는 것이 이 단언과 L2f를 함께 읽어야 하는 이유다.
+   *
+   * 이름 입력은 `aria-label`이 아니라 Field 라벨로 이름을 얻으므로(FieldLabeled의 자동
+   * 연결) `input[aria-label=…]`으로는 못 잡는다. 포커스된 요소에서 **거꾸로** 그 라벨을
+   * 읽는다 — 정착을 기다리는 이유는 헤더 이름 입력이 지연 청크 도착 시 한 번 교체되기
+   * 때문이다(ui-polish 03): 그 리마운트가 포커스를 훔치지 않는지까지 이 대기가 본다.
+   */
   const autofocused = await popup
     .waitForFunction(
       () => {
-        const el = document.querySelector('input[aria-label="Header name"]');
-        return !!el && document.activeElement === el;
+        const el = document.activeElement;
+        return el instanceof HTMLInputElement && el.labels?.[0]?.textContent?.trim() === 'Name';
       },
       null,
       { timeout: 500 },
@@ -2181,9 +2198,9 @@ try {
     const { state } = await chrome.storage.local.get('state');
     return state.profiles[0].modifications.length;
   });
-  record('N18a: 빈 필수 필드 Save 차단 — 인라인 오류·aria-invalid·스토리지 불변·autofocus',
+  record('N18a: 빈 필수 필드 Save 차단 — 인라인 오류·aria-invalid·스토리지 불변·이름 칸 autofocus',
     autofocused && inlineError && ariaInvalid === 'true' && modsAfterBlockedSave === 1,
-    `autofocus=${autofocused}, error=${inlineError}, aria-invalid=${ariaInvalid}, mods=${modsAfterBlockedSave}`);
+    `autofocus(이름)=${autofocused}, error=${inlineError}, aria-invalid=${ariaInvalid}, mods=${modsAfterBlockedSave}`);
 
   // N18f: Type 셀렉트가 더는 CSP를 제공하지 않는다 (ADR 0013). "CSP 없음"만 단언하면
   // 셀렉트가 통째로 깨져도 통과하므로, 남아야 할 종류가 빠짐없이 그대로인지 함께 본다.
@@ -3216,12 +3233,25 @@ try {
     `취소 reduced=${reducedClose?.toFixed?.(0)}ms/lively=${livelyClose?.toFixed?.(0)}ms, ` +
     `저장 reduced=${reducedSave?.toFixed?.(0)}ms/lively=${livelySave?.toFixed?.(0)}ms (exit 창 ${exitWindowMs}ms)`);
 
-  // N25: URL 매치 방식 셀렉트 폭 고정 (ui-polish 07, stories 1·2·3).
-  // 폭 안정성만 보면 폭을 좁게 잡아 라벨이 잘려도 통과한다 — 두 단언을 함께 건다.
-  // 로케일마다 라벨 길이가 달라 en에서만 재면 ko 회귀를 놓치므로 양쪽을 순회한다.
-  const measureMatchTypeWidths = async (page, matchLabel, editLabel, probeAfterPick) => {
-    await page.getByRole('button', { name: editLabel, exact: true }).first().click();
-    const trigger = page.getByRole('combobox', { name: matchLabel, exact: true });
+  /*
+   * N25: 셀렉트 폭 계약 (ui-polish 07, stories 1·2·3) — **앱의 모든 셀렉트가 같은 고정 폭이고,
+   * 트리거에서도 팝업에서도 라벨이 잘리지 않는다.**
+   *
+   * 폭 안정성만 보면 폭을 좁게 잡아 라벨이 잘려도 통과한다 — 절단 단언을 함께 건다.
+   * 로케일마다 라벨 길이가 달라 en에서만 재면 ko 회귀를 놓치므로 양쪽을 순회한다.
+   *
+   * **트리거만 재던 시절의 구멍을 메운다.** 예전에는 트리거의 `.truncate` 노드만 봤고
+   * 팝업 폭 단언(`popupAtLeastAnchor`)은 팝업이 구조적으로 앵커 폭이라 늘 참인 공허한
+   * 단언이었다 — 그 사이로 종류 셀렉트의 ko `User-Agent 변경`이 팝업에서 20px 잘린 채
+   * 살아 있었다. 이제 **팝업 항목 자체의 절단**을 재고, 대상도 매치 방식 하나가 아니라
+   * **두 셀렉트 모두**다(종류가 가장 긴 라벨을 든다).
+   *
+   * 같은 자리에서 **선택 표시**도 본다. 고른 항목은 체크 글리프가 아니라 면으로 말하므로
+   * (tokens.ts의 `popupItemSelected`), 그것이 되돌아가면 옵션 안에 svg가 생기거나 선택
+   * 항목의 배경이 나머지와 같아진다 — 둘 다 여기서 걸린다.
+   */
+  const measureSelectWidths = async (page, selectLabel, probeAfterPick) => {
+    const trigger = page.getByRole('combobox', { name: selectLabel, exact: true });
     await trigger.waitFor({ timeout: 5000 });
     const listbox = page.getByRole('listbox');
     // 팝업이 닫히는 중에 다음 클릭이 들어가면 Base UI의 inert 백드롭이 가로챈다 —
@@ -3234,6 +3264,36 @@ try {
 
     await openPopup();
     const options = (await page.getByRole('option').allTextContents()).map((n) => n.trim());
+    /*
+     * 팝업 안의 것들은 **열려 있는 지금 한 번에** 잰다 — 항목 폭도 선택 표시 문법도 어느
+     * 값을 골랐는지에 따라 변하지 않는다. 옵션마다 다시 열어 재면 시간만 늘고 같은 수를 본다.
+     */
+    const popupProbe = await page.evaluate(() => {
+      /*
+       * **보이는 팝업 하나로 좁힌다.** 닫힌 셀렉트의 목록은 DOM에서 사라지지 않고 `hidden`
+       * 으로 남는다 — 접근성 트리에서는 빠지므로 Playwright의 role 조회(`getByRole`)에는
+       * 안 잡히지만 `querySelectorAll('[role="option"]')`에는 그대로 잡힌다. 문서 전체를
+       * 훑으면 앞서 열었던 셀렉트의 항목이 섞여 들어와 "고른 항목이 둘"이 된다.
+       */
+      const list = [...document.querySelectorAll('[role="listbox"]')].find((el) =>
+        el.checkVisibility(),
+      );
+      const items = list ? [...list.querySelectorAll('[role="option"]')] : [];
+      const bg = (el) => getComputedStyle(el).backgroundColor;
+      const selected = items.filter((el) => el.getAttribute('aria-selected') === 'true');
+      return {
+        count: items.length,
+        // 항목은 `whitespace-nowrap`이라 넘치면 접히지 않고 넘친다 — 그래야 여기서 보인다.
+        clipped: items
+          .filter((el) => el.scrollWidth > el.clientWidth + 1)
+          .map((el) => el.textContent.trim()),
+        selectedCount: selected.length,
+        selectedBg: selected.map(bg),
+        otherBgs: items.filter((el) => !selected.includes(el)).map(bg),
+        // 체크 글리프는 없다 — 선택은 면이 말한다.
+        glyphs: items.filter((el) => el.querySelector('svg')).length,
+      };
+    });
     await page.keyboard.press('Escape');
     await closePopup();
 
@@ -3264,7 +3324,7 @@ try {
       // 흉내 내면 대기 규율이 두 곳으로 갈라진다.
       if (probeAfterPick) probes.push(await probeAfterPick());
     }
-    return { options, rows, popupAtLeastAnchor, probes };
+    return { options, rows, popupAtLeastAnchor, probes, popupProbe };
   };
 
   await seedProfiles([
@@ -3274,23 +3334,30 @@ try {
     ]),
   ]);
   await popup.reload();
+  await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
   // 폭이 고정이면 옆의 패턴 입력도 자리를 지킨다 — 사용자가 말한 증상이 이것이다.
-  const widthEn = await measureMatchTypeWidths(popup, 'URL match type', 'Edit', () =>
+  const widthEn = await measureSelectWidths(popup, 'URL match type', () =>
     popup
       .getByLabel('URL filter')
       .first()
       .evaluate((el) => Number(el.getBoundingClientRect().left.toFixed(2))),
   );
   const patternLeftEdges = widthEn.probes;
+  // 종류는 **매치 방식 다음**에 순회한다 — 리다이렉트로 바꾸는 순간 URL 스코프 행이
+  // 사라져 위의 패턴 입력 프로브가 잡을 것을 잃는다.
+  const kindEn = await measureSelectWidths(popup, 'Type');
   await popup.getByRole('button', { name: 'Cancel', exact: true }).click();
 
   const widthPopupKo = await context.newPage();
   await widthPopupKo.setViewportSize({ width: 760, height: 580 });
   await widthPopupKo.goto(`chrome-extension://${extensionId}/popup.html?locale=ko`);
   await widthPopupKo.getByRole('button', { name: '규칙 추가' }).waitFor({ timeout: 5000 });
-  const widthKo = await measureMatchTypeWidths(widthPopupKo, 'URL 매치 방식', '편집');
+  await widthPopupKo.getByRole('button', { name: '편집', exact: true }).first().click();
+  const widthKo = await measureSelectWidths(widthPopupKo, 'URL 매치 방식');
+  const kindKo = await measureSelectWidths(widthPopupKo, '종류');
   await widthPopupKo.close();
 
+  const measured = [widthEn, kindEn, widthKo, kindKo];
   const stableWidth = (rows) =>
     rows.length > 1 &&
     Math.max(...rows.map((r) => r.width)) - Math.min(...rows.map((r) => r.width)) <= 0.5;
@@ -3298,16 +3365,34 @@ try {
   // 공허하게 참이 되면 안 된다.
   const noClipping = (rows) =>
     rows.length > 0 && rows.every((r) => r.scroll >= 0 && r.scroll <= r.client + 1);
+  /*
+   * **네 셀렉트가 전부 같은 폭이다.** 각자 안에서만 안정적인 것으로는 부족하다 — 폭 변형이
+   * 되살아나면 자리마다 다른 폭이 되는데, 셀렉트별 단언은 그것을 하나도 보지 못한다.
+   */
+  const allWidths = measured.flatMap((m) => m.rows.map((r) => r.width));
+  const oneWidth = allWidths.length > 0 && Math.max(...allWidths) - Math.min(...allWidths) <= 0.5;
+  // 선택 표시 — 고른 항목이 정확히 하나이고, 그 면이 나머지 어느 항목과도 다르며, 체크 없음.
+  const selectionShown = (p) =>
+    p.count > 1 &&
+    p.selectedCount === 1 &&
+    p.glyphs === 0 &&
+    p.selectedBg[0] !== 'rgba(0, 0, 0, 0)' &&
+    p.otherBgs.every((bg) => bg !== p.selectedBg[0]);
   const patternStable =
     patternLeftEdges.length > 1 &&
     Math.max(...patternLeftEdges) - Math.min(...patternLeftEdges) <= 0.5;
-  record('N25: 매치 방식 셀렉트 — en/ko 모든 옵션에서 폭 동일·라벨 미절단, 패턴 입력 고정',
-    stableWidth(widthEn.rows) && noClipping(widthEn.rows) &&
-      stableWidth(widthKo.rows) && noClipping(widthKo.rows) &&
-      widthEn.popupAtLeastAnchor && widthKo.popupAtLeastAnchor && patternStable,
-    `en 폭=${[...new Set(widthEn.rows.map((r) => r.width))].join('/')} 미절단=${noClipping(widthEn.rows)}, ` +
-    `ko 폭=${[...new Set(widthKo.rows.map((r) => r.width))].join('/')} 미절단=${noClipping(widthKo.rows)}, ` +
-    `패턴 좌변=${[...new Set(patternLeftEdges)].join('/')}, 팝업≥앵커=${widthEn.popupAtLeastAnchor && widthKo.popupAtLeastAnchor}`);
+  record('N25: 셀렉트 — en/ko 두 셀렉트 모두 같은 고정 폭·트리거/팝업 미절단, 선택은 면으로, 패턴 입력 고정',
+    measured.every((m) => stableWidth(m.rows) && noClipping(m.rows) && m.popupAtLeastAnchor) &&
+      measured.every((m) => m.popupProbe.clipped.length === 0) &&
+      measured.every((m) => selectionShown(m.popupProbe)) &&
+      oneWidth && patternStable,
+    `폭=${[...new Set(allWidths)].join('/')} 한폭=${oneWidth}, ` +
+    `트리거 미절단=${measured.map((m) => noClipping(m.rows)).join('/')}, ` +
+    `팝업 절단=${JSON.stringify(measured.flatMap((m) => m.popupProbe.clipped))}, ` +
+    `선택 표시=${measured.map((m) => selectionShown(m.popupProbe)).join('/')} ` +
+    `(체크 svg=${measured.map((m) => m.popupProbe.glyphs).join('/')}, ` +
+    `선택 면=${measured.map((m) => m.popupProbe.selectedBg[0]).join(' | ')}), ` +
+    `패턴 좌변=${[...new Set(patternLeftEdges)].join('/')}`);
 
   // N26: 검증 실패 시 첫 누락 입력으로 포커스 (ui-polish 08, stories 12~16).
   // 저장 전에 포커스를 일부러 딴 곳(종류 셀렉트)에 둔다 — 폼 열림 autoFocus가 남아
@@ -3796,8 +3881,10 @@ try {
     railStructure.map((r) => r.text).join('|') === 'Profiles|Backups|Settings' &&
     railStructure.map((r) => r.aria).join('|') === 'Show profiles|Show backups|Show settings';
 
-  // 프로필 열 — 검색·색 스와치·인라인 토글·새 프로필. 스와치는 활성이면 채움, 비활성이면
-  // 테두리다(색을 지워도 남는 차이) — 그러면서 프로필 색은 두 상태 모두에서 보인다.
+  // 프로필 열 — 검색·색 스와치·인라인 토글·새 프로필. 스와치는 **둘 다 채운 사각**이고
+  // 채움 색만 다르다: 활성은 프로필 색, 비활성은 중립 회색(`--input`). 예전에는 비활성이
+  // '테두리만 남은 사각'이라 안이 뚫려 보였고, 그 테두리가 사용자 색이라 흰색을 고르면
+  // 도형이 사라져 윤곽선을 한 겹 더 얹어야 했다(N41c가 그 겹을 지키던 단언이다).
   const column = await popup.evaluate(() => {
     const rows = [...document.querySelectorAll('[aria-label^="Select profile"]')];
     return {
@@ -3837,9 +3924,12 @@ try {
     column.newProfile &&
     // 스위치는 프로필 하나에 하나뿐이다 — 편집기 헤더에 같은 이름의 스위치가 남아 있으면 4개가 된다.
     column.switches.join('|') === 'Toggle RailA|Toggle RailB' &&
+    // 활성은 **프로필 색**으로 채운다 — 시드 색이 그대로 나와야 한다.
     column.swatches[0]?.bg === 'rgb(37, 99, 235)' &&
-    column.swatches[1]?.bg === 'rgba(0, 0, 0, 0)' &&
-    column.swatches[1]?.border === 'rgb(37, 99, 235)';
+    // 비활성도 채운다(투명이 아니다) — 그러나 프로필 색이 아니라 중립 회색이다.
+    // 두 조건을 함께 걸어야 "그냥 안 칠했다"와 "색을 그대로 뒀다" 둘 다 걸린다.
+    column.swatches[1]?.bg !== 'rgba(0, 0, 0, 0)' &&
+    column.swatches[1]?.bg !== column.swatches[0]?.bg;
 
   // 치수 — 팝업은 760×580 고정, 레일 < 프로필 열 (ADR 0005). 가로 오버플로 0.
   const shellProbe = () => ({
@@ -3883,9 +3973,16 @@ try {
       `tab=${tabShell.w}x${tabShell.h} cols=${JSON.stringify(tabShell.cols)} overflow=${tabShell.overflow}`);
 
   /*
-   * N41c: 비활성 스와치의 대비 (fix R-1) — 비활성 스와치의 테두리는 **프로필 색**이라,
-   * 사용자가 흰색에 가까운 색을 고르면(색은 <input type="color">에서 온다) 라이트 캔버스
-   * 위에서 도형이 사라진다. 색과 무관하게 3:1을 지는 윤곽선이 한 겹 겹쳐 있는지 본다.
+   * N41c: 비활성 스와치의 대비 (fix R-1) — **사용자 색과 무관하게** 보여야 한다.
+   *
+   * 색은 `<input type="color">`에서 오므로 아무 값이나 될 수 있다. 예전에는 비활성 스와치의
+   * 테두리가 그 색이라 흰색에 가까운 값을 고르면 라이트 캔버스에서 도형이 사라졌고, 그래서
+   * `--input` 윤곽선을 한 겹 겹쳐 3:1을 지켰다. 지금은 비활성 채움 자체가 중립 회색이라
+   * 겹칠 것이 없다 — 그러니 재는 것도 "윤곽선이 있는가"가 아니라 **"채움이 사용자 색이
+   * 아니고, 실제로 뒤에 깔린 면에 대해 3:1을 지는가"**로 바뀐다.
+   *
+   * 뒤 면을 조상에서 찾아 올라가는 이유: 스와치가 앉는 곳은 캔버스일 수도 있고 선택된 행의
+   * `bg-secondary`일 수도 있어, 토큰 하나를 배경으로 가정하면 실제와 다른 수를 잰다.
    * N41은 디자인 팔레트의 파랑 하나만 보므로 이 구멍을 볼 수 없다.
    */
   await seedProfiles([
@@ -3896,18 +3993,34 @@ try {
   const whiteSwatch = await popup.evaluate(() => {
     const s = document.querySelector('[aria-label^="Select profile"] span[aria-hidden]');
     if (!s) return null;
+    const parse = (c) => (c.match(/[\d.]+/g) ?? []).map(Number);
+    // 투명 배경은 뒤를 그대로 비추므로 계속 올라간다 — 처음 만나는 불투명 면이 실제 뒤 면이다.
+    const opaqueBehind = (el) => {
+      for (let n = el.parentElement; n; n = n.parentElement) {
+        const [r, g, b, a = 1] = parse(getComputedStyle(n).backgroundColor);
+        if (a > 0) return [r, g, b];
+      }
+      return parse(getComputedStyle(document.body).backgroundColor).slice(0, 3);
+    };
+    const lum = ([r, g, b]) => {
+      const f = (v) => {
+        const x = v / 255;
+        return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+      };
+      return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+    };
     const cs = getComputedStyle(s);
+    const behind = opaqueBehind(s);
+    const [hi, lo] = [lum(parse(cs.backgroundColor).slice(0, 3)), lum(behind)].sort((a, b) => b - a);
     return {
-      border: cs.borderTopColor,
-      outline: cs.outlineColor,
-      style: cs.outlineStyle,
-      width: Math.round(parseFloat(cs.outlineWidth) || 0),
+      fill: cs.backgroundColor,
+      behind: `rgb(${behind.join(', ')})`,
+      ratio: Number(((hi + 0.05) / (lo + 0.05)).toFixed(2)),
     };
   });
-  record('N41c: 비활성 스와치 — 사용자 색(흰색)과 무관한 대비 윤곽선 (비텍스트 3:1)',
-    !!whiteSwatch && whiteSwatch.border === 'rgb(255, 255, 255)' &&
-      whiteSwatch.style !== 'none' && whiteSwatch.width >= 1 &&
-      whiteSwatch.outline !== whiteSwatch.border,
+  record('N41c: 비활성 스와치 — 사용자 색(흰색)과 무관한 중립 채움이 뒤 면에 3:1 (비텍스트)',
+    !!whiteSwatch && whiteSwatch.fill !== 'rgb(255, 255, 255)' &&
+      whiteSwatch.fill !== 'rgba(0, 0, 0, 0)' && whiteSwatch.ratio >= 3,
     `swatch=${JSON.stringify(whiteSwatch)}`);
 
   /*
@@ -5625,6 +5738,90 @@ try {
     `permissions=${JSON.stringify(perms)}, host=${JSON.stringify(manifest.host_permissions)}, ` +
       `alarms API 부재=${alarmsApiGone}, tabs.query 부재=${tabsQueryGone}, ` +
       `탭 열림=${openedTab > beforeTabs} (${beforeTabs}→${openedTab})`);
+
+  /*
+   * N53: 대형 편집기 다이얼로그의 열림·닫힘 전이 (ADR 0012).
+   *
+   * 이 계약은 만들어질 때 관측이 하나도 없었다 — J3은 값이 저장되는지만 보고, 모션 시나리오
+   * (N29·N30·N33)는 패널·셀렉트·스크롤바를 본다. ADR 0012가 "새로 만든 계약은 곧바로
+   * 목록에 올린다"고 적어 둔 이유가 이것이다.
+   *
+   * **두 가지를 함께 본다.** 시간만 재면 "느려서 늦게 사라졌다"와 구분되지 않고, 선언만
+   * 보면 선언이 실제로 발화하는지를 모른다. 그래서 (1) 팝업의 `transition-property`가
+   * 무엇인지와 (2) 닫기부터 DOM에서 사라지기까지 얼마가 걸리는지를 같이 잰다.
+   *
+   * reduced-motion의 계약은 **부재**다(0초 전이가 아니라 `transition-property: none`).
+   * Base UI는 팝업 자신의 애니메이션이 끝나기를 기다렸다 언마운트하므로, 전이가 없으면
+   * 즉시 사라지고 있으면 전이 길이만큼 남는다 — 그 차이가 이 단언의 관측 창이다.
+   *
+   * 닫기는 **Escape**로 한다. 다이얼로그의 '취소'와 규칙 폼의 '취소'가 같은 이름이라
+   * 이름으로는 고를 수 없고, 포털의 Esc는 폼까지 버블되지 않아(rule-form의 onKeyDown 주석)
+   * 다이얼로그만 닫힌다.
+   */
+  const measureDialogClose = async (page) => {
+    await page.getByRole('button', { name: 'Edit', exact: true }).first().click();
+    await page.getByRole('button', { name: /open large editor/i }).first().click();
+    await page.getByRole('dialog').waitFor({ timeout: 5000 });
+    /*
+     * **열림 전이가 끝나기를 기다린다.** 열리는 중에 닫으면 Base UI는 중단된 애니메이션을
+     * '끝난 것'으로 쳐서(`useAnimationsFinished`의 `treatAbortedAsFinished`) 곧바로
+     * 언마운트한다 — 닫힘 전이는 멀쩡히 살아 있는데 관측만 한 프레임으로 나온다.
+     * 처음에 이 대기 없이 재다가 정확히 그 함정에 빠졌다(기본 12ms / reduced 14ms).
+     */
+    await page.waitForTimeout(POPUP_FADE_S * 1000 + 120);
+    const transition = await page.evaluate(() => {
+      const el = document.querySelector('[data-slot="dialog-popup"]');
+      return el ? getComputedStyle(el).transitionProperty : null;
+    });
+    await page.evaluate(() => {
+      window.__dialogGoneMs = null;
+      const start = performance.now();
+      const tick = () => {
+        if (!document.querySelector('[data-slot="dialog-popup"]')) {
+          window.__dialogGoneMs = performance.now() - start;
+        } else {
+          requestAnimationFrame(tick);
+        }
+      };
+      requestAnimationFrame(tick);
+    });
+    await page.keyboard.press('Escape');
+    const observed = await page
+      .waitForFunction(() => window.__dialogGoneMs != null, null, { timeout: 5000 })
+      .then(() => true, () => false);
+    return {
+      transition,
+      goneMs: observed ? await page.evaluate(() => window.__dialogGoneMs) : null,
+    };
+  };
+
+  await seedProfiles([
+    baseProfile('p-dlg', 'Dialog', [
+      { kind: 'request-header', id: 'm1', name: 'X-Dlg', value: 'v', enabled: true,
+        mode: 'override', emptyMeans: 'remove', comment: '' },
+    ]),
+  ]);
+  await popup.emulateMedia({ reducedMotion: null });
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Edit', exact: true }).first().waitFor({ timeout: 5000 });
+  const livelyDialog = await measureDialogClose(popup);
+  await popup.emulateMedia({ reducedMotion: 'reduce' });
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Edit', exact: true }).first().waitFor({ timeout: 5000 });
+  const reducedDialog = await measureDialogClose(popup);
+  await popup.emulateMedia({ reducedMotion: null });
+  // 창은 넉넉히 잡는다 — 재는 것은 "전이가 돌았는가"이지 정확한 밀리초가 아니다.
+  // 기본 180ms(POPUP_FADE_S) 대 즉시(0~1프레임) 사이라 경계가 넓다.
+  const dialogFadeMs = POPUP_FADE_S * 1000;
+  const movesOn = (t) => typeof t === 'string' && t.includes('opacity') && t.includes('scale');
+  record('N53: 대형 편집기 다이얼로그 — 기본은 opacity·scale 전이만큼 남고 reduced는 전이가 없다',
+    movesOn(livelyDialog.transition) &&
+      typeof livelyDialog.goneMs === 'number' && livelyDialog.goneMs >= dialogFadeMs * 0.66 &&
+      reducedDialog.transition === 'none' &&
+      typeof reducedDialog.goneMs === 'number' && reducedDialog.goneMs < dialogFadeMs / 3,
+    `기본 transition="${livelyDialog.transition}" 잔류=${livelyDialog.goneMs?.toFixed?.(0)}ms, ` +
+    `reduced transition="${reducedDialog.transition}" 잔류=${reducedDialog.goneMs?.toFixed?.(0)}ms ` +
+    `(전이 ${dialogFadeMs}ms)`);
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
