@@ -6,9 +6,21 @@ import { ToggleGroup } from '@base-ui/react/toggle-group';
  * aria-pressed·roving focus는 Base UI가 제공한다. 캡션은 이 컴포넌트 밖의 span이고
  * 그룹은 aria-label로 이름을 갖는다 — 라벨 요소가 컨트롤을 감싸지 않으므로
  * 라벨 호버가 첫 칩에 전파되던 버그 구조가 없다.
+ *
+ * **안 고른 칩에도 경계가 있다.** 채움(`bg-secondary`)만으로 칩을 세우던 시절에는, 이 칩들이
+ * 실제로 놓이는 자리 — 규칙 폼 본문 — 이 같은 `bg-secondary` 면이라 칩과 배경이 같은 색이
+ * 됐다. 화면에는 낱말만 떠 있고 누를 수 있는 것으로 보이지 않았다. 경계선은 그 면 차이와
+ * 무관하게 칩의 윤곽을 그린다.
+ *
+ * 색은 `--input`이다 — `--border`는 **장식 구분선**용이라 대비를 지지 않는데(라이트
+ * #e2e2e6 ≈ 1.24:1) 칩은 눌러 고르는 상호작용 요소다(비텍스트 3:1). 프로필 스와치·필드
+ * 경계가 같은 이유로 같은 토큰을 쓴다.
+ *
+ * 고른 칩도 **같은 두께의** 경계를 갖는다(색만 accent로). 한쪽에만 두면 고를 때마다 칩이
+ * 2px씩 커졌다 작아져 줄 전체가 흔들린다.
  */
 const chipClass =
-  'cursor-pointer whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] transition-colors bg-secondary text-muted-foreground hover:bg-accent data-[pressed]:bg-primary data-[pressed]:text-primary-foreground data-[pressed]:hover:bg-primary dark:data-[pressed]:hover:bg-primary';
+  'cursor-pointer whitespace-nowrap rounded-full border border-input px-1.5 py-0.5 text-[10px] transition-colors bg-secondary text-muted-foreground hover:bg-accent data-[pressed]:border-primary data-[pressed]:bg-primary data-[pressed]:text-primary-foreground data-[pressed]:hover:bg-primary dark:data-[pressed]:hover:bg-primary';
 
 export interface ChipOption<T extends string> {
   value: T;
