@@ -1,0 +1,38 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "release",
+  "ack": "human-triage",
+  "triageMode": "human",
+  "verdict": "approve",
+  "summary": "Ship for this round. R-1 resolved under the corrected scope: attribute-only structured cookies are rejected while empty removal and raw variants remain valid (`src/core/rule-validation.ts:71-85`; tests at `src/core/rule-validation.test.ts:53-76`). R-2 resolved: the shared compiler condition builder no longer emits retired domain conditions and retains supported request methods (`src/core/compile.ts:138-152`; regression assertions at `src/core/compile-filters.test.ts:49-120`). R-3 remains still-open but explicitly deferred and documented as a non-blocking test gap (`.scratch/rule-accordion-ui/issues/10-teardown-alarms-tabs-permissions.md:87-107`). No new critical or high issue was introduced by e409567.",
+  "planFile": "docs/reviews/rule-accordion-ui/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 114,
+  "target": "branch diff against main",
+  "reviewer": "codex",
+  "fallbackFrom": null,
+  "fallbackReason": null,
+  "effort": "xhigh",
+  "inputMode": "self-collect",
+  "reviewedSha": "e409567298c3294337a303d4fe8d842c662f4a0e",
+  "reviewedTree": "52d767497e77b38b3cfd17e118cea1696a80937c",
+  "reviewedPlanSha256": "e4f496f58e62b4496f5a307e1885be473f9ac41e976d57479f04e5da450960e1",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "backendExitCode": 0,
+  "parseError": null,
+  "promptDelivery": {
+    "mechanism": "token-echo",
+    "enforcing": false,
+    "verified": true,
+    "echoed": "a2e0a8b2a66b32e1"
+  },
+  "findingCount": 0,
+  "planFindingCount": 0,
+  "triage": "Clean verdict: note it in your report and COMMIT this artifact with the next bookkeeping commit.",
+  "findings": [],
+  "next_steps": [
+    "Proceed under the existing R-3 defer and retain its authoritative-store v1 fixture follow-up in issue 10."
+  ]
+}

@@ -251,3 +251,27 @@ Testing Decisions의 "**v1 체인 테스트 (core)**"가 요구한 픽스처가
 **돌연변이로 이빨을 확인했다.** 걷어낸 매핑을 되살리면 3파일 5건이 붉어지고(`compile.test`
 1 · `compile-filters.test` 3 · `block-kind.test` 1), `setCookieIssues`의 게이트를 무력화하면
 새 케이스가 붉어진다. 원복하면 624/624.
+
+### release r2 (codex)
+
+**`ok:true` / `verdict: approve` / 발견 0건** (reviewedSha `e409567`, reviewedTree `52d76749`,
+114파일, effort xhigh, headMoved·planDrift 둘 다 false). 발견이 없으므로 트리아지할 행도 없다.
+
+R-1 · R-2 **resolved**, R-3의 defer 사유도 재론되지 않았다. 라운드 2의 두 번째 과업("수정이
+새로 만든 critical·high")도 0건이다 — 이 브랜치에서 가장 조마조마했던 자리가 거기였다.
+`conditionFor`에서 조건 매핑을 걷는 것은 **방출되는 규칙의 모양을 바꾸는** 수정이고,
+`fieldIssues`에 갈래를 더하는 것은 **저장을 막는 문**을 좁히는 수정이라 둘 다 과하면 살아 있는
+기능을 죽인다. r1 트리아지에서 리뷰어 권고를 그대로 받지 않고 범위를 정정한 판단(값 필수화 거부,
+Request Method 매핑 보존)이 여기서 반증되지 않았다.
+
+**릴리스 게이트 종결: r1(accept 2 · defer 1) → r2 approve.** 사람 면제 없이 닫혔다.
+
+## 세 게이트 최종
+
+| 게이트 | 라운드 | 종결 |
+|---|---|---|
+| plan | r1 needs-attention(accept 3) → r2 needs-attention(accept 2) → r3 needs-attention(accept 2) | **사람 waiver** — 근거 3개 위에 기재 |
+| structure | r1 needs-attention(accept 3) → r2 needs-attention(accept 1) → r3 **approve** | 면제 없이 |
+| release | r1 needs-attention(accept 2 · defer 1) → r2 **approve** | 면제 없이 |
+
+세 게이트 중 둘이 `approve`로 닫혔고, plan 하나만 waiver로 닫혔다.
