@@ -3,7 +3,6 @@ import type { SuggestionHistory } from '@/core/autocomplete';
 import type { Command } from '@/core/commands';
 import type { Modification, Profile } from '@/core/schema';
 import { Button } from '@/ui/press-button';
-import { Card } from '@/ui/card';
 import { AnimatePresence, MotionRow } from '@/ui/motion-row';
 import {
   ruleFormIntentProps,
@@ -92,9 +91,16 @@ export function ProfileSection({
    * ⋯ 메뉴(복제·삭제)가 있었다. 시안에 그 컨트롤들이 없으므로 넷 다 없앴고, 지금 보는 프로필의
    * 이름은 본문 헤더 바가 제목으로 든다(티켓 03). 되돌리는 유일한 길은 전체 초기화다 —
    * 값이 작지 않은 트레이드오프이고 ADR 0017에 그렇게 적혀 있다.
+   *
+   * **바깥 카드도 없다.** 헤더가 사라진 뒤로 그 `Card`가 하던 일은 규칙 카드 목록을 한 겹 더
+   * 감싸는 것뿐이었고, 화면에서는 둥근 상자 안에 둥근 상자가 겹쳐 보였다. 목록의 단위는
+   * 규칙 카드 하나이므로 그 위의 껍질은 뜻을 나르지 않는다 — 빈 상태 안내와 목록이 본문
+   * 스크롤 영역의 직접 자식이 된다. 빈 상태를 목록과 **같은 flex 열에** 두는 것이 중요하다:
+   * 따로 두면 규칙이 없을 때 비어 있는 목록 상자가 여전히 flex 항목이라 안내 아래에 죽은
+   * 간격이 남는다.
    */
   return (
-    <Card>
+    <div className="flex flex-col gap-1.5">
       {profile.modifications.length === 0 && editingRule === null && (
         <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border py-6 text-center">
           <p className="text-xs text-muted-foreground">{t('noRulesYet')}</p>
@@ -116,81 +122,79 @@ export function ProfileSection({
         건드리지 않으므로 폼을 닫으면 원래 자리로 돌아온다 — 저장으로 끝나든 취소로 끝나든
         사용자가 기억하는 순서가 유지된다.
       */}
-      <div className="flex flex-col gap-1.5">
-        <AnimatePresence initial={false}>
-          {/*
-            새 규칙 폼이 목록 **맨 위**에 카드로 열린다 (story 7). 예전에는 목록 아래에
-            있어서, 규칙이 많으면 방금 만들기 시작한 것을 찾아 스크롤해야 했다.
-          */}
-          {editingRule === 'new' && (
-            <MotionRow key="new-rule-form">
-              <div className={`${expandedCard} p-2`}>
-                {RuleForm ? (
-                  <RuleForm
-                    history={history}
-                    onCancel={() => setEditingRule(null)}
-                    onSave={(next) => saveItem(next, 'add')}
-                  />
-                ) : (
-                  <RuleFormSlot />
-                )}
+      <AnimatePresence initial={false}>
+        {/*
+          새 규칙 폼이 목록 **맨 위**에 카드로 열린다 (story 7). 예전에는 목록 아래에
+          있어서, 규칙이 많으면 방금 만들기 시작한 것을 찾아 스크롤해야 했다.
+        */}
+        {editingRule === 'new' && (
+          <MotionRow key="new-rule-form">
+            <div className={`${expandedCard} p-2`}>
+              {RuleForm ? (
+                <RuleForm
+                  history={history}
+                  onCancel={() => setEditingRule(null)}
+                  onSave={(next) => saveItem(next, 'add')}
+                />
+              ) : (
+                <RuleFormSlot />
+              )}
+            </div>
+          </MotionRow>
+        )}
+
+        {orderedModifications.map((modification) => {
+          const open = editingRule === modification.id;
+          return (
+            // 규칙 행 추가/삭제 시 fade+height enter/exit (ui-refine 08) — reduced-motion 존중.
+            <MotionRow key={modification.id}>
+              {/* 폼으로 가는 길목 셋째 — 행 어디에 포인터가 닿거나 포커스가 들어오면 청크를
+                  받기 시작한다. 연필 아이콘까지 뚫고 내려보내는 대신 여기에 두면 배선이 한
+                  곳이고, 행에 닿는 것 자체가 이미 편집 의도에 가깝다. */}
+              <div
+                className={`px-2.5 ${open ? expandedCard : collapsedCard}`}
+                {...ruleFormIntentProps}
+              >
+                <RuleRow
+                  modification={modification}
+                  paused={paused}
+                  editing={open}
+                  onToggleEnabled={(enabled) =>
+                    onCommand({
+                      type: 'update-modification',
+                      profileId: profile.id,
+                      modification: { ...modification, enabled } as Modification,
+                    })
+                  }
+                  // 같은 버튼으로 열고 닫는다 (story 5) — 열려 있으면 누르는 것이 접기다.
+                  onEdit={() => (open ? setEditingRule(null) : openRuleForm(modification.id))}
+                  onRemove={() => onDeleteRule(profile.id, modification.id)}
+                />
+                {/* 폼이 행 **아래로** 펼쳐진다 — 열림에 height-in, 닫힘에 height-out
+                    (ui-refine 08). AnimatePresence가 없으면 닫힘이 즉시 사라진다. */}
+                <AnimatePresence initial={false}>
+                  {open && (
+                    <MotionRow key={`${modification.id}-form`}>
+                      <div className="border-t border-border py-2">
+                        {RuleForm ? (
+                          <RuleForm
+                            initial={modification}
+                            history={history}
+                            onCancel={() => setEditingRule(null)}
+                            onSave={(next) => saveItem(next, 'update')}
+                          />
+                        ) : (
+                          <RuleFormSlot />
+                        )}
+                      </div>
+                    </MotionRow>
+                  )}
+                </AnimatePresence>
               </div>
             </MotionRow>
-          )}
-
-          {orderedModifications.map((modification) => {
-            const open = editingRule === modification.id;
-            return (
-              // 규칙 행 추가/삭제 시 fade+height enter/exit (ui-refine 08) — reduced-motion 존중.
-              <MotionRow key={modification.id}>
-                {/* 폼으로 가는 길목 셋째 — 행 어디에 포인터가 닿거나 포커스가 들어오면 청크를
-                    받기 시작한다. 연필 아이콘까지 뚫고 내려보내는 대신 여기에 두면 배선이 한
-                    곳이고, 행에 닿는 것 자체가 이미 편집 의도에 가깝다. */}
-                <div
-                  className={`px-2.5 ${open ? expandedCard : collapsedCard}`}
-                  {...ruleFormIntentProps}
-                >
-                  <RuleRow
-                    modification={modification}
-                    paused={paused}
-                    editing={open}
-                    onToggleEnabled={(enabled) =>
-                      onCommand({
-                        type: 'update-modification',
-                        profileId: profile.id,
-                        modification: { ...modification, enabled } as Modification,
-                      })
-                    }
-                    // 같은 버튼으로 열고 닫는다 (story 5) — 열려 있으면 누르는 것이 접기다.
-                    onEdit={() => (open ? setEditingRule(null) : openRuleForm(modification.id))}
-                    onRemove={() => onDeleteRule(profile.id, modification.id)}
-                  />
-                  {/* 폼이 행 **아래로** 펼쳐진다 — 열림에 height-in, 닫힘에 height-out
-                      (ui-refine 08). AnimatePresence가 없으면 닫힘이 즉시 사라진다. */}
-                  <AnimatePresence initial={false}>
-                    {open && (
-                      <MotionRow key={`${modification.id}-form`}>
-                        <div className="border-t border-border py-2">
-                          {RuleForm ? (
-                            <RuleForm
-                              initial={modification}
-                              history={history}
-                              onCancel={() => setEditingRule(null)}
-                              onSave={(next) => saveItem(next, 'update')}
-                            />
-                          ) : (
-                            <RuleFormSlot />
-                          )}
-                        </div>
-                      </MotionRow>
-                    )}
-                  </AnimatePresence>
-                </div>
-              </MotionRow>
-            );
-          })}
-        </AnimatePresence>
-      </div>
-    </Card>
+          );
+        })}
+      </AnimatePresence>
+    </div>
   );
 }

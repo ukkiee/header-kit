@@ -31,32 +31,32 @@ export function profileSelectLabel(
 /**
  * 프로필 색 스와치 — 사이드바(양 표면)의 시각 언어 (티켓 10: 디자인의 색 스와치).
  *
- * **색은 정체성, 형태는 상태다.** 프로필 색은 활성 여부와 무관하게 늘 보여야 목록에서
- * 프로필을 색으로 짚을 수 있다(디자인의 스와치). 그러면서 활성은 **채운 사각**, 비활성은
- * **테두리만 남은 사각**이다(ui-review UI-07·UI-09) — 채움 대 테두리는 색을 지워도 남는
- * 차이라, 그레이스케일에서도 활성 프로필을 찾을 수 있다.
+ * **활성은 프로필 색으로 채운 사각, 비활성은 회색으로 채운 사각이다.** 둘 다 채움이고
+ * 다른 것은 색뿐이다.
  *
- * 크기를 size-2.5로 키운 것도 같은 이유다 — 6px 도형에 얇은 테두리는 형태 차이가 뭉갠다.
+ * 예전에는 비활성이 **테두리만 남은 사각**이었다 — "색은 정체성, 형태는 상태"를 지켜
+ * 꺼진 프로필의 색도 목록에서 보이게 하려던 것이다. 그 대가가 두 가지였다. 화면에서는
+ * 2.5px 도형 안이 뚫려 보여 색 얼룩처럼 읽혔고, 코드에서는 그 테두리가 **사용자 색**이라
+ * (색은 `<input type="color">`에서 오므로 아무 값이나 될 수 있다) 흰색에 가까운 색을
+ * 고르면 라이트 캔버스에서 도형이 통째로 사라졌다 — 그래서 `--input` 윤곽선을 한 겹 더
+ * 겹쳐야 했다. 회색 채움 하나가 그 겹을 없앤다: 색이 사용자 값과 무관해지므로 대비가
+ * 색 선택에 매이지 않는다.
  *
- * **대비는 사용자 색에 맡기지 않는다.** 비활성의 테두리는 프로필 색이라 흰색에 가까운
- * 색을 고르면 라이트 캔버스에서 도형이 사라진다(색은 `<input type="color">`에서 오므로
- * 아무 값이나 될 수 있다). 그래서 그 위에 `--input` 윤곽선을 한 겹 겹친다 — 이 토큰은
- * bg·surface·fill 어느 면 위에서도 3:1을 넘기도록(라이트 최저 3.18:1, 다크 3.20:1)
- * 고른 값이라, 상태를 나르는 비텍스트 요소의 하한이 색 선택과 무관해진다.
+ * 채움 색이 `--input`인 이유는 그 토큰이 bg·surface·fill 어느 면 위에서도 3:1을 넘기도록
+ * (라이트 최저 3.18:1, 다크 3.20:1) 고른 값이기 때문이다 — 상태를 나르는 비텍스트 요소의
+ * 하한이 이걸로 선다.
  *
- * 상태는 여기 말고도 두 곳에서 더 말한다: `profileSelectLabel`의 aria-label(문자열)과
- * 같은 행의 인라인 토글(손잡이 **위치**). 색 하나에 상태를 싣지 않는다(스펙 story 38).
+ * **트레이드오프**: 꺼진 프로필의 색이 목록에서 보이지 않는다. 색 채널 하나를 상태에
+ * 내준 셈인데, 상태는 여기 말고도 세 곳에서 말한다 — `profileSelectLabel`의
+ * aria-label(문자열), 같은 행의 인라인 토글(손잡이 **위치**), 이름 아래 메타의 낱말.
+ * 색 하나에 상태를 싣지 않는다는 계약(스펙 story 38)은 그대로다.
  */
 export function ProfileDot({ profile }: { profile: Pick<Profile, 'active' | 'color'> }) {
   return (
     <span
       aria-hidden
-      className={`size-2.5 shrink-0 rounded-[3px] ${
-        profile.active ? '' : 'border-2 outline-1 outline-input'
-      }`}
-      style={
-        profile.active ? { backgroundColor: profile.color } : { borderColor: profile.color }
-      }
+      className={`size-2.5 shrink-0 rounded-[3px] ${profile.active ? '' : 'bg-input'}`}
+      style={profile.active ? { backgroundColor: profile.color } : undefined}
     />
   );
 }
