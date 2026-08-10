@@ -339,6 +339,53 @@ body {
 }
 
 /*
+ * 대형 편집기 다이얼로그 열림·닫힘 (`large-editor.tsx`) — Select 팝업과 **같은 방식**이다.
+ *
+ * 마운트를 Base UI가 소유해 motion으로 감쌀 수 없고, Tailwind 임의값에 변수를 넣으면 v4
+ * 스캐너가 유틸을 내주지 않아 전이가 조용히 죽는다(N30이 잡았던 그 실패). 그래서 여기서도
+ * `data-slot` 선택자에 CSS로 건다. 길이·곡선은 MotionProvider가 루트에 올리는 모션 토큰이라
+ * 팝업과 다이얼로그가 같은 감각으로 열린다(ADR 0012의 단일 모션 언어).
+ *
+ * 움직이는 것은 `scale`과 `opacity`뿐이다 — `translate`는 셸이 가운데 정렬에 쓰고 있어
+ * (`-translate-x-1/2 -translate-y-1/2`) 전이가 그 값과 싸운다. 두 속성은 독립 변형 속성이라
+ * 나란히 놓여도 서로를 덮지 않는다.
+ *
+ * 닫힘은 오버슈트 없이 ease-out이다 — 사라지는 것이 되돌아오는 인상은 어색하다(팝업과 같다).
+ *
+ * 백드롭은 fade만 한다. 팝업이 튀어 오르는 동안 배경까지 움직이면 무엇이 열리는지가 흐려진다.
+ *
+ * shadcn dialog를 나중에 들이면 그쪽 슬롯 이름은 `dialog-overlay`/`dialog-content`라 이
+ * 규칙에 걸리지 않는다 — 그때 선택자를 함께 늘려야 두 다이얼로그가 같은 모션을 쓴다.
+ */
+[data-slot='dialog-popup'] {
+  transition:
+    opacity var(--popup-fade) var(--popup-ease),
+    scale var(--popup-fade) var(--popup-ease);
+}
+[data-slot='dialog-popup'][data-starting-style],
+[data-slot='dialog-popup'][data-ending-style] {
+  opacity: 0;
+  scale: 0.96;
+}
+[data-slot='dialog-popup'][data-ending-style] {
+  transition-timing-function: var(--ease-out, cubic-bezier(0, 0, 0.2, 1));
+}
+[data-slot='dialog-backdrop'] {
+  transition: opacity var(--popup-fade) var(--popup-ease);
+}
+[data-slot='dialog-backdrop'][data-starting-style],
+[data-slot='dialog-backdrop'][data-ending-style] {
+  opacity: 0;
+}
+/* 감도 계약(ADR 0012) — 움직임·opacity는 계약 안이다. 전이의 **부재**가 계약이다. */
+@media (prefers-reduced-motion: reduce) {
+  [data-slot='dialog-popup'],
+  [data-slot='dialog-backdrop'] {
+    transition: none;
+  }
+}
+
+/*
  * 스크롤바 페이드 — shadcn ScrollArea는 Scrollbar를 자기 안에서 렌더해 호출부가 그
  * className에 닿지 못한다(ScrollBar는 export되지만 ScrollArea가 내부에서 직접 부른다).
  * 그래서 이 계약만 CSS로 되돌린다 — shadcn 소스는 손대지 않는다(ADR 0014).
