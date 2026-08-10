@@ -182,3 +182,72 @@ S2-1 **resolved** 확인. 리뷰어가 짚은 근거: `persistState`가 다음 �
 
 **structure 게이트 종결: r1(accept 3) → r2(accept 1) → r3 approve.** 세 게이트 중 사람 면제
 없이 닫힌 첫 게이트다(plan은 waiver로 닫혔다).
+
+### release r1 (codex)
+
+`ok:true` / `verdict: needs-attention` / 발견 3건 (reviewedSha `50214c0`, reviewedTree
+`2bf30ac5`, 113파일, effort xhigh, inputMode self-collect, headMoved·planDrift 둘 다 false).
+사람 트리아지 — **as proposed로 라운드 종결**. 제안 결정은 세 건을 코드로 독립 검증(건별
+3렌즈: 재현·인용 감사·반박)한 뒤 세웠고, 세 건 모두 리뷰어 본문에 코드와 다른 부분이 있어
+심각도가 high/high/medium → medium/low/low로 내려갔다.
+
+R-1 accept — 빈 Response Cookie 폼이 모든 Set-Cookie를 제거한다
+R-2 accept — 퇴역 조건이 현재 v3 상태에서 계속 숨은 DNR 조건으로 적용된다
+R-3 defer — v1 마이그레이션 통합 테스트가 요구된 데이터 변환을 싣지 않는다
+
+**R-1 — 리뷰어가 적은 범위 그대로는 채택하지 않았다.** 권고("새 구조화 변형에는 이름과 값을
+필수로")를 그대로 넣으면 `rule-validation.ts:7`이 이유까지 적어 둔 유효 사용례(서버 Set-Cookie
+차단, ui-refine 스토리 6)가 죽고 `compile-issue03.test.ts:68-75`·`:197-210`(v2→v3 동치)이
+깨진다. set-cookie 분기는 `git diff main...HEAD` 기준 main과 글자까지 같아 이 브랜치의 회귀도
+아니다. 이 브랜치에 귀속되는 것만 접었다:
+  (a) **ADR 0017이 스스로와 어긋나 있었다** — `:23`이 "응답 쿠키에는 필수 필드가 없어 그대로
+      저장을 통과한다"를 티켓 06 수정의 **근거**(현재형 전제)로 쓰는데 아래에서 "쿠키 값은
+      필수가 된다"고 적었다. 리뷰어는 뒤쪽만 인용했다. 실제 기준("이름·값이 둘 다 비었는데
+      속성이 채워져 있으면 막는다")으로 개정.
+  (b) **속성만 채운 응답 쿠키가 사용자 입력을 통째로 버리고 무경고 전역 제거가 됐다.**
+      `compile.ts`의 빈 판정(`name.trim()==='' && value===''`)이 줄을 조립하지 않으므로 Domain·
+      Path·Max-Age·SameSite·Secure·HttpOnly가 사라지는데, 폼을 다시 열면 그 값들이 남아 있다.
+      티켓 01의 v3 재구조화가 재료를 칸으로 가르면서 **비로소 표현 가능해진** 상태다 — main은
+      값 칸이 하나라 "속성만 채운다"가 존재할 수 없었다. `setCookieIssues`로 그 한 갈래만 막고,
+      완전히 빈 초안(차단 사용례)과 원시 보존은 그대로 통과시킨다. **컴파일 의미론은 무변경**.
+  낡은 픽스처도 함께 고쳤다 — 옛 케이스는 `name` 키가 아예 없는 v2 모양을 `as Modification`으로
+  캐스팅해, 이 발견이 말하는 "v3 구조화의 이름·값이 둘 다 빈" 경우를 한 번도 덮지 못했다.
+
+**R-2 — 사실 관계 셋을 정정한 뒤 접었다.** 리뷰어 본문의 오류: (1) `requestMethods`는 퇴역
+조건이 **아니다** — 퇴역한 것은 값 셋(head·connect·other)뿐이고 조건 자체는 살아 있어 폼이
+여섯을 그린다. 권고대로 이 매핑까지 걷으면 스모크 E3가 재는 살아 있는 기능이 죽는다.
+(2) 남아 있던 것은 넷이 아니라 **둘**이다 — `tabDomains`·`expiresAt`은 `compile.ts`에 등장하지
+않는다. (3) 도달 경로가 없다 — 로드·가져오기·백업 복원·sync 복원·폼 저장 다섯 문이 전부
+벗기기를 지나므로 남는 입구는 devtools 손편집뿐이라 high가 아니라 low다.
+그럼에도 접은 이유: **스펙 미이행이 진짜이고 티켓 사이로 빠졌다.** `spec.md:157`이 "컴파일
+(core) — 퇴역한 Condition 넷의 매핑은 걷어낸다"를 명시하는데 둘이 남았고, 티켓 02의 재개
+노트가 이 철거를 티켓 10에 넘겼는데 티켓 10의 AC 아홉에 그 항목이 없다 — 티켓 10이 마지막이라
+잡을 티켓이 남지 않았다. 게다가 `model.ts:38-47`("업그레이드 입력에만 나타난다")과
+`compile.ts`가 같은 브랜치 안에서 서로를 반박하고 있었다.
+방향은 **코드를 스펙에 맞추는 쪽**을 골랐다(반대로 스펙을 개정하는 선택도 성립했다). ADR
+0017의 퇴역 결정에 "컴파일이 그 넷을 읽지 않는 것이 두 번째 방어선"을 명문화하고, Request
+Method는 포함되지 않는다는 경계를 함께 적었다 — 두 문서가 갈라진 채 머지되지 않게 하는 것이
+이 accept의 핵심이다.
+리뷰어의 "통과 증거가 요구사항과 반대다"는 과독이다 — `compile.test.ts`의 그 케이스는 main에서
+그대로 온 사실 진술이고, 바로 아래에 티켓 10 방향의 단언이 이미 서 있었다. 단언은 **지우지
+않고 방향만 뒤집었다**(입력은 남기고 부재를 잰다). 리뷰어가 적은 것보다 표면이 넓어
+`compile.test.ts`·`compile-filters.test.ts`·`block-kind.test.ts` 셋을 함께 고쳤다.
+
+**R-3 defer — 진술된 형태로는 틀렸다.** 리뷰어는 이 체인이 시험되지 않는다고 했으나, 스펙
+Testing Decisions의 "**v1 체인 테스트 (core)**"가 요구한 픽스처가
+`schema-version.test.ts:292-314`의 `realV1()`에 **빠짐없이** 있다 — 원시 set-cookie +
+`request-method: ['head','connect','other']` + `initiator-domain` + `tab-domain` + `time`,
+감도 대조용 `resource-type`까지. 스펙이 runtime에 준 몫은 "커밋이 쓰기 줄을 지나 직렬화·재시도·
+재시작·겹친 명령"뿐이라 통합 픽스처가 얇은 것은 설계다. 제품 코드 결함도 도달 가능한 실패도
+없다.
+**그러나 defer이지 reject가 아닌 이유**: 스펙의 그 항목은 "권위 저장소에 v1 상태를 심고 …
+커밋이 쓰기 줄을 지나고 재시도되는지"까지 한 묶음으로 요구했는데, 리치 픽스처는 순수
+`readStoredState` 테스트에만 있고 저장소·레인 테스트(`stateStore.test.ts`의 `V1`, 통합의
+`StoredV1`)는 request-header 전용이다. 단언들이 각각 어딘가에 있을 뿐 리치 픽스처가 저장소
+문과 레인까지 가지는 않는다. 회귀 감시의 공백이지 현재 결함이 아니므로 머지 차단 사유가
+아니고, 후속 보강으로 남긴다 — `StoredV1`에 필터 한 종류를 허용하고 `v1StateTwoProfiles`에
+`tab-domain` 하나를 얹어 `stored.retirementNotice`를 단언하면 한 줄로 닫힌다.
+
+**돌연변이로 이빨을 확인했다.** 걷어낸 매핑을 되살리면 3파일 5건이 붉어지고(`compile.test`
+1 · `compile-filters.test` 3 · `block-kind.test` 1), `setCookieIssues`의 게이트를 무력화하면
+새 케이스가 붉어진다. 원복하면 624/624.

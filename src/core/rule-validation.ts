@@ -4,7 +4,8 @@ import { urlScopeBreadth } from './url-scope';
 /**
  * 저장 차단 검증 (ui-refine 04) — 종류별로 비어 있으면 규칙이 무의미해지는
  * 필수 필드를 반환한다. 폼이 이 결과가 빌 때만 저장을 통과시킨다.
- * 응답 쿠키(set-cookie)는 빈 값이 유효한 사용례(서버 Set-Cookie 차단)라 필수가 없다.
+ * 응답 쿠키(set-cookie)는 빈 값이 유효한 사용례(서버 Set-Cookie 차단)라 필수가 없다 —
+ * 예외 하나는 `setCookieIssues`에 있다(속성만 채워 그 입력이 버려지는 상태).
  * Compile의 빈 이름 경고는 import·레거시 데이터 방어선으로 별도 유지된다.
  */
 export type RequiredField = 'name' | 'pattern' | 'substitution' | 'value' | 'urlFilter';
@@ -31,7 +32,7 @@ export function fieldIssues(modification: Modification): FieldIssue[] {
     case 'cookie':
       return modification.name.trim() === '' ? [required('name')] : [];
     case 'set-cookie':
-      return [];
+      return setCookieIssues(modification);
     case 'user-agent':
       // 값이 이 규칙의 전부다 — 비면 UA를 빈 문자열로 보내는 사고가 된다.
       return modification.value.trim() === '' ? [required('value')] : [];
@@ -49,6 +50,39 @@ export function fieldIssues(modification: Modification): FieldIssue[] {
     default:
       return modification satisfies never;
   }
+}
+
+/**
+ * 응답 쿠키의 검증 — 막는 것이 **하나뿐**인 이유가 있다 (릴리스 게이트 R-1).
+ *
+ * 이름도 값도 비운 것은 막지 않는다. 그것이 곧 "서버가 보낸 Set-Cookie를 제거한다"는
+ * 유효한 사용례이고(ui-refine 스토리 6), `compile`이 줄을 조립하지 않는 것으로 그 뜻을
+ * 낸다. 원시로 보존된 항목도 그대로 통과한다 — 가를 수 없는 옛 줄에 재료를 요구할 수 없다.
+ *
+ * 막는 것은 **속성만 채운 상태** 하나다. 이름·값이 비면 조립 자체가 일어나지 않으므로
+ * 사용자가 친 Domain·Path·Max-Age·SameSite·Secure·HttpOnly가 통째로 버려지는데, 폼을
+ * 다시 열면 그 값들이 그대로 보인다 — 화면은 "이 쿠키를 이렇게 얹는다"고 말하고 나가는
+ * 것은 전역 제거인, 폼과 효과가 정면으로 어긋난 상태다. 값을 필수로 만드는 것이 아니라
+ * **버려질 입력을 세우는** 것이므로 위 두 사용례는 그대로 산다.
+ *
+ * 티켓 01의 v3 재구조화가 재료를 칸으로 가르면서 비로소 표현 가능해진 상태다 — 값 칸이
+ * 하나였을 때는 "속성만 채운다"가 존재할 수 없었다.
+ */
+function setCookieIssues(
+  modification: Extract<Modification, { kind: 'set-cookie' }>,
+): FieldIssue[] {
+  if (modification.raw !== undefined) return [];
+  // compile의 빈 판정과 **글자까지 같아야** 한다 — 갈라지면 여기서 통과한 것이 저기서 버려진다.
+  const assemblesNothing = modification.name.trim() === '' && modification.value === '';
+  if (!assemblesNothing) return [];
+  const carriesAttribute =
+    (modification.domain ?? '') !== ''
+    || (modification.path ?? '') !== ''
+    || (modification.maxAge ?? '') !== ''
+    || modification.sameSite !== undefined
+    || modification.secure === true
+    || modification.httpOnly === true;
+  return carriesAttribute ? [required('value')] : [];
 }
 
 /**

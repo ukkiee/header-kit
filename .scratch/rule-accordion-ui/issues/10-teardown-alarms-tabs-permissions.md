@@ -83,3 +83,25 @@ opacity 전이를 단언하고 통과하는데, 그 요소가 스크롤바 트�
 무의미해졌다. 남은 호출은 `tabs.create` 하나이고 이 메서드는 권한을 요구하지 않는다 — N52가
 이 매니페스트로 실제 브라우저에서 눌러 확인한다. `<all_urls>`가 무엇을 주는지는 검증하지
 않았고, 검증할 이유도 없다(읽는 쪽이 없다).
+
+## 릴리스 게이트 r1에서 이월 (R-3, defer) — 후속 테스트 보강
+
+**리치 v1 픽스처가 권위 저장소·쓰기 줄까지 가지 않는다.** 스펙 Testing Decisions의
+"v1 체인 테스트 (core)"는 **한 묶음**으로 요구했다 — 권위 저장소에 진짜 v1(요청 메서드
+HEAD·CONNECT·OTHER + initiator/tab/time 필터 + 원시 Set-Cookie)을 심고, 벗기기·집계·
+재읽기·컴파일 보존·v2 동치·**커밋이 쓰기 줄을 지나고 재시도되는지**까지.
+
+실제 배치는 이렇게 갈라져 있다:
+- `schema-version.test.ts:292-314`의 `realV1()` — 요구된 픽스처를 **빠짐없이** 담지만
+  순수 `readStoredState` 경로다(저장소 문을 지나지 않는다).
+- `stateStore.test.ts`의 `V1`, `service-worker.integration.test.ts`의 `StoredV1` —
+  저장소·레인을 진짜로 지나지만 **request-header 전용**이다.
+
+즉 단언들은 각각 어딘가에 있는데, 리치 픽스처가 저장소 문과 레인까지 가지는 않는다.
+제품 코드 결함이 아니고 도달 가능한 실패도 없어 머지 차단 사유가 아니라 **회귀 감시의
+공백**이다(그래서 accept가 아니라 defer).
+
+닫는 법(한 줄에 가깝다): `StoredV1`에 필터 한 종류를 허용하고 `v1StateTwoProfiles`에
+`tab-domain` 필터 하나를 얹은 뒤, 인터리빙 시나리오에서 `stored.retirementNotice`를 단언한다.
+겸사로 `stateStore.test.ts`의 재시도 픽스처를 퇴역 조건을 실은 것으로 바꾸면 "재시도 뒤에도
+집계 수가 같다"가 함께 채워진다.

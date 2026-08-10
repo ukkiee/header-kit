@@ -28,8 +28,10 @@ describe('compile', () => {
     const c = rules.find((r) => r.action.requestHeaders?.[0]?.header === 'X-C')?.condition;
     expect(c?.resourceTypes).toEqual(['script']);
     expect(c?.requestMethods).toEqual(['post']);
-    expect(c?.initiatorDomains).toEqual(['init.io']);
-    expect(c?.excludedRequestDomains).toEqual(['skip.io']);
+    // 퇴역 조건 둘은 입력에 남아 있어도 **실리지 않는다** (릴리스 게이트 R-2).
+    // 입력을 지우지 않는 것이 요점이다 — 매핑이 되살아나면 여기서 붉어진다.
+    expect(c?.initiatorDomains).toBeUndefined();
+    expect(c?.excludedRequestDomains).toBeUndefined();
     const free = rules.find((r) => r.action.requestHeaders?.[0]?.header === 'X-Free')?.condition;
     expect(free?.requestMethods).toBeUndefined();
   });

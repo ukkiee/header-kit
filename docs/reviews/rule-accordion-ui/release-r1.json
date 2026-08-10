@@ -1,0 +1,74 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "release",
+  "ack": "human-triage",
+  "triageMode": "human",
+  "verdict": "needs-attention",
+  "summary": "병합하면 안 됩니다. 새 응답 쿠키가 전역 쿠키 차단으로 저장될 수 있고, 퇴역 조건도 일부 컴파일 경로에서 계속 적용됩니다. 필수 마이그레이션 검증도 실제 위험 조합을 시험하지 않습니다.",
+  "planFile": "docs/reviews/rule-accordion-ui/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 113,
+  "target": "branch diff against main",
+  "reviewer": "codex",
+  "fallbackFrom": null,
+  "fallbackReason": null,
+  "effort": "xhigh",
+  "inputMode": "self-collect",
+  "reviewedSha": "50214c06fc325e03cf781f7aa15090e406c47982",
+  "reviewedTree": "2bf30ac5b8c0d73d547b35d7d00c43b13e87d70d",
+  "reviewedPlanSha256": "e4f496f58e62b4496f5a307e1885be473f9ac41e976d57479f04e5da450960e1",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "backendExitCode": 0,
+  "parseError": null,
+  "promptDelivery": {
+    "mechanism": "token-echo",
+    "enforcing": false,
+    "verified": true,
+    "echoed": "a027fe63720945bd"
+  },
+  "findingCount": 3,
+  "planFindingCount": 0,
+  "triage": "review-gate SKILL.md § Triage governs: render EVERY finding as a full table row, never inside a dialog; then ask the ROUND before the rows — take every Proposed decision as it stands, or decide row by row — and `as proposed` ends the round in that ONE action; only if row-by-row was chosen, ask per finding with that row's Proposed decision as the first option, a reject or defer taking a free-text reason; echo back ONLY the rows that carried free text, and none if the round was decided by selection alone; max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "빈 Response Cookie 폼이 모든 Set-Cookie를 제거한다",
+      "body": "`fieldIssues`는 구조화된 `set-cookie`의 이름과 값이 모두 비어 있어도 저장을 허용합니다. 새 초안은 이 두 값을 빈 문자열로 만들고, 폼은 이 함수만 통과하면 저장합니다. 활성 프로필에서 종류만 Response Cookie로 바꾸고 저장하면 `compile.ts:186-203,352-354`가 이를 URL·리소스 제한 없는 `Set-Cookie` 제거 연산으로 바꿔 로그인과 세션 갱신을 전역 차단합니다. 값이나 속성만 입력한 경우에도 빈 이름의 `=value` 또는 제거 연산이 만들어집니다. 이는 쿠키 값을 필수로 정한 `docs/adr/0017-strict-design-conformance-accordion.md:27`과 어긋나며, `rule-validation.test.ts:34-37`은 오히려 낡은 빈 값 동작을 정상으로 단언합니다.",
+      "file": "src/core/rule-validation.ts",
+      "line_start": 27,
+      "line_end": 34,
+      "confidence": 0.99,
+      "recommendation": "원시 레거시 변형만 기존 빈 줄 제거 의미를 보존하고, 새 구조화 변형에는 비어 있지 않은 이름과 값을 필수로 검증하십시오. 전체 Set-Cookie 제거가 계속 필요하다면 별도 명시적 동작과 범위 표시로 제공하고 UI·컴파일 테스트를 추가하십시오.",
+      "isPlanFinding": false
+    },
+    {
+      "severity": "high",
+      "title": "퇴역 조건이 현재 v3 상태에서 계속 숨은 DNR 조건으로 적용된다",
+      "body": "`conditionFor`는 여전히 `initiatorDomains`, `excludedDomains`, 그리고 HEAD·CONNECT·OTHER를 포함할 수 있는 `requestMethods`를 DNR 조건으로 내보냅니다. 스펙은 퇴역 Condition 매핑 제거를 요구하지만(`spec.md:157`), 현재 v3 검증은 이 키들을 허용하고 `readStoredState`는 같은 버전에 업그레이드를 다시 적용하지 않습니다(`persist.ts:99-112,709-713`). 따라서 해당 값을 가진 v3 상태는 UI에서 보거나 지울 수 없는데도 규칙을 조용히 좁힙니다. `compile.test.ts:18-32`도 제거 여부가 아니라 이 낡은 매핑을 긍정적으로 단언해 통과 증거가 요구사항과 반대입니다.",
+      "file": "src/core/compile.ts",
+      "line_start": 133,
+      "line_end": 150,
+      "confidence": 0.98,
+      "recommendation": "컴파일러에서 퇴역 도메인 매핑을 제거하고 요청 메서드를 현재 선택 가능 집합으로 제한하십시오. 같은 버전 상태에서도 퇴역 값을 안전하게 정리·보고하도록 읽기 경계를 보강하고, 테스트는 해당 DNR 필드가 방출되지 않음을 단언하게 바꾸십시오.",
+      "isPlanFinding": false
+    },
+    {
+      "severity": "medium",
+      "title": "v1 마이그레이션 통합 테스트가 요구된 데이터 변환을 싣지 않는다",
+      "body": "권위 저장소용 `StoredV1` 픽스처는 request-header만 허용하고 레거시 필터와 원시 Set-Cookie를 전혀 포함하지 않습니다. 이 픽스처를 사용하는 마이그레이션·명령 인터리빙 테스트는 단순 버전 상승과 writer 순서만 증명할 뿐, 스펙이 요구한 HEAD·CONNECT·OTHER, initiator/tab/time 필터, 원시 Set-Cookie의 실체화→퇴역·집계→커밋→재읽기→컴파일 체인을 시험하지 않습니다. 순수 스키마 테스트의 부분 픽스처로는 재시도·재시작·동시 명령이 결합된 권위 저장소 경계를 대체할 수 없어, 기록된 622개 단위 테스트와 131개 smoke 통과가 핵심 마이그레이션 위험을 덮지 못합니다.",
+      "file": "src/runtime/service-worker.integration.test.ts",
+      "line_start": 452,
+      "line_end": 504,
+      "confidence": 0.99,
+      "recommendation": "통합 픽스처에 요구된 모든 레거시 필터와 원시 Set-Cookie를 함께 넣고, 두 인터리빙에서 퇴역 필드 부재·영향 수 공지·쿠키 컴파일 보존·재읽기 멱등성·실패 후 재시도를 최종 저장값으로 검증하십시오.",
+      "isPlanFinding": false
+    }
+  ],
+  "next_steps": [
+    "구조화된 Response Cookie의 필수 검증과 명시적 제거 UX를 확정해 수정",
+    "퇴역 조건의 컴파일·현재 v3 읽기 경계를 정리하고 반대 방향 테스트로 교체",
+    "완전한 v1 권위 저장소 픽스처로 통합 검증을 다시 실행해 증거 갱신"
+  ]
+}

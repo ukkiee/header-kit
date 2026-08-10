@@ -50,7 +50,8 @@ describe('Block 종류', () => {
     expect(rules[0]?.condition.urlFilter).toBe('||ads.example.com');
     expect(rules[0]?.condition.resourceTypes).toEqual(['script']);
     expect(rules[0]?.condition.requestMethods).toEqual(['get']);
-    expect(rules[0]?.condition.excludedRequestDomains).toEqual(['ok.io']);
+    // 같은 조립기를 탄다는 것은 **퇴역 조건을 함께 버리는 것까지** 같다는 뜻이다 (R-2).
+    expect(rules[0]?.condition.excludedRequestDomains).toBeUndefined();
   });
 
   it('스코프가 없으면 방출하지 않고 경고한다 — 모든 요청을 막는 사고를 막는다', () => {

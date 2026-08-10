@@ -36,7 +36,7 @@ r3 `approve`로 면제 없이 닫혔다.
 | 명령 | 결과 |
 |---|---|
 | `bun run check` (`tsc --noEmit`) | exit 0 — 오류 0 |
-| `bun run test` (`vitest run`) | **34 파일 / 622 테스트 전부 통과** |
+| `bun run test` (`vitest run`) | **34 파일 / 624 테스트 전부 통과** |
 | `bun run build` (`wxt build`) | 성공 — Σ 961.45 kB |
 | `bun run smoke` (`scripts/smoke.mjs`) | **131/131 통과** |
 | `bun run writer-lane-gate` | PASS — `createWriterLane` 1회 · `createStateWriter` 1회 · 허가 노출 4파일(전부 허용) · 산출물 16개 중 워커 밖 15개 검사 |
@@ -80,3 +80,38 @@ r3 `approve`로 면제 없이 닫혔다.
 사라졌기 때문이다. 그 과정에서 잃을 뻔한 단언 하나(`규칙을 끄는 것은 활성화 경계가 아니다`)를
 리뷰가 잡아 `materialization.test.ts`의 `update-modification` 경로로 복구했고, 돌연변이로
 이빨을 확인했다.
+
+## 릴리스 게이트 r1 트리아지 뒤 재실행
+
+r1의 accept 둘을 적용한 뒤 같은 스위트를 다시 돌렸다. 위 표의 수치 중 **단위만 622 → 624**로
+늘었고(응답 쿠키 케이스 둘) 나머지는 같다.
+
+이 재실행이 귀속되는 트리는 **이 문서를 담은 커밋 자신의 트리**다(부모 `50214c0`). 위쪽 표의
+`905baf0`/`c6629d4`는 트리아지 **이전**의 실행이고, 두 실행을 합치지 않고 나란히 남기는 이유는
+릴리스 렌즈가 "커밋된 증거가 diff를 덮는가"를 보기 때문이다 — 무엇이 언제 돌았는지가 붙어
+있어야 그 판정이 가능하다.
+
+| 명령 | 결과 |
+|---|---|
+| `bun run check` | exit 0 |
+| `bun run test` | **624/624 통과** (34 파일) |
+| `bun run build` | Σ 961.45 kB |
+| `bun run smoke` | **131/131 통과** |
+| `bun run writer-lane-gate` | PASS |
+| `bun run bundle-gate` | PASS — 489.0KB |
+| `bun run storybook:build` | 성공 |
+
+**돌연변이로 이빨을 확인했다** — 새 단언이 실제로 무언가를 막는지 재기 위해서다.
+
+| 돌연변이 | 결과 |
+|---|---|
+| `conditionFor`에 걷어낸 매핑 둘을 되살린다 | **5건 FAIL** (3파일 — `compile.test` 1 · `compile-filters.test` 3 · `block-kind.test` 1) |
+| `setCookieIssues`의 게이트를 무력화한다(옛 동작) | **1건 FAIL** (속성만 채운 응답 쿠키 케이스) |
+| 원복 | 624/624 |
+
+## 릴리스 게이트로 넘겼던 셋의 처리
+
+위 "릴리스 게이트로 넘기는 것 셋"은 r1에서 리뷰어가 짚지 않았다. 셋 다 여전히 열려 있고,
+티켓 10 파일에 기록된 채로 남는다 — 스크롤바 토큰이 실물과 어긋남, 헤더 이름 이력을 지우는
+길이 전체 초기화뿐, 백업 화면 배너 자리. 여기에 r1의 **R-3(defer)** 이 넷째로 합류했다:
+리치 v1 픽스처가 권위 저장소·쓰기 줄까지 가지 않는 회귀 감시 공백.

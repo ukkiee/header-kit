@@ -49,11 +49,14 @@ describe('compile — 규칙 conditions의 DNR 매핑 (ADR 0010)', () => {
     );
 
     expect(rules).toHaveLength(1);
+    /*
+     * 퇴역 조건 둘(initiator/excluded 도메인)은 입력에 있어도 조건에 **없다** — 컴파일이
+     * 읽지 않기 때문이다 (릴리스 게이트 R-2). `toEqual`로 통째로 재는 것이 요점이다:
+     * 매핑이 되살아나면 여분 키가 생겨 여기서 붉어진다.
+     */
     expect(rules[0]?.condition).toEqual({
       resourceTypes: ['xmlhttprequest'],
       requestMethods: ['post'],
-      initiatorDomains: ['dev.example.com'],
-      excludedRequestDomains: ['private.example.com'],
     });
   });
 
@@ -77,12 +80,19 @@ describe('compile — 규칙 conditions의 DNR 매핑 (ADR 0010)', () => {
     expect(conditionOf(rules, 'X-Empty')).toEqual(unconditional);
   });
 
-  it('도메인 조건은 트리밍되고 빈 문자열은 걸러진다 — 전부 비면 조건 없음과 같다', () => {
+  /*
+   * 이 자리는 **트리밍을 재던 곳**이었다 (릴리스 게이트 R-2 이전). 컴파일이 두 도메인
+   * 조건을 다듬어 실었으므로 공백만 든 항목이 걸러지는지가 계약이었는데, 그 매핑 자체가
+   * 사라져 다듬을 대상이 없다. 지우는 대신 **어떤 모양으로 남아 있어도 실리지 않는다**를
+   * 재도록 뒤집는다 — 값이 든 것·공백만 든 것·빈 배열 셋을 함께 넣어, 매핑이 되살아나면
+   * 그중 하나라도 반드시 붉어지게 한다.
+   */
+  it('퇴역한 도메인 조건은 어떤 모양이든 DNR 조건으로 실리지 않는다', () => {
     const { rules } = compile(
       [
         profile({
           modifications: [
-            mod('m1', 'X-Trim', {
+            mod('m1', 'X-Filled', {
               conditions: { initiatorDomains: ['  a.com  ', '', '   '], excludedDomains: [' skip.io ', ''] },
             }),
             mod('m2', 'X-Blank', {
@@ -94,15 +104,13 @@ describe('compile — 규칙 conditions의 DNR 매핑 (ADR 0010)', () => {
       env,
     );
 
-    const trimmed = conditionOf(rules, 'X-Trim');
-    expect(trimmed?.initiatorDomains).toEqual(['a.com']);
-    expect(trimmed?.excludedRequestDomains).toEqual(['skip.io']);
-    const blank = conditionOf(rules, 'X-Blank');
-    expect(blank?.initiatorDomains).toBeUndefined();
-    expect(blank?.excludedRequestDomains).toBeUndefined();
+    const unconditional = { resourceTypes: [...ALL_RESOURCE_TYPES] };
+    // 값이 들어 있어도 조건은 무조건과 **완전히** 같다 — 여분 키가 하나도 없다.
+    expect(conditionOf(rules, 'X-Filled')).toEqual(unconditional);
+    expect(conditionOf(rules, 'X-Blank')).toEqual(unconditional);
   });
 
-  it('excludedDomains는 네이티브 excludedRequestDomains가 된다 — allow 규칙은 만들지 않는다', () => {
+  it('excludedDomains는 DNR로 내려가지 않는다 — allow 규칙도 만들지 않는다', () => {
     const { rules } = compile(
       [profile({ modifications: [mod('m1', 'X-A', { conditions: { excludedDomains: ['private.io'] } })] })],
       env,
@@ -110,7 +118,8 @@ describe('compile — 규칙 conditions의 DNR 매핑 (ADR 0010)', () => {
 
     expect(rules).toHaveLength(1);
     expect(rules[0]?.action.type).toBe('modifyHeaders');
-    expect(rules[0]?.condition.excludedRequestDomains).toEqual(['private.io']);
+    // 예전에는 네이티브 excludedRequestDomains가 됐다. 이제는 아무것도 되지 않는다.
+    expect(rules[0]?.condition.excludedRequestDomains).toBeUndefined();
     expect(rules.some((r) => r.action.type === 'allow')).toBe(false);
   });
 

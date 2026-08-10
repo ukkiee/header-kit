@@ -125,17 +125,20 @@ function emitRule(
  * 규칙의 conditions + URL 스코프를 DNR 조건으로 조립한다 (ADR 0010).
  *
  * `tabIds`를 받던 인자가 사라졌다 (티켓 10) — 탭 도메인 조건이 퇴역해 전개할 것이 없다.
+ *
+ * **퇴역 조건 넷은 여기까지 오지 않는다** (스펙 "컴파일 (core)", 릴리스 게이트 R-2).
+ * `model.ts`의 `RuleConditions`가 그 넷을 "업그레이드 입력에만 나타난다"로 못박고 저장소
+ * 문(`persist.ts`의 벗기기)이 실제로 걷어 간다. 컴파일이 그것을 **읽지 않는 것**이 두 번째
+ * 방어선이다 — 어떤 경로로든 남아 있는 값이 조용히 규칙을 좁히지 못한다.
+ *
+ * 남는 넷은 전부 살아 있는 조건이다. 특히 `requestMethods`는 퇴역하지 **않았다** — 퇴역한
+ * 것은 값 셋(head·connect·other)뿐이고(`rules.ts`의 `RETIRED_REQUEST_METHODS`) 저장소 문이
+ * 그 값들만 걷는다. 이 매핑을 함께 걷으면 폼이 그리는 여섯 메서드가 동작을 잃는다.
  */
 function conditionFor(
   conditions: RuleConditions | undefined,
   scope: { regexFilter?: string; urlFilter?: string },
 ): NetRule['condition'] {
-  const initiatorDomains = (conditions?.initiatorDomains ?? [])
-    .map((d) => d.trim())
-    .filter((d) => d !== '');
-  const excludedRequestDomains = (conditions?.excludedDomains ?? [])
-    .map((d) => d.trim())
-    .filter((d) => d !== '');
   return {
     ...(scope.regexFilter !== undefined ? { regexFilter: scope.regexFilter } : {}),
     ...(scope.urlFilter !== undefined ? { urlFilter: scope.urlFilter } : {}),
@@ -146,8 +149,6 @@ function conditionFor(
     ...(conditions?.requestMethods && conditions.requestMethods.length > 0
       ? { requestMethods: conditions.requestMethods }
       : {}),
-    ...(initiatorDomains.length > 0 ? { initiatorDomains } : {}),
-    ...(excludedRequestDomains.length > 0 ? { excludedRequestDomains } : {}),
   };
 }
 
