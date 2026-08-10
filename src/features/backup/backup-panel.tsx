@@ -7,7 +7,9 @@ import {
   type SnapshotStatus,
 } from '@/core/backup';
 import type { Command } from '@/core/commands';
+import type { Profile } from '@/core/schema';
 import { parseImport } from '@/core/transfer';
+import { importIssueText } from '@/features/transfer/import-text';
 import { format, MESSAGES, type MessageKey, type Translator } from '@/core/i18n';
 import { hasCloudBackups, listBackupSnapshots, readBackupKV } from '@/platform/backupStore';
 import type { BackupMutationResult } from '@/core/state-writer';
@@ -24,8 +26,13 @@ import { useT } from '@/ui/i18n-context';
 export interface BackupPanelProps {
   /** 클라우드 동기화 스위치 — **앞으로의** 백업 위치만 정한다 (티켓 07). */
   syncBackup: boolean;
-  /** 권위 실행 결과를 돌려받는다 — 거부된 복원을 성공처럼 표시하지 않기 위해. */
+  /** 권위 실행 결과를 돌려받는다 — 거부된 동작을 성공처럼 표시하지 않기 위해. */
   onCommand: (command: Command) => Promise<{ ok: boolean; error?: string }>;
+  /**
+   * 복원 — 명령을 직접 보내지 않고 **셸을 거친다**. 되돌리기 토스트를 띄우려면 복원 직전의
+   * 프로필 전체가 필요한데, 그것을 쥔 쪽은 이 패널이 아니라 셸이다(`restore` 주석).
+   */
+  onRestore: (profiles: Profile[]) => Promise<{ ok: boolean; error?: string }>;
   /**
    * 주입 지점 넷은 **안정된 참조**여야 한다 (code-review). 렌더마다 새로 만든 함수를 넘기면
    * 목록 로드가 매번 다시 돌고, 그 결과가 새 배열이라 잔존 여부 effect까지 함께 돌아 루프가 된다.
@@ -94,14 +101,19 @@ type CloudPresence = 'unknown' | 'present' | 'none';
 
 /**
  * 확인 중인 행과 동작 — **한 번에 하나뿐**이다 (티켓 12). 행마다 확인 상태를 따로 들면
- * 복원 확인과 삭제 확인이 나란히 켜져, 다음 클릭이 무엇을 실행할지 화면만 봐서는 모른다.
- * 하나만 담기 때문에 다른 파괴적 동작을 켜는 것이 앞의 확인을 그대로 취소한다.
+ * 두 확인이 나란히 켜져, 다음 클릭이 무엇을 실행할지 화면만 봐서는 모른다. 하나만 담기
+ * 때문에 다른 파괴적 동작을 켜는 것이 앞의 확인을 그대로 취소한다.
+ *
+ * **복원은 여기 없다.** 되물음 대신 실행 취소 토스트를 쓰기로 바뀌었기 때문이다(아래
+ * `restore` 주석) — 남은 것은 삭제뿐이라 지금은 한 값짜리 유니온이지만, 두 번째 파괴적
+ * 동작이 생기면 여기로 돌아온다.
  */
-type Confirming = { id: string; action: 'restore' | 'delete' };
+type Confirming = { id: string; action: 'delete' };
 
 export function BackupPanel({
   syncBackup,
   onCommand,
+  onRestore,
   loadSnapshots = listBackupSnapshots,
   loadSnapshotText = defaultLoadSnapshotText,
   loadCloudPresence = hasCloudBackups,
@@ -222,11 +234,18 @@ export function BackupPanel({
     await loadSnapshots(target).then(setSnapshots, (reason) => setError(reasonText(reason)));
   };
 
+  /**
+   * 복원 — **누르면 바로 실행되고, 되돌리기는 토스트가 든다** (규칙 삭제와 같은 결).
+   *
+   * 예전에는 2단 확인이었다. 파괴적이라는 판단은 맞지만 되물음은 값이 싸지 않다: 복원은
+   * 사고가 나면 되돌릴 수 있는 동작인데(직전 프로필 전체를 다시 심으면 된다) 되물음은 매번
+   * 두 번 누르게 한다. 되돌릴 수 없는 것(삭제·초기화)에만 되물음을 남기고, 되돌릴 수 있는
+   * 것은 즉시 실행 + 실행 취소로 옮긴다.
+   *
+   * 실행 취소는 **셸이 든다**(`onRestore`). 되돌리려면 복원 직전의 프로필 전체가 필요한데
+   * 이 패널은 그것을 보지 못한다 — 스냅샷을 쥔 쪽이 토스트도 띄우는 것이 맞다.
+   */
   const restore = async (entry: SnapshotStatus) => {
-    if (!isConfirming(entry, 'restore')) {
-      setConfirming({ id: entry.id, action: 'restore' });
-      return;
-    }
     setConfirming(null);
     setNotices([]);
 
@@ -237,16 +256,16 @@ export function BackupPanel({
     }
     const parsed = parseImport(decoded.text);
     if (!parsed.ok) {
-      setError(parsed.errors.join('\n'));
+      setError(parsed.errors.map((e) => importIssueText(e, t)).join('\n'));
       return;
     }
-    const result = await onCommand({ type: 'restore-profiles', profiles: parsed.profiles });
+    const result = await onRestore(parsed.profiles);
     setError(result.ok ? null : (result.error ?? 'Restore rejected.'));
     /*
      * 복원이 실제로 착지했을 때만 공지를 올린다 (티켓 02에서 이월). 거부된 복원의 공지를
      * 올리면 "이것들이 걷혔습니다"라고 말해 놓고 저장소는 그대로인 화면이 된다.
      */
-    if (result.ok) setNotices(parsed.notices);
+    if (result.ok) setNotices(parsed.notices.map((n) => importIssueText(n, t)));
   };
 
   const backedUpAt = lastBackupAt(snapshots);
@@ -340,17 +359,8 @@ export function BackupPanel({
                   <Pill tone="danger" title={snapshot.reason}>
                     {t('corrupt')}
                   </Pill>
-                ) : isConfirming(snapshot, 'restore') ? (
-                  // 파괴적 확인 단계는 문구가 명시적인 텍스트 버튼을 유지한다
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    aria-label={t('ariaConfirmRestore')}
-                    onClick={() => void restore(snapshot)}
-                  >
-                    {t('confirmReplaceAll')}
-                  </Button>
                 ) : (
+                  // 되물음 없이 바로 복원한다 — 되돌리기는 토스트가 든다(위 `restore` 주석).
                   <IconButton
                     label={t('ariaRestoreBackup')}
                     tooltip={t('restore')}

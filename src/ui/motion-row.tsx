@@ -2,7 +2,9 @@ import { AnimatePresence, m, useReducedMotion } from 'motion/react';
 import type { ReactNode } from 'react';
 import { ROW_TRANSITION } from './motion-tokens';
 
-export { AnimatePresence };
+// 감도 판정도 여기서 함께 내보낸다 — 목록 모션을 쓰는 쪽이 "지금 전이가 도는가"를 물어야
+// 할 때가 있고(빈 상태의 등장 시점), 그 답의 출처가 MotionRow와 갈리면 안 된다.
+export { AnimatePresence, useReducedMotion };
 
 /**
  * 목록 항목 enter/exit 모션 (ui-refine 08) — 추가는 fade+height-in, 삭제는 반대.

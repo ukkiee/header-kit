@@ -162,7 +162,7 @@ describe('내보내기·가져오기 포맷 버전', () => {
     const text = JSON.stringify({ headerkit: EXPORT_FORMAT_VERSION + 1, profiles: [profile()] });
     const result = parseImport(text);
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.errors.join(' ')).toMatch(/newer/i);
+    if (!result.ok) expect(result.errors.map((e) => e.code)).toEqual(['newer-format']);
   });
 
   it('미지의 종류는 조용히 버리지 않고 오류로 거부한다', () => {
@@ -389,7 +389,7 @@ describe('가져오기 — v2 파일의 응답 쿠키', () => {
 
   const imported = (value: string) => {
     const result = parseImport(v2File(value));
-    if (!result.ok) throw new Error(`import 실패: ${result.errors.join(', ')}`);
+    if (!result.ok) throw new Error(`import 실패: ${result.errors.map((e) => e.code).join(', ')}`);
     const m = result.profiles[0]?.modifications[0];
     if (m?.kind !== 'set-cookie') throw new Error('set-cookie가 아니다');
     return m;
@@ -473,7 +473,7 @@ describe('저장소와 가져오기가 같은 곳에 도착한다', () => {
 
   const fromImport = () => {
     const result = parseImport(JSON.stringify({ headerkit: 1, profiles: [legacyProfile()] }));
-    if (!result.ok) throw new Error(`import 실패: ${result.errors.join(', ')}`);
+    if (!result.ok) throw new Error(`import 실패: ${result.errors.map((e) => e.code).join(', ')}`);
     return result.profiles[0]!.modifications[0]!;
   };
 
@@ -493,7 +493,7 @@ describe('저장소와 가져오기가 같은 곳에 도착한다', () => {
     const broken = { ...legacyProfile(), filters: [{ kind: 'request-method', id: 'f1', enabled: true, methods: 'nope' }] };
     const result = parseImport(JSON.stringify({ headerkit: 1, profiles: [broken] }));
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.errors.join(' ')).toMatch(/invalid filter/);
+    if (!result.ok) expect(result.errors.map((e) => e.code)).toContain('unreadable-legacy-filter');
   });
 });
 

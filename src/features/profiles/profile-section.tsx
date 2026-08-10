@@ -3,7 +3,8 @@ import type { SuggestionHistory } from '@/core/autocomplete';
 import type { Command } from '@/core/commands';
 import type { Modification, Profile } from '@/core/schema';
 import { Button } from '@/ui/press-button';
-import { AnimatePresence, MotionRow } from '@/ui/motion-row';
+import { useEffect, useState } from 'react';
+import { AnimatePresence, MotionRow, useReducedMotion } from '@/ui/motion-row';
 import {
   ruleFormIntentProps,
   RuleFormSlot,
@@ -62,8 +63,23 @@ export function ProfileSection({
    * 한 프레임도 그려지지 않는다.
    */
   const RuleForm = useRuleForm();
+  const reduce = useReducedMotion();
   const setEditingRule = onEditingRuleChange;
   const openRuleForm = onOpenRuleForm;
+
+  /*
+   * **새 규칙의 행은 폼이 다 접힌 뒤에 선다.**
+   *
+   * 저장하면 폼(400px)이 접히고 새 행(56px)이 목록에 들어온다. 둘이 동시에 움직이면 그
+   * 차이만큼 아래 내용이 위로 당겨지면서, 무엇이 생겼는지보다 화면이 줄었다는 것이 먼저
+   * 읽힌다 — 마지막 규칙을 지웠을 때 빈 상태가 성급히 서던 것과 같은 종류의 겹침이다.
+   *
+   * 그래서 방금 저장한 규칙 하나를 **폼이 사라질 때까지 목록에서 빼 둔다**. 붙잡는 것은 그
+   * 하나뿐이라 다른 화면에서 들어온 규칙은 곧바로 보인다.
+   *
+   * reduced-motion에서는 접힘이 없어 기다릴 것도 없다 — 붙잡지 않는다(ADR 0012).
+   */
+  const [heldRowId, setHeldRowId] = useState<string | null>(null);
 
   /** 규칙 저장 — 원자 전송, 성공 시 폼 닫기. */
   const saveItem = async (item: Modification, op: 'add' | 'update') => {
@@ -72,7 +88,10 @@ export function ProfileSection({
         ? { type: 'add-modification', profileId: profile.id, modification: item }
         : { type: 'update-modification', profileId: profile.id, modification: item };
     const result = await onCommandWithResult(command);
-    if (result.ok) setEditingRule(null);
+    if (result.ok) {
+      if (op === 'add' && !reduce) setHeldRowId(item.id);
+      setEditingRule(null);
+    }
     return result;
   };
 
@@ -82,9 +101,52 @@ export function ProfileSection({
    * 저장으로 끝나든 취소로 끝나든 사용자가 기억하는 순서가 유지된다.
    */
   const editing = profile.modifications.find((m) => m.id === editingRule);
-  const orderedModifications = editing
+  const ordered = editing
     ? [editing, ...profile.modifications.filter((m) => m !== editing)]
     : profile.modifications;
+  const orderedModifications = heldRowId
+    ? ordered.filter((m) => m.id !== heldRowId)
+    : ordered;
+
+  /*
+   * **빈 상태는 마지막 행이 다 접힌 뒤에 선다.**
+   *
+   * 예전에는 목록이 비는 그 순간 안내가 통째로 나타났다. 삭제한 행은 아직 260ms 동안 접히는
+   * 중이라(`MotionRow`), 지우는 규칙 옆에 "아직 규칙이 없습니다"가 나란히 떠 있는 프레임이
+   * 생긴다 — 규칙 하나짜리 프로필에서 특히 티가 났다. 화면이 사용자보다 먼저 결론을 말하는
+   * 셈이라 빠른 것이 아니라 성급하게 읽힌다.
+   *
+   * 그래서 두 단계로 나눈다: 행이 접히고(260ms), 그다음 안내가 같은 모션으로 열린다.
+   * 판단은 `onExitComplete` 하나가 내린다 — 시간을 재서 맞추면 모션 토큰이 바뀌는 날
+   * 두 값이 조용히 어긋난다.
+   *
+   * `initial={false}`가 아래 안내에도 붙는 이유: 규칙이 원래 없는 프로필을 열 때는 기다릴
+   * 퇴장이 없으므로 애니메이션 없이 곧바로 서야 한다. 첫 렌더에 이미 있는 자식은 그 prop이
+   * 등장 모션을 건너뛰게 한다.
+   *
+   * reduced-motion에서는 퇴장이 없어 기다릴 것도 없다 — 감도 계약이 "전이의 부재"이므로
+   * 순서도 함께 사라지는 것이 맞다(ADR 0012).
+   */
+  const listIsEmpty = profile.modifications.length === 0 && editingRule === null;
+  const [emptyReady, setEmptyReady] = useState(listIsEmpty);
+  useEffect(() => {
+    // 목록이 다시 차면 다음 비움을 위해 되돌린다. 안내가 사라지는 것은 이 플래그가 아니라
+    // `listIsEmpty`가 정하므로, 이 되돌림이 한 프레임 늦어도 화면에는 나타나지 않는다.
+    if (!listIsEmpty) setEmptyReady(false);
+    // 규칙이 원래 없던 프로필은 마운트 시점에 이미 참이라(useState) 여기서 건드리지 않는다.
+    else if (reduce) setEmptyReady(true);
+  }, [listIsEmpty, reduce]);
+
+  /*
+   * 붙잡아 둔 행의 안전망 — 폼이 **다시 열리면** 놓는다.
+   *
+   * 정상 경로에서는 `onExitComplete`가 놓아 준다. 그것이 오지 않는 경로(다음 저장이 앞선
+   * 퇴장을 앞지르는 식)에서 붙잡은 채로 남으면 저장된 규칙이 목록에서 사라진 것처럼 보인다 —
+   * 화면이 저장소와 다른 말을 하는 것은 어떤 모션보다 나쁘다.
+   */
+  useEffect(() => {
+    if (editingRule !== null) setHeldRowId(null);
+  }, [editingRule]);
 
   /*
    * **카드에 헤더가 없다** (ADR 0017, 티켓 04). 예전에는 이 자리에 이름·색·두 글자 라벨 입력과
@@ -101,16 +163,6 @@ export function ProfileSection({
    */
   return (
     <div className="flex flex-col gap-1.5">
-      {profile.modifications.length === 0 && editingRule === null && (
-        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border py-6 text-center">
-          <p className="text-xs text-muted-foreground">{t('noRulesYet')}</p>
-          <Button size="sm" {...ruleFormIntentProps} onClick={() => openRuleForm('new')}>
-            <Plus size={14} strokeWidth={1.75} className="mr-1" />
-            {t('addRule')}
-          </Button>
-        </div>
-      )}
-
       {/*
         아코디언 카드 목록 (ADR 0017, 스펙 story 1–7) — 규칙 하나가 카드 하나다.
 
@@ -122,7 +174,15 @@ export function ProfileSection({
         건드리지 않으므로 폼을 닫으면 원래 자리로 돌아온다 — 저장으로 끝나든 취소로 끝나든
         사용자가 기억하는 순서가 유지된다.
       */}
-      <AnimatePresence initial={false}>
+      <AnimatePresence
+        initial={false}
+        // 마지막 행이 다 접힌 그 순간이 빈 상태가 설 시점이다 (위 주석).
+        onExitComplete={() => {
+          if (listIsEmpty) setEmptyReady(true);
+          // 폼이 사라졌다 — 붙잡아 둔 새 행을 이제 세운다.
+          setHeldRowId(null);
+        }}
+      >
         {/*
           새 규칙 폼이 목록 **맨 위**에 카드로 열린다 (story 7). 예전에는 목록 아래에
           있어서, 규칙이 많으면 방금 만들기 시작한 것을 찾아 스크롤해야 했다.
@@ -194,6 +254,27 @@ export function ProfileSection({
             </MotionRow>
           );
         })}
+      </AnimatePresence>
+
+      {/*
+        **빈 상태는 목록 아래에 있다.** 화면에서는 둘이 동시에 서는 일이 없으니 순서가
+        안 보일 것 같지만, 전이 중에는 보인다: 위에 있으면 규칙 추가를 눌렀을 때 안내가
+        접히는 만큼 그 아래의 폼이 위로 끌려 올라가, 폼이 펴지는 것이 아니라 아래에서
+        솟아오르는 것으로 읽힌다. 아래로 내리면 폼은 제자리에서 아래로 펴지고 안내는 그
+        밑에서 접힌다 — 움직이는 것이 하나뿐이라 눈이 쫓을 것도 하나다.
+      */}
+      <AnimatePresence initial={false}>
+        {listIsEmpty && emptyReady && (
+          <MotionRow key="empty-state">
+            <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border py-6 text-center">
+              <p className="text-xs text-muted-foreground">{t('noRulesYet')}</p>
+              <Button size="sm" {...ruleFormIntentProps} onClick={() => openRuleForm('new')}>
+                <Plus size={14} strokeWidth={1.75} className="mr-1" />
+                {t('addRule')}
+              </Button>
+            </div>
+          </MotionRow>
+        )}
       </AnimatePresence>
     </div>
   );

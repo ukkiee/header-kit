@@ -31,8 +31,14 @@ function counted(t: Translator, count: number, one: MessageKey, many: MessageKey
  * 헤더가 그 수를 가져오면서 분기까지 함께 와야 했다.
  */
 export function statusCountsText(summary: StatusSummary, t: Translator): string {
+  /*
+   * 실패 쪽도 **같은 `counted`를 지난다.** 예전에는 이 가지만 코드에서 수와 문구를 이어
+   * 붙였고, 그래서 한국어에서 세는 단위가 빠진 `5 규칙 — 적용 안 됨`이 나갔다 — 바로 위
+   * 주석이 경고하던 그 새는 자리다. 카탈로그가 수를 함께 들면 두 가지가 한 번에 옳아진다:
+   * 단위가 로케일의 자리에 붙고, 단수/복수 선택도 카탈로그의 일로 돌아온다.
+   */
   const rules = summary.applyError
-    ? `${summary.ruleCount} ${t('rulesNotApplied')}`
+    ? counted(t, summary.ruleCount, 'ruleNotApplied', 'rulesNotApplied')
     : counted(t, summary.ruleCount, 'countRule', 'countRules');
   const profiles = counted(t, summary.activeProfileCount, 'countProfile', 'countProfiles');
   return `${rules}${DOT}${profiles}`;

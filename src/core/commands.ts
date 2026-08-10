@@ -64,10 +64,14 @@ function withoutKey(
 }
 
 /*
- * **프로필의 메타를 바꾸는 명령이 없다** (ADR 0017, 티켓 04). 이름·색은 만들 때 정해지고,
- * 복제·삭제 컨트롤도 시안에 없어 함께 퇴역했다 — `duplicate-profile`·`remove-profile`·
- * `update-profile-meta` 셋과 그 순수 함수들이 이 커밋에서 사라진 이유다. 호출부가 없는
- * 명령을 남겨 두면 화면에 없는 조작이 메시지로는 계속 가능한 채로 남는다.
+ * **프로필의 메타를 바꾸는 명령이 없다** (ADR 0017, 티켓 04). 이름·색은 만들 때 정해지고
+ * 그 뒤로 바뀌지 않는다 — `duplicate-profile`·`update-profile-meta`와 그 순수 함수들이
+ * 그때 사라진 이유다. 호출부가 없는 명령을 남겨 두면 화면에 없는 조작이 메시지로는 계속
+ * 가능한 채로 남는다.
+ *
+ * **`remove-profile`은 돌아왔다** (ADR 0017 개정). 함께 퇴역했었지만, 잘못 만든 프로필을
+ * 되돌리는 길이 전체 초기화뿐이라는 대가가 컸다 — 그건 다른 프로필까지 날린다. 목록 행이
+ * 2단계 확인을 거쳐 이 명령을 보낸다(`removeProfile` 주석).
  */
 
 /**
@@ -318,6 +322,31 @@ export function addProfile(
   return base;
 }
 
+/**
+ * 프로필 삭제 (ADR 0017 개정) — 그 프로필과 **그것이 남긴 실체화 값까지** 함께 지운다.
+ *
+ * ADR 0017은 삭제를 두지 않기로 했었다. 이름·색이 만들 때 정해져 바뀌지 않으니 잘못 만든
+ * 프로필을 되돌리는 길이 전체 초기화뿐이었고, 그건 다른 프로필까지 함께 날리는 값이다 —
+ * 되돌릴 수 없는 실수를 없애려던 결정이 더 큰 되돌림을 강요하고 있었다.
+ *
+ * 실체화 값을 함께 지우는 것이 이 함수의 요점이다. 그 값들은 modification id로 매인 별도
+ * 맵이라 프로필만 지우면 **아무도 가리키지 않는 값이 영구히 남는다**. 프로필을 끄는 경로가
+ * 이미 같은 정리를 하므로(`clearProfileMaterialization`) 그 함수를 그대로 쓴다 — 삭제는
+ * 비활성화보다 강한 일이지 다른 일이 아니다.
+ *
+ * 없는 id면 상태를 그대로 돌려준다 — 두 화면이 같은 프로필을 동시에 지웠을 때 뒤에 도착한
+ * 명령이 실패로 보이지 않게 한다(쓰기 줄이 순서를 보장하므로 앞선 것이 이미 지웠다).
+ */
+export function removeProfile(state: StoredState, profileId: string): StoredState {
+  const profile = state.profiles.find((p) => p.id === profileId);
+  if (!profile) return state;
+  return {
+    ...state,
+    profiles: state.profiles.filter((p) => p.id !== profileId),
+    materialized: clearProfileMaterialization(state.materialized, profile),
+  };
+}
+
 export function moveProfile(
   state: StoredState,
   profileId: string,
@@ -423,6 +452,7 @@ export type Command =
   | { type: 'toggle-profile'; profileId: string; active: boolean }
   | { type: 'add-profile'; profile: Profile; afterProfileId?: string }
   | { type: 'move-profile'; profileId: string; toIndex: number }
+  | { type: 'remove-profile'; profileId: string }
   | { type: 'set-paused'; paused: boolean }
   | { type: 'toggle-pause' }
   | { type: 'set-theme'; theme: ThemePreference }
@@ -487,6 +517,8 @@ export function applyCommand(
       return addProfile(state, command.profile, command.afterProfileId, deps);
     case 'move-profile':
       return moveProfile(state, command.profileId, command.toIndex);
+    case 'remove-profile':
+      return removeProfile(state, command.profileId);
     case 'set-paused':
       return setPaused(state, command.paused);
     case 'toggle-pause':

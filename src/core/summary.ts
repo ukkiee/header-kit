@@ -17,6 +17,18 @@ export interface WarningView {
 export interface StatusSummary {
   ruleCount: number;
   activeProfileCount: number;
+  /**
+   * 지금 걸려 있는 것들의 **대표 색** — 툴바 배지가 이것으로 칠해진다.
+   *
+   * 여럿이 켜져 있으면 **목록에서 가장 위**에 있는 활성 프로필의 색이다. 임의로 고른
+   * 기준이 아니라 이 앱이 이미 쓰는 우선순위다: 같은 헤더를 여러 프로필이 건드리면 목록
+   * 위쪽이 이긴다(`warnHeaderOverlap`). 배지가 그 승자의 색을 들면, 겹쳤을 때 실제로
+   * 나가는 값이 어느 프로필의 것인지를 툴바만 보고도 알 수 있다.
+   *
+   * 정지 중이거나 켜진 프로필이 없으면 `null`이다 — `activeProfileCount`가 0으로
+   * 떨어지는 것과 같은 규율이라, 요약 안에서 두 값이 어긋나지 않는다.
+   */
+  leadProfileColor: string | null;
   paused: boolean;
   /** 어댑터가 규칙을 실제 적용하다 실패한 메시지 (예: quota) — 없으면 null. */
   applyError: string | null;
@@ -97,9 +109,12 @@ export function summarizeCompile(
   context: SummaryContext,
 ): StatusSummary {
   const warnings = result.warnings.map(toView);
+  const active = context.paused ? [] : context.profiles.filter((p) => p.active);
   return {
     ruleCount: result.rules.length,
-    activeProfileCount: context.paused ? 0 : context.profiles.filter((p) => p.active).length,
+    activeProfileCount: active.length,
+    // 목록 순서가 곧 우선순위다 — 첫 활성 프로필이 겹침의 승자이고 배지의 색이다.
+    leadProfileColor: active[0]?.color ?? null,
     paused: context.paused,
     applyError: context.applyError,
     warnings,

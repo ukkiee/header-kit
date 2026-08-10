@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type RefObject } from 'react';
+import { useEffect, useId, useRef, useState, type RefObject } from 'react';
 import { X } from 'lucide-react';
 import {
   EMPTY_SUGGESTION_HISTORY,
@@ -68,6 +68,50 @@ type SameSiteChoice = SameSitePolicy | typeof UNSET;
 const SAME_SITE_POLICIES = Object.keys(SAME_SITE_LABEL) as SameSitePolicy[];
 
 /**
+ * 종류를 고른 뒤 커서가 갈 곳 — 그 종류에서 **아직 비어 있는 첫 칸** (화면에 놓인 순서대로).
+ *
+ * `fieldIssues`의 필수 목록을 그대로 쓰지 않는 이유가 둘이다. 하나, 응답 쿠키에는 필수가
+ * 없어(빈 쿠키가 유효한 사용례다) 그 목록만 보면 종류를 골라도 커서가 갈 곳이 없다. 둘,
+ * 헤더의 값은 필수가 아니지만 이름 다음에 채우는 칸이라 "다음에 칠 곳"으로는 맞다.
+ *
+ * URL 필터는 Block에만 들어 있다. 다른 종류에서 그것은 비워 두면 "모든 URL"이라는 뜻의
+ * 선택 항목이라, 비었다고 커서를 보내면 안 채워도 되는 칸으로 끌고 가는 셈이다. Block에서만
+ * 그 칸이 규칙의 전부다.
+ */
+const FIRST_EMPTY_ORDER: Record<ModificationKind, readonly RequiredField[]> = {
+  'request-header': ['name', 'value'],
+  'response-header': ['name', 'value'],
+  cookie: ['name', 'value'],
+  'set-cookie': ['name', 'value'],
+  'user-agent': ['value'],
+  'header-removal': ['name'],
+  redirect: ['pattern', 'substitution'],
+  block: ['urlFilter'],
+};
+
+/** 초안에서 그 칸의 현재 글자 — 종류마다 필드가 달라 `in`으로 물어본다. */
+function fieldText(draft: Modification, field: RequiredField): string {
+  switch (field) {
+    case 'name':
+      return 'name' in draft ? (draft.name ?? '') : '';
+    case 'value':
+      return 'value' in draft ? (draft.value ?? '') : '';
+    case 'pattern':
+      return draft.kind === 'redirect' ? draft.pattern : '';
+    case 'substitution':
+      return draft.kind === 'redirect' ? draft.substitution : '';
+    case 'urlFilter':
+      return 'urlFilter' in draft ? (draft.urlFilter ?? '') : '';
+    default:
+      return field satisfies never;
+  }
+}
+
+function firstEmptyField(draft: Modification): RequiredField | undefined {
+  return FIRST_EMPTY_ORDER[draft.kind].find((field) => fieldText(draft, field).trim() === '');
+}
+
+/**
  * 규칙 폼 (ADR 0006) — 종류를 고르면 그 종류의 필드가 나타나고, Save가 규칙
  * 전체를 원자적으로 저장한다. 초안은 로컬 — 취소가 아무것도 흘리지 않는다.
  */
@@ -117,12 +161,34 @@ export function RuleForm({
     value: valueRef,
     urlFilter: urlFilterRef,
   };
+  /*
+   * 종류를 고르면 **그 종류에서 아직 빈 첫 칸으로 커서가 간다** — 고른 다음에 할 일이 늘
+   * "무언가를 친다"이기 때문이다. 예전에는 커서가 셀렉트에 남아, 값을 치려면 매번 마우스나
+   * Tab으로 다음 칸을 찾아야 했다.
+   *
+   * 옮기는 것은 **사용자가 고른 직후 한 번**뿐이라 플래그를 둔다. 초안이 바뀔 때마다 옮기면
+   * 글자를 칠 때마다 커서가 다른 칸으로 튄다. 실제 focus는 아래 효과가 하는데, 새 종류의
+   * 입력이 마운트된 **뒤**여야 ref가 그것을 가리키기 때문이다.
+   */
+  const kindJustPicked = useRef(false);
   const switchKind = (kind: ModificationKind) => {
     if (kind === draft.kind) return;
     setDraft(switchDraftKind(draft, kind));
     // 이전 종류의 검증 오류는 새 초안과 무관하다 — 아직 Save한 적 없는데 표시되면 안 된다.
     setFieldErrors([]);
+    kindJustPicked.current = true;
   };
+
+  useEffect(() => {
+    if (!kindJustPicked.current) return;
+    kindJustPicked.current = false;
+    const field = firstEmptyField(draft);
+    // 빈 칸이 없으면(예: URL 필터를 이어받은 Block) 옮기지 않는다 — 채운 칸으로 끌고 가는
+    // 것은 도움이 아니다. 종류별 `autoFocus`는 마운트 시점에 이미 지났으므로 이쪽이 이긴다.
+    if (field) requiredFieldRefs[field].current?.focus();
+    // 종류가 바뀐 커밋에서만 돈다 — 초안 전체를 의존성에 두면 타이핑마다 재실행된다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft.kind]);
 
   /**
    * 저장될 모양의 초안 — 정리한 뒤 **수렴**시킨다 (ADR 0017, 티켓 06).
@@ -275,12 +341,23 @@ export function RuleForm({
     </div>
   );
 
-  /** 끔/켬 두 칩 — 부재와 `false`는 같은 뜻이라(속성이 안 붙는다) 한 칩으로 접는다. */
-  const boolOptions = [
-    { value: 'off' as const, label: t('toggleOff') },
-    { value: 'on' as const, label: t('toggleOn') },
-  ];
-  const boolChipValue = (flag: boolean | undefined) => (flag ? ('on' as const) : ('off' as const));
+  /**
+   * 캡션 + 스위치 — 켜고 끄기뿐인 속성(Secure·HttpOnly)이 쓴다.
+   *
+   * 예전에는 '끔'·'켬' 두 칩이었다. 값이 둘뿐인 것을 칩 두 개로 그리면 **고를 것이 둘**로
+   * 보이는데, 실제로 사용자가 하는 일은 하나를 켜고 끄는 것이다 — 같은 화면의 다른 on/off
+   * (프로필 토글, 규칙 토글, 저장 후 활성화)가 전부 스위치라 문법도 갈려 있었다. 부재와
+   * `false`가 같은 뜻이라는 것(속성이 안 붙는다)도 스위치 쪽이 그대로 옮긴다.
+   *
+   * 캡션을 위에 두는 것은 옆의 SameSite 칩 그룹과 같은 줄에 서기 때문이다 — 한쪽만 캡션이
+   * 옆에 붙으면 세 칸의 첫 줄이 어긋난다.
+   */
+  const switchField = (caption: string, checked: boolean, onChange: (next: boolean) => void) => (
+    <div className="flex flex-col gap-1">
+      <span className={fieldCaption}>{caption}</span>
+      <ToggleSwitch checked={checked} onCheckedChange={onChange} aria-label={caption} />
+    </div>
+  );
 
   return (
     <div className="@container flex flex-col gap-3 rounded-lg bg-secondary p-3" onKeyDown={onKeyDown}>
@@ -455,6 +532,13 @@ export function RuleForm({
             <FieldLabeled label={isCookieKind ? t('cookieValue') : t('value')}>
               <div className="flex items-center gap-1">
                 <Input
+                  /*
+                    값 칸도 ref를 든다. 응답 쿠키의 "속성만 채웠다" 검증이 이 칸을 가리키는데
+                    (rule-validation의 setCookieIssues) ref가 사용자-에이전트 쪽에만 붙어 있어,
+                    저장이 막혀도 커서가 아무 데도 가지 않았다. 두 종류는 동시에 마운트되지
+                    않으므로 같은 ref를 나눠 써도 겹치지 않는다.
+                  */
+                  ref={valueRef}
                   autoFocus={editing && draft.kind === 'set-cookie'}
                   value={draft.value}
                   onChange={(e) => patchDraft({ value: e.target.value })}
@@ -516,11 +600,12 @@ export function RuleForm({
                   ],
                   (picked) => patchDraft({ sameSite: picked === UNSET ? undefined : picked }),
                 )}
-                {chipField(t('cookieSecure'), boolChipValue(draft.secure), boolOptions, (picked) =>
-                  patchDraft({ secure: picked === 'on' || undefined }),
+                {/* 켠 것만 저장한다 — 끄면 `undefined`라 조립에 붙지 않는다(story 35). */}
+                {switchField(t('cookieSecure'), draft.secure === true, (on) =>
+                  patchDraft({ secure: on || undefined }),
                 )}
-                {chipField(t('cookieHttpOnly'), boolChipValue(draft.httpOnly), boolOptions, (picked) =>
-                  patchDraft({ httpOnly: picked === 'on' || undefined }),
+                {switchField(t('cookieHttpOnly'), draft.httpOnly === true, (on) =>
+                  patchDraft({ httpOnly: on || undefined }),
                 )}
               </div>
             </>

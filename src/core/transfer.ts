@@ -25,9 +25,47 @@ export interface ExportFile {
   profiles: Profile[];
 }
 
+/**
+ * 가져오기가 말하는 것들 — **문자열이 아니라 코드와 파라미터다** (컴파일 경고와 같은 구조).
+ *
+ * core는 로케일을 모른다. 여기서 영어 문장을 만들면 한국어 화면에 영어 오류가 뜨고, 그것은
+ * 이 저장소가 못박은 "모든 UI 문자열은 카탈로그를 거친다"를 어긴다 — JSX만 훑는 커버리지
+ * 테스트가 못 보는 자리라 조용히 어겨져 있었다. `CompileWarning` → `WarningView` →
+ * `warning-text`가 이미 같은 문제를 푼 길이고, 가져오기도 그 길을 탄다.
+ *
+ * `where`는 지역화 대상이 아니다 — `profiles[0] ("Work")`는 파일 안의 **자리**를 가리키는
+ * 좌표이고, 사용자가 고칠 곳을 찾는 데 쓰는 그 표기 그대로여야 한다.
+ */
+export type ImportIssueCode =
+  | 'invalid-json'
+  | 'newer-format'
+  | 'not-export-file'
+  | 'entry-not-object'
+  | 'field-not-text'
+  | 'bad-color'
+  | 'active-not-boolean'
+  | 'modifications-not-list'
+  | 'unreadable-rule'
+  | 'filters-not-list'
+  | 'unreadable-legacy-filter'
+  | 'dropped-lost-filters'
+  | 'filters-moved'
+  | 'dropped-disabled-filters'
+  | 'rules-lost-conditions';
+
+export interface ImportIssue {
+  code: ImportIssueCode;
+  params: Record<string, string | number>;
+}
+
+const issue = (code: ImportIssueCode, params: Record<string, string | number> = {}): ImportIssue => ({
+  code,
+  params,
+});
+
 export type ImportResult =
-  | { ok: true; profiles: Profile[]; notices: string[] }
-  | { ok: false; errors: string[] };
+  | { ok: true; profiles: Profile[]; notices: ImportIssue[] }
+  | { ok: false; errors: ImportIssue[] };
 
 export function exportProfiles(state: StoredState, profileIds: string[]): ExportFile {
   const wanted = new Set(profileIds);
@@ -41,29 +79,34 @@ export function serializeExport(file: ExportFile): string {
   return JSON.stringify(file, null, 2);
 }
 
-/** 항목 단위 오류 메시지 — 어느 항목이 왜 틀렸는지 (AC). */
-function validateProfileEntry(value: unknown, index: number): string[] {
+/** 파일 안의 자리 — 이름이 읽히면 함께 붙인다. 고칠 곳을 찾는 좌표다(지역화 대상 아님). */
+function entryLabel(value: unknown, index: number): string {
   const path = `profiles[${index}]`;
-  if (!isRecord(value)) return [`${path}: expected an object`];
+  return isRecord(value) && typeof value.name === 'string' ? `${path} ("${value.name}")` : path;
+}
 
-  const label = typeof value.name === 'string' ? `${path} ("${value.name}")` : path;
-  const errors: string[] = [];
+/** 항목 단위 오류 — 어느 항목이 왜 틀렸는지 (AC). */
+function validateProfileEntry(value: unknown, index: number): ImportIssue[] {
+  const where = entryLabel(value, index);
+  if (!isRecord(value)) return [issue('entry-not-object', { where })];
+
+  const errors: ImportIssue[] = [];
 
   for (const field of ['id', 'name', 'color'] as const) {
-    if (typeof value[field] !== 'string') errors.push(`${label}.${field}: expected string`);
+    if (typeof value[field] !== 'string') errors.push(issue('field-not-text', { where, field }));
   }
   if (typeof value.color === 'string' && !/^#[0-9a-fA-F]{6}$/.test(value.color)) {
-    errors.push(`${label}.color: expected #rrggbb`);
+    errors.push(issue('bad-color', { where }));
   }
-  if (typeof value.active !== 'boolean') errors.push(`${label}.active: expected boolean`);
+  if (typeof value.active !== 'boolean') errors.push(issue('active-not-boolean', { where }));
 
   if (!Array.isArray(value.modifications)) {
-    errors.push(`${label}.modifications: expected array`);
+    errors.push(issue('modifications-not-list', { where }));
   } else {
     value.modifications.forEach((m, i) => {
       // 구버전 export(신규 필드 없음)도 backfill 후 검증한다.
       if (!isModification(backfillModification(m))) {
-        errors.push(`${label}.modifications[${i}]: invalid modification`);
+        errors.push(issue('unreadable-rule', { where, index: i + 1 }));
       }
     });
   }
@@ -78,13 +121,12 @@ function validateProfileEntry(value: unknown, index: number): string[] {
  * 조용히 삼켜진다. 파일 전체를 거부하는 쪽이 옳다 — 사용자는 규칙이 어디로 갔는지 모른 채
  * "가져오기 성공"을 보게 되지 않는다.
  */
-function legacyFilterErrors(value: unknown, index: number): string[] {
+function legacyFilterErrors(value: unknown, index: number): ImportIssue[] {
   if (!isRecord(value) || value.filters === undefined) return [];
-  const path = `profiles[${index}]`;
-  const label = typeof value.name === 'string' ? `${path} ("${value.name}")` : path;
-  if (!Array.isArray(value.filters)) return [`${label}.filters: expected array`];
+  const where = entryLabel(value, index);
+  if (!Array.isArray(value.filters)) return [issue('filters-not-list', { where })];
   return value.filters.flatMap((f, i) =>
-    isFilter(f) ? [] : [`${label}.filters[${i}]: invalid filter`],
+    isFilter(f) ? [] : [issue('unreadable-legacy-filter', { where, index: i + 1 })],
   );
 }
 
@@ -100,7 +142,7 @@ function legacyFilterErrors(value: unknown, index: number): string[] {
  * **프로필을 올리기 전에** 불러야 한다 — 올리면 필터 키가 사라져 셀 것이 없어진다.
  * enabled 기준으로 소실 종류·이주·꺼진 필터 폐기를 구분한다.
  */
-export function legacyFilterNotices(profile: unknown): string[] {
+export function legacyFilterNotices(profile: unknown): ImportIssue[] {
   if (!isRecord(profile)) return [];
   const name = typeof profile.name === 'string' ? profile.name : '';
   const legacyFilters = (Array.isArray(profile.filters) ? profile.filters : []).filter(isRecord);
@@ -109,17 +151,11 @@ export function legacyFilterNotices(profile: unknown): string[] {
     f.kind === 'exclude-url' || f.kind === 'tab' || f.kind === 'tab-group' || f.kind === 'window';
   const lost = enabled.filter(isLostKind);
   const disabledCount = legacyFilters.length - enabled.length;
-  const notices: string[] = [];
-  if (lost.length > 0) {
-    notices.push(
-      `"${name}": ${lost.length} legacy filter(s) (exclude-url/tab/group/window) have no per-rule equivalent and were dropped.`,
-    );
-  }
-  if (enabled.some((f) => !isLostKind(f))) {
-    notices.push(`"${name}": legacy profile filters were migrated to per-rule conditions.`);
-  }
+  const notices: ImportIssue[] = [];
+  if (lost.length > 0) notices.push(issue('dropped-lost-filters', { name, count: lost.length }));
+  if (enabled.some((f) => !isLostKind(f))) notices.push(issue('filters-moved', { name }));
   if (disabledCount > 0) {
-    notices.push(`"${name}": ${disabledCount} disabled legacy filter(s) were dropped.`);
+    notices.push(issue('dropped-disabled-filters', { name, count: disabledCount }));
   }
   return notices;
 }
@@ -134,14 +170,10 @@ export function legacyFilterNotices(profile: unknown): string[] {
  * **이 문장이 열거하는 목록의 출처는 `persist.ts`의 `RETIRED_CONDITION_KEYS`·`RETIRED_METHODS`다** —
  * 그쪽이 바뀌면 여기도 함께 고쳐야 하고, 안 고치면 이 공지가 조용히 거짓이 된다.
  */
-function retirementNotices({ entry, retired }: { entry: unknown; retired: number }): string[] {
+function retirementNotices({ entry, retired }: { entry: unknown; retired: number }): ImportIssue[] {
   if (retired === 0) return [];
   const name = isRecord(entry) && typeof entry.name === 'string' ? entry.name : '';
-  return [
-    `"${name}": ${retired} rule(s) lost conditions this version no longer supports ` +
-      `(excluded/initiator/tab domains, auto-off, and the HEAD/CONNECT/OTHER methods) ` +
-      `and now apply more broadly.`,
-  ];
+  return [issue('rules-lost-conditions', { name, count: retired })];
 }
 
 export function normalizeImportedProfiles(
@@ -179,7 +211,7 @@ export function parseImport(
   try {
     raw = JSON.parse(text);
   } catch {
-    return { ok: false, errors: ['Not valid JSON.'] };
+    return { ok: false, errors: [issue('invalid-json')] };
   }
 
   if (
@@ -191,17 +223,10 @@ export function parseImport(
     if (isRecord(raw) && typeof raw.headerkit === 'number' && raw.headerkit > EXPORT_FORMAT_VERSION) {
       return {
         ok: false,
-        errors: [
-          `This file was exported by a newer HeaderKit (format v${raw.headerkit}); this version reads v${EXPORT_FORMAT_VERSION} and older.`,
-        ],
+        errors: [issue('newer-format', { found: raw.headerkit, readable: EXPORT_FORMAT_VERSION })],
       };
     }
-    return {
-      ok: false,
-      errors: [
-        `Not a HeaderKit export file (expected { "headerkit": ${EXPORT_FORMAT_VERSION}, "profiles": [...] }).`,
-      ],
-    };
+    return { ok: false, errors: [issue('not-export-file', { readable: EXPORT_FORMAT_VERSION })] };
   }
 
   // 퇴역 종류(csp — ADR 0013)는 **검증 전에** 걷어낸다. validateProfileEntry가

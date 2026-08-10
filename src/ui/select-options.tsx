@@ -1,7 +1,7 @@
 import { Select as SelectPrimitive } from '@base-ui/react/select';
 import { Select, SelectContent, SelectTrigger, SelectValue } from '@/ui/select';
 import { cn } from './cn';
-import { popupItemSelected, popupItemText, selectFixedWidth } from './tokens';
+import { fieldTransition, popupItemSelected, popupItemText, selectFixedWidth } from './tokens';
 
 /**
  * options 배열로 쓰는 Select — shadcn의 합성 API(Trigger/Content) 위에 얹은 앱 레벨
@@ -67,7 +67,7 @@ export function SelectOptions<T extends string>({
         id={id}
         aria-label={ariaLabel}
         size="sm"
-        className={cn('text-xs', selectFixedWidth, className)}
+        className={cn('text-xs', fieldTransition, selectFixedWidth, className)}
       >
         <SelectValue className="truncate" />
       </SelectTrigger>
@@ -114,12 +114,18 @@ export function SelectOptions<T extends string>({
 
           `whitespace-nowrap` — 라벨이 폭을 넘으면 **줄바꿈 대신 넘치게** 둔다. 접히면
           보기에는 멀쩡한데 폭 계산이 틀렸다는 사실이 화면에서도 스모크에서도 사라진다.
+
+          `rounded-none` — 항목의 면이 팝업 폭을 **모서리 없이** 가득 채운다. 둥근 알약이
+          목록 안에 떠 있으면 고른 것이 목록의 한 줄이 아니라 그 위에 얹힌 다른 물건으로
+          읽힌다. 팝업이 `overflow-hidden`이라 첫·마지막 줄의 면은 팝업의 둥근 모서리에
+          맞춰 저절로 잘린다. 자동완성 팝업의 항목은 그대로 둔다 — 그쪽에는 '고른 항목'이
+          없어 면이 하이라이트에만 잠깐 뜨고, 그때는 알약이 커서 위치로 읽힌다.
         */}
         {options.map((option) => (
           <SelectPrimitive.Item
             key={option.value}
             value={option.value}
-            className={cn('whitespace-nowrap', popupItemText, popupItemSelected)}
+            className={cn('whitespace-nowrap', popupItemText, 'rounded-none', popupItemSelected)}
           >
             <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>
           </SelectPrimitive.Item>

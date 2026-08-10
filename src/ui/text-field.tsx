@@ -3,6 +3,7 @@ import { forwardRef, type InputHTMLAttributes, type TextareaHTMLAttributes } fro
 import { Input as ShadcnInput } from '@/ui/input';
 import { Textarea as ShadcnTextarea } from '@/ui/textarea';
 import { cn } from './cn';
+import { fieldTransition } from './tokens';
 
 /**
  * 앱의 텍스트 필드 — shadcn Input/Textarea를 감싸 이 저장소의 **크기·서체 축**을 유지한다.
@@ -16,7 +17,9 @@ import { cn } from './cn';
  * 덮어쓰기가 성립하는 것은 cn(twMerge) 덕이다 — 뒤에 오는 `h-7`이 shadcn의 `h-8`을
  * 이긴다. tailwind-merge를 들인 값을 여기서 돌려받는다.
  */
-const field = cva('', {
+// 베이스에 전이를 둔다 — shadcn의 `transition-colors`를 뒤에서 덮어 링까지 함께 번지게
+// 한다(근거는 tokens.ts의 `fieldTransition`). cn(twMerge)이 같은 그룹의 앞선 것을 지운다.
+const field = cva(fieldTransition, {
   variants: {
     variant: {
       solid: '',
@@ -53,7 +56,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
 });
 
 /** 여러 줄 필드 — 높이 대신 패딩으로 크기를 정하므로 별도 축을 쓴다. */
-const area = cva('', {
+const area = cva(fieldTransition, {
   variants: {
     font: { sans: '', mono: 'font-mono' },
     size: { sm: 'text-xs', md: 'text-sm' },

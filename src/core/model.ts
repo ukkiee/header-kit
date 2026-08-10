@@ -474,13 +474,31 @@ export const DEFAULT_BADGE_VISIBLE = true;
  */
 export const DEFAULT_SYNC_BACKUP = true;
 
+/**
+ * 새 프로필에 차례로 붙는 색 열 가지 — 목록 스와치와 툴바 배지가 이 값을 그대로 쓴다.
+ *
+ * **순서는 색상환 순이 아니라 이웃끼리 가장 먼 순이다.** 새 프로필은 `길이 % 10`으로 다음
+ * 색을 받으므로(app 셸), 색상환대로 늘어놓으면 연달아 만든 두 프로필이 이웃 색을 받아
+ * 목록에서 구별되지 않는다. 여기 배열은 인접한 두 항목의 색상각이 최소 79° 벌어지게 섞어
+ * 둔 것이다 — 열한 번째에 첫 색으로 돌아갈 때만 48°로 가까워진다.
+ *
+ * 첫 항목은 그대로 이 앱의 accent 파랑이다. `createProfile`의 기본값이자 기본 프로필의
+ * 색이라(persist의 복구 경로도 이것을 쓴다) 자리를 옮기면 기존 화면의 첫 색이 달라진다.
+ *
+ * 색은 만들 때 정해져 이후 바뀌지 않으므로(ADR 0017) 이 목록을 고쳐도 **이미 만든 프로필은
+ * 그대로다** — 늘어난 가짓수는 앞으로 만드는 것에만 닿는다.
+ */
 export const PROFILE_COLORS = [
-  '#2563eb',
-  '#16a34a',
-  '#d97706',
-  '#dc2626',
-  '#9333ea',
-  '#0891b2',
+  '#2563eb', // blue
+  '#d97706', // amber
+  '#16a34a', // green
+  '#9333ea', // purple
+  '#0891b2', // cyan
+  '#dc2626', // red
+  '#4f46e5', // indigo
+  '#65a30d', // lime
+  '#db2777', // pink
+  '#0d9488', // teal
 ] as const;
 
 export function createProfile(name: string, options: { id?: string; color?: string } = {}): Profile {

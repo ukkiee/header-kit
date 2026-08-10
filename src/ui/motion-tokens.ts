@@ -12,9 +12,17 @@ export const PRESS_SPRING = { type: 'spring', stiffness: 420, damping: 26, mass:
 
 /**
  * 목록 행 enter/exit — MotionRow. 규칙 폼의 저장·취소가 이 값으로 접힌다.
- * 0.18s는 동작이 끝난 것을 눈이 따라가기 전에 사라져 "툭 끊긴다"는 인상이었다.
+ *
+ * 0.18s → 0.26s → 0.34s로 두 번 늘렸다. 처음 늘린 것은 동작이 끝난 것을 눈이 따라가기 전에
+ * 사라져 "툭 끊긴다"는 인상이었기 때문이고, 두 번째는 이 전이가 접는 것이 **한 줄이 아니라
+ * 폼 한 장**이기 때문이다 — 400px가 접히고 펴지는 데 0.26s는 화면이 튀는 것으로 읽힌다.
+ *
+ * 곡선도 `easeOut`에서 바꿨다. 그것은 끝에서 급히 멈추는데, 높이가 크게 변할 때는 그
+ * 급정거가 "덜컥"으로 보인다. `cubic-bezier(0.22, 1, 0.36, 1)`은 초반에 빠르게 움직이고
+ * 끝을 길게 눕혀, 같은 시간 안에서도 도착이 부드럽다 — shadcn 토스트가 쓰는 그 곡선이라
+ * 앱 안에 이미 있던 감각이다.
  */
-export const ROW_TRANSITION = { duration: 0.26, ease: 'easeOut' } as const;
+export const ROW_TRANSITION = { duration: 0.34, ease: [0.22, 1, 0.36, 1] } as const;
 
 /**
  * 떠 있는 팝업 열림/닫힘 — Select 팝업. 열릴 때 위에서 아래로 내려오고 닫힐 때 위로 접힌다.

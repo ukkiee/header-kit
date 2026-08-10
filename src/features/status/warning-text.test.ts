@@ -35,9 +35,10 @@ describe('warningText', () => {
   it('quota는 total/regex를 params.quota로 분기한다', () => {
     const total = warningText(view('quota-exceeded', { quota: 'total-rules', limit: 5000 }), en);
     const regex = warningText(view('quota-exceeded', { quota: 'regex-rules', limit: 1000 }), en);
-    expect(total.detail).toContain('Session');
+    // 어느 한도인지를 문장이 말한다 — 문구가 문장 안으로 들어가며 소문자가 됐다.
+    expect(total.detail).toMatch(/session rule limit/i);
     expect(total.detail).toContain('5000');
-    expect(regex.detail).toContain('Regex');
+    expect(regex.detail).toMatch(/regex rule limit/i);
     expect(regex.detail).toContain('1000');
     expect(total.detail).not.toBe(regex.detail);
   });

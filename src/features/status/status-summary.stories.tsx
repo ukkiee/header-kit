@@ -13,6 +13,7 @@ type Story = StoryObj<typeof meta>;
 const clean: StatusSummaryData = {
   ruleCount: 4,
   activeProfileCount: 2,
+  leadProfileColor: null,
   paused: false,
   applyError: null,
   warnings: [],

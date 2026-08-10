@@ -59,11 +59,31 @@ export function initialMatchType(initial: Modification | undefined): VisibleMatc
 }
 
 /**
+ * URL 스코프를 갖는 종류인가 — **Redirect만 아니다.**
+ *
+ * Redirect의 스코프는 자기 `pattern`이고 그 문법이 정규식이다(ADR 0007) — 그래서 폼도 그
+ * 종류에서만 URL 필터 줄을 세우지 않는다. 나머지 일곱은 전부 `urlFilter`를 든다.
+ *
+ * 판정을 함수로 세워 두는 이유는 이 사실을 읽는 곳이 셋이기 때문이다: 폼의 렌더 분기,
+ * `tidyDraft`의 벗기기, 그리고 아래 종류 전환. 각자 `kind !== 'redirect'`를 적으면 종류가
+ * 하나 늘 때 세 곳이 따로 틀린다.
+ */
+export function carriesUrlScope(kind: ModificationKind): boolean {
+  return kind !== 'redirect';
+}
+
+/**
  * 종류를 바꿀 때 무엇이 따라가는가 — **규칙을 가리키지 않는 것들만** 따라간다.
  *
  * id·켜짐·메모·조건은 어느 종류에서든 같은 뜻이라 이어진다. 종류 고유 필드는 이어지지
  * 않는다: 헤더의 값이 리다이렉트의 치환으로 옮겨 가면 사용자가 넣은 적 없는 목적지가 생기고,
  * 그 규칙은 저장되는 순간 엉뚱한 곳으로 보낸다.
+ *
+ * **URL 스코프는 따라간다 — 양쪽 종류가 그것을 가질 때만.** 스코프는 "무엇을 고치는가"가
+ * 아니라 "어디에 거는가"라, 종류를 바꿔도 사용자가 방금 적은 대상은 그대로다. 예전에는
+ * 이것도 함께 지워져서, 종류를 잘못 골랐다가 되돌리면 URL을 다시 쳐야 했다. 반대로 스코프
+ * 줄이 없는 Redirect로 가면 버린다 — 화면에 없는 값이 저장에 실리면 폼이 보여 주지 않은
+ * 것이 규칙을 좁히게 된다.
  */
 export function switchDraftKind(draft: Modification, kind: ModificationKind): Modification {
   // 같은 종류면 초안을 그대로 돌려준다 — 입력 중이던 값을 잃지 않는다.
@@ -74,7 +94,22 @@ export function switchDraftKind(draft: Modification, kind: ModificationKind): Mo
     enabled: draft.enabled,
     comment: draft.comment,
     ...(draft.conditions ? { conditions: draft.conditions } : {}),
+    ...urlScopeToCarry(draft, kind),
   } as Modification;
+}
+
+/** 빈 스코프는 옮기지 않는다 — 새 초안에 `urlFilter: ''`를 심으면 tidy가 할 일이 늘 뿐이다. */
+function urlScopeToCarry(
+  draft: Modification,
+  kind: ModificationKind,
+): { urlFilter?: string; urlMatchType?: UrlMatchType } {
+  if (!carriesUrlScope(draft.kind) || !carriesUrlScope(kind)) return {};
+  if (!('urlFilter' in draft) || !draft.urlFilter?.trim()) return {};
+  const matchType = 'urlMatchType' in draft ? draft.urlMatchType : undefined;
+  return {
+    urlFilter: draft.urlFilter,
+    ...(matchType !== undefined ? { urlMatchType: matchType } : {}),
+  };
 }
 
 /**

@@ -156,13 +156,17 @@ describe('parseImport', () => {
     for (const m of imported.modifications) {
       expect(m.conditions).toEqual({ requestMethods: ['get', 'post'] });
     }
-    expect(result.notices).toContainEqual(
-      expect.stringContaining('migrated to per-rule conditions'),
-    );
+    /*
+     * 공지는 **코드와 파라미터**다 — 문장은 로케일을 아는 `import-text`가 만든다. 문자열을
+     * 단언하면 문구를 다듬을 때마다 여기가 깨지고, 정작 지켜야 할 것(무엇을 알리는가)은
+     * 그 문장 안에 묻힌다.
+     */
+    expect(result.notices).toContainEqual({ code: 'filters-moved', params: { name: 'Alpha' } });
     // 규칙 둘 다 조건을 잃었다 — 가져오기 공지가 그 수를 말한다.
-    expect(result.notices).toContainEqual(
-      expect.stringContaining('2 rule(s) lost conditions this version no longer supports'),
-    );
+    expect(result.notices).toContainEqual({
+      code: 'rules-lost-conditions',
+      params: { name: 'Alpha', count: 2 },
+    });
   });
 
   it('규칙 단위 대응물이 없는 레거시 필터(exclude-url·탭·그룹·창)는 소실되고 알림이 남는다', () => {
@@ -182,9 +186,9 @@ describe('parseImport', () => {
     // 대응물이 없으므로 규칙에는 아무것도 이식되지 않는다
     expect(imported.modifications[0]).not.toHaveProperty('urlFilter');
     expect(imported.modifications[0]?.conditions).toBeUndefined();
-    expect(result.notices).toEqual([expect.stringContaining('3 legacy filter(s)')]);
-    expect(result.notices[0]).toContain('dropped');
-    expect(result.notices[0]).toContain('Alpha');
+    expect(result.notices).toEqual([
+      { code: 'dropped-lost-filters', params: { name: 'Alpha', count: 3 } },
+    ]);
   });
 
   it('레거시 filters가 있으면 형을 검증한다 — 무효 항목은 전량 거부', () => {
@@ -199,8 +203,14 @@ describe('parseImport', () => {
     const result = parseImport(JSON.stringify(bad));
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.errors.join('\n')).toMatch(/profiles\[0\].*filters\[0\]: invalid filter/);
-    expect(result.errors.join('\n')).toMatch(/profiles\[1\].*filters: expected array/);
+    expect(result.errors).toContainEqual({
+      code: 'unreadable-legacy-filter',
+      params: { where: 'profiles[0] ("Alpha")', index: 1 },
+    });
+    expect(result.errors).toContainEqual({
+      code: 'filters-not-list',
+      params: { where: 'profiles[1] ("Alpha")' },
+    });
   });
 
   it('제거된 csp 규칙은 검증 전에 빠진다 — 파일 전체 거부 없이 나머지만 수용, 알림도 없다 (ADR 0013)', () => {
@@ -232,7 +242,7 @@ describe('parseImport', () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.errors[0]).toMatch(/JSON/i);
+    expect(result.errors).toEqual([{ code: 'invalid-json', params: {} }]);
   });
 
   it('envelope가 아니면 거부된다', () => {
@@ -253,8 +263,11 @@ describe('parseImport', () => {
     const result = parseImport(JSON.stringify(bad));
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.errors.join('\n')).toMatch(/profiles\[1\]/);
-    expect(result.errors.join('\n')).toMatch(/Broken|active/);
+    // 어느 항목이 왜 틀렸는지 — 자리(`where`)와 사유(코드)가 함께 온다.
+    expect(result.errors).toContainEqual({
+      code: 'active-not-boolean',
+      params: { where: 'profiles[1] ("Broken")' },
+    });
   });
 });
 

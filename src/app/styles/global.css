@@ -177,6 +177,8 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -215,6 +217,17 @@
   --accent-foreground: var(--color-light-fg);
   --destructive: var(--color-red-600);
   --destructive-foreground: var(--color-white);
+  /*
+   * 성공 표면 — **액션색이 아니라 상태색이다.** ADR 0015가 못박은 "단일 blue accent, 두 번째
+   * accent 없음"은 사용자가 **누르는** 것들의 색을 말한다(버튼·칩·스위치·선택 표면). 이미
+   * `--destructive`가 그 규칙 밖에서 빨강을 들고 있는 것과 같은 자리다: 무엇이 일어났는지를
+   * 말하는 면이고, 어떤 컨트롤도 이 색으로 칠하지 않는다.
+   *
+   * 두 테마가 같은 값을 쓴다 — destructive와 같은 규율이다. 상태색은 팔레트의 명암을 따라
+   * 움직이는 것이 아니라 "이건 빨강/초록이다"를 두 화면에서 똑같이 말해야 한다.
+   */
+  --success: var(--color-green-700);
+  --success-foreground: var(--color-white);
   /* 보더 두 종 — 장식 구분선(border)과 필드 경계(input)는 요구 대비가 다르다. */
   --border: var(--color-light-border);
   --input: var(--color-light-input);

@@ -34,6 +34,7 @@ export const WithSnapshots: Story = {
   args: {
     syncBackup: true,
     onCommand: async () => ({ ok: true }),
+    onRestore: async () => ({ ok: true }),
     loadSnapshots: async () => snapshots,
     loadSnapshotText: async () => ({
       ok: true,
@@ -50,6 +51,7 @@ export const Empty: Story = {
   args: {
     syncBackup: true,
     onCommand: async () => ({ ok: true }),
+    onRestore: async () => ({ ok: true }),
     loadSnapshots: async () => [],
     loadCloudPresence: async () => false,
     clearCloud: async () => ({ ok: true }),
@@ -61,6 +63,7 @@ export const SyncOffCloudResidue: Story = {
   args: {
     syncBackup: false,
     onCommand: async () => ({ ok: true }),
+    onRestore: async () => ({ ok: true }),
     loadSnapshots: async () => [],
     loadCloudPresence: async () => true,
     clearCloud: async () => ({ ok: false, error: '2 backup key(s) still in cloud storage' }),

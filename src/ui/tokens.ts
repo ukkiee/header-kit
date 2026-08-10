@@ -10,6 +10,20 @@
  */
 export const fieldFocus = 'outline-none transition-colors focus:border-ring';
 
+/**
+ * 필드 전이 — 포커스가 들어올 때 **테두리와 링이 함께** 번진다 (`text-field`·`select-options` 공유).
+ *
+ * `transition-colors`로는 부족하다. 그 유틸이 거는 속성 목록에 `box-shadow`가 없는데
+ * (실측: color·background-color·border-color·outline-color·text-decoration-color·fill·stroke·
+ * gradient 뿐), shadcn 필드의 포커스 표시는 보더 색 **과** 3px 링이고 그 링은 box-shadow다.
+ * 보더만 150ms에 걸쳐 물들고 링은 같은 순간 툭 나타나니, 눈에는 전이가 없는 것으로 읽힌다.
+ *
+ * **reduced-motion에서 끄지 않는다.** ADR 0012의 경계 판정 — "이 전이가 요소를 이동·변형·
+ * 페이드인아웃 시키는가, 색만 바꾸는가" — 에서 이것은 뒤쪽이다. 링은 자리를 차지하지도
+ * 움직이지도 않고 색이 번질 뿐이라, 끄면 접근성 이득 없이 포커스 표시만 투박해진다.
+ */
+export const fieldTransition = 'transition-[color,background-color,border-color,box-shadow]';
+
 /** ghost 상호작용 표면 — Button.ghost / Select.ghost 가 공유한다. */
 export const ghostInteractive = 'text-muted-foreground hover:bg-accent hover:text-foreground';
 

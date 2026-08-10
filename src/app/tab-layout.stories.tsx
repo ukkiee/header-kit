@@ -35,6 +35,7 @@ export const Wide: Story = {
         summary={{
           ruleCount: 1,
           activeProfileCount: 1,
+          leadProfileColor: null,
           paused: false,
           applyError: null,
           warnings: [],

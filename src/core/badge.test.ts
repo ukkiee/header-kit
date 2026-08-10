@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeBadge, drawsBadge } from './badge';
+import { computeBadge, drawsBadge, readableTextColor } from './badge';
 import { applyCommand } from './commands';
 import { compile, type CompileEnv } from './compile';
 import { createDefaultState, parseStoredState, type Modification, type Profile } from './schema';
@@ -16,6 +16,7 @@ function summary(overrides: Partial<StatusSummary> = {}): StatusSummary {
   return {
     ruleCount: 0,
     activeProfileCount: 0,
+    leadProfileColor: null,
     paused: false,
     applyError: null,
     warnings: [],
@@ -30,8 +31,8 @@ function mod(id: string, name: string): Modification {
   return { kind: 'request-header', id, name, value: 'v', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' };
 }
 
-function profile(modifications: Modification[]): Profile {
-  return { id: 'p1', name: 'P', active: true, color: '#2563eb', modifications };
+function profile(modifications: Modification[], over: Partial<Profile> = {}): Profile {
+  return { id: 'p1', name: 'P', active: true, color: '#2563eb', modifications, ...over };
 }
 
 /** 컴파일 → 재조정 요약까지 실제로 태운다 — 배지가 보는 수가 방출된 규칙 수임을 확인한다. */
@@ -53,6 +54,7 @@ describe('computeBadge — 적용 규칙 수 카운터', () => {
     expect(computeBadge(summary({ paused: true, ruleCount: 0 }), true)).toEqual({
       text: 'II',
       color: '#6b7280',
+      textColor: '#ffffff',
     });
   });
 
@@ -86,6 +88,59 @@ describe('computeBadge — 적용 규칙 수 카운터', () => {
     expect(computeBadge(status, false).text).toBe('');
     // 적용에 성공한 재조정은 늘 그대로 반영한다.
     expect(drawsBadge(summarizeOf([profile([mod('m1', 'X-A')])]), true)).toBe(true);
+  });
+
+  /*
+   * 배지 색 = **지금 걸려 있는 프로필의 색**. 툴바와 사이드바 스와치가 같은 색을 들어야
+   * 팝업을 열지 않고도 무엇이 걸려 있는지 안다.
+   */
+  it('켜진 프로필의 색으로 칠한다', () => {
+    expect(computeBadge(summary({ ruleCount: 1, leadProfileColor: '#16a34a' }), true).color)
+      .toBe('#16a34a');
+  });
+
+  it('여럿이 켜져 있으면 목록 맨 위의 색이다 — 겹침의 승자와 같은 우선순위', () => {
+    const top = profile([mod('m1', 'X-A')], { id: 'p-top', color: '#db2777' });
+    const below = profile([mod('m2', 'X-B')], { id: 'p-below', color: '#65a30d' });
+    const status = summarizeOf([top, below]);
+
+    expect(status.activeProfileCount).toBe(2);
+    expect(computeBadge(status, true).color).toBe('#db2777');
+  });
+
+  it('꺼진 프로필은 대표 색을 내지 않는다 — 첫 **활성** 프로필이 기준이다', () => {
+    const off = profile([mod('m1', 'X-A')], { id: 'p-off', color: '#db2777', active: false });
+    const on = profile([mod('m2', 'X-B')], { id: 'p-on', color: '#65a30d' });
+
+    expect(computeBadge(summarizeOf([off, on]), true).color).toBe('#65a30d');
+  });
+
+  it('색을 모르면 accent 파랑으로 물러난다 — 예전 요약에는 이 필드가 없다', () => {
+    expect(computeBadge(summary({ ruleCount: 1, leadProfileColor: null }), true).color)
+      .toBe('#2563eb');
+  });
+
+  /*
+   * 글자색은 배경에서 계산한다. 프로필 색은 사용자 데이터라 밝은 값이 올 수 있고, 그 위에
+   * 흰 글자를 쓰면 배지의 수가 보이지 않는다 — 배지는 확장이 켜져 있다는 유일한 상시 표시다.
+   */
+  it('밝은 색 위에는 검은 글자, 어두운 색 위에는 흰 글자', () => {
+    expect(readableTextColor('#ffffff')).toBe('#000000');
+    expect(readableTextColor('#65a30d')).toBe('#000000');
+    expect(readableTextColor('#2563eb')).toBe('#ffffff');
+    expect(readableTextColor('#000000')).toBe('#ffffff');
+    // 세 자리 표기도 읽는다.
+    expect(readableTextColor('#fff')).toBe('#000000');
+  });
+
+  it('읽을 수 없는 색은 흰 글자로 물러난다', () => {
+    expect(readableTextColor('rebeccapurple')).toBe('#ffffff');
+    expect(readableTextColor('')).toBe('#ffffff');
+  });
+
+  it('배지가 실을 글자색이 그 배경에서 나온 값이다', () => {
+    expect(computeBadge(summary({ ruleCount: 1, leadProfileColor: '#d97706' }), true))
+      .toEqual({ text: '1', color: '#d97706', textColor: readableTextColor('#d97706') });
   });
 
   it('표시가 꺼져 있으면 아무것도 보이지 않는다 — 일시정지 중에도', () => {

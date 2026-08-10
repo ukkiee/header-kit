@@ -8,6 +8,7 @@ const at = (locale: Locale) => (key: Parameters<typeof translate>[1]) => transla
 const summary = (over: Partial<StatusSummary> = {}): StatusSummary => ({
   ruleCount: 5,
   activeProfileCount: 2,
+  leadProfileColor: null,
   paused: false,
   applyError: null,
   warnings: [],
@@ -19,7 +20,7 @@ describe('statusCountsText — 본문 헤더 부제', () => {
   it('두 수를 가운뎃점으로 잇는다', () => {
     expect(statusCountsText(summary(), at('en'))).toBe('5 active rules · 2 active profiles');
     // 세는 단위가 수 뒤에 붙는다 — 코드에서 이어 붙였다면 여기가 '5 적용 규칙'으로 남았다.
-    expect(statusCountsText(summary(), at('ko'))).toBe('5개 적용 규칙 · 2개 활성 프로필');
+    expect(statusCountsText(summary(), at('ko'))).toBe('적용 중인 규칙 5개 · 활성 프로필 2개');
   });
 
   it('하나일 때 단수형을 고른다 — 로케일마다 그 선택이 다르다', () => {
@@ -33,8 +34,9 @@ describe('statusCountsText — 본문 헤더 부제', () => {
    */
   it('적용 실패 중에는 "적용 규칙"이라 부르지 않는다', () => {
     const failed = summary({ applyError: 'quota', hasProblems: true });
-    expect(statusCountsText(failed, at('en'))).toBe('5 rule(s) — not applied · 2 active profiles');
-    expect(statusCountsText(failed, at('ko'))).toBe('5 규칙 — 적용 안 됨 · 2개 활성 프로필');
+    expect(statusCountsText(failed, at('en'))).toBe('5 rules not applied · 2 active profiles');
+    // 실패 쪽도 세는 단위를 카탈로그가 든다 — 예전에는 이 자리에 '개'가 빠져 있었다.
+    expect(statusCountsText(failed, at('ko'))).toBe('적용하지 못한 규칙 5개 · 활성 프로필 2개');
   });
 
   it('0도 그대로 말한다 — 빈칸은 "없다"와 "아직 모른다"를 구별해 주지 않는다', () => {
@@ -48,7 +50,7 @@ describe('statusCountsText — 본문 헤더 부제', () => {
    */
   it('정지 중이라는 사실 자체는 이 문장이 말하지 않는다', () => {
     expect(statusCountsText(summary({ paused: true, ruleCount: 0, activeProfileCount: 0 }), at('ko')))
-      .toBe('0개 적용 규칙 · 0개 활성 프로필');
+      .toBe('적용 중인 규칙 0개 · 활성 프로필 0개');
   });
 });
 
@@ -67,19 +69,19 @@ describe('profileRowMetaText — 프로필 행 메타', () => {
 
   it('규칙 수와 상태를 가운뎃점으로 잇는다', () => {
     expect(profileRowMetaText(status(), at('en'))).toBe('3 rules · applied');
-    expect(profileRowMetaText(status(), at('ko'))).toBe('3개 규칙 · 적용');
+    expect(profileRowMetaText(status(), at('ko'))).toBe('규칙 3개 · 적용');
   });
 
   it('하나일 때 단수형을 고른다 — 한국어는 굴절하지 않는다', () => {
     expect(profileRowMetaText(status({ enabledModificationCount: 1 }), at('en')))
       .toBe('1 rule · applied');
     expect(profileRowMetaText(status({ enabledModificationCount: 1 }), at('ko')))
-      .toBe('1개 규칙 · 적용');
+      .toBe('규칙 1개 · 적용');
   });
 
   it('꺼진 프로필은 미적용이라 말한다', () => {
     expect(profileRowMetaText(status({ state: 'off' }), at('en'))).toBe('3 rules · not applied');
-    expect(profileRowMetaText(status({ state: 'off' }), at('ko'))).toBe('3개 규칙 · 미적용');
+    expect(profileRowMetaText(status({ state: 'off' }), at('ko'))).toBe('규칙 3개 · 미적용');
   });
 
   /*
@@ -87,7 +89,7 @@ describe('profileRowMetaText — 프로필 행 메타', () => {
    * 사람에게만 전달된다 — 색을 지워도, 형태를 못 읽어도 남는 채널이 하나 필요하다.
    */
   it('전역 정지 중에는 저장된 on/off 대신 정지라고 말한다', () => {
-    expect(profileRowMetaText(status({ state: 'paused' }), at('ko'))).toBe('3개 규칙 · 정지');
+    expect(profileRowMetaText(status({ state: 'paused' }), at('ko'))).toBe('규칙 3개 · 정지');
     expect(profileRowMetaText(status({ state: 'paused' }), at('en'))).toBe('3 rules · paused');
   });
 
@@ -97,7 +99,7 @@ describe('profileRowMetaText — 프로필 행 메타', () => {
    */
   it('정지가 규칙 수를 깎지 않는다', () => {
     const paused = profileRowMetaText(status({ state: 'paused', enabledModificationCount: 7 }), at('ko'));
-    expect(paused.startsWith('7개 규칙')).toBe(true);
+    expect(paused.startsWith('규칙 7개')).toBe(true);
   });
 
   it('0도 그대로 말한다', () => {

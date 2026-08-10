@@ -16,7 +16,7 @@ import { LocaleProvider } from '@/ui/i18n-context';
 import { ScrollArea } from '@/ui/scroll-area';
 import type { Command } from '@/core/commands';
 import { format, pickLocale, pickLocalePreference, t, type MessageKey } from '@/core/i18n';
-import { createProfile, PROFILE_COLORS, type StoredState } from '@/core/schema';
+import { createProfile, PROFILE_COLORS, type Profile, type StoredState } from '@/core/schema';
 import { DEFAULT_THEME } from '@/core/theme';
 import { useAppliedTheme } from '@/ui/use-theme';
 import type { StatusSummary as StatusSummaryData } from '@/core/summary';
@@ -119,16 +119,28 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
   const selectedIndex = state.profiles.findIndex((p) => p.id === effectiveSelectedId);
   const selectedProfile = selectedIndex >= 0 ? state.profiles[selectedIndex] : undefined;
 
-  const dispatch = (command: Command) => {
-    void sendCommand(command).then((result) => {
-      if (result.ok) {
-        setState(result.state);
-        setCommandError(null);
-      } else {
-        setCommandError(result.error);
-      }
-    });
-  };
+  /*
+   * 명령 보내기 — **약속을 돌려준다.** 대부분의 호출부는 그것을 버리지만, 드래그 재정렬은
+   * "명령이 착지했는가"를 알아야 낙관적 순서를 언제 버릴지 정할 수 있다.
+   *
+   * 거부(`ok: false`)뿐 아니라 **던진 것도** 배너로 잡는다. 배경 왕복은 워커 teardown·확장
+   * 리로드에서 던지는데, 예전에는 그 경로가 `void`로 흘러가 아무 말도 없이 사라졌다 —
+   * 화면은 아무 일도 안 일어난 것처럼 보이고 사용자는 다시 누른다.
+   */
+  const dispatch = (command: Command): Promise<void> =>
+    sendCommand(command).then(
+      (result) => {
+        if (result.ok) {
+          setState(result.state);
+          setCommandError(null);
+        } else {
+          setCommandError(result.error);
+        }
+      },
+      (error: unknown) => {
+        setCommandError(error instanceof Error ? error.message : String(error));
+      },
+    );
 
   // TransferPanel은 결과를 직접 받아 자기 자리에서 오류를 보여준다 (전역 배너 미사용).
   const dispatchWithResult = async (
@@ -140,6 +152,34 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
       return { ok: true };
     }
     return { ok: false, error: result.error };
+  };
+
+  /**
+   * 백업 복원 — **바로 실행하고 되돌리기를 토스트로 준다** (규칙 삭제와 같은 결).
+   *
+   * 되돌릴 스냅샷은 복원 **직전의** 프로필 전체다. 그것을 쥔 것은 셸이라 이 함수가 여기 있다 —
+   * 백업 패널은 스냅샷을 읽고 풀어 주기만 하고, 명령과 되돌리기는 이쪽이 든다.
+   *
+   * **되돌린 것이 원본과 완전히 같지는 않다.** `restore-profiles`는 권위 경로라 id를 다시
+   * 매기고 Placeholder를 다시 실체화한다 — 이름·색·규칙은 그대로지만 `{{uuid}}` 값은 새로
+   * 뽑힌다. 규칙 삭제의 실행 취소가 실체화 값까지 그대로 되살리는 것과 다른 점이고
+   * (그쪽은 전용 명령이 있다), 프로필 전체를 그렇게 되살리는 명령은 두지 않았다.
+   */
+  const restoreWithUndo = async (profiles: Profile[]) => {
+    const previous = state.profiles;
+    const result = await dispatchWithResult({ type: 'restore-profiles', profiles });
+    if (!result.ok) return result;
+    const toastId = toast.add({
+      title: t(locale, 'profilesRestored'),
+      data: { actionLabel: t(locale, 'undo') },
+      actionProps: {
+        onClick: () => {
+          void dispatchWithResult({ type: 'restore-profiles', profiles: [...previous] });
+          toast.close(toastId);
+        },
+      },
+    });
+    return result;
   };
 
   const openTabApp = () => {
@@ -372,6 +412,13 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
               onToggleActive={(profileId, active) =>
                 dispatch({ type: 'toggle-profile', profileId, active })
               }
+              /*
+                프로필 삭제 (ADR 0017 개정) — 되물음은 행이 이미 마쳤다.
+                선택은 따로 손대지 않는다: 지운 것이 보고 있던 프로필이면 렌더 중
+                재조정(`reconcileSelection`)이 남은 것 중 하나로 옮겨 주고, 하나도 남지
+                않으면 본문이 '아직 프로필이 없습니다'로 떨어진다.
+              */
+              onDelete={(profileId) => void dispatch({ type: 'remove-profile', profileId })}
             />
             </div>
           </ScrollArea>
@@ -452,7 +499,11 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
               {railView === 'backups' && (
                 <>
                   <TransferPanel state={state} onCommand={dispatchWithResult} />
-                  <BackupPanel syncBackup={state.syncBackup} onCommand={dispatchWithResult} />
+                  <BackupPanel
+                    syncBackup={state.syncBackup}
+                    onCommand={dispatchWithResult}
+                    onRestore={restoreWithUndo}
+                  />
                 </>
               )}
               {railView === 'preferences' && (

@@ -73,6 +73,9 @@ async function validateCommand(command: Command): Promise<string | null> {
 async function applyBadge(badge: BadgeSpec): Promise<void> {
   await browser.action.setBadgeText({ text: badge.text });
   await browser.action.setBadgeBackgroundColor({ color: badge.color });
+  // 글자색도 함께 정한다 — 배경이 프로필 색이라 브라우저 기본(흰색)으로는 밝은 색 위에서
+  // 수가 사라진다. 무엇을 쓸지는 `computeBadge`가 배경에서 계산해 함께 실어 준다.
+  await browser.action.setBadgeTextColor({ color: badge.textColor });
 }
 
 export default defineBackground(() => {

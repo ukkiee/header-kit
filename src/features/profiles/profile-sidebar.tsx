@@ -6,6 +6,7 @@ import { useT } from '@/ui/i18n-context';
 import {
   ProfileGrip,
   ProfileSelectRow,
+  profileDeleteLabels,
   profileReorderLabel,
   profileSelectLabel,
   profileToggleLabel,
@@ -13,6 +14,7 @@ import {
   sidebarRowClass,
 } from './profile-dot';
 import { SwitcherChip } from '@/ui/switcher-chip';
+import { AnimatePresence, MotionRow } from '@/ui/motion-row';
 
 // dnd-kit은 이 lazy 청크에만 있다 — 팝업 초기 번들에서 제외된다 (ui-refine 08).
 const SortableProfileList = lazy(() => import('./sortable-profile-list'));
@@ -24,10 +26,16 @@ export interface ProfileSidebarProps {
   paused: boolean;
   onSelect: (id: string) => void;
   onCreate: () => void;
-  /** 순서 변경 — 드롭이 move-profile 명령으로 귀결된다 (상태 전이는 앱 레이어). */
-  onReorder: (profileId: string, toIndex: number) => void;
+  /**
+   * 순서 변경 — 드롭이 move-profile 명령으로 귀결된다 (상태 전이는 앱 레이어).
+   * 명령이 착지할 때까지의 약속을 돌려준다 — 드래그 목록의 낙관적 순서가 그것으로 수명을
+   * 정한다(`sortable-profile-list`의 주석).
+   */
+  onReorder: (profileId: string, toIndex: number) => Promise<void>;
   /** 인라인 on/off — 목록에서 바로 켜고 끈다 (티켓 10). */
   onToggleActive: (profileId: string, active: boolean) => void;
+  /** 프로필 삭제 (ADR 0017 개정) — 행이 2단계 확인을 마친 뒤에만 불린다. */
+  onDelete: (profileId: string) => void;
 }
 
 /** 정적 목록 — dnd 로드 전 fallback(그립 정적) + 검색 중 목록(재정렬 비활성). */
@@ -37,6 +45,7 @@ function StaticList({
   paused,
   onSelect,
   onToggleActive,
+  onDelete,
   withGrip,
 }: {
   profiles: readonly Profile[];
@@ -44,17 +53,23 @@ function StaticList({
   paused: boolean;
   onSelect: (id: string) => void;
   onToggleActive: (profileId: string, active: boolean) => void;
+  onDelete: (profileId: string) => void;
   withGrip: boolean;
 }) {
   const t = useT();
   return (
     <ul className={sidebarListClass}>
+      {/* 드래그 목록과 **같은 등장·퇴장 모션**이다 — 한쪽만 움직이면 lazy 로드 순간
+          시각이 갈린다(sidebarRowClass가 지키는 no-jump 계약의 모션 쪽). */}
+      <AnimatePresence initial={false}>
       {profiles.map((profile) => {
         // 드래그 목록과 **같은 파생**을 쓴다 — 한쪽만 다르면 lazy 로드 순간 수·정지 표식이
         // 튄다(sidebarRowClass가 지키는 no-jump 계약의 값 쪽).
         const status = profileRowStatus(profile, paused);
         return (
-          <li key={profile.id} className={sidebarRowClass}>
+          <li key={profile.id}>
+            <MotionRow>
+            <div className={sidebarRowClass(profile.id === selectedId)}>
             {withGrip && <ProfileGrip label={profileReorderLabel(profile, t)} />}
             <ProfileSelectRow
               profile={profile}
@@ -62,12 +77,17 @@ function StaticList({
               selected={profile.id === selectedId}
               onSelect={() => onSelect(profile.id)}
               onToggleActive={(active) => onToggleActive(profile.id, active)}
+              onDelete={() => onDelete(profile.id)}
               label={profileSelectLabel(profile, t, status.state)}
               toggleLabel={profileToggleLabel(profile, t)}
+              {...profileDeleteLabels(profile, t)}
             />
+            </div>
+            </MotionRow>
           </li>
         );
       })}
+      </AnimatePresence>
     </ul>
   );
 }
@@ -87,6 +107,7 @@ export function ProfileSidebar({
   onCreate,
   onReorder,
   onToggleActive,
+  onDelete,
 }: ProfileSidebarProps) {
   const t = useT();
   const [query, setQuery] = useState('');
@@ -111,6 +132,7 @@ export function ProfileSidebar({
           paused={paused}
           onSelect={onSelect}
           onToggleActive={onToggleActive}
+          onDelete={onDelete}
           withGrip={false}
         />
       ) : (
@@ -122,6 +144,7 @@ export function ProfileSidebar({
               paused={paused}
               onSelect={onSelect}
               onToggleActive={onToggleActive}
+              onDelete={onDelete}
               withGrip
             />
           }
@@ -133,6 +156,7 @@ export function ProfileSidebar({
             onSelect={onSelect}
             onReorder={onReorder}
             onToggleActive={onToggleActive}
+            onDelete={onDelete}
           />
         </Suspense>
       )}

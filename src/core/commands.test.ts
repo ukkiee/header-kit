@@ -5,6 +5,7 @@ import {
   applyCommand,
   moveProfile,
   removeModification,
+  removeProfile,
   setPaused,
   toggleProfile,
   updateModification,
@@ -76,14 +77,58 @@ describe('state transition commands', () => {
   });
 
   /*
-   * **복제·삭제·메타 변경 테스트가 여기 없다** (ADR 0017, 티켓 04). 명령 셋이 함께 퇴역해서다 —
-   * 프로필로 할 수 있는 일은 만들기·켜고 끄기·옮기기 넷이고, 그 넷은 이 파일의 나머지가 잰다.
-   * 지운 것을 대신 지킬 것도 없다: 되돌리는 유일한 길은 전체 초기화이고 그것은 자기 테스트를 갖는다.
+   * **복제·메타 변경 테스트가 여기 없다** (ADR 0017, 티켓 04). 그 명령들이 퇴역해서다 —
+   * 이름·색은 만들 때 정해지고 그 뒤로 바뀌지 않는다.
+   *
+   * 삭제는 돌아왔다(ADR 0017 개정) — 아래가 그 테스트다.
    */
   it('moveProfile은 순서를 바꾼다 (순서 = 충돌 우선순위)', () => {
     const next = moveProfile(state(), 'p2', 0);
 
     expect(next.profiles.map((p) => p.id)).toEqual(['p2', 'p1']);
+  });
+
+  it('removeProfile은 그 프로필만 지우고 순서는 그대로 둔다', () => {
+    const three = addProfile(state(), {
+      id: 'p3', name: 'Three', active: false, color: '#d97706', modifications: [],
+    });
+    const next = removeProfile(three, 'p2');
+
+    expect(next.profiles.map((p) => p.id)).toEqual(['p1', 'p3']);
+  });
+
+  /*
+   * **실체화 값도 함께 지운다.** modification id로 매인 별도 맵이라, 프로필만 지우면 아무도
+   * 가리키지 않는 값이 영구히 남는다 — 끄는 경로가 이미 하던 정리를 삭제도 한다.
+   */
+  it('removeProfile은 그 프로필이 남긴 실체화 값을 함께 걷는다', () => {
+    const seeded = toggleProfile(
+      {
+        ...state(),
+        profiles: [
+          { id: 'p1', name: 'One', active: false, color: '#2563eb',
+            modifications: [{ ...modification('m1'), value: 'id-{{uuid}}' }] },
+          { id: 'p2', name: 'Two', active: false, color: '#16a34a', modifications: [] },
+        ],
+      },
+      'p1',
+      true,
+    );
+    expect(Object.keys(seeded.materialized)).toEqual(['m1']);
+
+    expect(removeProfile(seeded, 'p1').materialized).toEqual({});
+    // 남의 프로필을 지우는 것으로는 걷히지 않는다 — 정리 대상이 id로 정확히 좁혀진다.
+    expect(Object.keys(removeProfile(seeded, 'p2').materialized)).toEqual(['m1']);
+  });
+
+  it('마지막 프로필도 지울 수 있다 — 빈 목록은 화면이 이미 말한다', () => {
+    const one = removeProfile(state(), 'p2');
+    expect(removeProfile(one, 'p1').profiles).toEqual([]);
+  });
+
+  it('없는 id는 상태를 그대로 둔다 — 두 화면이 같은 것을 지워도 뒤엣것이 실패로 보이지 않는다', () => {
+    const before = state();
+    expect(removeProfile(before, 'nope')).toEqual(before);
   });
 
   it('togglePause는 권위 상태 기준으로 Pause를 뒤집는다 (lost-update 방지)', () => {
@@ -116,6 +161,9 @@ describe('state transition commands', () => {
 
     const pausedState = applyCommand(state(), { type: 'set-paused', paused: true });
     expect(pausedState.paused).toBe(true);
+
+    const removed = applyCommand(state(), { type: 'remove-profile', profileId: 'p1' });
+    expect(removed.profiles.map((p) => p.id)).toEqual(['p2']);
   });
 
   /*

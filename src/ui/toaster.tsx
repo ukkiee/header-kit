@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Button } from '@/ui/press-button';
 import {
   Toast,
   ToastAction,
@@ -26,14 +27,36 @@ import {
  * (Tailwind v4 preflight가 버튼을 기본 커서로 되돌렸다) shadcn `toast.tsx`는 그 조합을
  * 거치지 않고 shadcn `Button`을 직접 렌더한다. 이 앱이 손댈 수 있는 마지막 자리가 여기다.
  */
+/**
+ * 이 앱의 토스트 한 벌 — **작고, 초록이다.**
+ *
+ * shadcn 기본은 384px 폭에 16px 안쪽 여백, 24px 모서리, 팝오버 면이라 760×580 팝업에서
+ * 화면의 절반을 덮으면서도 배경과 같은 색이라 눈에 걸리지 않았다. 규칙 삭제처럼 **이미
+ * 일어난 일**을 알리는 쪽지는 작아야 하고, 대신 색으로 존재를 말해야 한다.
+ *
+ * 종류가 하나뿐이라(규칙 삭제 + 실행 취소) 면을 조건 없이 칠한다. 오류·경고 토스트가
+ * 생기면 여기서 `item.type`으로 갈라야 한다 — 그때 전부 초록이면 실패가 성공처럼 보인다.
+ *
+ * 실행 취소 버튼은 초록 면 위에 서므로 shadcn `outline`의 배경·보더를 흰색 계열로 덮는다.
+ * 그대로 두면 밝은 면이 초록 위에 얹혀 버튼만 다른 카드처럼 보인다.
+ */
 function AppToastList() {
   const { toasts } = useToastManager();
   return toasts.map((item) => (
-    <Toast key={item.id} toast={item}>
-      <ToastContent>
-        <ToastTitle className="min-w-0 flex-1 truncate" />
+    <Toast
+      key={item.id}
+      toast={item}
+      className="rounded-lg border-transparent bg-success text-success-foreground shadow-md"
+    >
+      <ToastContent className="gap-2 px-3 py-2">
+        <ToastTitle className="min-w-0 flex-1 truncate text-xs" />
         {item.actionProps && (
-          <ToastAction className="cursor-pointer">{actionLabel(item.data)}</ToastAction>
+          <ToastAction
+            render={<Button variant="outline" size="xs" />}
+            className="border-white/40 bg-transparent text-inherit hover:border-white/60 hover:bg-white/15 hover:text-inherit dark:border-white/40 dark:bg-transparent dark:hover:bg-white/15"
+          >
+            {actionLabel(item.data)}
+          </ToastAction>
         )}
       </ToastContent>
     </Toast>
@@ -57,7 +80,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ShadcnToastProvider>
       {children}
       <ToastPortal>
-        <ToastViewport>
+        {/* 폭도 함께 줄인다 — 셸이 760px이라 shadcn 기본(384px)은 화면의 절반이다. */}
+        <ToastViewport className="max-w-64">
           <AppToastList />
         </ToastViewport>
       </ToastPortal>

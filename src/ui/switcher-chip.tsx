@@ -12,11 +12,24 @@ const switcherChip = cva(
   {
     variants: {
       selected: {
-        true: 'bg-secondary font-medium text-foreground',
-        false: 'text-muted-foreground hover:bg-accent',
+        true: 'font-medium text-foreground',
+        false: 'text-muted-foreground',
       },
+      /**
+       * 면을 **자기가** 칠하는가.
+       *
+       * 기본은 참이다 — 혼자 서는 칩(＋ 새 프로필)은 자기 배경이 곧 선택 표시다. 거짓은
+       * 칩이 더 큰 표면의 일부일 때다: 프로필 행은 칩 옆에 켬/끔 스위치가 함께 서고, 선택
+       * 표시가 칩에만 칠해지면 스위치가 그 면 **밖에** 남아 한 행이 두 조각으로 보인다.
+       * 그때는 행이 면을 들고 칩은 글자만 바꾼다.
+       */
+      filled: { true: '', false: '' },
     },
-    defaultVariants: { selected: false },
+    compoundVariants: [
+      { selected: true, filled: true, class: 'bg-secondary' },
+      { selected: false, filled: true, class: 'hover:bg-accent' },
+    ],
+    defaultVariants: { selected: false, filled: true },
   },
 );
 
