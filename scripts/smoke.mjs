@@ -711,7 +711,10 @@ try {
   // 스냅샷 히스토리와 같은 자리다.
   await popup.getByRole('button', { name: 'Show backups' }).click();
   await popup.getByRole('button', { name: 'Import…' }).click();
-  await popup.getByLabel('Import JSON').fill(exportJson);
+  // 가져오기는 **파일 하나**만 받는다 — 붙여넣기 칸이 사라졌다(놓기와 파일 선택이 같은 문).
+  await popup.getByLabel('Import file').setInputFiles({
+    name: 'headerkit-profiles.json', mimeType: 'application/json', buffer: Buffer.from(exportJson),
+  });
   await popup.getByRole('button', { name: 'Run import' }).click();
   await pollSessionRuleCount(sw, 1); // 레거시 tab 필터는 마이그레이션에서 소실 → 규칙이 전 탭에 적용된다
   const importedState = await sw.evaluate(async () => {
@@ -728,7 +731,9 @@ try {
     `id=${importedProfile?.id?.slice(0, 8)}, filters=${JSON.stringify(importedProfile?.filters)}, header=${importedHeader}`);
 
   await popup.getByRole('button', { name: 'Import…' }).click();
-  await popup.getByLabel('Import JSON').fill('{broken json');
+  await popup.getByLabel('Import file').setInputFiles({
+    name: 'broken.json', mimeType: 'application/json', buffer: Buffer.from('{broken json'),
+  });
   await popup.getByRole('button', { name: 'Run import' }).click();
   // 백업 화면에는 스냅샷 패널도 자기 오류 배너를 가질 수 있다 — Import 패널이 위에 서므로
   // 첫 배너가 여기서 보는 것이다(단언 자체는 그대로: 이 문구가 JSON 거부여야 한다).
@@ -801,8 +806,8 @@ try {
   await popup.getByRole('button', { name: 'Show backups' }).click();
   await settleScreen(popup, 'Backup history');
   const restoreRow = popup.locator('li').filter({ hasText: 'profile' }).first();
+  // 복원은 **바로 실행된다** — 되물음 대신 실행 취소 토스트가 되돌림을 든다.
   await restoreRow.getByRole('button', { name: 'Restore backup' }).click();
-  await restoreRow.getByRole('button', { name: 'Confirm restore' }).click();
 
   const restoredState = await pollUntil(
     () => sw.evaluate(async () => {
@@ -1724,7 +1729,37 @@ try {
   await popup.mouse.down();
   await popup.mouse.move(topBox.x + topBox.width / 2, topBox.y - 4, { steps: 8 });
   await popup.mouse.move(topBox.x + topBox.width / 2, topBox.y - 6, { steps: 4 });
+  /*
+   * **놓는 프레임에 이미 새 순서여야 한다.**
+   *
+   * dnd-kit은 드롭과 순서 확정이 같은 React 커밋에서 일어난다고 전제한다. 이 앱의 순서는
+   * 서비스워커를 한 바퀴 돌아야 갱신되므로(메시지 두 홉 + 쓰기 줄 + 저장소 IPC 셋) 그 커밋에
+   * 옛 순서가 남고, 그러면 놓은 행에 원래 자리로 돌아가는 200ms 전이가 붙는다 — 아래로 끌면
+   * "위로 갔다가 내려오는" 움직임이 된다. 목록이 낙관적으로 먼저 바뀌면 그 전이가 아예 안 붙는다.
+   *
+   * 재는 자리가 까다롭다. 폴링으로는 왕복이 끝난 뒤를 보게 되어 고치기 전에도 통과한다.
+   * 그래서 **mouseup 다음 프레임**을 페이지 안에서 잡는다 — 리스너를 미리 걸어 두고 그
+   * 안에서 rAF 한 번을 기다린다(React 커밋이 이벤트 끝에 flush된 뒤). 어떤 왕복도 한
+   * 프레임 안에 끝나지 않으므로, 여기 찍힌 순서는 낙관 갱신의 것이지 권위의 것이 아니다.
+   */
+  await popup.evaluate(() => {
+    window.__orderAtDrop = null;
+    window.addEventListener(
+      'mouseup',
+      () => {
+        requestAnimationFrame(() => {
+          window.__orderAtDrop = [...document.querySelectorAll('[aria-label^="Select profile"]')]
+            .map((el) => el.getAttribute('aria-label'));
+        });
+      },
+      { once: true },
+    );
+  });
   await popup.mouse.up();
+  const orderAtDrop = await popup
+    .waitForFunction(() => window.__orderAtDrop != null, null, { timeout: 3000 })
+    .then(() => popup.evaluate(() => window.__orderAtDrop), () => null);
+  const droppedInPlace = orderAtDrop?.[0]?.startsWith('Select profile Bottom') === true;
   const dragOrder = await pollUntil(orderNames, (names) => names[0]?.startsWith('Bottom'), 5000, 100);
   const dragWinner = await pollUntil(
     () => fetchEchoHeaders(pageB, '/headers').then((h) => h['x-conf']),
@@ -1775,11 +1810,13 @@ try {
   const moveButtonsGone =
     (await popup.getByRole('button', { name: /Move (up|down)/ }).count()) === 0;
 
-  record('N8: 드래그·키보드 재정렬+Esc 취소(원순서·포커스 유지), 이동 컨트롤은 그립뿐',
+  record('N8: 드래그(놓는 프레임에 확정)·키보드 재정렬+Esc 취소(원순서·포커스 유지), 이동 컨트롤은 그립뿐',
     winnerBefore === 'top-wins'
+      && droppedInPlace
       && dragOrder[0]?.startsWith('Bottom') && dragWinner === 'bottom-wins'
       && kbdOrder[0]?.startsWith('Bottom') && kbdWinner === 'bottom-wins'
       && cancelKeptOrder && focusKept && moveButtonsGone,
+    `drop-frame=${droppedInPlace}(${orderAtDrop?.join('|') ?? 'null'}), ` +
     `drag=[${dragOrder.join('|')}]/${dragWinner}, kbd=[${kbdOrder.join('|')}]/${kbdWinner}, cancel-kept=${cancelKeptOrder}, focus-kept=${focusKept}, move-buttons-gone=${moveButtonsGone}`);
 
   // N9: 탭 앱 셸 — 사이드바 검색·선택, 레일 화면 전환 (슬라이스 08)
@@ -1890,7 +1927,7 @@ try {
   await popup.getByRole('button', { name: 'Export…' }).click();
   const [exportDownload] = await Promise.all([
     popup.waitForEvent('download'),
-    popup.getByRole('button', { name: /Export… \(2\)/ }).click(),
+    popup.getByRole('button', { name: /^Export \(2\)$/ }).click(),
   ]);
   const exportPayload = JSON.parse(readFileSync(await exportDownload.path(), 'utf8'));
   record('N13: Export 다운로드 → 페이로드 검증',
@@ -1909,12 +1946,12 @@ try {
   const popupKo = await context.newPage();
   await popupKo.goto(`chrome-extension://${extensionId}/popup.html?locale=ko`);
   const koToggle = await popupKo
-    .getByRole('switch', { name: 'KeyA 켬/끔' })
+    .getByRole('switch', { name: 'KeyA 켜고 끄기' })
     .waitFor({ timeout: 5000 })
     .then(() => true, () => false);
   // ⋯ 메뉴가 사라졌으므로(티켓 04) 그 자리를 **행 메타**가 대신 잰다 — ko 카탈로그를 거친
   // `N개 규칙 · 미적용`이 화면에 서고, 같은 낱말이 행 이름 끝에도 들어간다(WCAG 2.5.3).
-  const koRowMeta = await popupKo.getByText('0개 규칙 · 미적용', { exact: true }).isVisible().catch(() => false);
+  const koRowMeta = await popupKo.getByText('규칙 0개 · 미적용', { exact: true }).isVisible().catch(() => false);
   const koSidebarItem = await popupKo.getByRole('button', { name: 'KeyB 프로필 선택 (미적용)' }).isVisible().catch(() => false);
   const koRowToggle = await popupKo
     .getByRole('button', { name: '편집' })
@@ -4515,18 +4552,21 @@ try {
   await popup.getByLabel('Cookie value', { exact: true }).fill('abc');
   await popup.getByLabel('Path', { exact: true }).fill('/app');
   await popup.getByRole('button', { name: 'Lax', exact: true }).click();
-  const secureGroup = popup.getByRole('group', { name: 'Secure' });
-  await secureGroup.getByRole('button', { name: 'On', exact: true }).click();
   /*
-   * HttpOnly는 **켰다 끈다** — 끔이 기본이라 그냥 두면 "칩 그룹이 통째로 없어도 통과"가 된다.
+   * Secure·HttpOnly는 **스위치**다 — 끔/켬 두 칩이었던 것을 하나로 접었다. 값이 둘뿐인
+   * 속성에 고를 것을 둘 세우면, 같은 화면의 다른 on/off(프로필·규칙·저장 후 활성화)와
+   * 문법이 갈린다. 여기서 재는 계약은 그대로다: 켠 값이 저장에 실리는가.
+   */
+  await popup.getByRole('switch', { name: 'Secure', exact: true }).click();
+  /*
+   * HttpOnly는 **켰다 끈다** — 끔이 기본이라 그냥 두면 "컨트롤이 통째로 없어도 통과"가 된다.
    * 켠 값이 저장에 실리는지와, 다시 끄면 필드가 **부재로 돌아가는지**를 함께 본다: 비운 속성이
    * 조립에 붙지 않는다는 계약(story 35)은 `false`로 남는 것과 다르다.
    */
-  const httpOnlyGroup = popup.getByRole('group', { name: 'HttpOnly' });
-  await httpOnlyGroup.getByRole('button', { name: 'On', exact: true }).click();
-  const httpOnlyOnPressed =
-    (await httpOnlyGroup.getByRole('button', { name: 'On', exact: true }).getAttribute('aria-pressed')) === 'true';
-  await httpOnlyGroup.getByRole('button', { name: 'Off', exact: true }).click();
+  const httpOnlySwitch = popup.getByRole('switch', { name: 'HttpOnly', exact: true });
+  await httpOnlySwitch.click();
+  const httpOnlyOnPressed = (await httpOnlySwitch.getAttribute('aria-checked')) === 'true';
+  await httpOnlySwitch.click();
   // SameSite도 같은 왕복 — 'Not set'을 고르면 필드가 지워져야 한다(None을 고른 것과 다르다).
   const sameSiteGroup = popup.getByRole('group', { name: 'SameSite' });
   await sameSiteGroup.getByRole('button', { name: 'Strict', exact: true }).click();
@@ -4926,7 +4966,7 @@ try {
   await popup.getByRole('button', { name: 'Export…' }).click();
   const [rtDownload] = await Promise.all([
     popup.waitForEvent('download'),
-    popup.getByRole('button', { name: /Export… \(1\)/ }).click(),
+    popup.getByRole('button', { name: /^Export \(1\)$/ }).click(),
   ]);
   const rtJson = readFileSync(await rtDownload.path(), 'utf8');
 
@@ -4936,7 +4976,9 @@ try {
   await popup.reload();
   await popup.getByRole('button', { name: 'Show backups' }).click();
   await popup.getByRole('button', { name: 'Import…' }).click();
-  await popup.getByLabel('Import JSON').fill(rtJson);
+  await popup.getByLabel('Import file').setInputFiles({
+    name: 'round-trip.json', mimeType: 'application/json', buffer: Buffer.from(rtJson),
+  });
   await popup.getByRole('button', { name: 'Run import' }).click();
   const rtState = await pollUntil(
     () => sw.evaluate(async () => (await chrome.storage.local.get('state')).state),
@@ -5243,16 +5285,17 @@ try {
   const armed = await bkView(snapArea);
   const armedNothingRemoved = armed.ids.includes('del-row') && armed.keys.includes('bk:del-row:0');
 
-  // (b) 복원 확인을 켜면 삭제 확인이 꺼지고, 다시 삭제를 켜면 복원 확인이 꺼진다.
-  await delRow.getByRole('button', { name: 'Restore backup', exact: true }).click();
-  const restoreArmed = await delRow
-    .getByRole('button', { name: 'Confirm restore', exact: true })
+  /*
+   * (b) **복원에는 되물음이 없다.** 예전에는 두 확인(복원·삭제)이 서로를 끄는지를 여기서
+   * 쟀는데, 복원이 즉시 실행 + 실행 취소 토스트로 바뀌면서 되물음이 하나만 남았다 —
+   * "한 번에 하나뿐"은 이제 `Confirming` 타입이 한 값짜리 유니온인 것으로 강제된다.
+   * 남은 관측은 그 되물음이 실제로 사라졌는지다(누르지 않고 센다 — 누르면 복원이 돈다).
+   */
+  const restoreHasNoConfirm =
+    (await delRow.getByRole('button', { name: /Confirm restore/ }).count()) === 0;
+  const deleteStillArmed = await delRow
+    .getByRole('button', { name: 'Confirm delete backup', exact: true })
     .isVisible();
-  const deleteDisarmed =
-    (await delRow.getByRole('button', { name: 'Confirm delete backup', exact: true }).count()) === 0;
-  await delRow.getByRole('button', { name: 'Delete backup', exact: true }).click();
-  const restoreDisarmed =
-    (await delRow.getByRole('button', { name: 'Confirm restore', exact: true }).count()) === 0;
 
   // (c) 확인 클릭에서만 실행된다.
   await delRow.getByRole('button', { name: 'Confirm delete backup', exact: true }).click();
@@ -5279,10 +5322,10 @@ try {
     otherAfter.keys.includes('bk:del-other:0');
 
   record('N43: 히스토리 한 행 삭제 — 2단계 확인(복원 확인과 상호 취소), 그 행·그 청크만 사라지고 반대쪽 저장소는 무사',
-    corruptDeletable && deleteArmed && armedNothingRemoved && restoreArmed && deleteDisarmed &&
-      restoreDisarmed && deletedGone && othersKept && countDropped && rowsLeft === 0 && otherIntact,
+    corruptDeletable && deleteArmed && armedNothingRemoved && restoreHasNoConfirm &&
+      deleteStillArmed && deletedGone && othersKept && countDropped && rowsLeft === 0 && otherIntact,
     `손상행 삭제가능=${corruptDeletable}, 1클릭 확인=${deleteArmed}·무삭제=${armedNothingRemoved}, ` +
-      `복원확인=${restoreArmed}(삭제확인 해제=${deleteDisarmed}) → 삭제확인 복귀(복원 해제=${restoreDisarmed}), ` +
+      `복원 되물음 없음=${restoreHasNoConfirm}(삭제확인 유지=${deleteStillArmed}), ` +
       `매니페스트(${snapArea}) ${snapBefore.ids.length}→${snapAfter.ids.length}, 남은 행=${rowsLeft}, ` +
       `그 청크 잔재=${snapAfter.keys.some((k) => k.startsWith('bk:del-row:'))}, 나머지 보존=${othersKept}, ` +
       `반대쪽(${snapOther}) 키 ${otherBefore.keys.length}→${otherAfter.keys.length} 동일=${otherIntact}`);
@@ -5469,7 +5512,6 @@ try {
     }, DIRTY_MARKER);
 
     await keepRowAfter.getByRole('button', { name: 'Restore backup', exact: true }).click();
-    await keepRowAfter.getByRole('button', { name: 'Confirm restore', exact: true }).click();
     restored =
       (await pollUntil(
         () =>
@@ -5678,14 +5720,13 @@ try {
   await settleScreen(popup, 'Backup history');
   // 2단계 확인 — 첫 클릭은 확인만 켠다.
   await popup.getByRole('button', { name: 'Restore backup' }).first().click();
-  await popup.getByRole('button', { name: 'Confirm restore' }).first().click();
   const restoreNotice = await pollUntil(
     () => popup.locator('[role="status"], ul li').allTextContents(),
-    (texts) => texts.some((x) => /legacy profile filters were migrated/i.test(x)),
+    (texts) => texts.some((x) => /moved the old profile filters onto each rule/i.test(x)),
     8000,
     200,
   );
-  const noticeShown = restoreNotice.some((x) => /legacy profile filters were migrated/i.test(x));
+  const noticeShown = restoreNotice.some((x) => /moved the old profile filters onto each rule/i.test(x));
   const restoredProfile = await pollUntil(
     () => sw.evaluate(async () => (await chrome.storage.local.get('state')).state.profiles.map((p) => p.name)),
     (names) => names.includes('LegacyRestore'),
@@ -5822,6 +5863,214 @@ try {
     `기본 transition="${livelyDialog.transition}" 잔류=${livelyDialog.goneMs?.toFixed?.(0)}ms, ` +
     `reduced transition="${reducedDialog.transition}" 잔류=${reducedDialog.goneMs?.toFixed?.(0)}ms ` +
     `(전이 ${dialogFadeMs}ms)`);
+
+  {
+    /*
+     * N19c: 마지막 규칙을 지우면 빈 상태가 **행이 다 접힌 뒤에** 선다.
+     *
+     * 예전에는 목록이 비는 그 순간 안내가 통째로 나타났다 — 지우는 행이 아직 260ms 동안
+     * 접히는 중이라, 그 행 옆에 "규칙이 없습니다"가 나란히 서는 프레임이 생긴다.
+     *
+     * **존재 시각으로 잰다.** 보이는지가 아니라 DOM에 생기는 시각이다: 안내는 등장 모션이
+     * 붙어 높이 0에서 시작하므로 가시성으로 재면 전이 길이까지 함께 세게 되어, 무엇이
+     * 늦춘 것인지(순서인지 모션인지) 구별되지 않는다. 클릭 시각은 페이지 안에서 잡는다 —
+     * CDP 왕복을 t0에 넣으면 그 왕복 시간이 계약처럼 보인다.
+     */
+    await seedProfiles([
+      baseProfile('p-last', 'LastOne', [hdr({ id: 'only', name: 'X-Only', value: '1' })]),
+    ]);
+    await popup.reload();
+    await popup.getByRole('button', { name: 'Delete', exact: true }).first().waitFor({ timeout: 5000 });
+    await popup.evaluate(() => {
+      window.__emptyMs = null;
+      const seen = () =>
+        [...document.querySelectorAll('p')].some((p) => p.textContent.trim().startsWith('No rules yet'));
+      window.addEventListener(
+        'click',
+        () => {
+          const t0 = performance.now();
+          const tick = () => {
+            if (seen()) window.__emptyMs = performance.now() - t0;
+            else if (performance.now() - t0 < 3000) requestAnimationFrame(tick);
+            else window.__emptyMs = -1;
+          };
+          requestAnimationFrame(tick);
+        },
+        { once: true, capture: true },
+      );
+    });
+    await popup.getByRole('button', { name: 'Delete', exact: true }).first().click();
+    const emptyAfterMs = await popup
+      .waitForFunction(() => window.__emptyMs != null, null, { timeout: 5000 })
+      .then(() => popup.evaluate(() => window.__emptyMs), () => null);
+    const rowExitMs = ROW_TRANSITION.duration * 1000;
+    record('N19c: 마지막 규칙 삭제 — 빈 상태는 행이 접힌 뒤에 선다 (성급하게 앞서지 않는다)',
+      typeof emptyAfterMs === 'number' && emptyAfterMs >= rowExitMs * 0.8 && emptyAfterMs < 3000,
+      `안내 등장=${emptyAfterMs?.toFixed?.(0)}ms (행 접힘 ${rowExitMs}ms)`);
+  }
+
+  {
+    /*
+     * N19d: 새 규칙을 저장하면 그 행이 **폼이 접힌 뒤에** 선다.
+     *
+     * 폼은 400px, 행은 56px이라 둘이 동시에 움직이면 그 차이만큼 아래 내용이 위로 당겨진다 —
+     * 무엇이 생겼는지보다 화면이 줄었다는 것이 먼저 읽힌다. N19c(마지막 규칙 삭제)와 같은
+     * 겹침의 반대 방향이고, 같은 방식으로 잰다: 클릭 시각을 페이지 안에서 잡고 행이 DOM에
+     * 생기는 시각을 본다.
+     */
+    await seedProfiles([baseProfile('p-save-seq', 'SaveSeq', [])]);
+    await popup.reload();
+    await popup.getByRole('button', { name: 'Add rule' }).first().click();
+    await popup.getByRole('button', { name: 'Cancel', exact: true }).waitFor({ timeout: 5000 });
+    /*
+     * 행의 제목은 **메모**다(메모가 없으면 종류 이름이 선다 — N19a). 그래서 메모를 채우고
+     * 그 문자열이 목록에 서는 시각을 잰다: 헤더 이름으로 찾으면 칩 줄에 섞여 잡히거나
+     * 아예 안 잡힌다.
+     */
+    await popup.getByLabel('Name', { exact: true }).first().fill('SeqRule');
+    await popup.getByLabel('Header name', { exact: true }).first().fill('X-Seq');
+    await popup.evaluate(() => {
+      window.__rowMs = null;
+      const seen = () =>
+        [...document.querySelectorAll('span')].some((el) => el.textContent.trim() === 'SeqRule');
+      window.addEventListener(
+        'click',
+        () => {
+          const t0 = performance.now();
+          const tick = () => {
+            if (seen()) window.__rowMs = performance.now() - t0;
+            else if (performance.now() - t0 < 4000) requestAnimationFrame(tick);
+            else window.__rowMs = -1;
+          };
+          requestAnimationFrame(tick);
+        },
+        { once: true, capture: true },
+      );
+    });
+    await popup.getByRole('button', { name: SAVE_BUTTON }).click();
+    const rowAfterMs = await popup
+      .waitForFunction(() => window.__rowMs != null, null, { timeout: 6000 })
+      .then(() => popup.evaluate(() => window.__rowMs), () => null);
+    // 저장이 실제로 착지했는지도 함께 본다 — 행만 늦게 서고 저장은 안 된 상태를 통과시키지 않는다.
+    const savedName = await pollUntil(
+      () => sw.evaluate(async () => {
+        const { state } = await chrome.storage.local.get('state');
+        return state.profiles[0]?.modifications[0]?.name ?? null;
+      }),
+      (v) => v === 'X-Seq',
+    );
+    const formExitMs = ROW_TRANSITION.duration * 1000;
+    record('N19d: 새 규칙 저장 — 행은 폼이 접힌 뒤에 선다 (겹쳐 움직이지 않는다)',
+      typeof rowAfterMs === 'number' && rowAfterMs >= formExitMs * 0.8 && rowAfterMs < 4000 &&
+        savedName === 'X-Seq',
+      `행 등장=${rowAfterMs?.toFixed?.(0)}ms (폼 접힘 ${formExitMs}ms), 저장=${savedName}`);
+    await waitFormClosed();
+  }
+
+  // 이 시나리오의 지역 이름을 블록으로 닫는다 — 스모크 본문은 한 스코프라 이름이 겹친다.
+  {
+    /*
+     * N54: 프로필 삭제 (ADR 0017 개정) — 숨었다 나타나고, 두 번 눌러야 지워지고, 마지막
+     * 하나까지 지울 수 있다.
+     *
+     * 세 가지가 함께 걸려야 계약이 산다. **숨김**만 재면 도달할 수 없는 버튼을 통과시키고
+     * (호버·포커스 둘 다 본다), **2단 확인**만 재면 한 번 눌러 지워지는 회귀를 놓치며,
+     * **마지막 하나**를 안 재면 예외 하나가 조용히 되살아난다.
+     */
+    await seedProfiles([
+      baseProfile('d-1', 'DelA', [hdr({ id: 'm1', name: 'X-Del', value: '1' })]),
+      baseProfile('d-2', 'DelB', []),
+    ]);
+    await popup.reload();
+    await popup.getByRole('button', { name: 'Show profiles', exact: true }).waitFor({ timeout: 5000 });
+    /*
+     * **드래그 목록이 도착하기를 기다린다.** dnd-kit은 지연 청크라(ui-refine 08) 그것이
+     * 붙는 순간 정적 fallback 목록이 통째로 교체된다 — 행이 리마운트되므로 행이 들고 있던
+     * 되물음도 함께 풀린다. 기다리지 않으면 그 교체가 시나리오 한가운데로 떨어져,
+     * 무장해 둔 버튼이 이유 없이 사라진 것처럼 보인다(실제로 그렇게 헛디뎠다).
+     */
+    await waitSortableReady();
+    const profileDelRow = popup.locator('li').filter({ has: popup.getByRole('button', { name: 'Delete DelB' }) });
+    const profileDelButton = popup.getByRole('button', { name: 'Delete DelB' });
+    const rowOpacity = () =>
+      profileDelButton.evaluate((el) => Number(getComputedStyle(el.parentElement).opacity));
+    // 평소에는 숨는다 — 264px 열에서 상시 아이콘은 이름을 먼저 자른다.
+    const hiddenIdle = (await rowOpacity()) === 0;
+    await profileDelRow.hover();
+    const shownOnHover = (await pollUntil(rowOpacity, (v) => v === 1, 2000, 50)) === 1;
+    // 포커스로도 나타난다 — 호버만이면 키보드·터치에서 부재가 된다.
+    await popup.mouse.move(0, 0);
+    await popup.getByRole('switch', { name: 'Toggle DelB' }).focus();
+    await popup.keyboard.press('Shift+Tab');
+    const shownOnFocus = (await pollUntil(rowOpacity, (v) => v === 1, 2000, 50)) === 1;
+
+    // 한 번 누르면 되묻기만 한다 — 저장소는 그대로다.
+    await profileDelRow.hover();
+    await profileDelButton.click();
+    const armed = await popup
+      .getByRole('button', { name: 'Confirm delete DelB' })
+      .waitFor({ timeout: 5000 })
+      .then(() => true, () => false);
+    const stillThere = await sw.evaluate(async () => {
+      const { state } = await chrome.storage.local.get('state');
+      return state.profiles.length;
+    });
+    // 두 번째 클릭이 지운다.
+    await popup.getByRole('button', { name: 'Confirm delete DelB' }).click();
+    const afterDelete = await pollUntil(
+      () => sw.evaluate(async () => {
+        const { state } = await chrome.storage.local.get('state');
+        return state.profiles.map((p) => p.id).join('|');
+      }),
+      (ids) => ids === 'd-1',
+    );
+
+    /*
+     * 마지막 하나도 지운다 — 그리고 지운 것이 남긴 **실체화 값도 함께** 걷힌다. 남은 프로필은
+     * Placeholder 규칙을 갖도록 다시 심어, 걷혔는지를 저장소에서 직접 본다.
+     */
+    await seedProfiles([
+      { ...baseProfile('d-only', 'DelOnly',
+        [hdr({ id: 'mp', name: 'X-Ph', value: 'v-{{uuid}}' })]), active: false },
+    ]);
+    await popup.reload();
+    await waitSortableReady();
+    await popup.getByRole('switch', { name: 'Toggle DelOnly' }).click();
+    const materializedBefore = await pollUntil(
+      () => sw.evaluate(async () => {
+        const { state } = await chrome.storage.local.get('state');
+        return Object.keys(state.materialized ?? {}).length;
+      }),
+      (n) => n === 1,
+    );
+    const onlyRow = popup.locator('li').filter({ has: popup.getByRole('button', { name: 'Delete DelOnly' }) });
+    await onlyRow.hover();
+    await popup.getByRole('button', { name: 'Delete DelOnly' }).click();
+    await popup.getByRole('button', { name: 'Confirm delete DelOnly' }).click();
+    const emptied = await pollUntil(
+      () => sw.evaluate(async () => {
+        const { state } = await chrome.storage.local.get('state');
+        return { profiles: state.profiles.length, materialized: Object.keys(state.materialized ?? {}).length };
+      }),
+      (v) => v.profiles === 0,
+    );
+    // 프로필이 없어진 화면이 그렇게 말한다 — 빈 목록은 이미 표현 가능한 상태다.
+    const emptyNoticeShown = await popup
+      .getByText('No profiles yet', { exact: false })
+      .first()
+      .waitFor({ timeout: 5000 })
+      .then(() => true, () => false);
+
+    record('N54: 프로필 삭제 — 호버·포커스에만 보이고, 2단 확인이며, 마지막 하나와 실체화 값까지 걷힌다',
+      hiddenIdle && shownOnHover && shownOnFocus &&
+        armed && stillThere === 2 && afterDelete === 'd-1' &&
+        materializedBefore === 1 && emptied.profiles === 0 && emptied.materialized === 0 &&
+        emptyNoticeShown,
+      `숨김=${hiddenIdle} 호버=${shownOnHover} 포커스=${shownOnFocus}, ` +
+      `1클릭 되물음=${armed}(프로필 ${stillThere}개 유지), 2클릭 후=[${afterDelete}], ` +
+      `마지막 하나 삭제=${emptied.profiles === 0} 실체화 ${materializedBefore}→${emptied.materialized}, ` +
+      `빈 안내=${emptyNoticeShown}`);
+  }
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} passed`);
