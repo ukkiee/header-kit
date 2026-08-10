@@ -1,32 +1,18 @@
-import { cva, type VariantProps } from 'class-variance-authority';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ui/select';
+import { Select as SelectPrimitive } from '@base-ui/react/select';
+import { Select, SelectContent, SelectTrigger, SelectValue } from '@/ui/select';
 import { cn } from './cn';
-import { selectFixedWidth } from './tokens';
+import { popupItemSelected, popupItemText, selectFixedWidth } from './tokens';
 
 /**
- * options 배열로 쓰는 Select — shadcn의 합성 API(Trigger/Content/Item) 위에 얹은 앱 레벨
+ * options 배열로 쓰는 Select — shadcn의 합성 API(Trigger/Content) 위에 얹은 앱 레벨
  * 조합이다. shadcn 소스(`select.tsx`)는 손대지 않는다(ADR 0014): 이 파일은 그 소스를
  * 조합만 하므로 shadcn을 재복사해도 여기만 다시 맞추면 된다.
  *
  * 래퍼를 둔 이유는 두 가지다.
- * 1. 이 앱의 셀렉트는 전부 "값 목록 하나를 고르는" 같은 모양이다 — 호출부 여섯 곳이
- *    똑같은 Trigger/Content/Item 조합을 베껴 쓰면 팝업 규칙이 곧 자리마다 어긋난다.
- * 2. 팝업 위치 규칙(아래로 열리고 좌변 정렬)을 한 곳에 못박기 위해서다. 아래 주석 참고.
+ * 1. 이 앱의 셀렉트는 전부 "값 목록 하나를 고르는" 같은 모양이다 — 호출부들이 똑같은
+ *    Trigger/Content/Item 조합을 베껴 쓰면 팝업 규칙이 곧 자리마다 어긋난다.
+ * 2. 팝업 위치·폭·선택 표시 규칙을 한 곳에 못박기 위해서다. 아래 주석 참고.
  */
-const trigger = cva('', {
-  variants: {
-    /**
-     * 폭 정책. 기본은 `auto` — 대부분의 셀렉트는 Field나 그리드가 폭을 정해 준다.
-     * `fixed`는 **다른 컨트롤과 같은 행에 있어 폭이 변하면 옆을 미는** 자리에만 준다.
-     * 값 근거는 tokens.ts의 selectFixedWidth 주석에 있고, 스모크 N25가 지킨다.
-     */
-    width: {
-      auto: '',
-      fixed: selectFixedWidth,
-    },
-  },
-  defaultVariants: { width: 'auto' },
-});
 
 export interface SelectOption<T extends string = string> {
   value: T;
@@ -34,7 +20,7 @@ export interface SelectOption<T extends string = string> {
 }
 
 /** 값 타입 T가 현재 값·옵션·콜백에 일관 적용된다 — 호출부가 도메인 union을 그대로 쓴다. */
-export interface SelectOptionsProps<T extends string> extends VariantProps<typeof trigger> {
+export interface SelectOptionsProps<T extends string> {
   value: T;
   onValueChange: (value: T) => void;
   options: readonly SelectOption<T>[];
@@ -45,7 +31,6 @@ export interface SelectOptionsProps<T extends string> extends VariantProps<typeo
 }
 
 export function SelectOptions<T extends string>({
-  width,
   className,
   value,
   onValueChange,
@@ -68,14 +53,21 @@ export function SelectOptions<T extends string>({
     >
       {/*
         `text-xs` — shadcn Trigger 기본은 text-sm(14px)인데 이 앱의 폼은 12px 계열이다.
-        크기 문제만이 아니다: 14px에서는 매치 방식의 최장 라벨(en `Regex (advanced)`)이
-        고정 폭 안에서 잘렸다(N25). 폼의 다른 필드(Input size="sm")와도 글자 크기가 갈린다.
+        팝업 항목도 같은 12px를 쓰므로(아래 `popupItemText`) 트리거와 목록의 글자가 갈리지
+        않는다 — 예전에는 트리거 12px에 목록 14px이라 같은 라벨이 두 크기로 보였다.
+
+        **폭은 늘 고정이다** (`selectFixedWidth`). 변형으로 고를 수 있게 두던 것을 없앴다:
+        `w-fit`으로 두면 트리거가 지금 고른 값에 맞춰 줄고, 팝업 폭은 앵커(=트리거)에서
+        나오므로 **팝업이 그 폭에 갇혀 더 긴 라벨이 잘린다** — 종류 셀렉트의 ko
+        `User-Agent 변경`이 실제로 그렇게 잘려 있었다. 값을 고를 때마다 옆 컨트롤이 밀리는
+        문제도 같은 뿌리다. 폭 계산 근거는 tokens.ts의 `selectFixedWidth` 주석에 있고,
+        스모크 N25가 en/ko 모든 옵션에서 트리거·팝업 양쪽의 미절단을 지킨다.
       */}
       <SelectTrigger
         id={id}
         aria-label={ariaLabel}
         size="sm"
-        className={cn('text-xs', trigger({ width }), className)}
+        className={cn('text-xs', selectFixedWidth, className)}
       >
         <SelectValue className="truncate" />
       </SelectTrigger>
@@ -84,8 +76,8 @@ export function SelectOptions<T extends string>({
         트리거 위에 겹치도록** 팝업 전체를 끌어올린다(macOS 네이티브 셀렉트 방식). 그 모드에서는
         side·align·sideOffset이 무시되어 팝업이 트리거를 가리고 좌우도 밀려 보인다.
 
-        이 앱의 다른 팝업(메뉴·자동완성)은 전부 앵커 아래로 떨어지는 드롭다운이다. 셀렉트만
-        다른 규칙을 쓰면 같은 표면이 자리마다 다르게 움직인다. 스모크 N30이 이를 지킨다.
+        이 앱의 다른 팝업(자동완성)은 앵커 아래로 떨어지는 드롭다운이다. 셀렉트만 다른 규칙을
+        쓰면 같은 표면이 자리마다 다르게 움직인다. 스모크 N30이 이를 지킨다.
 
         prop으로 끌 수 있으므로 shadcn 소스를 고치지 않고도 규칙을 지킨다.
       */}
@@ -106,15 +98,31 @@ export function SelectOptions<T extends string>({
           //
           // 안쪽 List에도 함께 줘야 한다 — role="listbox"를 갖는 것은 Popup이 아니라 그
           // List이고, shadcn은 거기에 폭을 주지 않아 콘텐츠 폭으로 줄어든다(N25가 잡았다).
-          // 팝업이 트리거보다 좁아 보이지 않게. role="listbox"는 Popup이 아니라 안쪽
-          // List가 갖는데 shadcn이 거기에 폭을 주지 않아 콘텐츠 폭으로 줄어든다(N25).
           'min-w-[var(--anchor-width)] [&>[role=listbox]]:w-full',
         )}
       >
+        {/*
+          항목은 shadcn의 `SelectItem`이 아니라 **Base UI Item을 이 앱의 팝업 항목 토큰으로**
+          직접 조합한다 (ADR 0014의 조합 파일 역할).
+
+          이유가 둘이다. (1) shadcn 항목은 `text-sm`에 오른쪽 32px을 체크 표시 자리로 비워
+          두는데, 이 앱의 팝업 항목 규약(`popupItemText`)은 12px에 좌우 8px이고 자동완성
+          팝업이 이미 그것을 쓴다 — 같은 앱의 두 팝업이 다른 문법으로 그려지고 있었다.
+          (2) 고른 항목을 체크(✓)가 아니라 **면**으로 말하려면(`popupItemSelected`) 그
+          체크를 렌더하지 않아야 하는데, 그것은 shadcn 소스 안에 있어 고칠 수 없다. 안 그리면
+          되는 것을 CSS로 숨기는 대신 여기서 조합하지 않는 쪽이 읽힌다.
+
+          `whitespace-nowrap` — 라벨이 폭을 넘으면 **줄바꿈 대신 넘치게** 둔다. 접히면
+          보기에는 멀쩡한데 폭 계산이 틀렸다는 사실이 화면에서도 스모크에서도 사라진다.
+        */}
         {options.map((option) => (
-          <SelectItem key={option.value} value={option.value}>
-            {option.label}
-          </SelectItem>
+          <SelectPrimitive.Item
+            key={option.value}
+            value={option.value}
+            className={cn('whitespace-nowrap', popupItemText, popupItemSelected)}
+          >
+            <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>
+          </SelectPrimitive.Item>
         ))}
       </SelectContent>
     </Select>

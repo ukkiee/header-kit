@@ -41,6 +41,31 @@ export const popupAnchored = `min-w-[var(--anchor-width)] outline-none ${popupSu
 /** 본문 색이 붙은 팝업 항목 — 값 목록(Select / Autocomplete)이 공유한다. */
 export const popupItemText = `text-popover-foreground ${popupItem}`;
 
+/**
+ * 값 목록에서 **지금 고른 항목** — Select만 쓴다(Autocomplete에는 선택 상태가 없다).
+ *
+ * 체크 표시(✓) 대신 **면으로** 말한다. 이 앱에서 "고른 것"의 시각 언어는 이미 accent 면이다
+ * (칩의 `data-[pressed]:bg-primary`, 레일의 선택 배경) — 목록만 글리프로 말하면 같은 뜻에
+ * 두 문법이 생기고, 오른쪽 끝의 작은 체크는 라벨에서 멀어 어느 줄이 선택인지 눈이 한 번
+ * 더 훑어야 한다. 체크 자리로 비워 두던 오른쪽 32px 여백도 함께 사라져 같은 폭에 더 긴
+ * 라벨이 들어간다.
+ *
+ * 세 번째 규칙(`data-[selected]:data-[highlighted]:…`)이 두 가지를 한 번에 한다.
+ *
+ * 하나는 **하이라이트를 잃지 않는 것**이다. 고른 항목 위로 키보드 커서가 오면 accent 면이
+ * accent 면을 덮어 아무 변화가 없고, 그러면 커서가 어디 있는지 목록에서 사라진다. 값을
+ * `/80`으로 낮춘 것은 primary Button의 `hover:bg-primary/80`과 같은 값이라, "지금 가리키는
+ * accent 면"이 앱 어디서나 같은 농도로 읽힌다.
+ *
+ * 다른 하나는 **순서가 아니라 특이도로 이기는 것**이다. `data-[selected]`와
+ * `data-[highlighted]`는 둘 다 [attr] 하나짜리라 겹쳤을 때 승자가 Tailwind의 출력 순서에
+ * 달리는데, 그건 소스에서 읽히지 않는 승부다. 속성 둘을 겹친 규칙은 항상 이긴다.
+ *
+ * 선택은 색만이 아니다 — `aria-selected`가 문자로 같은 말을 한다(Base UI가 붙인다).
+ */
+export const popupItemSelected =
+  'data-[selected]:bg-primary data-[selected]:text-primary-foreground data-[selected]:data-[highlighted]:bg-primary/80';
+
 /** 툴팁 표면 — 반전 명도(라이트에서 어두운 배경). IconButton 계열이 공유한다. */
 export const tooltipPopup =
   'rounded-md bg-zinc-900 px-2 py-1 text-[11px] text-white dark:bg-zinc-100 dark:text-zinc-900';
@@ -77,17 +102,29 @@ export const scrollbarTrack =
 export const scrollbarThumb = 'w-full rounded-full bg-zinc-300 dark:bg-zinc-600';
 
 /**
- * 고정 폭 셀렉트 트리거 — 선택한 값에 따라 폭이 변하지 않아야 하는 자리에 쓴다.
+ * 셀렉트의 고정 폭 — **앱의 모든 셀렉트가 이 하나를 쓴다** (SelectOptions가 늘 붙인다).
  *
- * 값이 38(9.5rem = 152px)인 근거: 가장 긴 라벨은 매치 방식의 en `Regex (advanced)`로
- * 라벨 102px에 트리거의 여백이 붙는다. shadcn SelectTrigger는 좌우 패딩 18px
- * (`pl-2.5 pr-2`) + 아이콘 16px(`size-4`) + 간격 6px(`gap-1.5`) + 보더 2px = 42px를
- * 쓴다 — 예전 자체 트리거(패딩 12px + 아이콘 12px + 간격 4px)보다 12px 넓다. 그래서
- * 136px에서는 en 라벨이 잘렸고(N25가 잡았다) 152px로 올렸다.
+ * 고정인 이유가 둘이다. (1) 선택한 값에 따라 트리거 폭이 변하면 같은 행의 옆 컨트롤이
+ * 밀린다. (2) 팝업 폭은 앵커(=트리거) 폭에서 나오므로, 트리거가 `w-fit`으로 짧은 값에
+ * 맞춰 줄면 **팝업이 그 폭에 갇혀 긴 라벨이 잘린다** — 종류 셀렉트의 ko
+ * `User-Agent 변경`이 실제로 그렇게 20px 잘려 있었다.
  *
- * 라벨이 더 길어지면 폭보다 en/ko 미절단 스모크 단언(N25)이 먼저 깨져 알려 준다.
+ * 값이 40(10rem = 160px)인 근거 — 두 박스를 함께 재야 한다.
+ *   트리거: 좌우 패딩 18px(`pl-2.5 pr-2`) + 아이콘 16px + 간격 6px + 보더 2px = **42px**
+ *   팝업 항목: `popupItemText`의 좌우 패딩 16px(`px-2`) = **16px**
+ *     (팝업 셸과 List의 패딩은 0이고 `ring-1`은 box-shadow라 폭을 먹지 않는다. 체크 표시를
+ *      면으로 바꾸면서 오른쪽 32px 여백도 사라졌다 — `popupItemSelected` 주석 참고.)
+ * 둘 다 12px 글자를 담는다(항목도 트리거와 같은 `popupItemText`의 text-xs). 그래서 크롬이
+ * 더 큰 **트리거가 언제나 구속 조건**이고, 최장 라벨은 en `Response header`(95.4px)라
+ * 필요 폭은 42 + 95.4 = **137.4px**다. 160px은 그 위로 22.6px(16%)를 남긴다.
+ *
+ * 예전 값 152px은 지금은 없는 라벨(`Regex (advanced)`)로 계산된 수였고, 항목이 14px이던
+ * 시절의 팝업 요구(149.3px)에는 2.7px밖에 못 남겼다.
+ *
+ * 라벨이 더 길어지면 폭보다 en/ko 미절단 스모크 단언(N25)이 먼저 깨져 알려 준다 — 그 단언은
+ * 트리거뿐 아니라 **팝업 항목의 절단**도 두 셀렉트 모두에서 본다.
  */
-export const selectFixedWidth = 'w-38';
+export const selectFixedWidth = 'w-40';
 
 /**
  * 키보드 포커스 링 — Button·IconButton·SwitcherChip·아코디언 헤더·사이드바 그립이 공유한다(offset 일관).

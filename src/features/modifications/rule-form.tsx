@@ -330,9 +330,8 @@ export function RuleForm({
             */}
             <SelectOptions
               aria-label={t('ariaUrlMatchType')}
-              // 옆의 패턴 입력과 같은 행이라, 폭이 값에 따라 변하면 입력이 밀린다.
-              // width가 폭을 고정하고, 아래 shrink-0은 좁은 자리에서 눌리지 않게 지킨다.
-              width="fixed"
+              // 폭은 SelectOptions가 늘 고정한다(값이 바뀌어도 옆 입력이 안 밀린다).
+              // 아래 shrink-0은 좁은 자리에서 그 폭이 눌리지 않게 지킨다.
               value={visible}
               onValueChange={(value) => {
                 setDraft({ ...draft, urlMatchType: value } as Modification);
