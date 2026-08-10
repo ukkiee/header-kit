@@ -206,16 +206,28 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
     });
   };
 
+  /*
+   * 일시정지·재개 — **아이콘만** 남긴다. 헤더 오른쪽에 이미 '탭에서 열기'(아이콘)와
+   * '규칙 추가'(글자)가 서 있어 셋이 나란히 놓이면 줄이 붐빈다.
+   *
+   * 글자를 지우면서 `Button`이 아니라 **`IconButton`으로 갈아탄다.** 글자 없는 버튼을
+   * 툴팁 없이 두는 것이 이 저장소가 티켓 하나를 써서 없앤 결함이고(ui-polish 10, 레일),
+   * 옆의 '탭에서 열기'도 이미 이 셸이다. 접근성 이름은 같은 카탈로그 키에서 나오므로
+   * 이름으로 이 버튼을 집는 곳(스모크 14자리)은 그대로다 — 글자가 있던 시절에도 이름은
+   * `aria-label`에서 왔지 보이는 글자에서 오지 않았다.
+   *
+   * 정지 중 강조는 `variant="default"`(채운 파랑) 대신 **눌린 아이콘 버튼**으로 말한다 —
+   * 규칙 행의 편집 아이콘이 폼을 연 동안 쓰는 그 표시와 같다(`aria-pressed` + 채운 면).
+   * 정지는 그 밖에도 두 곳에서 더 말한다: 전폭 경고 배너와 흐려진 헤더 제목.
+   */
   const pauseButton = (
-    <Button
-      variant={state.paused ? 'default' : 'ghost'}
-      size="sm"
-      aria-label={state.paused ? t(locale, 'resume') : t(locale, 'pause')}
+    <IconButton
+      label={state.paused ? t(locale, 'resume') : t(locale, 'pause')}
+      icon={state.paused ? Play : Pause}
+      aria-pressed={state.paused}
+      className={state.paused ? 'bg-secondary text-foreground' : ''}
       onClick={() => dispatch({ type: 'set-paused', paused: !state.paused })}
-    >
-      {state.paused ? <Play size={14} strokeWidth={1.75} /> : <Pause size={14} strokeWidth={1.75} />}
-      <span className="ml-1.5">{state.paused ? t(locale, 'resume') : t(locale, 'pause')}</span>
-    </Button>
+    />
   );
 
   /*
@@ -318,8 +330,10 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
           {/* 레일 아이콘도 다른 아이콘 버튼과 같은 셸을 쓴다 — 툴팁(호버·키보드 포커스)과
               접근성 이름이 같은 카탈로그 키에서 나와 갈라지지 않는다.
 
-              선택 표시는 **색만이 아니다** — 왼쪽 2px 막대(위치·형태)가 함께 선다. 색을
-              지워도 어느 화면인지 남아야 한다(스펙 story 38). */}
+              선택 표시는 여전히 **색만이 아니다** — 채워진 면(명도)과 글자 굵기 두 채널이
+              함께 선다. 색을 지워도 어느 화면인지 남아야 한다(스펙 story 38). 예전에는 그
+              역할을 왼쪽 2px 파란 막대가 맡았는데, 시안에 없는 장식이라 걷었다: 남은 두
+              채널이 이미 그레이스케일에서 구별되고 `aria-pressed`가 문자로도 말한다. */}
           {RAIL_ITEMS.map(({ view, Icon, labelKey, textKey }) => (
             <IconButton
               key={view}
@@ -328,11 +342,7 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
               text={t(locale, textKey)}
               icon={Icon}
               aria-pressed={railView === view}
-              className={
-                railView === view
-                  ? 'border-l-2 border-primary bg-secondary font-medium'
-                  : 'border-l-2 border-transparent'
-              }
+              className={railView === view ? 'bg-secondary font-medium' : ''}
               onClick={() => setRailView(view)}
             />
           ))}
