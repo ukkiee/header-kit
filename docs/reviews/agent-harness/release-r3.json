@@ -1,0 +1,52 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "release",
+  "ack": "human-triage",
+  "triageMode": "human",
+  "verdict": "needs-attention",
+  "summary": "NO-SHIP. (1) R2-F1 is resolved for the reported closed-sibling case: the baseline now uses `label`/`div`, and fixtures cover sibling renaming and element-name spans. R2-F2 is resolved: the evidence tree matches `31f28fa`, README is unchanged from that measured tree through HEAD, and only `docs/reviews/**` trails it. (2) However, the R2-F1 fix introduces a new high-severity false-green path for valid JSX attribute expressions.",
+  "planFile": "docs/reviews/agent-harness/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 143,
+  "target": "branch diff against main",
+  "reviewer": "codex",
+  "fallbackFrom": null,
+  "fallbackReason": null,
+  "effort": "xhigh",
+  "inputMode": "self-collect",
+  "reviewedSha": "75e5e79a5fd41dab77d0fd5d2b93f0e3272e1fe9",
+  "reviewedTree": "aa0cb7375e854498e70691e7f291fa29a1956ef7",
+  "reviewedPlanSha256": "020faad8d7c7e809f8f13af8a07ef46a929a9e1c99f59aeec90a42ff65035f2e",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "backendExitCode": 0,
+  "parseError": null,
+  "promptDelivery": {
+    "mechanism": "token-echo",
+    "enforcing": false,
+    "verified": true,
+    "echoed": "c0425fbcdb0abb3c"
+  },
+  "findingCount": 1,
+  "planFindingCount": 0,
+  "triage": "review-gate SKILL.md § Triage governs: render EVERY finding as a full table row, never inside a dialog; then ask the ROUND before the rows — take every Proposed decision as it stands, or decide row by row — and `as proposed` ends the round in that ONE action; only if row-by-row was chosen, ask per finding with that row's Proposed decision as the first option, a reject or defer taking a free-text reason; echo back ONLY the rows that carried free text, and none if the round was decided by selection alone; max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "The R2-F1 fix mistakes JSX expressions for tag boundaries",
+      "body": "`openTagAt` searches raw `<` and `>` characters, but both can occur inside JSX attribute expressions before the diagnosed attribute. In a child-process reproduction, `<Input leading={<Icon />} autoFocus>` produced the unqualified fingerprint `autoFocus`; replacing `Input` with `Textarea` then incorrectly returned PASS. Likewise, `disabled={count < limit}` can identify `limit` as the element, making an unrelated variable rename change the fingerprint. This reintroduces the same-file, same-rule, different-element false green that the accepted partial contract requires the hard gate to reject. The new fixtures only exercise plain opening tags and closed siblings.",
+      "file": "scripts/a11y-gate.mjs",
+      "line_start": 109,
+      "line_end": 116,
+      "code": "function openTagAt(source, offset) {\n  const before = source.subarray(0, offset).toString('utf8');\n  const lt = before.lastIndexOf('<');\n  if (lt === -1) return null;\n  if (before.indexOf('>', lt) !== -1) return null; // 태그가 이미 닫혔다 — 우리는 그 밖에 있다\n  const name = /^<\\s*([A-Za-z_$][\\w$.:-]*)/.exec(before.slice(lt));\n  return name === null ? null : name[1];\n}",
+      "confidence": 1,
+      "recommendation": "Resolve the owning JSX opening element with an AST or a JSX-aware balanced scan. Add child-process fixtures requiring nested-JSX/comparison attribute replacement across different elements to FAIL, while expression-only renames remain PASS.",
+      "isPlanFinding": false
+    }
+  ],
+  "next_steps": [
+    "Replace the raw delimiter heuristic and add the missing regression fixtures.",
+    "Rerun the full hard gate set on the corrected final tree and update the committed verification pin."
+  ]
+}

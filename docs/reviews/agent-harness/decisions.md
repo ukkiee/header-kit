@@ -806,3 +806,18 @@ R2-F2 accept — The committed verification evidence does not cover the final RE
   그 트리에서 게이트를 돌리고, 증거는 `docs/reviews/**` 만 담아 뒤에 커밋한다. 어느 게이트도 그
   경로를 읽지 않는다는 것을 확인했다(`.oxfmtrc.json` ignorePatterns · 러너는 `docs/agents/`만 ·
   readme-parity는 `README.md`·`gates.txt`·`package.json`만).
+
+### release r3 (codex)
+
+r2 재검증: R2-F1 resolved(보고된 닫힌 형제 케이스) · R2-F2 resolved(증거 트리 일치 · README 불변 ·
+docs/reviews/** 만 뒤에 남음). F4는 재개되지 않음.
+
+R3-F1 accept — The R2-F1 fix mistakes JSX expressions for tag boundaries
+
+라운드 4: 사용자가 명시적으로 승인함. 근거는 같은 함수에서 세 번 연속 결함이 났다는 것.
+
+반영: 중괄호를 건너뛰는 뒤걸음 스캔으로 교체. 두 모양(`leading={<Icon />}`의 `/>`, `count < limit`의
+비교 연산자)을 픽스처로 못 박고 실측했다. 저장소 베이스라인은 불변(지문 8종·진단 13건).
+**남는 한계를 코드가 적는다**: 문자열 리터럴 안의 `<`·`>`·중괄호는 구분하지 않는다 — 지문이
+안정적으로 달라지므로 거짓 초록이 아니라 한 번의 베이스라인 차이이고, 문자열 파싱은 이 게이트가
+사려는 멈춤보다 큰 기계장치다. 세 번 반복된 자리라 이 판단을 명시적으로 남긴다.
