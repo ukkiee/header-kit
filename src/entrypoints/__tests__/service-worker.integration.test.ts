@@ -1133,39 +1133,60 @@ describe('S3 — 서비스워커 통합 시임', () => {
    */
   const FENCE_WAIT_MS = 5_000;
 
-  it('축출 중에 히스토리를 읽어도 멀쩡한 Backup이 손상으로 보이지 않는다', async () => {
-    const orderings = await forEachInterleaving({
-      seed: () => ({ [STATE_KEY]: twoProfiles() }), // syncBackup 기본값 true → 백업은 sync로
-      seedSync: () => seededBackups(['c1', 'c2', 'c3', 'c4', 'c5']), // 링이 꽉 찼다
-      start: (harness) => {
-        harness.stateChanged();
-        harness.fireBackupTimers(); // 축출을 일으키는 백업
-        return { listing: listBackupSnapshots('sync', FENCE_WAIT_MS) };
-      },
-      check: (outcomes, harness) => {
-        const listing = outcomes.listing as PromiseFulfilledResult<SnapshotStatus[]>;
-        expect(listing.status).toBe('fulfilled');
-        // 어떤 순서에서도 손상으로 그려지는 항목이 없다. 단순 재시도는 사전 정리 뒤 커밋 앞
-        // 창에 **두 읽기가 모두** 드는 순서에서 여기서 깨진다.
-        expect(listing.value.filter((entry) => entry.status === 'corrupt')).toEqual([]);
-        /*
-         * **축출이 정말 일어났는지 못 박는다.** 이것이 없으면 링을 덜 채워 창이 아예 열리지
-         * 않게 만들어도 위 단언이 그대로 통과한다 — 검증하려던 분기에 도달조차 못 하는 그 모양이다.
-         *
-         * 단언 대상은 **끝 상태**다. 읽기가 쓰기보다 먼저 이기는 순서에서는 목록이 축출 전
-         * 다섯을 그대로 보여 주는 것이 정답이므로, 목록에 축출을 요구하면 그 순서가 거짓
-         * 실패가 된다. 창이 열렸는지는 저장소가 답한다.
-         */
-        const settled = snapshotIds(harness.sync);
-        expect(settled).toHaveLength(5); // 새 스냅샷 + 살아남은 넷 (MAX_SNAPSHOTS)
-        expect(settled).not.toContain('c5'); // 가장 오래된 것이 링에서 밀려났다
-        expect(settled).toContain('c1'); // 직전 정상본은 남는다
-        // 그리고 저장소는 정합하다 — 목록에 남은 항목은 전부 데이터가 있다.
-        expect(manifestBacked(harness.sync)).toEqual([]);
-      },
-    });
-    expect(orderings).toBeGreaterThan(1);
-  });
+  /**
+   * 이 절의 두 테스트는 **실제 시계**로 도는 펜스를 기다리고, 그것을 여러 순서로 반복한다.
+   * vitest의 기본 예산(5초)은 `FENCE_WAIT_MS`와 **정확히 같아 여유가 0이다** — 한 순서만
+   * 펜스 끝까지 가도 시간 초과이고, 빠른 개발 기계에서 통과하던 것은 커밋이 늘 일찍
+   * 착지했기 때문이다.
+   *
+   * 그리고 시간 초과는 그 테스트 하나로 끝나지 않는다: `runOnce`의 정리(`globalThis.browser`
+   * 제거)가 성공 경로에만 있어, 초과로 중단된 실행이 다음 테스트의 탐색을 오염시켜
+   * **"탐색 prefix가 실행과 어긋났다"**라는 전혀 다른 사유로 번진다. 실측(리눅스 컨테이너,
+   * 18코어 유휴, 파일 단독 실행): 기본 예산에서 둘이 함께 빨강 · `--testTimeout=60000`에서
+   * 27개 전부 초록. 두 번째 실패는 첫 번째의 그림자였다.
+   *
+   * 그래서 예산을 펜스보다 넉넉히 크게 잡는다. **임계값을 느슨하게 하는 것이 아니다** —
+   * 재는 것(펜스가 유계인가)은 그대로이고, 테스트가 스스로에게 준 예산의 모순을 고치는 것이다.
+   */
+  const FENCE_TEST_TIMEOUT_MS = 60_000;
+
+  it(
+    '축출 중에 히스토리를 읽어도 멀쩡한 Backup이 손상으로 보이지 않는다',
+    async () => {
+      const orderings = await forEachInterleaving({
+        seed: () => ({ [STATE_KEY]: twoProfiles() }), // syncBackup 기본값 true → 백업은 sync로
+        seedSync: () => seededBackups(['c1', 'c2', 'c3', 'c4', 'c5']), // 링이 꽉 찼다
+        start: (harness) => {
+          harness.stateChanged();
+          harness.fireBackupTimers(); // 축출을 일으키는 백업
+          return { listing: listBackupSnapshots('sync', FENCE_WAIT_MS) };
+        },
+        check: (outcomes, harness) => {
+          const listing = outcomes.listing as PromiseFulfilledResult<SnapshotStatus[]>;
+          expect(listing.status).toBe('fulfilled');
+          // 어떤 순서에서도 손상으로 그려지는 항목이 없다. 단순 재시도는 사전 정리 뒤 커밋 앞
+          // 창에 **두 읽기가 모두** 드는 순서에서 여기서 깨진다.
+          expect(listing.value.filter((entry) => entry.status === 'corrupt')).toEqual([]);
+          /*
+           * **축출이 정말 일어났는지 못 박는다.** 이것이 없으면 링을 덜 채워 창이 아예 열리지
+           * 않게 만들어도 위 단언이 그대로 통과한다 — 검증하려던 분기에 도달조차 못 하는 그 모양이다.
+           *
+           * 단언 대상은 **끝 상태**다. 읽기가 쓰기보다 먼저 이기는 순서에서는 목록이 축출 전
+           * 다섯을 그대로 보여 주는 것이 정답이므로, 목록에 축출을 요구하면 그 순서가 거짓
+           * 실패가 된다. 창이 열렸는지는 저장소가 답한다.
+           */
+          const settled = snapshotIds(harness.sync);
+          expect(settled).toHaveLength(5); // 새 스냅샷 + 살아남은 넷 (MAX_SNAPSHOTS)
+          expect(settled).not.toContain('c5'); // 가장 오래된 것이 링에서 밀려났다
+          expect(settled).toContain('c1'); // 직전 정상본은 남는다
+          // 그리고 저장소는 정합하다 — 목록에 남은 항목은 전부 데이터가 있다.
+          expect(manifestBacked(harness.sync)).toEqual([]);
+        },
+      });
+      expect(orderings).toBeGreaterThan(1);
+    },
+    FENCE_TEST_TIMEOUT_MS,
+  );
 
   /*
    * 사전 정리 뒤 워커가 종료돼 **커밋이 영영 오지 않는** 순서 (티켓 04 수용 기준).
@@ -1174,29 +1195,33 @@ describe('S3 — 서비스워커 통합 시임', () => {
    * 계획의 self-healing이 그 항목을 치운다. **이 케이스가 없으면 펜스를 무한 대기로 구현해도
    * 통과한다.** 그래서 쓰기를 아예 세우지 않고, 불일치한 저장소를 그대로 둔 채 읽는다.
    */
-  it('커밋이 오지 않으면 유계 시간 뒤 손상으로 판정한다 — 무한히 기다리지 않는다', async () => {
-    const orderings = await forEachInterleaving({
-      seed: () => ({ [STATE_KEY]: twoProfiles() }),
-      // 매니페스트는 c1·c2를 열거하는데 c1의 청크가 없다 — 중단된 축출이 남긴 모양.
-      seedSync: () => {
-        const kv = seededBackups(['c1', 'c2']);
-        delete kv[chunkKey('c1', 0)];
-        return kv;
-      },
-      start: () => ({ listing: listBackupSnapshots('sync', 1) }),
-      check: (outcomes) => {
-        const listing = outcomes.listing as PromiseFulfilledResult<SnapshotStatus[]>;
-        expect(listing.status).toBe('fulfilled');
-        // 진짜로 유실된 것은 그대로 손상이고, 사유가 함께 온다.
-        const corrupt = listing.value.filter((entry) => entry.status === 'corrupt');
-        expect(corrupt.map((entry) => entry.id)).toEqual(['c1']);
-        expect(corrupt[0]?.reason).toBeDefined();
-        // 멀쩡한 것은 손상으로 번지지 않는다.
-        expect(listing.value.find((entry) => entry.id === 'c2')?.status).toBe('ok');
-      },
-    });
-    expect(orderings).toBeGreaterThan(0);
-  });
+  it(
+    '커밋이 오지 않으면 유계 시간 뒤 손상으로 판정한다 — 무한히 기다리지 않는다',
+    async () => {
+      const orderings = await forEachInterleaving({
+        seed: () => ({ [STATE_KEY]: twoProfiles() }),
+        // 매니페스트는 c1·c2를 열거하는데 c1의 청크가 없다 — 중단된 축출이 남긴 모양.
+        seedSync: () => {
+          const kv = seededBackups(['c1', 'c2']);
+          delete kv[chunkKey('c1', 0)];
+          return kv;
+        },
+        start: () => ({ listing: listBackupSnapshots('sync', 1) }),
+        check: (outcomes) => {
+          const listing = outcomes.listing as PromiseFulfilledResult<SnapshotStatus[]>;
+          expect(listing.status).toBe('fulfilled');
+          // 진짜로 유실된 것은 그대로 손상이고, 사유가 함께 온다.
+          const corrupt = listing.value.filter((entry) => entry.status === 'corrupt');
+          expect(corrupt.map((entry) => entry.id)).toEqual(['c1']);
+          expect(corrupt[0]?.reason).toBeDefined();
+          // 멀쩡한 것은 손상으로 번지지 않는다.
+          expect(listing.value.find((entry) => entry.id === 'c2')?.status).toBe('ok');
+        },
+      });
+      expect(orderings).toBeGreaterThan(0);
+    },
+    FENCE_TEST_TIMEOUT_MS,
+  );
 
   /*
    * 불변식 (d)의 **쓰기측** 계약 (D5가 남긴 둘 중 하나).
