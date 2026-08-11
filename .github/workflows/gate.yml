@@ -28,13 +28,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # 로컬에서 실측한 값이다 (bun 1.3.11 · node v24.14.1). 왜 bun은 정확히, node는 major로
       # 묶는지는 `docs/agents/verification.md`가 적는다.
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.11
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
       - run: bun install --frozen-lockfile
