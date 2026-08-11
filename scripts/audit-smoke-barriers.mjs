@@ -11,9 +11,14 @@
  * **양성 증거**를 record 전에 확보해야 한다. 그 규칙이 지켜지는지 사람의 기억이 아니라
  * 스크립트가 지킨다 — 새 시나리오가 같은 함정에 다시 빠지는 것을 막는다.
  *
- * `package.json`은 설정 가드라 스크립트를 등록하지 않는다. 직접 돌린다:
- *   node scripts/audit-smoke-barriers.mjs [검사할 smoke.mjs 경로]
- * 인자를 주면 다른 리비전의 사본도 검사할 수 있다(회귀 전 상태가 실제로 flag되는지 확인).
+ * 게이트로 등록되어 있다(티켓 01). `bun run smoke-barriers`.
+ *
+ * 이 감사는 처음에 **의도적으로 등록하지 않았고**, 그 이유는 "인자로 다른 리비전의 사본도
+ * 검사할 수 있다"였다. 그 능력은 등록과 공존하므로 등록을 막지 못한다:
+ *   bun run smoke-barriers                    # 기본 — scripts/smoke.mjs
+ *   bun run smoke-barriers /tmp/old-smoke.mjs # 회귀 전 상태가 실제로 flag되는지 확인
+ * 반면 미등록의 비용은 실재했다. 이 감사가 막는 것은 단언이 한 테스트씩 밀리는 결함인데,
+ * 사람이 기억해야 돌아가면 기억하지 않은 날 무방비해진다. 개정 이유는 판정 대장에 있다.
  */
 import { readFileSync } from 'node:fs';
 

@@ -1,0 +1,39 @@
+# 게이트 레지스트리 — **무엇이 게이트인가의 정의**.
+#
+# 러너(`scripts/run-gates.mjs`)가 이 파일을 읽는다. 글롭으로 발견하지 않는 이유는, 글롭이
+# "존재하는 게이트"를 "존재해야 할 게이트"의 정의로 만들기 때문이다 — 선언된 게이트가
+# 사라져도 아무 일도 일어나지 않는다.
+#
+# 참여하는 스크립트의 범위를 이 파일이 정한다. `package.json`에는 `dev`·`zip`·`test:watch`·
+# `storybook`·`postinstall`처럼 게이트가 아닌 스크립트가 이미 있고 앞으로 더 생긴다. 그것들은
+# 검사에 참여하지 않는다 — "모든 스크립트가 표에 있어야 한다"는 규칙은 영구히 빨강이라
+# 검사가 아니라 소음이다.
+#
+# gate: <id> | <package script> | <kind> | <ci> | <needs> | <browser> | <na>
+#   id       사람이 읽는 표(`docs/agents/verification.md`)의 행과 이 값으로 맞춘다
+#   kind     hard(완료를 막는다) | advisory(관측만 남긴다)
+#   ci       CI 워크플로가 이 게이트를 도는가 (티켓 08이 채운다)
+#   needs    선행 조건. `-`는 없음. `build`는 티켓 02가 채운다
+#   browser  실제 브라우저를 띄우는가. 테스트 분류가 이 값에서 파생된다 (티켓 07)
+#   na       이 행이 N/A가 될 수 있는 **유일한** 조건. 없으면 `never`
+#
+# `#` 주석과 빈 줄은 무시된다.
+
+gate: check          | check           | hard | no | - | no | never
+gate: test           | test            | hard | no | - | no | never
+gate: build          | build           | hard | no | - | no | never
+gate: storybook      | storybook:build | hard | no | - | no | never
+gate: smoke-barriers | smoke-barriers  | hard | no | - | no | never
+
+# deferred: <스크립트 파일> | <왜 아직 등록하지 않는가>
+#
+# `scripts/*-gate.mjs`인데 등록되지 않은 것은 고아 게이트로 FAIL이다. 아직 등록할 수 없는
+# 것은 여기 **선언**한다 — 그러면 통과하되 기록이 남는다. 양방향으로 정직하다: 등록하는
+# 변경이 이 줄을 지우는 것을 포함하고, 등록된 뒤에도 줄이 남아 있으면 FAIL이며, 존재하지
+# 않는 파일을 선언해도 FAIL이다.
+#
+# 이 검출이 미치는 범위는 `*-gate.mjs` 이름 규약 안뿐이다. 규약 밖 이름으로 만든 게이트
+# 스크립트는 **잡지 못한다** — 규약을 넓히면 평범한 스크립트를 오탐하므로 닫는 대신 밝힌다.
+
+deferred: bundle-gate.mjs      | 빌드 산출물을 읽는다. 회차별 산출물 디렉터리가 서는 티켓 02 뒤에 등록한다
+deferred: writer-lane-gate.mjs | 빌드 산출물을 읽는다. 회차별 산출물 디렉터리가 서는 티켓 02 뒤에 등록한다

@@ -15,8 +15,10 @@
     "storybook": "storybook dev -p 6006",
     "storybook:build": "storybook build",
     "smoke": "node scripts/smoke.mjs",
+    "smoke-barriers": "node scripts/audit-smoke-barriers.mjs",
     "bundle-gate": "node scripts/bundle-gate.mjs",
     "writer-lane-gate": "node scripts/writer-lane-gate.mjs",
+    "gate": "node scripts/run-gates.mjs",
     "postinstall": "wxt prepare"
   },
   "dependencies": {
