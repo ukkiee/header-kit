@@ -785,3 +785,24 @@ F4 defer — The CI slice is closed without an actual GitHub Actions run; 고치
   적고 있었는데 실제로는 네 모듈에 걸쳐 있다(`writer-lane-gate` 실행이 "허가 노출 4파일(전부 허용)"로
   확인). 목록은 게이트가 들고 문서는 그것을 가리킨다 — 코어의 "숫자와 목록은 게이트가 소유한다"와
   같은 규칙이다. **아키텍처 변경(캡슐화)은 하지 않았다** — 이 기능의 범위 밖이다.
+
+### release r2 (codex)
+
+r1 재검증: F1 resolved · F2 부분 계약 만족(잔여를 정직하게 문서화) · F3 resolved · F4 재개되지 않음.
+
+R2-F1 accept — The F2 fix fingerprints element violations with an unrelated closed sibling
+R2-F2 accept — The committed verification evidence does not cover the final README
+
+라운드 3: 사용자가 명시적으로 승인함(상한 2 초과). 근거는 두 수정 다 게이트의 판정 자체를 바꾸므로
+적대적 재검증 없이 종결하면 이번 라운드가 잡은 것과 같은 종류를 또 남길 수 있다는 것.
+
+반영:
+
+- R2-F1 — 휴리스틱(앞의 여는 태그를 뒤로 훑기)을 정확한 규칙으로 교체했다: 오프셋 앞의 마지막 `<`
+  뒤에 `>`가 없으면 그 태그가 열려 있고 스팬은 속성 자리에 있다. 태그 이름 스팬에는 접두 없음.
+  실측: `span.div` → `div`, r1이 얻은 판별은 유지. 실제 파일에서 그 형제를 `strong`으로 바꿔 초록 확인.
+  픽스처 둘(닫힌 형제 이름 변경이 통과 · 요소 이름 스팬에 접두 없음).
+- R2-F2 — 커밋 순서를 바꿨다. 판정에 들어가는 것(코드·`README.md`·`docs/agents/`)을 먼저 커밋해
+  그 트리에서 게이트를 돌리고, 증거는 `docs/reviews/**` 만 담아 뒤에 커밋한다. 어느 게이트도 그
+  경로를 읽지 않는다는 것을 확인했다(`.oxfmtrc.json` ignorePatterns · 러너는 `docs/agents/`만 ·
+  readme-parity는 `README.md`·`gates.txt`·`package.json`만).
