@@ -166,6 +166,244 @@ const TARGETS = [
       ['판정 발화를 통과로', 'if (problems.length > 0) {', 'if (false) {'],
     ],
   },
+  {
+    gate: 'core-line-budget',
+    script: 'core-line-budget-gate.mjs',
+    test: 'scripts/core-line-budget-gate.test.mjs',
+    filter: 'core-line-budget',
+    mutations: [
+      ['알 수 없는 인자 검사 무력화', "if (argv[i] !== '--dir') fail(", 'if (false) fail('],
+      ['--dir 중복 검사 무력화', 'if (dir !== null) fail(', 'if (false) fail('],
+      [
+        '--dir 값 없음 검사 무력화',
+        "if (v === undefined || v.trim() === '' || v.startsWith('-')) {",
+        'if (false) {',
+      ],
+      ['AGENTS.md 부재 검사 무력화', 'if (!existsSync(path)) fail(', 'if (false) fail('],
+      ['마커 대조를 포함 비교로', 'l.trim() === marker', 'l.includes(marker)'],
+      [
+        '선언 정규식의 줄 앵커 제거',
+        'const DECLARATION = /^Target\\s+(\\S+)\\s+lines$/;',
+        'const DECLARATION = /Target\\s+(\\S+)\\s+lines/;',
+      ],
+      ['마커 쌍 수 검사 무력화', 'if (begins.length !== 1 || ends.length !== 1) {', 'if (false) {'],
+      ['마커 순서 검사 무력화', 'if (ends[0] < begins[0]) fail(', 'if (false) fail('],
+      [
+        '마커 줄 자신도 예산에 넣기',
+        'const core = lines.slice(begins[0] + 1, ends[0]);',
+        'const core = lines.slice(begins[0], ends[0] + 1);',
+      ],
+      [
+        '선언을 문서 전체에서 찾기',
+        'const declared = core.flatMap((l) => {',
+        'const declared = lines.flatMap((l) => {',
+      ],
+      ['선언 수 검사 무력화', 'if (declared.length !== 1) {', 'if (false) {'],
+      ['예산이 정수인지 검사 무력화', 'if (!/^\\d+$/.test(declared[0])) fail(', 'if (false) fail('],
+      ['예산을 문서 전체 줄 수로', 'const used = core.length;', 'const used = lines.length;'],
+      [
+        '빈 줄을 세지 않기',
+        'const used = core.length;',
+        "const used = core.filter((l) => l.trim() !== '').length;",
+      ],
+      ['예산 초과 검사 무력화', 'if (used > budget) {', 'if (false) {'],
+      ['경계를 초과로 취급', 'if (used > budget) {', 'if (used >= budget) {'],
+    ],
+  },
+  {
+    gate: 'manifest-gate',
+    script: 'manifest-gate.mjs',
+    test: 'scripts/manifest-gate.test.mjs',
+    filter: 'manifest-gate',
+    mutations: [
+      ['인자 계약 오류 무시', 'if (parsed.error) fail(parsed.error);', 'if (false) fail(parsed.error);'],
+      [
+        '인자 없을 때의 기본 경로 변경',
+        "artifactsDirFrom(process.argv.slice(2), join('.output', 'chrome-mv3'))",
+        "artifactsDirFrom(process.argv.slice(2), join('.output', 'other'))",
+      ],
+      [
+        '매니페스트 부재 검사 무력화',
+        'if (!existsSync(MANIFEST)) fail(missingArtifacts(MANIFEST));',
+        'if (false) fail(missingArtifacts(MANIFEST));',
+      ],
+      [
+        '매니페스트 파싱 실패 처리 제거',
+        '  fail(`매니페스트를 읽을 수 없다: ${MANIFEST} — ${oneLine(e.message)}`);',
+        '  throw e;',
+      ],
+      [
+        '객체 여부 가드 무력화',
+        "if (manifest === null || typeof manifest !== 'object' || Array.isArray(manifest)) {",
+        'if (false) {',
+      ],
+      ['모르는 최상위 키 검사 무력화', 'if (unknownKeys.length > 0) {', 'if (false) {'],
+      ['사라진 최상위 키 검사 무력화', 'if (absentKeys.length > 0) note(', 'if (false) note('],
+      [
+        'JUDGED_KEYS에서 content_security_policy 제거',
+        "const JUDGED_KEYS = ['content_security_policy', 'optional_permissions', 'optional_host_permissions'];",
+        "const JUDGED_KEYS = ['optional_permissions', 'optional_host_permissions'];",
+      ],
+      ['manifest_version 검사 무력화', 'if (manifest.manifest_version !== 3) {', 'if (false) {'],
+      ['늘어난 항목 검사 무력화', 'if (added.length > 0) note(', 'if (false) note('],
+      ['사라진 항목 검사 무력화', 'if (missing.length > 0) note(', 'if (false) note('],
+      ['중복 항목 검사 무력화', 'if (dupes.length > 0) note(', 'if (false) note('],
+      ['배열 여부 가드 무력화', 'if (!Array.isArray(actual)) {', 'if (false) {'],
+      [
+        'EXPECTED_LISTS에서 선택 권한 둘 제거',
+        '  optional_permissions: [],\n  optional_host_permissions: [],\n',
+        '',
+      ],
+      ['최소 크롬 버전 부재 검사 무력화', 'if (floor === undefined) {', 'if (false) {'],
+      [
+        '최소 크롬 버전 형식 검사 무력화',
+        "} else if (typeof floor !== 'string' || !/^\\d+(\\.\\d+)*$/.test(floor)) {",
+        '} else if (false) {',
+      ],
+      [
+        '최소 크롬 버전 동등 비교 무력화',
+        '} else if (floor !== MIN_CHROME_VERSION) {',
+        '} else if (false) {',
+      ],
+      ['CSP 검사 전체 무력화', 'if (csp !== undefined) {', 'if (false) {'],
+      [
+        'CSP 객체 가드 무력화',
+        "if (typeof csp !== 'object' || csp === null || Array.isArray(csp)) {",
+        'if (false) {',
+      ],
+      ['판정 가능한 CSP 키 검사 무력화', 'if (!CSP_KEYS.has(key)) note(', 'if (false) note('],
+      [
+        'extension_pages 문자열 가드 무력화',
+        "if (pages !== undefined && typeof pages !== 'string') {",
+        'if (false) {',
+      ],
+      [
+        'CSP 토큰의 따옴표 벗기기 제거',
+        `.map((t) => t.replace(/^['"]|['"]$/g, '').toLowerCase())`,
+        '.map((t) => t.toLowerCase())',
+      ],
+      [
+        'CSP 토큰의 대소문자 무시 제거',
+        `.map((t) => t.replace(/^['"]|['"]$/g, '').toLowerCase())`,
+        `.map((t) => t.replace(/^['"]|['"]$/g, ''))`,
+      ],
+      ['CSP 토큰 분해에서 세미콜론 제거', '.split(/[\\s;]+/)', '.split(/[\\s]+/)'],
+      [
+        '위반 사유의 한 줄 접기 제거',
+        'note(`프로덕션 CSP(extension_pages)에 unsafe-eval이 있다: ${oneLine(pages)}`);',
+        'note(`프로덕션 CSP(extension_pages)에 unsafe-eval이 있다: ${pages}`);',
+      ],
+      ['판정 발화를 통과로', 'if (violations.length > 0) fail(', 'if (false) fail('],
+    ],
+  },
+  {
+    gate: 'bundle-gate',
+    script: 'bundle-gate.mjs',
+    test: 'scripts/run-gates.test.mjs',
+    filter: 'bundle-gate',
+    mutations: [
+      ['인자 계약 오류 무시', 'if (parsed.error) fail(parsed.error);', 'if (false) fail(parsed.error);'],
+      [
+        '인자 없을 때의 기본 경로 변경',
+        "artifactsDirFrom(process.argv.slice(2), join('.output', 'chrome-mv3'))",
+        "artifactsDirFrom(process.argv.slice(2), join('.output', 'other'))",
+      ],
+      [
+        'popup.html 부재 검사 무력화',
+        'if (!existsSync(ENTRY_HTML)) fail(missingArtifacts(ENTRY_HTML));',
+        'if (false) fail(missingArtifacts(ENTRY_HTML));',
+      ],
+      [
+        '즉시 로드 뿌리에서 modulepreload 제외',
+        '/(?:src|href)="\\/chunks\\/([^"]+\\.js)"/g',
+        '/src="\\/chunks\\/([^"]+\\.js)"/g',
+      ],
+      ['뿌리 0개 검사 무력화', 'if (roots.length === 0) {', 'if (false) {'],
+      ['즉시 청크 파일 부재 검사 무력화', 'if (!existsSync(path)) {', 'if (false) {'],
+      [
+        '정적 import 추적 제거',
+        "  for (const match of readFileSync(path, 'utf8').matchAll(STATIC_IMPORT)) queue.push(match[1]);\n",
+        '',
+      ],
+      [
+        '정적 추적이 동적 import까지 받기',
+        `const STATIC_IMPORT = /(?:from|import)\\s*["']\\.\\/([^"']+\\.js)["']/g;`,
+        `const STATIC_IMPORT = /(?:from|import)\\s*\\(?\\s*["']\\.\\/([^"']+\\.js)["']/g;`,
+      ],
+      [
+        '정적 추적에서 bare import 제외',
+        `const STATIC_IMPORT = /(?:from|import)\\s*["']\\.\\/([^"']+\\.js)["']/g;`,
+        `const STATIC_IMPORT = /from\\s*["']\\.\\/([^"']+\\.js)["']/g;`,
+      ],
+      ['기준선 상수 부풀리기', 'const BASELINE_KB = 386.0;', 'const BASELINE_KB = 3860.0;'],
+      ['한도 상수 완화', 'const MAX_INCREASE_KB = 190;', 'const MAX_INCREASE_KB = 1900;'],
+      ['크기 판정을 통과로', 'const sizePass = increase < MAX_INCREASE_KB;', 'const sizePass = true;'],
+      ['MUST_BE_DEFERRED에서 rule-form 제거', "  'rule-form',\n", ''],
+      ['지연 청크 부재 검사 무력화', 'if (matches.length === 0) {', 'if (false) {'],
+      [
+        '즉시 누출 검사 무력화',
+        'if (leaked.length > 0) deferredViolations.push(',
+        'if (false) deferredViolations.push(',
+      ],
+      ['판정 발화를 통과로', 'if (!sizePass || deferredViolations.length > 0) {', 'if (false) {'],
+    ],
+  },
+  {
+    gate: 'a11y-gate',
+    // 필터가 `a11y-gate`가 아니라 `a11y`인 것은 이 파일의 describe 제목이 그렇기 때문이다.
+    // 맞지 않는 필터는 조용히 0개를 고르므로, 기준선의 `ran === 0` 가드가 그것을 가른다.
+    script: 'a11y-gate.mjs',
+    test: 'scripts/a11y-gate.test.mjs',
+    filter: 'a11y',
+    mutations: [
+      ['알 수 없는 인자 검사 무력화', "if (a !== '--update') return {", 'if (false) return {'],
+      ['--update 중복 검사 무력화', 'if (update) return { error:', 'if (false) return { error:'],
+      ['인자 계약 오류 무시', 'if (parsed.error) fail(parsed.error);', 'if (false) fail(parsed.error);'],
+      [
+        'oxlint 출력 파싱 실패 처리 제거',
+        "    fail(`oxlint를 읽을 수 없다: ${String(e.message).split('\\n')[0]}`);",
+        '    throw e;',
+      ],
+      [
+        'jsx-a11y 규칙군 필터 제거',
+        "if (!d.code?.startsWith('jsx-a11y(')) continue;",
+        'if (false) continue;',
+      ],
+      [
+        '요소 이름 뽑기 제거',
+        '  const element = /^<\\s*([A-Za-z_$][\\w$.:-]*)/.exec(text);\n  if (element) return element[1];\n',
+        '',
+      ],
+      [
+        '속성 이름 뽑기 제거',
+        '  const name = /^[A-Za-z_$][\\w$-]*/.exec(text);\n  if (name) return name[0];\n',
+        '',
+      ],
+      [
+        '지문에서 규칙 제거',
+        'return `${rule} | ${diagnostic.filename} | ${identifierOf(text)}`;',
+        'return `${diagnostic.filename} | ${identifierOf(text)}`;',
+      ],
+      ['개수 누적을 1로 고정', 'observed.set(key, (observed.get(key) ?? 0) + 1);', 'observed.set(key, 1);'],
+      [
+        '베이스라인에 적는 개수를 1로 굳히기',
+        '.map(([key, n]) => `${n} ${key}`)',
+        '.map(([key]) => `1 ${key}`)',
+      ],
+      ['베이스라인 줄 형식 검사 무력화', 'if (!m) fail(', 'if (false) fail('],
+      ['베이스라인 중복 지문 검사 무력화', 'if (counts.has(m[2])) fail(', 'if (false) fail('],
+      [
+        '--update의 넓힘 보고 무력화',
+        'const widened = [...observed.entries()].filter(([key, n]) => n > (before.get(key) ?? 0));',
+        'const widened = [];',
+      ],
+      ['베이스라인 부재 검사 무력화', 'if (baseline === null) {', 'if (false) {'],
+      ['늘어난 지문 판정 무력화', 'if (n > was) added.push(', 'if (false) added.push('],
+      ['사라진 지문 보고 무력화', 'if (now < n) gone.push(', 'if (false) gone.push('],
+      ['전부 사라짐 검사 무력화', 'if (baseline.size > 0 && observed.size === 0) {', 'if (false) {'],
+      ['판정 발화를 통과로', 'if (added.length > 0) {', 'if (false) {'],
+    ],
+  },
 ];
 
 function parseArgs(argv) {
@@ -305,6 +543,16 @@ async function sweep(target) {
       fail(
         `${target.gate}: 변조 전부터 빨강이다 (${baseRed.titles.join(' · ') || `exit ${base.code}`}) — ` +
           `스윕은 초록인 기준선 위에서만 뜻이 있다`,
+      );
+      return;
+    }
+    // **고른 것이 0개면 그것은 초록이 아니다.** `filter`가 어느 테스트도 고르지 못하면 기준선은
+    // "빨강 없음"으로 초록처럼 보이고, 그 뒤 모든 변조가 물리지 않아 사유가 "픽스처가 공허하다"로
+    // 읽힌다 — 실제 원인은 필터 오타다. 대상이 늘수록 이 혼동이 비싸지므로 여기서 가른다.
+    if (baseRed.ran === 0) {
+      fail(
+        `${target.gate}: 기준선에서 아무 테스트도 돌지 않았다 — ` +
+          `filter(${target.filter ?? '없음'})가 ${target.test}의 어느 제목과도 맞지 않는다`,
       );
       return;
     }
