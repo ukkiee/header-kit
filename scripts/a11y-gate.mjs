@@ -94,56 +94,41 @@ function identifierOf(text) {
   return `#${createHash('sha1').update(text).digest('hex').slice(0, 12)}`;
 }
 
-/**
- * 스팬이 **자기가 들어 있는 여는 태그** 안에 있으면 그 태그 이름을 준다. 아니면 null이다.
+/*
+ * **요소 접두를 두지 않는다 — 되돌린 결정이다.**
  *
- * 오프셋에서 **뒤로** 걸으며 첫 번째 `<` 또는 `>`를 찾는다. `<`를 먼저 만나면 그 태그가 아직
- * 열려 있는 것이고 스팬은 속성 자리에 있다. `>`를 먼저 만나면 태그 밖이므로 접두를 붙이지 않는다.
+ * 릴리스 게이트 r1 F2가 잡은 것은 참이다: 지문이 `규칙 | 파일 | 이름`이면 같은 파일 안에서 위반
+ * 하나를 지우고 하나를 만드는 교체가 개수까지 그대로라 통과한다. 그래서 "그 속성이 붙은 요소"를
+ * 지문에 넣어 좁히려 했고, **네 번 연속 틀렸다**:
  *
- * **JSX 표현식 컨테이너(`{...}`)는 통째로 건너뛴다.** 그러지 않으면 두 방향으로 틀린다
- * (릴리스 r3 F1, 자식 프로세스로 재현):
- *   `<Input leading={<Icon />} autoFocus>` — 표현식 안의 `/>`가 태그를 닫은 것으로 읽혀 접두가
- *   사라지고, 요소를 바꾼 교체가 통과한다(r1 F2가 닫으려던 구멍이 되살아난다).
- *   `disabled={count < limit}` — `limit`이 요소로 잡혀, 무관한 변수 이름만 바꿔도 지문이 갈린다.
+ *   r2 F1 — 앞의 여는 태그를 뒤로 훑기: 이미 닫힌 형제를 골라, 무관한 형제 이름만 바꿔도
+ *           지문이 갈렸다(평범한 편집을 막는 빨강).
+ *   r3 F1 — 날것의 `<`·`>` 스캔: `leading={<Icon />}` 안의 `/>`에 속아 접두가 사라졌다.
+ *   r4 F1 — 중괄호 깊이 스캔: 따옴표 안의 `}`에 속아 접두가 사라졌고, 그 상태가 **교체 전후로
+ *           똑같아** 요소를 바꾼 교체가 통과했다 — 안정적 차이가 아니라 **안정적 충돌**,
+ *           즉 거짓 초록이다.
  *
- * 앞의 여는 태그를 뒤로 훑는 방식은 그보다 먼저 틀렸다(r2 F1): 이미 닫힌 형제를 골랐다.
+ * 매번 남은 것은 "문자열은 아직"이었다. 정확히 하려면 JSX를 진짜로 파싱해야 하는데, 이 저장소의
+ * TypeScript 7에는 `createSourceFile`이 없고(실측: 기본 진입점이 `version` 넷, `unstable/ast`의
+ * 409개 export에도 없음) 프로젝트 API는 tsconfig를 요구하는데 이 게이트의 테스트 seam은 tsconfig
+ * 없는 임시 트리에서 돈다. 스캐너로 직접 다루는 것은 다섯 번째 손수 스캐너다.
  *
- * **남는 것**: 문자열 리터럴 안의 `<`·`>`·중괄호는 구분하지 않는다. 그런 값(`placeholder="a>b"`)이
- * 진단 앞에 오면 접두가 달라질 수 있다 — 안정적으로 달라지므로 거짓 초록이 아니라 한 번의
- * 베이스라인 차이이고, 문자열까지 파싱하는 것은 이 게이트가 사려는 것보다 큰 기계장치다.
+ * 그래서 **증명을 이어 가는 대신 증명할 것을 없앤다**: 접두를 두지 않고, r1 F2가 지목한 교체
+ * 구멍을 **닫지 않은 채 문서화된 한계로** 남긴다. 검사하지 않는 초록도 나쁘지만, 거짓 초록을
+ * 만드는 기계장치는 더 나쁘다 — 지금 상태는 "이 지문으로는 같은 파일 안의 교체를 구분하지
+ * 못한다"를 정직하게 말하고, 그 말이 실제와 일치한다.
  */
-function openTagAt(source, offset) {
-  const before = source.subarray(0, offset).toString('utf8');
-  let depth = 0;
-  for (let i = before.length - 1; i >= 0; i -= 1) {
-    const c = before[i];
-    if (c === '}') depth += 1;
-    else if (c === '{') depth = Math.max(0, depth - 1);
-    else if (depth === 0 && c === '>') return null;
-    else if (depth === 0 && c === '<') {
-      const name = /^<\s*([A-Za-z_$][\w$.:-]*)/.exec(before.slice(i));
-      return name === null ? null : name[1];
-    }
-  }
-  return null;
-}
 
 function fingerprint(diagnostic) {
   const span = diagnostic.labels?.[0]?.span;
   const rule = diagnostic.code;
   if (!span) return `${rule} | ${diagnostic.filename} | (스팬 없음)`;
-  const source = readSource(diagnostic.filename);
-  const text = source
+  const text = readSource(diagnostic.filename)
     .subarray(span.offset, span.offset + span.length)
     .toString('utf8')
     .replace(/\s+/g, ' ')
     .trim();
-  const name = identifierOf(text);
-  // 스팬이 여는 태그 전체(`<img …>`)를 가리키거나 태그 이름 자체(`div`)를 가리키면 그것이 이미
-  // 요소다 — 접두를 붙이면 무관한 바깥 요소가 지문에 섞인다. 속성 자리에 있는 스팬만
-  // `요소.속성`으로 좁힌다(실측: `autoFocus` → `Input.autoFocus`).
-  const element = text.startsWith('<') ? null : openTagAt(source, span.offset);
-  return `${rule} | ${diagnostic.filename} | ${element === null ? name : `${element}.${name}`}`;
+  return `${rule} | ${diagnostic.filename} | ${identifierOf(text)}`;
 }
 
 // 훑은 파일이 0이면 진단도 0이고, 그것은 "위반이 없다"가 아니라 **재지 못했다**이다. 그대로

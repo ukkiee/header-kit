@@ -127,21 +127,6 @@ describe('a11y 지문 베이스라인', () => {
     expect(r.code).toBe(1);
   });
 
-  it('같은 파일·같은 규칙이라도 붙은 요소가 다르면 교체가 FAIL이다', () => {
-    // 릴리스 r1 F2: 식별자가 속성 이름뿐이면 `규칙 | 파일 | autoFocus` 한 버킷으로 접혀,
-    // 같은 파일에서 하나를 지우고 하나를 만드는 교체가 개수까지 그대로라 통과했다.
-    const dir = seeded({ 'src/a.tsx': `export const A = () => <input autoFocus={true} />;\n` });
-    writeFileSync(join(dir, 'src/a.tsx'), `export const A = () => <textarea autoFocus={true} />;\n`);
-    const r = run(dir);
-    expect(r.out).toMatch(/^FAIL a11y-gate:/m);
-    expect(r.code).toBe(1);
-  });
-
-  it('지문이 붙은 요소를 담는다 — 속성 이름만으로 접히지 않는다', () => {
-    const dir = seeded({ 'src/a.tsx': `export const A = () => <input autoFocus={true} />;\n` });
-    expect(baselineOf(dir)).toContain('input.autoFocus');
-  });
-
   it('요소까지 같으면 구분하지 못한다 — 덤지 못하는 자리를 못 박는다', () => {
     // 위치를 빼기로 한 결정(D13a)의 대가다. 같은 파일·규칙·요소의 두 위반은 위치 없이는
     // 구분할 수 없고, 그래서 개수까지가 지문이다. 덤지 못하는 것을 덤은 척하지 않기 위해
@@ -171,34 +156,24 @@ describe('a11y 지문 베이스라인', () => {
     expect(r.code).toBe(0);
   });
 
-  it('요소 이름 스팬에는 접두를 붙이지 않는다 — 그 스팬이 이미 요소다', () => {
-    const dir = seeded({
-      'src/a.tsx': `export const A = () => (\n  <section>\n    <div onClick={() => {}}>x</div>\n  </section>\n);\n`,
-    });
-    const base = baselineOf(dir);
-    expect(base).toContain('| div');
-    expect(base).not.toContain('section.div');
-  });
-
-  it('속성 안의 JSX 표현식이 태그 경계로 오인되지 않는다', () => {
-    // 릴리스 r3 F1: `<`·`>`를 날것으로 세면 `leading={<Icon />}` 안의 `/>`가 태그를 닫은 것으로
-    // 읽혀 접두가 사라지고, 그러면 요소를 바꾼 교체가 통과한다 — r1 F2가 닫으려던 그 구멍이다.
-    const withIcon = (tag) =>
-      `const Icon = () => <i />;\nexport const A = () => <${tag} leading={<Icon />} autoFocus={true} />;\n`;
-    const dir = seeded({ 'src/a.tsx': withIcon('Input') });
-    writeFileSync(join(dir, 'src/a.tsx'), withIcon('Textarea'));
+  it('무관한 형제·표현식·문자열이 지문을 흔들지 않는다 — 접두가 없으므로', () => {
+    // 요소 접두를 되돌린 뒤의 계약이다. 네 라운드에 걸쳐 거짓 빨강·거짓 초록을 낸 입력들을
+    // 그대로 모아 두고, 위반과 무관한 편집이 지문을 흔들지 않는 것을 못 박는다.
+    const doc = (sib, name) =>
+      `const Icon = () => <i />;\nexport const A = ({ count, ${name} }: { count: number; ${name}: number }) => (\n  <section>\n    <${sib}>hi</${sib}>\n    <Input leading={<Icon />} placeholder="}" disabled={count < ${name}} autoFocus={true} />\n  </section>\n);\n`;
+    const dir = seeded({ 'src/a.tsx': doc('em', 'limit') });
+    writeFileSync(join(dir, 'src/a.tsx'), doc('strong', 'max'));
     const r = run(dir);
-    expect(r.out).toMatch(/^FAIL a11y-gate:/m);
-    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/^PASS a11y-gate:/m);
+    expect(r.code).toBe(0);
   });
 
-  it('속성 표현식 안의 비교 연산자가 요소로 오인되지 않는다', () => {
-    // `disabled={count < limit}`의 `limit`이 요소로 잡히면, 무관한 변수 이름만 바꿔도 지문이
-    // 갈려 평범한 편집이 빨강이 된다 — r2 F1과 같은 모양이 다른 문으로 들어온다.
-    const cmp = (name) =>
-      `export const A = ({ count, ${name} }: { count: number; ${name}: number }) => (\n  <Input autoFocus={true} disabled={count < ${name}} />\n);\n`;
-    const dir = seeded({ 'src/a.tsx': cmp('limit') });
-    writeFileSync(join(dir, 'src/a.tsx'), cmp('max'));
+  it('같은 파일 안의 교체는 구분하지 못한다 — 닫지 않은 한계를 못 박는다', () => {
+    // 릴리스 r1 F2가 지목한 구멍이고, **닫지 않기로 한 것**이다(r4 뒤 사용자 결정).
+    // 요소를 지문에 넣어 좁히려는 시도가 네 번 다 거짓 초록이나 거짓 빨강을 만들었다.
+    // 이 단언은 그 한계가 **말한 그대로**인지를 지킨다 — 조용히 바뀌면 여기가 말해 준다.
+    const dir = seeded({ 'src/a.tsx': `export const A = () => <input autoFocus={true} />;\n` });
+    writeFileSync(join(dir, 'src/a.tsx'), `export const A = () => <textarea autoFocus={true} />;\n`);
     const r = run(dir);
     expect(r.out).toMatch(/^PASS a11y-gate:/m);
     expect(r.code).toBe(0);
