@@ -10,7 +10,7 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] 러너가 회차마다 고유한 산출물 디렉터리에 빌드하고 그 경로를 소비자에게 넘긴다. 빌드는 **한 번만** 돈다
 - [ ] `bundle-gate`·`writer-lane-gate`·`smoke`가 산출물 경로를 인자로 받는다. 인자 없이 직접 부르면 기존 기본 경로를 쓴다 — 사람이 손으로 돌리던 방식이 깨지지 않는다
