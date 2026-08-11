@@ -1,0 +1,74 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "structure",
+  "ack": "human-triage",
+  "triageMode": "human",
+  "verdict": "needs-attention",
+  "summary": "Do not ship. Reverification: S1-F1 resolved at its narrowed exit/token seam; S1-F2 resolved by command/kind/N/A parity checks; S1-F3 remains open because `gate:ci` is neither verified as an active runner entrypoint nor dependency-closed. The 50 runner tests pass, but currently bless two false-green contracts described below.",
+  "planFile": "docs/reviews/agent-harness/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 26,
+  "target": "branch diff against main",
+  "reviewer": "codex",
+  "fallbackFrom": null,
+  "fallbackReason": null,
+  "effort": "xhigh",
+  "inputMode": "inline-diff",
+  "reviewedSha": "72a7ebf31d32d3f004daf9092ebfcf6c9bd8d954",
+  "reviewedTree": "d1e6d9ed654fe09c47960086fa285e34c61b9a3e",
+  "reviewedPlanSha256": "03b62a46745c39ce370241fc99db92aa64ba9b6226dde4ae57bc59a533ab94d2",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "backendExitCode": 0,
+  "parseError": null,
+  "promptDelivery": {
+    "mechanism": "token-echo",
+    "enforcing": false,
+    "verified": true,
+    "echoed": "4290ee59c8615075"
+  },
+  "findingCount": 3,
+  "planFindingCount": 0,
+  "triage": "review-gate SKILL.md § Triage governs: render EVERY finding as a full table row, never inside a dialog; then ask the ROUND before the rows — take every Proposed decision as it stands, or decide row by row — and `as proposed` ends the round in that ONE action; only if row-by-row was chosen, ask per finding with that row's Proposed decision as the first option, a reject or defer taking a free-text reason; echo back ONLY the rows that carried free text, and none if the round was decided by selection alone; max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "N/A bypasses its policy and unlocks dependents",
+      "body": "Registry parsing currently permits only `na: never`, but `classify` accepts `N/A` from every token gate. `runGates` then counts that hard gate as nonblocking and treats N/A as satisfying `needs`. An owned gate can therefore emit `N/A` with exit 0, skip a mandatory check, and allow artifact consumers to execute; the current test suite explicitly blesses this behavior.",
+      "file": "scripts/run-gates.mjs",
+      "line_start": 310,
+      "line_end": 337,
+      "confidence": 0.99,
+      "recommendation": "Reject N/A when the row declares `na: never`; make future N/A policies machine-evaluable, and allow only PASS to satisfy a dependency unless the edge explicitly permits N/A. Add public-process fixtures for both cases.",
+      "isPlanFinding": false
+    },
+    {
+      "severity": "high",
+      "title": "gate:ci parity validates a forgeable label, not the runner",
+      "body": "The CI check only finds `bun run gate:ci` text and rejects other script names. It never verifies that package script `gate:ci` invokes `run-gates.mjs --ci`, and the passing fixture actually defines it as a no-op. The raw line regex also accepts echoed commands, `if: false` steps, or masked failures. Ticket 08 could therefore add a workflow that passes parity while running zero gates.",
+      "file": "scripts/run-gates.mjs",
+      "line_start": 238,
+      "line_end": 256,
+      "confidence": 0.99,
+      "recommendation": "Bind `gate:ci` to the canonical runner command and parse valid workflow structure. Require exactly one active, unconditional, unmasked `bun run gate:ci` step; add no-op-script, disabled-step, echoed-command, and masked-exit fixtures.",
+      "isPlanFinding": false
+    },
+    {
+      "severity": "high",
+      "title": "CI mode silently removes prerequisite edges",
+      "body": "`--ci` filters the registry to `ci: yes` rows before execution. If a selected consumer depends on a `ci: no` predecessor, that predecessor disappears; its state is undefined, so the consumer runs as though it had no dependency. This directly defeats the artifact DAG that tickets 02 and 08 rely on and can let CI inspect stale or missing output.",
+      "file": "scripts/run-gates.mjs",
+      "line_start": 336,
+      "line_end": 381,
+      "confidence": 0.98,
+      "recommendation": "Require the CI-selected graph to be dependency-closed, either by rejecting `ci: yes` rows whose prerequisites are not also selected or by including their transitive prerequisites. Treat a missing prerequisite state as a configuration failure, and add a negative fixture.",
+      "isPlanFinding": false
+    }
+  ],
+  "next_steps": [
+    "Correct and test N/A eligibility and dependency semantics.",
+    "Make `gate:ci` an authenticated package/workflow entrypoint rather than a text token.",
+    "Enforce transitive dependency closure in CI mode before implementing ticket 02 or ticket 08."
+  ]
+}

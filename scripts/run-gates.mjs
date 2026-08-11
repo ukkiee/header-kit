@@ -180,14 +180,24 @@ function readWorkflowInvocations(dir) {
   const found = GATE_WORKFLOWS.map((f) => join(wfDir, f)).filter((p) => existsSync(p));
   if (found.length === 0) return null;
   const keys = [];
+  const guards = [];
   for (const p of found) {
     for (const raw of readFileSync(p, 'utf8').split('\n')) {
       const line = raw.trim();
       if (line.startsWith('#')) continue;
-      for (const m of line.matchAll(/\bbun\s+run\s+([A-Za-z0-9:_-]+)/g)) keys.push(m[1]);
+      // 조건부·실패 무시 단계는 "돌았다"를 뜻하지 않는다. YAML을 제대로 파싱하지 않으므로
+      // 판정할 수 없는 모양을 **거절한다** — 게이트 워크플로는 우리가 단순하게 유지할 수 있는
+      // 파일이고, 판정할 수 없는 것을 통과시키는 것보다 모양을 좁히는 편이 정직하다.
+      if (/^-?\s*(if|continue-on-error)\s*:/.test(line)) guards.push(line);
+      // `run:` 단계의 값만 실행으로 센다. `echo "bun run gate:ci"`는 실행이 아니다.
+      const step = /^-?\s*run\s*:\s*(.*)$/.exec(line);
+      if (!step) continue;
+      const cmd = step[1].trim().replace(/^['"]|['"]$/g, '');
+      if (/^echo\b/.test(cmd)) continue;
+      for (const m of cmd.matchAll(/\bbun\s+run\s+([A-Za-z0-9:_-]+)/g)) keys.push(m[1]);
     }
   }
-  return keys;
+  return { keys, guards };
 }
 
 /** 명령 문자열이 이 파일을 부르는가. 부분 문자열이 아니라 경로 토큰으로 맞춘다 — */
@@ -237,23 +247,49 @@ function checkPlaces(dir, registryPath) {
 
   // CI 일치. CI는 게이트를 하나씩 부르지 않는다 — 그러면 선행 관계가 무너져, 산출물을 읽는
   // 게이트가 각자 빌드하거나 낡은 것을 재사용한다.
-  const invocations = readWorkflowInvocations(dir);
+  const wf = readWorkflowInvocations(dir);
   const ciRows = gates.filter((g) => g.ci === 'yes');
-  if (invocations === null) {
-    if (ciRows.length > 0) fail(`ci: yes인 게이트가 있는데 게이트 워크플로가 없다: ${ciRows.map((g) => g.id).join(', ')}`);
+
+  // CI에서 고르는 집합은 **선행까지 닫혀 있어야 한다.** 소비자만 고르고 선행을 빼면 그
+  // 선행의 판정이 없어져 소비자가 선행이 없는 것처럼 돈다 — DAG가 CI에서만 조용히 사라진다.
+  // 전이적으로 끌어오는 대신 설정 오류로 거절한다: 무엇을 CI에서 돌릴지는 사람이 정해 적는다.
+  const ciIds = new Set(ciRows.map((g) => g.id));
+  for (const g of ciRows) {
+    if (g.needs !== '-' && !ciIds.has(g.needs)) {
+      fail(`ci: yes인 ${g.id}의 선행 ${g.needs}가 ci: no다 — CI 선택 집합이 선행까지 닫혀야 한다`);
+    }
+  }
+
+  if (wf === null) {
+    if (ciRows.length > 0) {
+      fail(`ci: yes인 게이트가 있는데 게이트 워크플로가 없다: ${ciRows.map((g) => g.id).join(', ')}`);
+    }
   } else {
-    const direct = invocations.filter((k) => gates.some((g) => g.script === k));
+    if (wf.guards.length > 0) {
+      fail(`게이트 워크플로에 조건부·실패 무시 단계가 있다(판정할 수 없다): ${wf.guards[0]}`);
+    }
+    const direct = wf.keys.filter((k) => gates.some((g) => g.script === k));
     if (direct.length > 0) {
       fail(`게이트 워크플로가 게이트를 직접 부른다(선행 관계를 건너뛴다): ${direct.join(', ')} — ${CI_ENTRYPOINT} 하나만 부른다`);
     }
-    const entry = invocations.filter((k) => k === CI_ENTRYPOINT);
+    const entry = wf.keys.filter((k) => k === CI_ENTRYPOINT);
     if (ciRows.length > 0 && entry.length === 0) fail(`게이트 워크플로가 ${CI_ENTRYPOINT}를 부르지 않는다`);
     if (entry.length > 1) fail(`게이트 워크플로가 ${CI_ENTRYPOINT}를 ${entry.length}번 부른다 — 한 번이어야 한다`);
     if (ciRows.length === 0 && entry.length > 0) {
       fail(`ci: yes인 게이트가 없는데 워크플로가 ${CI_ENTRYPOINT}를 부른다`);
     }
-    const unknown = invocations.filter((k) => k !== CI_ENTRYPOINT && !gates.some((g) => g.script === k));
+    const unknown = wf.keys.filter((k) => k !== CI_ENTRYPOINT && !gates.some((g) => g.script === k));
     if (unknown.length > 0) fail(`게이트 워크플로가 알 수 없는 것을 부른다: ${unknown.join(', ')}`);
+
+    // 이름표가 가리키는 것을 본다. 이 검사가 없으면 `gate:ci`가 아무것도 하지 않는
+    // no-op이어도 CI 일치가 초록이다 — 이름만 맞고 아무 게이트도 돌지 않는 워크플로.
+    if (entry.length === 1) {
+      const cmd = scripts[CI_ENTRYPOINT];
+      if (cmd === undefined) fail(`package.json에 ${CI_ENTRYPOINT} 스크립트가 없다`);
+      if (!commandInvokes(cmd, 'run-gates.mjs') || !/(^|\s)--ci(\s|$)/.test(cmd)) {
+        fail(`${CI_ENTRYPOINT}가 러너를 --ci로 부르지 않는다: "${cmd}"`);
+      }
+    }
   }
 
   // 고아 게이트. 등록된 게이트의 명령이 그 파일을 부르면 등록된 것으로 본다.
@@ -322,6 +358,12 @@ function classify(gate, status, out) {
   if (token !== FAIL && !ok) {
     return { state: FAIL, why: `${token}을 찍고 종료 코드 ${status}로 끝났다` };
   }
+  // 행이 `na: never`라고 선언했으면 N/A 토큰은 그 선언과 정면으로 모순이다. 받아들이면
+  // 게이트가 스스로 "잴 대상이 없다"고 말해 필수 검사를 건너뛰고, 그 상태가 선행 조건까지
+  // 만족시켜 산출물 소비 게이트를 풀어 준다 — 선언과 실행이 갈라서는 자리다.
+  if (token === 'N/A' && gate.na === 'never') {
+    return { state: FAIL, why: 'N/A를 찍었지만 이 행의 na 조건은 never다' };
+  }
   return { state: token === 'N/A' ? NA : token === FAIL ? FAIL : PASS };
 }
 
@@ -333,8 +375,10 @@ function runGates(dir, gates) {
   for (const g of gates) {
     // 선행이 통과하지 못했으면 이 게이트는 BLOCKED다 — FAIL도 N/A도 아니다. 실패한 것은
     // 이 게이트가 아니고, 잴 대상이 없었던 것도 아니다. BLOCKED은 완료를 막는다.
+    // 선행을 만족시키는 것은 **PASS뿐**이다. N/A로도 풀리게 두면 "잴 대상이 없었다"가
+    // "확인됐다"와 같은 값을 갖게 되고, 그 둘의 차이가 판정을 넷으로 나눈 이유다.
     const need = g.needs === '-' ? null : state.get(g.needs);
-    if (need && need !== PASS && need !== NA) {
+    if (need !== null && need !== PASS) {
       state.set(g.id, BLOCKED);
       tally[BLOCKED] += 1;
       if (g.kind === 'hard') hardFail += 1;
