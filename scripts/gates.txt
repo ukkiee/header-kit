@@ -41,6 +41,11 @@ gate: writer-lane-gate | writer-lane-gate | hard | no | build | no  | token | ne
 gate: manifest-gate    | manifest-gate    | hard | no | build | no  | token | never
 gate: smoke            | smoke            | hard | no | build | yes | token | never
 
+# `scripts/format-proof.mjs`는 **게이트가 아니다.** 특정 커밋 하나를 인자로 받아 재현을
+# 검사하는 도구이고, 레지스트리에는 인자 칸이 없어 기본값(HEAD)으로 매 회차 돌면 평범한
+# 커밋마다 빨강이 난다. 검사하지 않는 초록만큼 나쁜 것이 평범한 것을 막는 빨강이다.
+# 쓰는 법과 결과는 `docs/agents/verification.md`가 적는다.
+
 # deferred: <스크립트 파일> | <왜 아직 등록하지 않는가>
 #
 # `scripts/*-gate.mjs`인데 등록되지 않은 것은 고아 게이트로 FAIL이다. 아직 등록할 수 없는

@@ -25,10 +25,15 @@ const fail = (message) => {
 
 /** 인자 하나뿐이다. 오타가 조용히 기본값을 재게 두면 무엇을 증명했는지가 호출 문면에서 사라진다. */
 function parseArgs(argv) {
-  let commit = 'HEAD';
+  let commit = null;
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] !== '--commit')
       return { error: `알 수 없는 인자: ${argv[i]} — 받는 것은 --commit <ref> 뿐이다` };
+    // 말없이 마지막 값을 고르면 무엇을 증명했는지가 호출 문면에서 읽히지 않는다
+    // (`artifacts-arg.mjs`가 `--artifacts`에 세운 계약과 같다).
+    if (commit !== null) {
+      return { error: '--commit이 두 번 왔다 — 어느 커밋을 증명하라는 것인지 판정할 수 없다' };
+    }
     const v = argv[i + 1];
     if (v === undefined || v.trim() === '' || v.startsWith('-')) {
       return { error: `--commit에 ref가 없다 (받은 값: ${v === undefined ? '없음' : `"${v}"`})` };
@@ -36,7 +41,7 @@ function parseArgs(argv) {
     commit = v;
     i += 1;
   }
-  return { commit };
+  return { commit: commit ?? 'HEAD' };
 }
 
 const git = (args, cwd) =>
@@ -98,7 +103,11 @@ try {
 
   // 트리 해시로 비교한다. `git add`는 `.gitignore`를 존중하므로 `-f`로 강제한다 — 커밋된
   // 파일이 무시 패턴에 걸리면 파일 집합이 달라져 비교가 거짓 실패를 낸다.
+  // 포매터 버전은 정확히 고정하면서 git의 줄바꿈 정규화를 사용자 전역 설정에 맡기면 비대칭이다 —
+  // `core.autocrlf=input`인 기기에서는 같은 바이트가 다른 블롭이 되어 거짓 실패가 난다.
   git(['init', '-q'], work);
+  git(['config', 'core.autocrlf', 'false'], work);
+  git(['config', 'core.eol', 'lf'], work);
   git(['add', '-A', '-f'], work);
   const rebuilt = git(['write-tree'], work);
   const expected = git(['rev-parse', `${target}^{tree}`], repo);
@@ -110,17 +119,22 @@ try {
     );
   } else {
     // 무엇이 더 들어갔는지 보여 준다 — 실패가 "다르다"에서 끝나면 고칠 자리를 찾지 못한다.
-    let extra = '';
+    //
+    // 두 트리는 **서로 다른 저장소**에 있다: 기대 트리는 이 저장소의 odb, 재현 트리는 임시
+    // 저장소의 odb다. 그래서 임시 저장소에서 돌리되 이 저장소의 odb를 alternates로 붙인다.
+    // (전에는 이 저장소에서 돌려 재현 트리를 못 찾고 늘 죽었는데, 파이프가 종료 코드를 덮어
+    // 폴백도 타지 않아 **빈 줄 하나만** 찍혔다.)
+    let extra;
     try {
-      extra = execFileSync(
-        'sh',
-        ['-c', `git -C ${JSON.stringify(repo)} diff --stat ${expected} ${rebuilt} 2>/dev/null | tail -20`],
-        { encoding: 'utf8' },
-      );
-    } catch {
-      extra = '(diff를 만들지 못했다 — 두 트리가 같은 저장소에 없다)';
+      extra = execFileSync('git', ['-C', work, 'diff', '--stat', expected, rebuilt], {
+        encoding: 'utf8',
+        env: { ...process.env, GIT_ALTERNATE_OBJECT_DIRECTORIES: join(repo, '.git', 'objects') },
+        maxBuffer: 64 * 1024 * 1024,
+      });
+    } catch (e) {
+      extra = `(diff를 만들지 못했다: ${String(e.message).split('\n')[0]})`;
     }
-    console.error(extra);
+    console.error(extra.split('\n').slice(0, 20).join('\n'));
     fail(
       `재현 결과가 커밋의 트리와 다르다: 재현 ${rebuilt} ≠ 커밋 ${expected} — ` +
         `이 커밋은 포맷 말고 다른 것도 담고 있다`,
