@@ -7,5 +7,5 @@
 1 jsx-a11y(no-autofocus) | src/features/modifications/suggest-input.tsx | Autocomplete.autoFocus
 1 jsx-a11y(no-autofocus) | src/features/modifications/suggest-input.tsx | Input.autoFocus
 1 jsx-a11y(no-autofocus) | src/features/modifications/suggest-input.tsx | PlainSuggestInput.autoFocus
-1 jsx-a11y(no-noninteractive-element-interactions) | src/features/transfer/transfer-panel.tsx | div.label
-1 jsx-a11y(no-static-element-interactions) | src/features/modifications/rule-form.tsx | span.div
+1 jsx-a11y(no-noninteractive-element-interactions) | src/features/transfer/transfer-panel.tsx | label
+1 jsx-a11y(no-static-element-interactions) | src/features/modifications/rule-form.tsx | div

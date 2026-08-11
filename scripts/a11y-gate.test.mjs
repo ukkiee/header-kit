@@ -158,6 +158,28 @@ describe('a11y 지문 베이스라인', () => {
     expect(r.code).toBe(0);
   });
 
+  it('무관한 닫힌 형제의 이름을 바꿔도 지문이 갈리지 않는다', () => {
+    // 릴리스 r2 F1: 앞의 여는 태그를 뒤로 훑기만 하면 **이미 닫힌 형제**가 잡힌다.
+    // 그러면 위반한 요소는 손도 안 댔는데 지문이 갈려 평범한 마크업 편집이 빨강이 되고,
+    // 그것을 푸는 베이스라인 재취득이 진짜 새 위반을 함께 축복한다.
+    const before = `export const A = () => (\n  <section>\n    <em>hi</em>\n    <div onClick={() => {}}>x</div>\n  </section>\n);\n`;
+    const dir = seeded({ 'src/a.tsx': before });
+    // 위반과 무관한 형제만 이름을 바꾼다.
+    writeFileSync(join(dir, 'src/a.tsx'), before.replace('<em>hi</em>', '<strong>hi</strong>'));
+    const r = run(dir);
+    expect(r.out).toMatch(/^PASS a11y-gate:/m);
+    expect(r.code).toBe(0);
+  });
+
+  it('요소 이름 스팬에는 접두를 붙이지 않는다 — 그 스팬이 이미 요소다', () => {
+    const dir = seeded({
+      'src/a.tsx': `export const A = () => (\n  <section>\n    <div onClick={() => {}}>x</div>\n  </section>\n);\n`,
+    });
+    const base = baselineOf(dir);
+    expect(base).toContain('| div');
+    expect(base).not.toContain('section.div');
+  });
+
   it('요소 단위 규칙의 지문도 이름이다 — 표현식 안의 변수만 바꿔도 통과한다', () => {
     // 스팬이 `<img src={src} />`로 시작하는 규칙군. 접두를 잘라 쓰던 판에서는 변수 이름만
     // 바꿔도 FAIL이었고, 앞 40자가 같은 서로 다른 위반은 한 지문으로 접혀 **새 위반이 숨었다**.

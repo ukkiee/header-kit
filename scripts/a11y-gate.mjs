@@ -95,21 +95,24 @@ function identifierOf(text) {
 }
 
 /**
- * 속성에 걸린 진단이 **붙어 있는 요소**의 이름. 스팬 앞에서 아직 닫히지 않은 여는 태그를
- * 뒤로 훑어 찾는다.
+ * 스팬이 **자기가 들어 있는 여는 태그** 안에 있으면 그 태그 이름을 준다. 아니면 null이다.
  *
- * 이것이 없으면 지문이 `규칙 | 파일 | autoFocus` 한 버킷으로 접혀, 같은 파일 안에서 위반
- * 하나를 지우고 하나를 만드는 교체가 개수까지 그대로라 통과한다 — 스펙이 잡으라고 한 바로
- * 그 모양이다(릴리스 r1 F2. 실측: 커밋된 베이스라인의 `no-autofocus | rule-form.tsx |
- * autoFocus` 7건이 한 버킷이었고, 요소를 넣자 `Input` 4 + `SuggestInput` 3으로 갈렸다).
+ * 규칙은 정확하다: 오프셋 앞의 마지막 `<` 뒤에 `>`가 하나도 없으면 그 `<`의 태그가 아직 열려
+ * 있는 것이고, 스팬은 그 태그 **안**(속성 자리)에 있다. `>`가 끼어 있으면 태그 밖이므로 접두를
+ * 붙이지 않는다.
  *
- * **줄·열이 아니라 이름이라는 점이 중요하다.** 위치를 넣으면 전면 포맷이 모든 지문을 한꺼번에
- * 무효화하지만(D13a), 요소 이름은 재배치와 재포맷에 흔들리지 않는다.
+ * **앞의 여는 태그를 뒤로 훑는 방식은 틀렸다**(릴리스 r2 F1, 실측): 그 방식은 이미 닫힌 형제를
+ * 고른다 — `<span …>{caption}</span>` 다음 줄의 `div` 위반이 `span.div`로 키를 받았고, 그러면
+ * 무관한 형제의 이름만 바꿔도 위반한 요소는 그대로인 채 지문이 갈려 **평범한 마크업 편집이
+ * 빨강**이 된다. 그 빨강을 푸는 베이스라인 재취득이 진짜 새 위반을 함께 축복한다.
  */
-function enclosingElement(source, offset) {
+function openTagAt(source, offset) {
   const before = source.subarray(0, offset).toString('utf8');
-  const opens = [...before.matchAll(/<([A-Za-z_$][\w$.:-]*)(?![^<>]*\/>)/g)];
-  return opens.length > 0 ? opens[opens.length - 1][1] : null;
+  const lt = before.lastIndexOf('<');
+  if (lt === -1) return null;
+  if (before.indexOf('>', lt) !== -1) return null; // 태그가 이미 닫혔다 — 우리는 그 밖에 있다
+  const name = /^<\s*([A-Za-z_$][\w$.:-]*)/.exec(before.slice(lt));
+  return name === null ? null : name[1];
 }
 
 function fingerprint(diagnostic) {
@@ -123,10 +126,10 @@ function fingerprint(diagnostic) {
     .replace(/\s+/g, ' ')
     .trim();
   const name = identifierOf(text);
-  // 스팬이 여는 태그 전체(`<img …>`)를 가리키면 그 자체가 요소이므로 더 붙일 것이 없다.
-  // 그렇지 않은 스팬(속성 이름, 또는 태그 이름만 가리키는 규칙)에는 **담고 있는 요소**를
-  // 앞에 붙인다 — 실측: `autoFocus` → `Input.autoFocus`, `div` → `span.div`.
-  const element = text.startsWith('<') ? null : enclosingElement(source, span.offset);
+  // 스팬이 여는 태그 전체(`<img …>`)를 가리키거나 태그 이름 자체(`div`)를 가리키면 그것이 이미
+  // 요소다 — 접두를 붙이면 무관한 바깥 요소가 지문에 섞인다. 속성 자리에 있는 스팬만
+  // `요소.속성`으로 좁힌다(실측: `autoFocus` → `Input.autoFocus`).
+  const element = text.startsWith('<') ? null : openTagAt(source, span.offset);
   return `${rule} | ${diagnostic.filename} | ${element === null ? name : `${element}.${name}`}`;
 }
 
