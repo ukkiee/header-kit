@@ -30,7 +30,12 @@ export function runChild(bin, args, options = {}) {
     maxBuffer: 16 * 1024 * 1024,
     ...options,
   });
-  return { code: r.status ?? 1, out: `${r.stdout ?? ''}${r.stderr ?? ''}` };
+  const stdout = r.stdout ?? '';
+  const stderr = r.stderr ?? '';
+  // `out`은 사람이 읽는 증거이므로 두 스트림을 합친 것이다. 두 스트림을 **따로도** 준다:
+  // 기계가 읽는 형식(JSON 등)을 파싱할 때 stderr 한 줄이 섞이면 파싱이 깨지고, 그 깨짐이
+  // "진단이 없다"로 접히면 검사가 아무것도 재지 않으면서 초록이 된다.
+  return { code: r.status ?? 1, out: `${stdout}${stderr}`, stdout, stderr };
 }
 
 /**

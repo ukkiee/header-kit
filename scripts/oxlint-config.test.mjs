@@ -60,15 +60,34 @@ function fixture(files) {
   return dir;
 }
 
-/** 진단 줄만 돌려준다. 규칙은 `<플러그인>/<규칙>`으로 적는다 — 플러그인을 떼면 어느 규칙이
- * 물었는지가 이름만으로 갈리지 않는다(`import/no-cycle` vs 다른 플러그인의 같은 이름). */
+/**
+ * 진단만 돌려준다. 규칙은 `<플러그인>/<규칙>`으로 적는다 — 플러그인을 떼면 어느 규칙이
+ * 물었는지가 이름만으로 갈리지 않는다(`import/no-cycle` vs 다른 플러그인의 같은 이름).
+ *
+ * **형식을 `-f json`으로 못박는다.** 기본 형식은 환경에 따라 달라진다(실측: macOS에서는
+ * `파일:줄:열: error 규칙(이름)` 한 줄, 리눅스 컨테이너에서는 여러 줄짜리 그래픽 출력).
+ * 사람이 읽는 형식을 정규식으로 긁던 이전 방식은 그래픽 출력에서 **한 줄도 매치하지 않아
+ * 진단이 0건으로 접혔고**, "진단이 있어야 한다"는 케이스 열 개가 CI에서 통째로 빨강이 됐다.
+ * 더 나쁜 방향도 같은 문에 있었다: 형식이 바뀌면 "진단이 없어야 한다"는 케이스는 **영원히
+ * 초록**이라 규칙이 꺼져도 아무도 모른다. `a11y-gate`가 이미 `-f json`을 쓰는 이유가 같다.
+ *
+ * 파싱이 깨지면 조용히 0건으로 접지 않고 **던진다.** 우리가 방금 겪은 실패 모양이 침묵이었다.
+ */
 function lint(dir) {
-  const { code, out } = runChild(OXLINT, ['src'], { cwd: dir });
-  const rows = out
-    .split('\n')
-    .map((l) => /^(\S+?):\d+:\d+: \w+ (\w+)\(([a-z-]+)\)/.exec(l.trim()))
-    .filter(Boolean)
-    .map((m) => ({ file: m[1].replaceAll('\\', '/'), rule: `${m[2]}/${m[3]}` }));
+  const { code, out, stdout } = runChild(OXLINT, ['-f', 'json', 'src'], { cwd: dir });
+  let report;
+  try {
+    report = JSON.parse(stdout);
+  } catch {
+    throw new Error(`oxlint의 JSON을 읽을 수 없다 (exit ${code}) — 출력 전문:\n${out}`);
+  }
+  const rows = (report.diagnostics ?? []).map((d) => {
+    const m = /^(\w+)\(([a-z-]+)\)$/.exec(d.code ?? '');
+    return {
+      file: (d.filename ?? '').replaceAll('\\', '/'),
+      rule: m === null ? (d.code ?? '') : `${m[1]}/${m[2]}`,
+    };
+  });
   return { code, out, rows };
 }
 
