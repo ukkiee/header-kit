@@ -138,8 +138,10 @@ const en = {
    * **"그래서 무엇이 달라졌나"**다: 조건이 없어졌다는 사실만으로는 사용자가 자기 규칙이 전보다
    * 넓게 걸린다는 것을 짐작하지 못한다.
    */
-  retirementNoticeRules: 'Some conditions are no longer supported and were removed. {count} rules now apply more broadly than before.',
-  retirementNoticeRule: 'Some conditions are no longer supported and were removed. {count} rule now applies more broadly than before.',
+  retirementNoticeRules:
+    'Some conditions are no longer supported and were removed. {count} rules now apply more broadly than before.',
+  retirementNoticeRule:
+    'Some conditions are no longer supported and were removed. {count} rule now applies more broadly than before.',
   acknowledgeRetirement: 'Got it',
   activeRules: 'active rules',
   activeRule: 'active rule',
@@ -170,7 +172,8 @@ const en = {
   cloudBackupsPresent: 'The cloud still holds backups.',
   cloudBackupsNone: 'No backups in the cloud.',
   cloudBackupsUnknown: "Can't tell whether the cloud still holds backups.",
-  cloudSyncKeepsHistory: 'Switching does not move backups you already made. Each one stays where it was written.',
+  cloudSyncKeepsHistory:
+    'Switching does not move backups you already made. Each one stays where it was written.',
   deleteCloudBackups: 'Delete cloud backups',
   confirmDeleteCloudBackups: 'Delete from cloud?',
   cloudBackupsDeleted: 'Cloud backups deleted.',
@@ -218,8 +221,7 @@ const en = {
   importModificationsNotList: '{where}: "modifications" must be a list.',
   importUnreadableRule: '{where}: rule {index} is not a rule this version can read.',
   importFiltersNotList: '{where}: "filters" must be a list.',
-  importUnreadableLegacyFilter:
-    '{where}: legacy filter {index} is not one this version can read.',
+  importUnreadableLegacyFilter: '{where}: legacy filter {index} is not one this version can read.',
   importFiltersMoved: '"{name}": moved the old profile filters onto each rule.',
   importDroppedLostFilter:
     '"{name}": dropped {count} filter that no per-rule condition can express (excluded URLs, tab, group, window).',
@@ -240,13 +242,15 @@ const en = {
   warnRegexTooLong: 'URL pattern is too long',
   warnRegexTooLongDetail: 'The URL pattern is longer than {limit} characters, so it was skipped.',
   warnQuotaExceeded: 'Rule limit exceeded',
-  warnQuotaTotalDetail: 'The session rule limit ({limit}) was exceeded, so some modifications are not applied.',
+  warnQuotaTotalDetail:
+    'The session rule limit ({limit}) was exceeded, so some modifications are not applied.',
   warnQuotaRegexDetail: 'The regex rule limit ({limit}) was exceeded, so some modifications are not applied.',
   warnMissingMaterialization: 'Placeholder not materialized',
   warnMissingMaterializationDetail:
     'An active profile has a placeholder with no value yet, so the whole profile was left out of the rules.',
   warnAppendNotAllowed: 'Header cannot be appended',
-  warnAppendNotAllowedDetail: 'The request header "{header}" cannot be appended, so it was overwritten instead.',
+  warnAppendNotAllowedDetail:
+    'The request header "{header}" cannot be appended, so it was overwritten instead.',
   warnBlockWithoutScope: 'Block rule without a URL filter',
   warnBlockWithoutScopeDetail:
     'A block rule has no URL filter. That would block every request, so it was skipped.',
@@ -402,8 +406,10 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     countRule: '적용 중인 규칙 {count}개',
     countProfiles: '활성 프로필 {count}개',
     countProfile: '활성 프로필 {count}개',
-    retirementNoticeRules: '더 이상 지원하지 않는 조건을 제거했습니다. 규칙 {count}개가 전보다 넓은 범위에 적용됩니다.',
-    retirementNoticeRule: '더 이상 지원하지 않는 조건을 제거했습니다. 규칙 {count}개가 전보다 넓은 범위에 적용됩니다.',
+    retirementNoticeRules:
+      '더 이상 지원하지 않는 조건을 제거했습니다. 규칙 {count}개가 전보다 넓은 범위에 적용됩니다.',
+    retirementNoticeRule:
+      '더 이상 지원하지 않는 조건을 제거했습니다. 규칙 {count}개가 전보다 넓은 범위에 적용됩니다.',
     acknowledgeRetirement: '확인',
     activeRules: '적용 규칙',
     activeRule: '적용 규칙',
@@ -443,9 +449,9 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     snapshotDeleteRemaining: '이 백업의 키 {count}개가 아직 남아 있습니다.',
     resetEverything: '전체 초기화',
     confirmResetEverything: '전부 지울까요?',
-    resetEverythingNote:
-      '이 브라우저와 클라우드의 모든 프로필·선호값·백업을 지웁니다. 되돌릴 수 없습니다.',
-    resetRetryNote: '한 단계가 실패해도 이미 지운 것은 돌아오지 않습니다. 다시 누르면 남은 단계부터 이어서 진행합니다.',
+    resetEverythingNote: '이 브라우저와 클라우드의 모든 프로필·선호값·백업을 지웁니다. 되돌릴 수 없습니다.',
+    resetRetryNote:
+      '한 단계가 실패해도 이미 지운 것은 돌아오지 않습니다. 다시 누르면 남은 단계부터 이어서 진행합니다.',
     resetDone: '모두 기본값으로 초기화했습니다.',
     resetFailed: '초기화를 끝내지 못했습니다',
     resetStoppedAtLocalBackups: '이 브라우저의 백업을 지우는 단계에서 멈췄습니다',
@@ -456,8 +462,7 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
       '시크릿 창에서 활성화되지 않았습니다. 시크릿 트래픽을 수정하려면 확장 상세 페이지에서 “시크릿 모드에서 허용”을 켜세요.',
     responsePanelNote:
       '응답 헤더 변경은 DevTools 네트워크 패널에 안 보일 수 있지만 페이지에는 그대로 반영됩니다.',
-    placeholderNote:
-      '프로필을 켤 때마다 새 값이 만들어지고, 끌 때까지 그 값이 그대로 쓰입니다.',
+    placeholderNote: '프로필을 켤 때마다 새 값이 만들어지고, 끌 때까지 그 값이 그대로 쓰입니다.',
     rawCookieNote:
       '예전 버전이 저장한 그대로 남아 있는 줄입니다. 위 칸을 채우면 이 줄 대신 그 값이 나갑니다:',
     dropExportHere: '내보낸 파일을 여기에 끌어다 놓거나, 눌러서 고르세요',
@@ -489,7 +494,8 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     warnEmptyHeaderName: '헤더 이름 없음',
     warnEmptyHeaderNameDetail: '헤더 이름이 비어 있어 이 수정을 건너뛰었습니다.',
     warnHeaderOverlap: '프로필 간 헤더 겹침',
-    warnHeaderOverlapDetail: '여러 활성 프로필이 "{header}"를 수정합니다. 목록에서 위에 있는 프로필이 이깁니다.',
+    warnHeaderOverlapDetail:
+      '여러 활성 프로필이 "{header}"를 수정합니다. 목록에서 위에 있는 프로필이 이깁니다.',
     warnRegexTooLong: 'URL 패턴 길이 초과',
     warnRegexTooLongDetail: 'URL 패턴이 {limit}자를 넘어 이 수정을 건너뛰었습니다.',
     warnQuotaExceeded: '규칙 수 한도 초과',

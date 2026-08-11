@@ -63,10 +63,7 @@ const SET_COOKIE_PART_KEYS = [
 function isSetCookieVariant(value: Record<string, unknown>): boolean {
   if (!hasHeaderMode(value)) return false;
   if (value.raw !== undefined) {
-    return (
-      typeof value.raw === 'string' &&
-      SET_COOKIE_PART_KEYS.every((key) => value[key] === undefined)
-    );
+    return typeof value.raw === 'string' && SET_COOKIE_PART_KEYS.every((key) => value[key] === undefined);
   }
   return typeof value.name === 'string' && isHeaderish(value) && isSetCookieShape(value);
 }
@@ -214,8 +211,7 @@ export function backfillModification(value: unknown): unknown {
    * header-removal(이름만)·block(둘 다 없음)에 붙이면 저장소에 뜻 없는 필드가 쌓이고,
    * 나중에 그 필드를 읽는 코드가 생기면 조용히 잘못된 분기를 탄다.
    */
-  const headerish =
-    value.kind !== 'user-agent' && value.kind !== 'header-removal' && value.kind !== 'block';
+  const headerish = value.kind !== 'user-agent' && value.kind !== 'header-removal' && value.kind !== 'block';
   // 무효 urlMatchType은 치유로 벗긴다(부재 = regex 하위 호환) — 전량 거부 방지.
   const healed: Record<string, unknown> = {
     ...(headerish ? { mode: 'override', emptyMeans: 'remove' } : {}),
@@ -365,9 +361,7 @@ export function migrateProfileFilters(value: Record<string, unknown>): Record<st
   const { filters: _dropped, ...profile } = value;
   if (!Array.isArray(profile.modifications)) return profile;
 
-  const enabled = filters.filter(
-    (f): f is Record<string, unknown> => isRecord(f) && f.enabled === true,
-  );
+  const enabled = filters.filter((f): f is Record<string, unknown> => isRecord(f) && f.enabled === true);
   const byKind = (kind: string) => enabled.filter((f) => f.kind === kind);
 
   const urlJoin = byKind('url')
@@ -379,10 +373,14 @@ export function migrateProfileFilters(value: Record<string, unknown>): Record<st
     byKind(kind)
       .map((f) => (typeof f[field] === 'string' ? (f[field] as string).trim() : ''))
       .filter((x) => x !== '');
-  const resourceTypes = [...new Set(byKind('resource-type').flatMap((f) =>
-    Array.isArray(f.resourceTypes) ? f.resourceTypes : []))];
-  const requestMethods = [...new Set(byKind('request-method').flatMap((f) =>
-    Array.isArray(f.methods) ? f.methods : []))];
+  const resourceTypes = [
+    ...new Set(
+      byKind('resource-type').flatMap((f) => (Array.isArray(f.resourceTypes) ? f.resourceTypes : [])),
+    ),
+  ];
+  const requestMethods = [
+    ...new Set(byKind('request-method').flatMap((f) => (Array.isArray(f.methods) ? f.methods : []))),
+  ];
   const initiatorDomains = [...new Set(strings('initiator-domain', 'domain'))];
   const tabDomains = [...new Set(strings('tab-domain', 'domain'))];
   const expiries = byKind('time')
@@ -492,12 +490,7 @@ export function migrateSetCookieToV3(value: unknown): unknown {
  * 걸리기 시작한다. 그래서 벗기는 것과 **세는 것**이 한 함수 안에 있다 — 세지 않으면
  * 알릴 것이 없고, 알리지 않으면 사용자는 어느 날 규칙이 넓어진 이유를 모른다.
  */
-const RETIRED_CONDITION_KEYS = [
-  'excludedDomains',
-  'initiatorDomains',
-  'tabDomains',
-  'expiresAt',
-] as const;
+const RETIRED_CONDITION_KEYS = ['excludedDomains', 'initiatorDomains', 'tabDomains', 'expiresAt'] as const;
 
 /**
  * 퇴역 요청 메서드 (ADR 0017) — 목록에서 빠지면 그만큼 규칙이 넓어진다.
@@ -655,14 +648,12 @@ function validateStoredState(value: Record<string, unknown>): StoredState | null
    */
   const theme = isThemePreference(value.theme) ? value.theme : DEFAULT_THEME;
   // 배지 표시도 같은 이유로 백필·치유 대상이다 — 툴바 배지 하나가 프로필을 날릴 수 없다.
-  const badgeVisible =
-    typeof value.badgeVisible === 'boolean' ? value.badgeVisible : DEFAULT_BADGE_VISIBLE;
+  const badgeVisible = typeof value.badgeVisible === 'boolean' ? value.badgeVisible : DEFAULT_BADGE_VISIBLE;
   /*
    * 백업 저장 위치도 같은 계열의 백필·치유 대상이다 — 필드가 없던 기존 설치는 sync ON으로
    * 읽혀 자기 클라우드 히스토리를 그대로 보고, 알 수 없는 값 때문에 상태 전체가 리셋되지 않는다.
    */
-  const syncBackup =
-    typeof value.syncBackup === 'boolean' ? value.syncBackup : DEFAULT_SYNC_BACKUP;
+  const syncBackup = typeof value.syncBackup === 'boolean' ? value.syncBackup : DEFAULT_SYNC_BACKUP;
   /*
    * 언어 선호도 같은 계열의 치유 대상이다 (티켓 09). 지원하지 않는 값(번역이 없는 'ja' 등)이
    * 들어와도 상태 전체를 리셋하지 않고 **선호 없음**으로 접는다 — 그러면 화면은 브라우저 UI

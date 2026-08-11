@@ -24,8 +24,7 @@ const withRules = (modifications: Modification[]): Profile => ({
   modifications,
 });
 
-const compileOne = (m: Modification) =>
-  compile([withRules([m])], { paused: false, materialized: {} });
+const compileOne = (m: Modification) => compile([withRules([m])], { paused: false, materialized: {} });
 
 describe('User-Agent 종류', () => {
   it('User-Agent 요청 헤더를 값으로 덮어쓴다', () => {
@@ -132,17 +131,19 @@ describe('겹침 경고는 헤더를 만지는 모든 종류를 본다', () => {
 
 describe('검증·영속 계약', () => {
   it('UA는 값이 필수다 — 비면 UA를 빈 문자열로 보내는 사고가 된다', () => {
-    expect(fieldIssues({ ...createModification('user-agent'), value: '' } as Modification))
-      .toEqual([{ field: 'value', reason: 'required' }]);
-    expect(fieldIssues({ ...createModification('user-agent'), value: 'X' } as Modification))
-      .toEqual([]);
+    expect(fieldIssues({ ...createModification('user-agent'), value: '' } as Modification)).toEqual([
+      { field: 'value', reason: 'required' },
+    ]);
+    expect(fieldIssues({ ...createModification('user-agent'), value: 'X' } as Modification)).toEqual([]);
   });
 
   it('Header Removal은 이름이 필수다', () => {
-    expect(fieldIssues({ ...createModification('header-removal'), name: ' ' } as Modification))
-      .toEqual([{ field: 'name', reason: 'required' }]);
-    expect(fieldIssues({ ...createModification('header-removal'), name: 'X-Foo' } as Modification))
-      .toEqual([]);
+    expect(fieldIssues({ ...createModification('header-removal'), name: ' ' } as Modification)).toEqual([
+      { field: 'name', reason: 'required' },
+    ]);
+    expect(fieldIssues({ ...createModification('header-removal'), name: 'X-Foo' } as Modification)).toEqual(
+      [],
+    );
   });
 
   it('두 종류가 저장→로드 왕복에서 살아남는다 — 검증 실패는 상태 전체를 기본값으로 리셋한다', () => {
@@ -160,10 +161,7 @@ describe('검증·영속 계약', () => {
       ],
     };
     const revived = parseStoredState(JSON.parse(JSON.stringify(state)));
-    expect(revived.profiles[0]?.modifications.map((m) => m.kind)).toEqual([
-      'user-agent',
-      'header-removal',
-    ]);
+    expect(revived.profiles[0]?.modifications.map((m) => m.kind)).toEqual(['user-agent', 'header-removal']);
     // 새 종류에는 뜻 없는 mode/emptyMeans가 붙지 않는다.
     expect(revived.profiles[0]?.modifications[0]).not.toHaveProperty('mode');
   });
@@ -181,10 +179,7 @@ describe('검증·영속 계약', () => {
     const result = parseImport(JSON.stringify(file));
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.profiles[0]?.modifications.map((m) => m.kind)).toEqual([
-        'user-agent',
-        'header-removal',
-      ]);
+      expect(result.profiles[0]?.modifications.map((m) => m.kind)).toEqual(['user-agent', 'header-removal']);
     }
   });
 });

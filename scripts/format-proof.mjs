@@ -27,7 +27,8 @@ const fail = (message) => {
 function parseArgs(argv) {
   let commit = 'HEAD';
   for (let i = 0; i < argv.length; i += 1) {
-    if (argv[i] !== '--commit') return { error: `알 수 없는 인자: ${argv[i]} — 받는 것은 --commit <ref> 뿐이다` };
+    if (argv[i] !== '--commit')
+      return { error: `알 수 없는 인자: ${argv[i]} — 받는 것은 --commit <ref> 뿐이다` };
     const v = argv[i + 1];
     if (v === undefined || v.trim() === '' || v.startsWith('-')) {
       return { error: `--commit에 ref가 없다 (받은 값: ${v === undefined ? '없음' : `"${v}"`})` };
@@ -38,7 +39,8 @@ function parseArgs(argv) {
   return { commit };
 }
 
-const git = (args, cwd) => execFileSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).trim();
+const git = (args, cwd) =>
+  execFileSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).trim();
 
 const parsed = parseArgs(process.argv.slice(2));
 if (parsed.error) {
@@ -84,9 +86,13 @@ if (installed !== pinned) {
 const work = mkdtempSync(join(tmpdir(), 'hk-format-proof-'));
 try {
   // 부모 트리를 **작업 트리 없이** 꺼낸다 — 지금 체크아웃 상태나 미커밋 변경이 섞이지 않는다.
-  execFileSync('sh', ['-c', `git -C ${JSON.stringify(repo)} archive ${parent} | tar -x -C ${JSON.stringify(work)}`], {
-    stdio: ['ignore', 'ignore', 'pipe'],
-  });
+  execFileSync(
+    'sh',
+    ['-c', `git -C ${JSON.stringify(repo)} archive ${parent} | tar -x -C ${JSON.stringify(work)}`],
+    {
+      stdio: ['ignore', 'ignore', 'pipe'],
+    },
+  );
 
   execFileSync(bin, ['.'], { cwd: work, stdio: ['ignore', 'ignore', 'pipe'] });
 

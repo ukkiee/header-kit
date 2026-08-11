@@ -9,10 +9,7 @@ import type { Profile } from '@/core/schema';
  * 삭제가 퇴역해 그 넷째 길이 없어졌다. 셋 다 프로필을 새 id로 갈아 끼우므로 이 폴백이
  * 없으면 화면이 목록에 없는 프로필을 가리킨 채로 남는다.
  */
-export function reconcileSelection(
-  selectedId: string | null,
-  profiles: readonly Profile[],
-): string | null {
+export function reconcileSelection(selectedId: string | null, profiles: readonly Profile[]): string | null {
   if (selectedId !== null && profiles.some((p) => p.id === selectedId)) return selectedId;
   return profiles.find((p) => p.active)?.id ?? profiles[0]?.id ?? null;
 }

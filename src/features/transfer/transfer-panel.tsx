@@ -136,36 +136,36 @@ export function TransferPanel({ state, onCommand, download = browserDownload }: 
         움직이지 않게 한다.
       */}
       <AnimatePresence initial={false} mode="wait">
-      {mode === 'export' && (
-        <MotionRow key="export">
-        <div className="flex flex-col gap-1.5">
-          {state.profiles.map((profile) => (
-            <label key={profile.id} className="flex items-center gap-2 text-sm">
-              <Checkbox
-                checked={selected.has(profile.id)}
-                onCheckedChange={() => toggleSelected(profile)}
-              />
-              {profile.name}
-            </label>
-          ))}
-          <div className="flex gap-1">
-            {/* 실행 버튼은 말줄임표를 떼고 고른 수를 붙인다 — '내보내기… (2)'는 더 물어볼
+        {mode === 'export' && (
+          <MotionRow key="export">
+            <div className="flex flex-col gap-1.5">
+              {state.profiles.map((profile) => (
+                <label key={profile.id} className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={selected.has(profile.id)}
+                    onCheckedChange={() => toggleSelected(profile)}
+                  />
+                  {profile.name}
+                </label>
+              ))}
+              <div className="flex gap-1">
+                {/* 실행 버튼은 말줄임표를 떼고 고른 수를 붙인다 — '내보내기… (2)'는 더 물어볼
                 것이 있다는 뜻으로 읽히는데, 누르면 곧바로 파일이 떨어진다. */}
-            <Button size="sm" onClick={runExport} disabled={selected.size === 0}>
-              {t('exportAction')} ({selected.size})
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => setMode('idle')}>
-              {t('cancel')}
-            </Button>
-          </div>
-        </div>
-        </MotionRow>
-      )}
+                <Button size="sm" onClick={runExport} disabled={selected.size === 0}>
+                  {t('exportAction')} ({selected.size})
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setMode('idle')}>
+                  {t('cancel')}
+                </Button>
+              </div>
+            </div>
+          </MotionRow>
+        )}
 
-      {mode === 'import' && (
-        <MotionRow key="import">
-        <div className="flex flex-col gap-1.5">
-          {/*
+        {mode === 'import' && (
+          <MotionRow key="import">
+            <div className="flex flex-col gap-1.5">
+              {/*
             **파일 하나만 받는다** — 붙여넣기 칸을 걷었다.
             내보내기가 파일을 주므로 되돌아오는 것도 파일이다. 붙여넣기 칸은 그 왕복에
             없는 세 번째 길이었고, 폭 좁은 팝업에서 다섯 줄을 먹으면서 실제로는 JSON을
@@ -173,60 +173,62 @@ export function TransferPanel({ state, onCommand, download = browserDownload }: 
             모른다. 놓기와 고르기 둘 다 같은 자리를 쓴다: 라벨이 숨은 파일 입력을 감싸므로
             클릭은 파일 선택창을 열고, 같은 영역에 떨어뜨리면 그 파일을 읽는다.
           */}
-          <label
-            className={`flex cursor-pointer flex-col items-center gap-1 rounded-lg border border-dashed px-3 py-5 text-center text-xs transition-colors ${
-              dropping ? 'border-primary bg-secondary text-foreground' : 'border-input text-muted-foreground'
-            }`}
-            onDragOver={(e) => {
-              // 기본 동작은 브라우저가 그 파일로 **이동**하는 것이다 — 막지 않으면 확장 화면이
-              // JSON 뷰어로 바뀐다.
-              e.preventDefault();
-              setDropping(true);
-            }}
-            onDragLeave={() => setDropping(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDropping(false);
-              readFile(e.dataTransfer.files?.[0]);
-            }}
-          >
-            <span>{t('dropExportHere')}</span>
-            {fileName !== null && (
-              <span className="font-mono text-[11px] text-foreground">
-                {format(t('importFileChosen'), { name: fileName })}
-              </span>
-            )}
-            <input
-              type="file"
-              accept="application/json,.json"
-              aria-label={t('ariaImportFile')}
-              className="sr-only"
-              onChange={(e) => readFile(e.target.files?.[0])}
-            />
-          </label>
-          {errors.length > 0 && (
-            <AlertBanner as="ul" severity="danger" size="xs" role="alert">
-              {errors.map((error) => (
-                <li key={error}>{error}</li>
-              ))}
-            </AlertBanner>
-          )}
-          <div className="flex gap-1">
-            <Button
-              size="sm"
-              aria-label={t('ariaRunImport')}
-              onClick={() => void runImport()}
-              disabled={importText.trim() === ''}
-            >
-              {t('importAction')}
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => setMode('idle')}>
-              {t('cancel')}
-            </Button>
-          </div>
-        </div>
-        </MotionRow>
-      )}
+              <label
+                className={`flex cursor-pointer flex-col items-center gap-1 rounded-lg border border-dashed px-3 py-5 text-center text-xs transition-colors ${
+                  dropping
+                    ? 'border-primary bg-secondary text-foreground'
+                    : 'border-input text-muted-foreground'
+                }`}
+                onDragOver={(e) => {
+                  // 기본 동작은 브라우저가 그 파일로 **이동**하는 것이다 — 막지 않으면 확장 화면이
+                  // JSON 뷰어로 바뀐다.
+                  e.preventDefault();
+                  setDropping(true);
+                }}
+                onDragLeave={() => setDropping(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDropping(false);
+                  readFile(e.dataTransfer.files?.[0]);
+                }}
+              >
+                <span>{t('dropExportHere')}</span>
+                {fileName !== null && (
+                  <span className="font-mono text-[11px] text-foreground">
+                    {format(t('importFileChosen'), { name: fileName })}
+                  </span>
+                )}
+                <input
+                  type="file"
+                  accept="application/json,.json"
+                  aria-label={t('ariaImportFile')}
+                  className="sr-only"
+                  onChange={(e) => readFile(e.target.files?.[0])}
+                />
+              </label>
+              {errors.length > 0 && (
+                <AlertBanner as="ul" severity="danger" size="xs" role="alert">
+                  {errors.map((error) => (
+                    <li key={error}>{error}</li>
+                  ))}
+                </AlertBanner>
+              )}
+              <div className="flex gap-1">
+                <Button
+                  size="sm"
+                  aria-label={t('ariaRunImport')}
+                  onClick={() => void runImport()}
+                  disabled={importText.trim() === ''}
+                >
+                  {t('importAction')}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setMode('idle')}>
+                  {t('cancel')}
+                </Button>
+              </div>
+            </div>
+          </MotionRow>
+        )}
       </AnimatePresence>
     </SectionCard>
   );

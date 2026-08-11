@@ -26,10 +26,7 @@ const noopResetStorage: ResetStorage = {
   clearSummary: async () => {},
 };
 
-function fakeWriter(
-  overrides: Partial<StateWriter> = {},
-  storage: Partial<ResetStorage> = {},
-): StateWriter {
+function fakeWriter(overrides: Partial<StateWriter> = {}, storage: Partial<ResetStorage> = {}): StateWriter {
   const effects = { ...noopResetStorage, ...storage };
   return {
     execute: async () => createDefaultState(),
@@ -351,9 +348,7 @@ describe('background bootstrap', () => {
     };
     const populated: StoredState = {
       ...createDefaultState(),
-      profiles: [
-        { id: 'p1', name: 'One', active: true, color: '#2563eb', modifications: [] },
-      ],
+      profiles: [{ id: 'p1', name: 'One', active: true, color: '#2563eb', modifications: [] }],
     };
     const timers: (() => void)[] = [];
     let handler: ((command: Command) => Promise<StoredState>) | undefined;
@@ -441,9 +436,9 @@ describe('background bootstrap', () => {
     expect(timers.length).toBeGreaterThan(0); // 초기 예약
 
     // 실패하는 삭제 — 결과는 오류 객체이고 던지지 않는다.
-    expect(await mutate!({ op: 'delete-snapshot', snapshotId: 's1', target: 'sync' })).toMatchObject(
-      { ok: false },
-    );
+    expect(await mutate!({ op: 'delete-snapshot', snapshotId: 's1', target: 'sync' })).toMatchObject({
+      ok: false,
+    });
     await flush();
 
     // 걸려 있던 예약이 그대로 살아 발화한다 — 무효화되지 않았다.

@@ -125,7 +125,11 @@ describe('ruleView — 효과 칩', () => {
   });
 
   it('Block은 효과 칩이 없다 — 뱃지와 스코프가 이미 전부를 말한다', () => {
-    const m = { ...createModification('block'), urlFilter: 'ads.example.com', urlMatchType: 'domain' } as Modification;
+    const m = {
+      ...createModification('block'),
+      urlFilter: 'ads.example.com',
+      urlMatchType: 'domain',
+    } as Modification;
     expect(ruleView(m, t)).toMatchObject({
       badge: 'BLOCK',
       scope: { label: 'ads.example.com', regex: false },
@@ -214,9 +218,9 @@ describe('ruleView — 응답 쿠키 속성 칩', () => {
    */
   it('이름도 값도 비면 빈 값의 뜻을 말한다 — `=` 한 글자가 아니다', () => {
     expect(ruleView(setCookie({ name: '', value: '' }), t).chips).toEqual(['(Remove)']);
-    expect(
-      ruleView(setCookie({ name: '  ', value: '', emptyMeans: 'send-empty' }), ko).chips,
-    ).toEqual(['(빈 값 전송)']);
+    expect(ruleView(setCookie({ name: '  ', value: '', emptyMeans: 'send-empty' }), ko).chips).toEqual([
+      '(빈 값 전송)',
+    ]);
   });
 
   it('비운 속성은 칩이 되지 않는다 — 안 정한 것이 기본값으로 박히지 않는다', () => {
@@ -232,7 +236,11 @@ describe('ruleView — 응답 쿠키 속성 칩', () => {
    * 않는 것이 정확하다 — 갈라 두지 않았으므로 어느 속성이 있는지 이 버전은 모른다.
    */
   it('원시로 보존된 응답 쿠키는 그 줄이 효과이고 속성 칩이 없다', () => {
-    const raw = setCookie({ name: undefined, value: undefined, raw: 'sid=abc; Expires=Thu, 01 Jan 2026 00:00:00 GMT' });
+    const raw = setCookie({
+      name: undefined,
+      value: undefined,
+      raw: 'sid=abc; Expires=Thu, 01 Jan 2026 00:00:00 GMT',
+    });
     expect(ruleView(raw, t).chips).toEqual(['sid=abc; Expires=Thu, 01 Jan 2026 00:00:00 GMT']);
   });
 });

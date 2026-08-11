@@ -14,23 +14,28 @@ import { REPO, runChild, tempDirs } from './test-support.mjs';
 const OXFMT = join(REPO, 'node_modules', '.bin', 'oxfmt');
 const PROOF = join(REPO, 'scripts', 'format-proof.mjs');
 /** 이 저장소가 고정한 버전. 증명이 "그 커밋이 고정한 바로 그 버전"을 요구하므로 픽스처도 같아야 한다. */
-const PINNED = JSON.parse(execFileSync('node', ['-p', "JSON.stringify(require('./package.json'))"], {
-  cwd: REPO,
-  encoding: 'utf8',
-})).devDependencies.oxfmt;
+const PINNED = JSON.parse(
+  execFileSync('node', ['-p', "JSON.stringify(require('./package.json'))"], {
+    cwd: REPO,
+    encoding: 'utf8',
+  }),
+).devDependencies.oxfmt;
 
 const track = tempDirs();
 
 /** 포매터가 손대지 않는 모양(이미 포맷됨)과 손대는 모양(어긋남). */
-const FORMATTED = "export const greet = (name: string): string => `hi ${name}`;\n";
-const MISFORMATTED = "export  const greet=(name:string):string=>`hi ${name}`\n";
+const FORMATTED = 'export const greet = (name: string): string => `hi ${name}`;\n';
+const MISFORMATTED = 'export  const greet=(name:string):string=>`hi ${name}`\n';
 
 function fixtureDir(prefix) {
   const dir = track(mkdtempSync(join(tmpdir(), prefix)));
   symlinkSync(join(REPO, 'node_modules'), join(dir, 'node_modules'), 'dir');
   // 끝 개행까지 맞춰 둔다 — 픽스처 자신이 어긋나 있으면 `--check .`가 그것을 잡아
   // 무엇을 재고 있는지가 흐려진다(실측으로 그렇게 됐다).
-  writeFileSync(join(dir, '.oxfmtrc.json'), `${JSON.stringify({ printWidth: 110, singleQuote: true }, null, 2)}\n`);
+  writeFileSync(
+    join(dir, '.oxfmtrc.json'),
+    `${JSON.stringify({ printWidth: 110, singleQuote: true }, null, 2)}\n`,
+  );
   return dir;
 }
 
@@ -57,12 +62,16 @@ describe('format 게이트 — 어긋난 파일이 종료 코드 1을 낸다', (
  */
 function repoWithFormatCommit({ pin = PINNED, extra = null } = {}) {
   const dir = fixtureDir('hk-proof-');
-  const run = (args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const run = (args) =>
+    execFileSync('git', args, { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   run(['init', '-q']);
   run(['config', 'user.email', 't@example.com']);
   run(['config', 'user.name', 'T']);
   // 부모: 설정·핀·어긋난 코드. (설정 커밋과 포맷 커밋을 가른 이 저장소의 모양 그대로다.)
-  writeFileSync(join(dir, 'package.json'), `${JSON.stringify({ devDependencies: { oxfmt: pin } }, null, 2)}\n`);
+  writeFileSync(
+    join(dir, 'package.json'),
+    `${JSON.stringify({ devDependencies: { oxfmt: pin } }, null, 2)}\n`,
+  );
   mkdirSync(join(dir, 'src'), { recursive: true });
   writeFileSync(join(dir, 'src', 'a.ts'), MISFORMATTED);
   run(['add', '-A', '-f']);
@@ -96,11 +105,15 @@ describe('재현 증명 — 포맷 커밋이 포맷만 담았는가', () => {
 
   it('기존 파일을 한 줄 고쳐 섞어도 FAIL이다 — 새 파일만 잡는 것이 아니다', () => {
     const dir = fixtureDir('hk-proof-edit-');
-    const run = (args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    const run = (args) =>
+      execFileSync('git', args, { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
     run(['init', '-q']);
     run(['config', 'user.email', 't@example.com']);
     run(['config', 'user.name', 'T']);
-    writeFileSync(join(dir, 'package.json'), `${JSON.stringify({ devDependencies: { oxfmt: PINNED } }, null, 2)}\n`);
+    writeFileSync(
+      join(dir, 'package.json'),
+      `${JSON.stringify({ devDependencies: { oxfmt: PINNED } }, null, 2)}\n`,
+    );
     mkdirSync(join(dir, 'src'), { recursive: true });
     writeFileSync(join(dir, 'src', 'a.ts'), MISFORMATTED);
     run(['add', '-A', '-f']);

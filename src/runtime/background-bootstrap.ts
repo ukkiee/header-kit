@@ -50,9 +50,7 @@ export interface BackgroundDeps {
    * 렌더러가 시작한 백업 변이 요청을 받는다 — **문은 하나**이고 무슨 동작인지는 판별 유니온의
    * 가지가 정한다 (D6, 티켓 03). 핸들러의 결과가 그대로 응답이 된다.
    */
-  onBackupMutation(
-    handler: (mutation: BackupMutation) => Promise<BackupMutationResult>,
-  ): void;
+  onBackupMutation(handler: (mutation: BackupMutation) => Promise<BackupMutationResult>): void;
   replaceSessionRules(rules: NetRule[]): Promise<void>;
   /**
    * 계산된 배지를 툴바에 반영한다 — 어댑터는 그대로 그리기만 한다.
@@ -99,8 +97,7 @@ export function bootstrap(deps: BackgroundDeps): void {
 
   const reconciler = createReconciler<StoredState>({
     loadSnapshot: () => deps.loadState(),
-    compile: (state) =>
-      compile(state.profiles, { paused: state.paused, materialized: state.materialized }),
+    compile: (state) => compile(state.profiles, { paused: state.paused, materialized: state.materialized }),
     // 규칙·배지·상태 요약을 같은 스냅샷·같은 세대 보증 아래 반영한다.
     apply: async (result, state) => {
       // 규칙 적용은 실패해도(예: quota) 나머지 반영·요약을 막지 않는다 —
@@ -231,9 +228,7 @@ export function bootstrap(deps: BackgroundDeps): void {
 
   // ── 레인 진입점 (ADR 0016 D2의 표) — 권위 상태를 쓰는 경로는 여기가 전부다 ──
 
-  deps.onCommand((command) =>
-    command.type === 'full-reset' ? fullReset() : writer.execute(command),
-  );
+  deps.onCommand((command) => (command.type === 'full-reset' ? fullReset() : writer.execute(command)));
   /*
    * 백업 변이 요청 — 쓰기 문이 그대로 받는다. 부트스트랩이 더할 것이 없다.
    *

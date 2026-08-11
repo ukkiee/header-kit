@@ -21,9 +21,32 @@ const GLOBAL_TOKENS = new Set(['*', '*://*/*', '<all_urls>', '*://*', '://*/*', 
  * 모든 사이트에 있는 파일이다. 이걸 호스트로 세면 가드레일이 정확히 반대로 작동한다.
  */
 const FILE_EXTENSIONS = new Set([
-  'js', 'mjs', 'cjs', 'css', 'html', 'htm', 'php', 'asp', 'aspx', 'jsp', 'json', 'xml',
-  'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico', 'woff', 'woff2', 'ttf', 'map',
-  'txt', 'pdf', 'wasm',
+  'js',
+  'mjs',
+  'cjs',
+  'css',
+  'html',
+  'htm',
+  'php',
+  'asp',
+  'aspx',
+  'jsp',
+  'json',
+  'xml',
+  'png',
+  'jpg',
+  'jpeg',
+  'gif',
+  'svg',
+  'webp',
+  'ico',
+  'woff',
+  'woff2',
+  'ttf',
+  'map',
+  'txt',
+  'pdf',
+  'wasm',
 ]);
 
 /** 라벨이 하나뿐이지만 넓지 않은 호스트 — 이 확장이 존재하는 이유인 개발 호스트다. */
@@ -342,9 +365,7 @@ function regexBreadth(pattern: string): ScopeBreadth {
   // 갈래마다 **자기 authority 구간**을 본다. 구간을 먼저 자르고 나서 `\.`를 리터럴 점으로
   // 되살리는 순서가 중요하다 — 자르는 동안에는 이스케이프가 온전해야 `\/`를 경로 구분자로,
   // `\.`를 구분자 아닌 것으로 읽을 수 있다.
-  return expanded.branches.every((alt) =>
-    isHostBound(authoritySpan(alt, 'regex').replace(/\\\./g, '.')),
-  )
+  return expanded.branches.every((alt) => isHostBound(authoritySpan(alt, 'regex').replace(/\\\./g, '.')))
     ? 'narrow'
     : 'wide';
 }

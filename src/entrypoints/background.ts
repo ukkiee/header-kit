@@ -11,7 +11,6 @@ import {
 } from '@/platform/stateStore';
 import { bootstrap } from '@/runtime/background-bootstrap';
 
-
 // ── browser 효과 래퍼 — browser.* 를 만지는 유일한 지점. 배선 자체는 bootstrap이 한다. ──
 
 async function replaceSessionRules(rules: NetRule[]): Promise<void> {

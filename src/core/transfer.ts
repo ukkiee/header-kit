@@ -202,10 +202,7 @@ export function normalizeImportedProfiles(
 /**
  * Import 파싱 — 전체 검증 후 전량 수용 또는 전량 거부.
  */
-export function parseImport(
-  text: string,
-  newId: () => string = () => crypto.randomUUID(),
-): ImportResult {
+export function parseImport(text: string, newId: () => string = () => crypto.randomUUID()): ImportResult {
   let raw: unknown;
   try {
     raw = JSON.parse(text);
@@ -274,9 +271,7 @@ export function parseImport(
   // 검증 통과분을 backfill해 신규 필드를 채운 뒤 정규화한다.
   const backfilled = (upgraded as Profile[]).map((p) => ({
     ...p,
-    modifications: p.modifications.map(
-      (m) => backfillModification(m) as Profile['modifications'][number],
-    ),
+    modifications: p.modifications.map((m) => backfillModification(m) as Profile['modifications'][number]),
   }));
   const { profiles } = normalizeImportedProfiles(backfilled, newId);
   return { ok: true, profiles, notices };

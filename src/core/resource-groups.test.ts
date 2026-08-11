@@ -68,11 +68,7 @@ describe('접기 — 값 목록 → 묶음 목록', () => {
   });
 
   it('묶음의 표시 순서로 낸다', () => {
-    expect(foldResourceTypes(['font', 'xmlhttprequest', 'image'])).toEqual([
-      'xhr',
-      'image',
-      'font',
-    ]);
+    expect(foldResourceTypes(['font', 'xmlhttprequest', 'image'])).toEqual(['xhr', 'image', 'font']);
   });
 
   it('기타에 드는 값 어느 것이든 기타 하나로 접힌다', () => {

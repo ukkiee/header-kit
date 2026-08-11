@@ -19,8 +19,26 @@ const sampleProfile: Profile = {
   active: true,
   color: '#d97706',
   modifications: [
-    { kind: 'request-header', id: 'm1', name: 'Authorization', value: 'Bearer test-token', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
-    { kind: 'request-header', id: 'm2', name: 'X-Feature-Flag', value: 'beta', enabled: false, mode: 'override', emptyMeans: 'remove', comment: '' },
+    {
+      kind: 'request-header',
+      id: 'm1',
+      name: 'Authorization',
+      value: 'Bearer test-token',
+      enabled: true,
+      mode: 'override',
+      emptyMeans: 'remove',
+      comment: '',
+    },
+    {
+      kind: 'request-header',
+      id: 'm2',
+      name: 'X-Feature-Flag',
+      value: 'beta',
+      enabled: false,
+      mode: 'override',
+      emptyMeans: 'remove',
+      comment: '',
+    },
   ],
 };
 
@@ -34,8 +52,8 @@ function InteractiveProfileSection({ initial }: { initial: Profile }) {
     profiles: [initial],
     materialized: {},
     customHeaderNames: [],
-  customCookieNames: [],
-  customUserAgents: [],
+    customCookieNames: [],
+    customUserAgents: [],
   });
   const profile = state.profiles[0];
   if (!profile) return <p className="text-sm">Profile deleted.</p>;

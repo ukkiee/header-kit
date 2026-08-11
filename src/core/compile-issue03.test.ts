@@ -17,7 +17,20 @@ const env: CompileEnv = { paused: false, materialized: {} };
 describe('compile — Cookie', () => {
   it('append는 Cookie 요청 헤더에 name=value로 누적된다', () => {
     const { rules } = compile(
-      [profile([{ kind: 'cookie', id: 'm1', name: 'session', value: 'abc', mode: 'append', emptyMeans: 'remove', comment: '', enabled: true }])],
+      [
+        profile([
+          {
+            kind: 'cookie',
+            id: 'm1',
+            name: 'session',
+            value: 'abc',
+            mode: 'append',
+            emptyMeans: 'remove',
+            comment: '',
+            enabled: true,
+          },
+        ]),
+      ],
       env,
     );
 
@@ -30,7 +43,20 @@ describe('compile — Cookie', () => {
 
   it('override는 Cookie 헤더를 통째 교체한다', () => {
     const { rules } = compile(
-      [profile([{ kind: 'cookie', id: 'm1', name: 'session', value: 'abc', mode: 'override', emptyMeans: 'remove', comment: '', enabled: true }])],
+      [
+        profile([
+          {
+            kind: 'cookie',
+            id: 'm1',
+            name: 'session',
+            value: 'abc',
+            mode: 'override',
+            emptyMeans: 'remove',
+            comment: '',
+            enabled: true,
+          },
+        ]),
+      ],
       env,
     );
 
@@ -43,7 +69,20 @@ describe('compile — Cookie', () => {
 
   it('빈 값 + remove는 Cookie 헤더를 제거한다', () => {
     const { rules } = compile(
-      [profile([{ kind: 'cookie', id: 'm1', name: 'session', value: '', mode: 'override', emptyMeans: 'remove', comment: '', enabled: true }])],
+      [
+        profile([
+          {
+            kind: 'cookie',
+            id: 'm1',
+            name: 'session',
+            value: '',
+            mode: 'override',
+            emptyMeans: 'remove',
+            comment: '',
+            enabled: true,
+          },
+        ]),
+      ],
       env,
     );
 
@@ -54,7 +93,24 @@ describe('compile — Cookie', () => {
 describe('compile — Set-Cookie', () => {
   it('append는 Set-Cookie 응답 헤더를 추가한다', () => {
     const { rules } = compile(
-      [{ ...profile([]), modifications: [{ kind: 'set-cookie', id: 'm1', name: 'theme', value: 'dark', path: '/', mode: 'append', emptyMeans: 'remove', comment: '', enabled: true }] }],
+      [
+        {
+          ...profile([]),
+          modifications: [
+            {
+              kind: 'set-cookie',
+              id: 'm1',
+              name: 'theme',
+              value: 'dark',
+              path: '/',
+              mode: 'append',
+              emptyMeans: 'remove',
+              comment: '',
+              enabled: true,
+            },
+          ],
+        },
+      ],
       env,
     );
 
@@ -67,7 +123,23 @@ describe('compile — Set-Cookie', () => {
 
   it('빈 값 + remove는 Set-Cookie를 차단(제거)한다', () => {
     const { rules } = compile(
-      [{ ...profile([]), modifications: [{ kind: 'set-cookie', id: 'm1', name: '', value: '', mode: 'override', emptyMeans: 'remove', comment: '', enabled: true }] }],
+      [
+        {
+          ...profile([]),
+          modifications: [
+            {
+              kind: 'set-cookie',
+              id: 'm1',
+              name: '',
+              value: '',
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+              enabled: true,
+            },
+          ],
+        },
+      ],
       env,
     );
 
@@ -133,7 +205,20 @@ describe('compile — Redirect', () => {
 describe('compile — Cookie Placeholder', () => {
   it('cookie 값의 Placeholder는 실체화 값을 소비한다', () => {
     const { rules } = compile(
-      [profile([{ kind: 'cookie', id: 'm1', name: 'trace', value: '{{uuid}}', mode: 'append', emptyMeans: 'remove', comment: '', enabled: true }])],
+      [
+        profile([
+          {
+            kind: 'cookie',
+            id: 'm1',
+            name: 'trace',
+            value: '{{uuid}}',
+            mode: 'append',
+            emptyMeans: 'remove',
+            comment: '',
+            enabled: true,
+          },
+        ]),
+      ],
       { ...env, materialized: { m1: 'real-uuid' } },
     );
 
@@ -155,9 +240,20 @@ describe('compile — v2 응답 쿠키 업그레이드 후 출력 보존', () =>
       paused: false,
       profiles: [
         {
-          id: 'p1', name: 'P', active: true, color: '#2563eb',
+          id: 'p1',
+          name: 'P',
+          active: true,
+          color: '#2563eb',
           modifications: [
-            { kind: 'set-cookie', id: 'm1', value: v2Line, enabled: true, mode: 'append', emptyMeans: 'remove', comment: '' },
+            {
+              kind: 'set-cookie',
+              id: 'm1',
+              value: v2Line,
+              enabled: true,
+              mode: 'append',
+              emptyMeans: 'remove',
+              comment: '',
+            },
           ],
         },
       ],
@@ -195,9 +291,20 @@ describe('compile — v2 응답 쿠키 업그레이드 후 출력 보존', () =>
       paused: false,
       profiles: [
         {
-          id: 'p1', name: 'P', active: true, color: '#2563eb',
+          id: 'p1',
+          name: 'P',
+          active: true,
+          color: '#2563eb',
           modifications: [
-            { kind: 'set-cookie', id: 'm1', value: '', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+            {
+              kind: 'set-cookie',
+              id: 'm1',
+              value: '',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+            },
           ],
         },
       ],
@@ -228,9 +335,20 @@ describe('compile — 응답 쿠키의 Placeholder', () => {
       paused: false,
       profiles: [
         {
-          id: 'p1', name: 'P', active: true, color: '#2563eb',
+          id: 'p1',
+          name: 'P',
+          active: true,
+          color: '#2563eb',
           modifications: [
-            { kind: 'set-cookie', id: 'm1', value: 'sid={{uuid}}; Path=/', enabled: true, mode: 'append', emptyMeans: 'remove', comment: '' },
+            {
+              kind: 'set-cookie',
+              id: 'm1',
+              value: 'sid={{uuid}}; Path=/',
+              enabled: true,
+              mode: 'append',
+              emptyMeans: 'remove',
+              comment: '',
+            },
           ],
         },
       ],
@@ -252,8 +370,15 @@ describe('compile — 응답 쿠키의 Placeholder', () => {
 
   it('구조화된 항목은 **값만** 실체화되고 줄은 그대로 조립된다', () => {
     const m: Modification = {
-      kind: 'set-cookie', id: 'm1', name: 'sid', value: '{{uuid}}', path: '/',
-      enabled: true, mode: 'append', emptyMeans: 'remove', comment: '',
+      kind: 'set-cookie',
+      id: 'm1',
+      name: 'sid',
+      value: '{{uuid}}',
+      path: '/',
+      enabled: true,
+      mode: 'append',
+      emptyMeans: 'remove',
+      comment: '',
     };
     expect(placeholderTemplate(m)).toBe('{{uuid}}');
 
@@ -282,9 +407,20 @@ describe('compile — 파서 인증과 방출의 일치', () => {
       paused: false,
       profiles: [
         {
-          id: 'p1', name: 'P', active: true, color: '#2563eb',
+          id: 'p1',
+          name: 'P',
+          active: true,
+          color: '#2563eb',
           modifications: [
-            { kind: 'set-cookie', id: 'm1', value: v2Line, enabled: true, mode: 'append', emptyMeans, comment: '' },
+            {
+              kind: 'set-cookie',
+              id: 'm1',
+              value: v2Line,
+              enabled: true,
+              mode: 'append',
+              emptyMeans,
+              comment: '',
+            },
           ],
         },
       ],
@@ -296,13 +432,12 @@ describe('compile — 파서 인증과 방출의 일치', () => {
     return rules[0]?.action.responseHeaders?.[0];
   };
 
-  it.each([
-    [' =; Path=/'],
-    ['  =value'],
-    ['\t=x; Secure'],
-  ])('공백뿐인 이름(%s)은 원시로 남아 원본 바이트가 그대로 나간다', (line) => {
-    expect(emitted(line)).toEqual({ header: 'Set-Cookie', operation: 'append', value: line });
-  });
+  it.each([[' =; Path=/'], ['  =value'], ['\t=x; Secure']])(
+    '공백뿐인 이름(%s)은 원시로 남아 원본 바이트가 그대로 나간다',
+    (line) => {
+      expect(emitted(line)).toEqual({ header: 'Set-Cookie', operation: 'append', value: line });
+    },
+  );
 
   it('그런 줄은 빈 값으로 접히지 않는다 — 접히면 헤더가 제거된다', () => {
     expect(emitted(' =; Path=/')).not.toEqual({ header: 'Set-Cookie', operation: 'remove' });

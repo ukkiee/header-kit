@@ -8,7 +8,17 @@ function mod(
   name: string,
   extra: { conditions?: RuleConditions; urlFilter?: string } = {},
 ): Modification {
-  return { kind: 'request-header', id, name, value: 'v', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '', ...extra };
+  return {
+    kind: 'request-header',
+    id,
+    name,
+    value: 'v',
+    enabled: true,
+    mode: 'override',
+    emptyMeans: 'remove',
+    comment: '',
+    ...extra,
+  };
 }
 
 function profile(overrides: Partial<Profile> = {}): Profile {
@@ -67,7 +77,12 @@ describe('compile — 규칙 conditions의 DNR 매핑 (ADR 0010)', () => {
           modifications: [
             mod('m1', 'X-Absent'),
             mod('m2', 'X-Empty', {
-              conditions: { resourceTypes: [], requestMethods: [], initiatorDomains: [], excludedDomains: [] },
+              conditions: {
+                resourceTypes: [],
+                requestMethods: [],
+                initiatorDomains: [],
+                excludedDomains: [],
+              },
             }),
           ],
         }),

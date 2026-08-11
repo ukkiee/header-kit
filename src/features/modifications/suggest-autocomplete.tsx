@@ -4,8 +4,7 @@ import type { Suggestion } from '@/core/autocomplete';
 import { Input, type InputProps } from '@/ui/text-field';
 import { popupAnchored, popupItemText, popupPositioner } from '@/ui/tokens';
 
-export interface SuggestAutocompleteProps
-  extends Pick<InputProps, 'variant' | 'size' | 'autoFocus'> {
+export interface SuggestAutocompleteProps extends Pick<InputProps, 'variant' | 'size' | 'autoFocus'> {
   value: string;
   onChange: (next: string) => void;
   /** 이미 산출된 후보 — 이 컴포넌트는 후보를 만들지도 거르지도 않는다. */

@@ -29,7 +29,12 @@ const compileOne = (m: Modification, env: Partial<Parameters<typeof compile>[1]>
   compile([withRules([m])], { paused: false, materialized: {}, ...env });
 
 const block = (over: Record<string, unknown> = {}): Modification =>
-  ({ ...createModification('block'), urlFilter: 'ads.example.com', urlMatchType: 'domain', ...over }) as Modification;
+  ({
+    ...createModification('block'),
+    urlFilter: 'ads.example.com',
+    urlMatchType: 'domain',
+    ...over,
+  }) as Modification;
 
 describe('Block 종류', () => {
   it('매칭된 요청을 block 액션으로 차단한다', () => {
@@ -93,9 +98,7 @@ describe('Block 검증 — 스코프만 필수', () => {
     expect(fieldIssues(block({ urlFilter: undefined }))).toEqual([
       { field: 'urlFilter', reason: 'required' },
     ]);
-    expect(fieldIssues(block({ urlFilter: ' ' }))).toEqual([
-      { field: 'urlFilter', reason: 'required' },
-    ]);
+    expect(fieldIssues(block({ urlFilter: ' ' }))).toEqual([{ field: 'urlFilter', reason: 'required' }]);
   });
 
   it('규칙이 만들어지지 않는 패턴은 저장을 막는다 — 막힌 줄 알았는데 아무 일도 없는 것이 최악이다', () => {

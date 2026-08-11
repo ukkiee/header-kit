@@ -5,12 +5,7 @@ import { assembleSetCookie, placeholderTemplate } from './schema';
 /** 값·mode를 가진 Modification 종류 (header/cookie/set-cookie). */
 type ValueModification = Extract<Modification, { mode: HeaderMode }>;
 import type { CompileWarning } from './compile-warnings';
-import {
-  ALL_RESOURCE_TYPES,
-  isRequestAppendAllowed,
-  type HeaderInfo,
-  type NetRule,
-} from './rules';
+import { ALL_RESOURCE_TYPES, isRequestAppendAllowed, type HeaderInfo, type NetRule } from './rules';
 
 /**
  * 컴파일 입력 — **저장 상태 말고는 아무것도 없다** (ADR 0002 개정, 티켓 10).
@@ -186,9 +181,8 @@ function planHeaderish(modification: ValueModification, emitter: Emitter): Heade
     }
     // 이름도 값도 비면 조립하지 않는다 — 그래야 빈 값의 뜻(remove)이 그대로 걸린다.
     // 조립하면 `=` 한 글자가 되어 "빈 쿠키를 심는" 다른 규칙이 된다.
-    const line = modification.name.trim() === '' && modification.value === ''
-      ? ''
-      : assembleSetCookie(modification);
+    const line =
+      modification.name.trim() === '' && modification.value === '' ? '' : assembleSetCookie(modification);
     return {
       isRequest: false,
       header: 'Set-Cookie',
@@ -541,7 +535,10 @@ export function compile(profiles: Profile[], env: CompileEnv): CompileResult {
   // 방출 대상: enabled인 규칙 — 대역 폭도 이 기준으로 센다.
   const emittable = new Map<string, Modification[]>();
   for (const profile of active) {
-    emittable.set(profile.id, profile.modifications.filter((m) => m.enabled));
+    emittable.set(
+      profile.id,
+      profile.modifications.filter((m) => m.enabled),
+    );
   }
 
   const bandBase = new Map<string, number>();

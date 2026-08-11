@@ -23,36 +23,32 @@ export function StatusSummary({ summary, showCounts = true }: StatusSummaryProps
   return (
     <section className="flex flex-col gap-1.5 text-xs">
       {showCounts && (
-      <div className="flex items-center gap-2 text-muted-foreground">
-        <span>
-          <strong className="font-medium text-foreground">
-            {summary.ruleCount}
-          </strong>{' '}
-          {summary.applyError
-            ? t('rulesNotApplied')
-            : summary.ruleCount === 1
-              ? t('activeRule')
-              : t('activeRules')}
-        </span>
-        <span aria-hidden className="text-border">
-          ·
-        </span>
-        <span>
-          <strong className="font-medium text-foreground">
-            {summary.activeProfileCount}
-          </strong>{' '}
-          {summary.activeProfileCount === 1 ? t('activeProfile') : t('activeProfiles')}
-        </span>
-        {(summary.paused || (!summary.hasProblems && !summary.paused)) && (
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <span>
+            <strong className="font-medium text-foreground">{summary.ruleCount}</strong>{' '}
+            {summary.applyError
+              ? t('rulesNotApplied')
+              : summary.ruleCount === 1
+                ? t('activeRule')
+                : t('activeRules')}
+          </span>
           <span aria-hidden className="text-border">
             ·
           </span>
-        )}
-        {summary.paused && <span className="text-amber-600 dark:text-amber-400">{t('paused')}</span>}
-        {!summary.hasProblems && !summary.paused && (
-          <span className="text-green-600 dark:text-green-400">{t('noIssues')}</span>
-        )}
-      </div>
+          <span>
+            <strong className="font-medium text-foreground">{summary.activeProfileCount}</strong>{' '}
+            {summary.activeProfileCount === 1 ? t('activeProfile') : t('activeProfiles')}
+          </span>
+          {(summary.paused || (!summary.hasProblems && !summary.paused)) && (
+            <span aria-hidden className="text-border">
+              ·
+            </span>
+          )}
+          {summary.paused && <span className="text-amber-600 dark:text-amber-400">{t('paused')}</span>}
+          {!summary.hasProblems && !summary.paused && (
+            <span className="text-green-600 dark:text-green-400">{t('noIssues')}</span>
+          )}
+        </div>
       )}
 
       {summary.applyError && (
@@ -66,15 +62,8 @@ export function StatusSummary({ summary, showCounts = true }: StatusSummaryProps
           {summary.warnings.map((warning, i) => {
             const text = warningText(warning, t);
             return (
-              <AlertBanner
-                as="li"
-                key={`${warning.code}-${i}`}
-                severity="warn"
-                className="flex flex-col"
-              >
-                <span className="font-medium text-amber-700 dark:text-amber-300">
-                  {text.label}
-                </span>
+              <AlertBanner as="li" key={`${warning.code}-${i}`} severity="warn" className="flex flex-col">
+                <span className="font-medium text-amber-700 dark:text-amber-300">{text.label}</span>
                 <span className="text-amber-600 dark:text-amber-400">{text.detail}</span>
               </AlertBanner>
             );

@@ -15,7 +15,12 @@ export interface LargeEditorProps {
 }
 
 /** 긴 regex·헤더 값을 넓은 다이얼로그에서 편집한다 (탭 앱·팝업 공용). */
-export function LargeEditor({ title, value, onCommit, triggerLabel = <Maximize2 size={14} strokeWidth={1.75} /> }: LargeEditorProps) {
+export function LargeEditor({
+  title,
+  value,
+  onCommit,
+  triggerLabel = <Maximize2 size={14} strokeWidth={1.75} />,
+}: LargeEditorProps) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -57,9 +62,19 @@ export function LargeEditor({ title, value, onCommit, triggerLabel = <Maximize2 
             font="mono"
           />
           <div className="flex justify-end gap-2">
-            <Dialog.Close render={<Button variant="ghost" size="sm">{t('cancel')}</Button>} />
             <Dialog.Close
-              render={<Button size="sm" aria-label={t('ariaSaveLargeEditor')}>{t('save')}</Button>}
+              render={
+                <Button variant="ghost" size="sm">
+                  {t('cancel')}
+                </Button>
+              }
+            />
+            <Dialog.Close
+              render={
+                <Button size="sm" aria-label={t('ariaSaveLargeEditor')}>
+                  {t('save')}
+                </Button>
+              }
               onClick={() => onCommit(draft)}
             />
           </div>

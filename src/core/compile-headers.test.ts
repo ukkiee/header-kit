@@ -32,7 +32,15 @@ describe('compile — 헤더 target / mode / empty', () => {
       [
         profile([
           header({ id: 'm1', name: 'X-Req', value: '1' }),
-          header({ kind: 'response-header', id: 'm2', name: 'X-Res', value: '2', mode: 'override', emptyMeans: 'remove', comment: '' }),
+          header({
+            kind: 'response-header',
+            id: 'm2',
+            name: 'X-Res',
+            value: '2',
+            mode: 'override',
+            emptyMeans: 'remove',
+            comment: '',
+          }),
         ]),
       ],
       env,

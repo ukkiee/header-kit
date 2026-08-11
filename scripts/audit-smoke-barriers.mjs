@@ -92,6 +92,4 @@ if (problems.length > 0) {
   process.exit(1);
 }
 
-console.log(
-  `PASS smoke-barriers: ${SEED_GATED.length + STABLE_GATED.length} barriers verified in ${target}`,
-);
+console.log(`PASS smoke-barriers: ${SEED_GATED.length + STABLE_GATED.length} barriers verified in ${target}`);

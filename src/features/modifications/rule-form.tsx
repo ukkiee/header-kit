@@ -112,12 +112,7 @@ function firstEmptyField(draft: Modification): RequiredField | undefined {
  * 규칙 폼 (ADR 0006) — 종류를 고르면 그 종류의 필드가 나타나고, Save가 규칙
  * 전체를 원자적으로 저장한다. 초안은 로컬 — 취소가 아무것도 흘리지 않는다.
  */
-export function RuleForm({
-  initial,
-  onSave,
-  onCancel,
-  history = EMPTY_SUGGESTION_HISTORY,
-}: RuleFormProps) {
+export function RuleForm({ initial, onSave, onCancel, history = EMPTY_SUGGESTION_HISTORY }: RuleFormProps) {
   const t = useT();
   const [draft, setDraft] = useState<Modification>(() => initial ?? createModification('request-header'));
   /*
@@ -363,9 +358,7 @@ export function RuleForm({
         어느 행 아래에 붙었는지로도 알 수 있지만, 새 규칙 폼은 붙을 행이 없다.
       */}
       <div className="flex items-center gap-2">
-        <span className="text-xs font-medium">
-          {t(editing ? 'editRuleTitle' : 'newRuleTitle')}
-        </span>
+        <span className="text-xs font-medium">{t(editing ? 'editRuleTitle' : 'newRuleTitle')}</span>
         <div className="ml-auto">
           <IconButton label={t('ariaCloseForm')} icon={X} onClick={onCancel} disabled={saving} />
         </div>

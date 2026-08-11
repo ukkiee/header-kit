@@ -38,8 +38,7 @@ const field = cva(fieldTransition, {
 });
 
 export interface InputProps
-  extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size'>,
-    VariantProps<typeof field> {}
+  extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size'>, VariantProps<typeof field> {}
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   { variant, size, font, align, className, type = 'text', ...props },
@@ -65,8 +64,7 @@ const area = cva(fieldTransition, {
 });
 
 export interface TextAreaProps
-  extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'size'>,
-    VariantProps<typeof area> {}
+  extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'size'>, VariantProps<typeof area> {}
 
 export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(function TextArea(
   { font, size, className, ...props },

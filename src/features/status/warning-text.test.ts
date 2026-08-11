@@ -44,9 +44,7 @@ describe('warningText', () => {
   });
 
   it('header/limit 보간이 상세에 실제 값으로 들어간다', () => {
-    expect(warningText(view('header-overlap', { header: 'X-Custom' }), en).detail).toContain(
-      'X-Custom',
-    );
+    expect(warningText(view('header-overlap', { header: 'X-Custom' }), en).detail).toContain('X-Custom');
     expect(warningText(view('append-not-allowed', { header: 'Host' }), ko).detail).toContain('Host');
     expect(warningText(view('regex-too-long', { limit: 2048 }), ko).detail).toContain('2048');
   });

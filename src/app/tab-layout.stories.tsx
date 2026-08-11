@@ -20,7 +20,16 @@ const profile: Profile = {
   active: true,
   color: '#d97706',
   modifications: [
-    { kind: 'request-header', id: 'm1', name: 'Authorization', value: 'Bearer test', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+    {
+      kind: 'request-header',
+      id: 'm1',
+      name: 'Authorization',
+      value: 'Bearer test',
+      enabled: true,
+      mode: 'override',
+      emptyMeans: 'remove',
+      comment: '',
+    },
   ],
 };
 
@@ -42,7 +51,16 @@ export const Wide: Story = {
           hasProblems: false,
         }}
       />
-      <ProfileSection profile={profile} paused={false} onCommand={() => {}} onDeleteRule={() => {}} onCommandWithResult={async () => ({ ok: true })} editingRule={null} onEditingRuleChange={() => {}} onOpenRuleForm={() => {}} />
+      <ProfileSection
+        profile={profile}
+        paused={false}
+        onCommand={() => {}}
+        onDeleteRule={() => {}}
+        onCommandWithResult={async () => ({ ok: true })}
+        editingRule={null}
+        onEditingRuleChange={() => {}}
+        onOpenRuleForm={() => {}}
+      />
     </main>
   ),
 };

@@ -156,12 +156,9 @@ describe('그룹 안에 숨은 갈래도 전부 호스트에 묶여야 좁다 (r
 
   it('포기 경로는 전부 넓음으로 떨어진다 — 갈래 상한과 빈 매칭이 되는 수량자', () => {
     // 갈래 2^7 = 128 > 상한. 하나하나는 전부 호스트에 묶이지만 세지 않고 물러난다.
-    expect(
-      urlScopeBreadth(
-        '^https://(a|b)(c|d)(e|f)(g|h)(i|j)(k|l)(m|n)\\.example\\.com/',
-        'regex',
-      ),
-    ).toBe('wide');
+    expect(urlScopeBreadth('^https://(a|b)(c|d)(e|f)(g|h)(i|j)(k|l)(m|n)\\.example\\.com/', 'regex')).toBe(
+      'wide',
+    );
     // 대안 그룹 바로 뒤의 `?`는 그룹이 통째로 빠진 문자열도 매칭시킨다 — 전개가 표현하지 못한다.
     expect(urlScopeBreadth('^https://(ads|cdn)?\\.example\\.com/', 'regex')).toBe('wide');
   });
@@ -193,9 +190,7 @@ describe('호스트 결합은 authority 자리에서만 센다 (release R-1, 티
 
   it('authority 자리의 호스트는 그대로 좁다 — 경로에 무엇이 있든', () => {
     // 경로에 도메인꼴이 섞여 있어도 호스트가 묶여 있으면 좁다(기존 행과 같은 성질).
-    expect(urlScopeBreadth('^https://ads\\.example\\.com/path\\.example\\.net/', 'regex')).toBe(
-      'narrow',
-    );
+    expect(urlScopeBreadth('^https://ads\\.example\\.com/path\\.example\\.net/', 'regex')).toBe('narrow');
     // 스킴 뒤 authority에 로컬 호스트가 오면 좁다 — 기기 하나에 묶여 있다.
     expect(urlScopeBreadth('^https?://localhost:3000/api', 'regex')).toBe('narrow');
   });

@@ -53,10 +53,7 @@ function clearProfileMaterialization(
   return next;
 }
 
-function withoutKey(
-  record: Record<string, string>,
-  key: string,
-): Record<string, string> {
+function withoutKey(record: Record<string, string>, key: string): Record<string, string> {
   if (!(key in record)) return record;
   const { [key]: _removed, ...rest } = record;
   return rest;
@@ -120,11 +117,7 @@ export function toggleProfile(
  * 요구한 것은 "직접 친 값은 다음에도 제안된다"이고, 상한은 그것을 21번째부터 조용히 어긴다.
  * 목록이 자라는 것이 문제가 되면 그건 지우는 화면을 주는 결정이지 값을 몰래 버리는 결정이 아니다.
  */
-function remember(
-  history: readonly string[],
-  preset: readonly string[],
-  value: string,
-): string[] {
+function remember(history: readonly string[], preset: readonly string[], value: string): string[] {
   const trimmed = value.trim();
   if (trimmed === '') return [...history];
   const lower = trimmed.toLowerCase();
@@ -306,9 +299,7 @@ export function addProfile(
   afterProfileId?: string,
   deps: MaterializeDeps = defaultMaterializeDeps,
 ): StoredState {
-  const index = afterProfileId
-    ? state.profiles.findIndex((p) => p.id === afterProfileId)
-    : -1;
+  const index = afterProfileId ? state.profiles.findIndex((p) => p.id === afterProfileId) : -1;
   const profiles = [...state.profiles];
   profiles.splice(index === -1 ? profiles.length : index + 1, 0, profile);
   const base = { ...state, profiles };
@@ -346,11 +337,7 @@ export function removeProfile(state: StoredState, profileId: string): StoredStat
   };
 }
 
-export function moveProfile(
-  state: StoredState,
-  profileId: string,
-  toIndex: number,
-): StoredState {
+export function moveProfile(state: StoredState, profileId: string, toIndex: number): StoredState {
   const from = state.profiles.findIndex((p) => p.id === profileId);
   if (from === -1) return state;
   const profiles = [...state.profiles];

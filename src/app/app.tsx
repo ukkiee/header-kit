@@ -24,13 +24,7 @@ import { canvas } from '@/ui/tokens';
 import { statusCountsText } from '@/features/status/status-text';
 import { loadRuleForm, ruleFormIntentProps } from '@/features/modifications/lazy-rule-form';
 import { ExternalLink, History, Layers, Pause, Play, Plus, Settings } from 'lucide-react';
-import {
-  getSummary,
-  loadState,
-  onStateChanged,
-  onSummaryChanged,
-  sendCommand,
-} from '@/platform/stateStore';
+import { getSummary, loadState, onStateChanged, onSummaryChanged, sendCommand } from '@/platform/stateStore';
 
 /** 두 표면은 단일 셸(ADR 0005) — 차이는 크기와 '탭에서 열기' 버튼뿐. */
 export type AppSurface = 'popup' | 'tab';
@@ -107,7 +101,11 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
   const toast = useToastManager();
 
   if (!state)
-    return loadError ? <AlertBanner severity="danger" role="alert">{loadError}</AlertBanner> : null;
+    return loadError ? (
+      <AlertBanner severity="danger" role="alert">
+        {loadError}
+      </AlertBanner>
+    ) : null;
 
   const locale = pickLocale(localeSources.override, state.locale, localeSources.uiLanguage);
   // 화면이 쓰는 언어와 **언어 칩이 짚는 값**은 다른 질문이다 — 칩은 오버라이드를 보지 않는다.
@@ -143,9 +141,7 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
     );
 
   // TransferPanel은 결과를 직접 받아 자기 자리에서 오류를 보여준다 (전역 배너 미사용).
-  const dispatchWithResult = async (
-    command: Command,
-  ): Promise<{ ok: boolean; error?: string }> => {
+  const dispatchWithResult = async (command: Command): Promise<{ ok: boolean; error?: string }> => {
     const result = await sendCommand(command);
     if (result.ok) {
       setState(result.state);
@@ -230,9 +226,12 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
 
   const createAndSelectProfile = () => {
     // 이름은 카탈로그를 거친다 (티켓 04) — 이름 변경 컨트롤이 없어져 이 이름이 끝까지 남는다.
-    const profile = createProfile(format(t(locale, 'newProfileName'), { number: state.profiles.length + 1 }), {
-      color: PROFILE_COLORS[state.profiles.length % PROFILE_COLORS.length],
-    });
+    const profile = createProfile(
+      format(t(locale, 'newProfileName'), { number: state.profiles.length + 1 }),
+      {
+        color: PROFILE_COLORS[state.profiles.length % PROFILE_COLORS.length],
+      },
+    );
     // 선택은 커맨드 성공 후 확정 — 낙관적 선택은 커밋-중-렌더 재조정이 되돌린다.
     void sendCommand({ type: 'add-profile', profile }).then((result) => {
       if (result.ok) {
@@ -360,102 +359,96 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
   return (
     <LocaleProvider locale={locale}>
       <MotionProvider>
-      <IconTooltipProvider>
-      <div
-        className={`grid ${canvas} ${surface === 'tab' ? 'h-screen' : 'h-[580px] w-[760px]'} ${
-          showProfileColumn ? 'grid-cols-[68px_264px_minmax(0,1fr)]' : 'grid-cols-[68px_minmax(0,1fr)]'
-        }`}
-      >
-        <nav className="flex flex-col gap-1 border-r border-border p-2">
-          {/* 레일 아이콘도 다른 아이콘 버튼과 같은 셸을 쓴다 — 툴팁(호버·키보드 포커스)과
+        <IconTooltipProvider>
+          <div
+            className={`grid ${canvas} ${surface === 'tab' ? 'h-screen' : 'h-[580px] w-[760px]'} ${
+              showProfileColumn ? 'grid-cols-[68px_264px_minmax(0,1fr)]' : 'grid-cols-[68px_minmax(0,1fr)]'
+            }`}
+          >
+            <nav className="flex flex-col gap-1 border-r border-border p-2">
+              {/* 레일 아이콘도 다른 아이콘 버튼과 같은 셸을 쓴다 — 툴팁(호버·키보드 포커스)과
               접근성 이름이 같은 카탈로그 키에서 나와 갈라지지 않는다.
 
               선택 표시는 여전히 **색만이 아니다** — 채워진 면(명도)과 글자 굵기 두 채널이
               함께 선다. 색을 지워도 어느 화면인지 남아야 한다(스펙 story 38). 예전에는 그
               역할을 왼쪽 2px 파란 막대가 맡았는데, 시안에 없는 장식이라 걷었다: 남은 두
               채널이 이미 그레이스케일에서 구별되고 `aria-pressed`가 문자로도 말한다. */}
-          {RAIL_ITEMS.map(({ view, Icon, labelKey, textKey }) => (
-            <IconButton
-              key={view}
-              size="rail"
-              label={t(locale, labelKey)}
-              text={t(locale, textKey)}
-              icon={Icon}
-              aria-pressed={railView === view}
-              className={railView === view ? 'bg-secondary font-medium' : ''}
-              onClick={() => setRailView(view)}
-            />
-          ))}
-          {/*
+              {RAIL_ITEMS.map(({ view, Icon, labelKey, textKey }) => (
+                <IconButton
+                  key={view}
+                  size="rail"
+                  label={t(locale, labelKey)}
+                  text={t(locale, textKey)}
+                  icon={Icon}
+                  aria-pressed={railView === view}
+                  className={railView === view ? 'bg-secondary font-medium' : ''}
+                  onClick={() => setRailView(view)}
+                />
+              ))}
+              {/*
             레일 하단 — 지금 실제로 걸려 있는 규칙 수(스펙 story 20). 값의 출처는 background가
             발행한 요약 하나뿐이라(독립 재컴파일 없음) 툴바 배지·헤더 부제와 같은 수를 말한다.
             일시정지면 요약의 규칙 수가 0이므로 여기도 0으로 떨어진다.
           */}
-          <p className="mt-auto flex flex-col items-center pt-2 text-xs">
-            <strong className="font-mono text-sm font-medium">{summary?.ruleCount ?? 0}</strong>
-            <span className="text-muted-foreground">{t(locale, 'railApplied')}</span>
-          </p>
-        </nav>
+              <p className="mt-auto flex flex-col items-center pt-2 text-xs">
+                <strong className="font-mono text-sm font-medium">{summary?.ruleCount ?? 0}</strong>
+                <span className="text-muted-foreground">{t(locale, 'railApplied')}</span>
+              </p>
+            </nav>
 
-        {showProfileColumn && (
-          <ScrollArea render={<aside />} className="min-h-0 border-r border-border">
-            <div className="flex flex-col gap-2 p-3">
-            <ProfileSidebar
-              profiles={state.profiles}
-              selectedId={effectiveSelectedId}
-              paused={state.paused}
-              onSelect={selectProfile}
-              onCreate={createAndSelectProfile}
-              onReorder={(profileId, toIndex) =>
-                dispatch({ type: 'move-profile', profileId, toIndex })
-              }
-              onToggleActive={(profileId, active) =>
-                dispatch({ type: 'toggle-profile', profileId, active })
-              }
-              /*
+            {showProfileColumn && (
+              <ScrollArea render={<aside />} className="min-h-0 border-r border-border">
+                <div className="flex flex-col gap-2 p-3">
+                  <ProfileSidebar
+                    profiles={state.profiles}
+                    selectedId={effectiveSelectedId}
+                    paused={state.paused}
+                    onSelect={selectProfile}
+                    onCreate={createAndSelectProfile}
+                    onReorder={(profileId, toIndex) => dispatch({ type: 'move-profile', profileId, toIndex })}
+                    onToggleActive={(profileId, active) =>
+                      dispatch({ type: 'toggle-profile', profileId, active })
+                    }
+                    /*
                 프로필 삭제 (ADR 0017 개정) — 되물음은 행이 이미 마쳤다.
                 선택은 따로 손대지 않는다: 지운 것이 보고 있던 프로필이면 렌더 중
                 재조정(`reconcileSelection`)이 남은 것 중 하나로 옮겨 주고, 하나도 남지
                 않으면 본문이 '아직 프로필이 없습니다'로 떨어진다.
               */
-              onDelete={(profileId) => void dispatch({ type: 'remove-profile', profileId })}
-            />
-            </div>
-          </ScrollArea>
-        )}
+                    onDelete={(profileId) => void dispatch({ type: 'remove-profile', profileId })}
+                  />
+                </div>
+              </ScrollArea>
+            )}
 
-        {/*
+            {/*
           본문은 **고정 헤더 + 스크롤 몸통**이다 (ADR 0017). 헤더까지 함께 스크롤되면 지금 보는
           프로필 이름과 적용 수가 목록을 내리는 순간 사라진다 — 시안이 그 줄을 고정해 둔 이유다.
 
           `min-h-0`이 없으면 스크롤이 조용히 죽는다 — 그리드 자식의 기본 min-height는 auto라
           칸보다 작아지지 않고, 그러면 콘텐츠가 팝업 셸 자체를 밀어낸다(760×580 고정이 깨진다).
         */}
-        <main className="flex min-h-0 min-w-0 flex-col">
-          <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3">
-            <div className="flex min-w-0 flex-col">
-              <h1
-                className={`truncate text-base font-semibold tracking-tight ${
-                  state.paused ? 'text-muted-foreground' : ''
-                }`}
-              >
-                {headerTitle}
-              </h1>
-              {headerSubtitle && (
-                <p className="truncate text-xs text-muted-foreground">{headerSubtitle}</p>
-              )}
-            </div>
-            <div className="ml-auto flex shrink-0 items-center gap-1">
-              {surface === 'popup' && (
-                <IconButton
-                  label={t(locale, 'openInTab')}
-                  icon={ExternalLink}
-                  onClick={openTabApp}
-                />
-              )}
-              {pauseButton}
-              {/* 규칙 추가는 프로필 화면의 동작이다 — 백업·설정에는 더할 목록이 없다. */}
-              {/*
+            <main className="flex min-h-0 min-w-0 flex-col">
+              <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3">
+                <div className="flex min-w-0 flex-col">
+                  <h1
+                    className={`truncate text-base font-semibold tracking-tight ${
+                      state.paused ? 'text-muted-foreground' : ''
+                    }`}
+                  >
+                    {headerTitle}
+                  </h1>
+                  {headerSubtitle && (
+                    <p className="truncate text-xs text-muted-foreground">{headerSubtitle}</p>
+                  )}
+                </div>
+                <div className="ml-auto flex shrink-0 items-center gap-1">
+                  {surface === 'popup' && (
+                    <IconButton label={t(locale, 'openInTab')} icon={ExternalLink} onClick={openTabApp} />
+                  )}
+                  {pauseButton}
+                  {/* 규칙 추가는 프로필 화면의 동작이다 — 백업·설정에는 더할 목록이 없다. */}
+                  {/*
                 폼이 **열려 있는 동안**은 누를 수 없다 — 편집 중에 누르면 나가는 폼과 들어오는
                 폼이 한동안 둘 다 DOM에 있어 같은 접근성 이름의 입력이 둘이 된다.
 
@@ -465,61 +458,61 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
                 막으려던 것이고 헤더 버튼은 자리가 고정이라 그 문제가 없다. 그 짧은 창에
                 의존하는 쪽(스모크)은 폼이 접히기를 명시적으로 기다린다.
               */}
-              {railView === 'profiles' && selectedProfile && (
-                <Button
-                  size="sm"
-                  disabled={editingRule !== null}
-                  {...ruleFormIntentProps}
-                  onClick={() => openRuleForm('new')}
-                >
-                  <Plus size={14} strokeWidth={1.75} className="mr-1" />
-                  {t(locale, 'addRule')}
-                </Button>
-              )}
-            </div>
-          </header>
+                  {railView === 'profiles' && selectedProfile && (
+                    <Button
+                      size="sm"
+                      disabled={editingRule !== null}
+                      {...ruleFormIntentProps}
+                      onClick={() => openRuleForm('new')}
+                    >
+                      <Plus size={14} strokeWidth={1.75} className="mr-1" />
+                      {t(locale, 'addRule')}
+                    </Button>
+                  )}
+                </div>
+              </header>
 
-          <ScrollArea className="min-h-0 flex-1">
-            <div className="flex flex-col gap-3 p-4">
-            {/* 오류·일시정지 배너는 레일 화면과 무관하게 항상 보인다 — 조용한 실패 금지. */}
-            {alerts}
+              <ScrollArea className="min-h-0 flex-1">
+                <div className="flex flex-col gap-3 p-4">
+                  {/* 오류·일시정지 배너는 레일 화면과 무관하게 항상 보인다 — 조용한 실패 금지. */}
+                  {alerts}
 
-            <MotionView viewKey={railView}>
-              {railView === 'profiles' && (
-                <>
-                  {/* 수는 헤더가 말하므로 여기서는 끈다 — 경고·오류는 그대로 남는다.
+                  <MotionView viewKey={railView}>
+                    {railView === 'profiles' && (
+                      <>
+                        {/* 수는 헤더가 말하므로 여기서는 끈다 — 경고·오류는 그대로 남는다.
                       조용한 실패 금지는 시안에 자리가 없다고 사라지는 계약이 아니다. */}
-                  {summary && <StatusSummary summary={summary} showCounts={false} />}
-                  {profileEditor}
-                </>
-              )}
-              {/* 백업 화면이 파일 왕복(JSON 내보내기·가져오기)과 스냅샷 히스토리를 함께 갖는다
+                        {summary && <StatusSummary summary={summary} showCounts={false} />}
+                        {profileEditor}
+                      </>
+                    )}
+                    {/* 백업 화면이 파일 왕복(JSON 내보내기·가져오기)과 스냅샷 히스토리를 함께 갖는다
                   (티켓 09) — 둘 다 "프로필 전체를 어딘가에 두고 되찾는" 같은 일이라, 파일은
                   프로필 화면에 두고 스냅샷만 여기 두면 백업하러 온 사람이 반쪽만 찾는다. */}
-              {railView === 'backups' && (
-                <>
-                  <TransferPanel state={state} onCommand={dispatchWithResult} />
-                  <BackupPanel
-                    syncBackup={state.syncBackup}
-                    onCommand={dispatchWithResult}
-                    onRestore={restoreWithUndo}
-                  />
-                </>
-              )}
-              {railView === 'preferences' && (
-                <PreferencesPanel
-                  theme={state.theme}
-                  locale={localePreference}
-                  badgeVisible={state.badgeVisible}
-                  onCommand={dispatch}
-                />
-              )}
-            </MotionView>
-            </div>
-          </ScrollArea>
-        </main>
-      </div>
-      </IconTooltipProvider>
+                    {railView === 'backups' && (
+                      <>
+                        <TransferPanel state={state} onCommand={dispatchWithResult} />
+                        <BackupPanel
+                          syncBackup={state.syncBackup}
+                          onCommand={dispatchWithResult}
+                          onRestore={restoreWithUndo}
+                        />
+                      </>
+                    )}
+                    {railView === 'preferences' && (
+                      <PreferencesPanel
+                        theme={state.theme}
+                        locale={localePreference}
+                        badgeVisible={state.badgeVisible}
+                        onCommand={dispatch}
+                      />
+                    )}
+                  </MotionView>
+                </div>
+              </ScrollArea>
+            </main>
+          </div>
+        </IconTooltipProvider>
       </MotionProvider>
     </LocaleProvider>
   );

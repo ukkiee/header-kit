@@ -28,7 +28,16 @@ function summary(overrides: Partial<StatusSummary> = {}): StatusSummary {
 const env: CompileEnv = { paused: false, materialized: {} };
 
 function mod(id: string, name: string): Modification {
-  return { kind: 'request-header', id, name, value: 'v', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' };
+  return {
+    kind: 'request-header',
+    id,
+    name,
+    value: 'v',
+    enabled: true,
+    mode: 'override',
+    emptyMeans: 'remove',
+    comment: '',
+  };
 }
 
 function profile(modifications: Modification[], over: Partial<Profile> = {}): Profile {
@@ -95,8 +104,7 @@ describe('computeBadge — 적용 규칙 수 카운터', () => {
    * 팝업을 열지 않고도 무엇이 걸려 있는지 안다.
    */
   it('켜진 프로필의 색으로 칠한다', () => {
-    expect(computeBadge(summary({ ruleCount: 1, leadProfileColor: '#16a34a' }), true).color)
-      .toBe('#16a34a');
+    expect(computeBadge(summary({ ruleCount: 1, leadProfileColor: '#16a34a' }), true).color).toBe('#16a34a');
   });
 
   it('여럿이 켜져 있으면 목록 맨 위의 색이다 — 겹침의 승자와 같은 우선순위', () => {
@@ -116,8 +124,7 @@ describe('computeBadge — 적용 규칙 수 카운터', () => {
   });
 
   it('색을 모르면 accent 파랑으로 물러난다 — 예전 요약에는 이 필드가 없다', () => {
-    expect(computeBadge(summary({ ruleCount: 1, leadProfileColor: null }), true).color)
-      .toBe('#2563eb');
+    expect(computeBadge(summary({ ruleCount: 1, leadProfileColor: null }), true).color).toBe('#2563eb');
   });
 
   /*
@@ -139,8 +146,11 @@ describe('computeBadge — 적용 규칙 수 카운터', () => {
   });
 
   it('배지가 실을 글자색이 그 배경에서 나온 값이다', () => {
-    expect(computeBadge(summary({ ruleCount: 1, leadProfileColor: '#d97706' }), true))
-      .toEqual({ text: '1', color: '#d97706', textColor: readableTextColor('#d97706') });
+    expect(computeBadge(summary({ ruleCount: 1, leadProfileColor: '#d97706' }), true)).toEqual({
+      text: '1',
+      color: '#d97706',
+      textColor: readableTextColor('#d97706'),
+    });
   });
 
   it('표시가 꺼져 있으면 아무것도 보이지 않는다 — 일시정지 중에도', () => {

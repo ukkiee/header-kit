@@ -14,7 +14,16 @@ import type { Modification, RequestHeaderModification, StoredState } from './sch
 import { readStoredState, SCHEMA_VERSION } from './schema';
 
 function modification(id: string, name = 'X-A'): RequestHeaderModification {
-  return { kind: 'request-header', id, name, value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' };
+  return {
+    kind: 'request-header',
+    id,
+    name,
+    value: '1',
+    enabled: true,
+    mode: 'override',
+    emptyMeans: 'remove',
+    comment: '',
+  };
 }
 
 function state(): StoredState {
@@ -90,7 +99,11 @@ describe('state transition commands', () => {
 
   it('removeProfile은 그 프로필만 지우고 순서는 그대로 둔다', () => {
     const three = addProfile(state(), {
-      id: 'p3', name: 'Three', active: false, color: '#d97706', modifications: [],
+      id: 'p3',
+      name: 'Three',
+      active: false,
+      color: '#d97706',
+      modifications: [],
     });
     const next = removeProfile(three, 'p2');
 
@@ -106,8 +119,13 @@ describe('state transition commands', () => {
       {
         ...state(),
         profiles: [
-          { id: 'p1', name: 'One', active: false, color: '#2563eb',
-            modifications: [{ ...modification('m1'), value: 'id-{{uuid}}' }] },
+          {
+            id: 'p1',
+            name: 'One',
+            active: false,
+            color: '#2563eb',
+            modifications: [{ ...modification('m1'), value: 'id-{{uuid}}' }],
+          },
           { id: 'p2', name: 'Two', active: false, color: '#16a34a', modifications: [] },
         ],
       },
@@ -231,31 +249,47 @@ describe('state transition commands', () => {
    */
   describe('제안 이력 기록', () => {
     const cookie = (name: string): Modification =>
-      ({ kind: 'cookie', id: 'c1', name, value: 'v', enabled: true,
-         mode: 'append', emptyMeans: 'remove', comment: '' }) as Modification;
+      ({
+        kind: 'cookie',
+        id: 'c1',
+        name,
+        value: 'v',
+        enabled: true,
+        mode: 'append',
+        emptyMeans: 'remove',
+        comment: '',
+      }) as Modification;
     const ua = (value: string): Modification =>
       ({ kind: 'user-agent', id: 'u1', value, enabled: true, comment: '' }) as Modification;
 
     it('쿠키 규칙을 저장하면 그 이름이 다음 제안에 남는다', () => {
       const next = applyCommand(state(), {
-        type: 'add-modification', profileId: 'p1', modification: cookie('my_sid'),
+        type: 'add-modification',
+        profileId: 'p1',
+        modification: cookie('my_sid'),
       });
       expect(next.customCookieNames).toEqual(['my_sid']);
     });
 
     it('User-Agent 규칙을 저장하면 그 값이 남는다', () => {
       const next = applyCommand(state(), {
-        type: 'add-modification', profileId: 'p1', modification: ua('MyBot/1.0'),
+        type: 'add-modification',
+        profileId: 'p1',
+        modification: ua('MyBot/1.0'),
       });
       expect(next.customUserAgents).toEqual(['MyBot/1.0']);
     });
 
     it('편집 저장도 남긴다 — 이름을 고쳐 저장한 값이 다음에 제안된다', () => {
       const added = applyCommand(state(), {
-        type: 'add-modification', profileId: 'p1', modification: cookie('first'),
+        type: 'add-modification',
+        profileId: 'p1',
+        modification: cookie('first'),
       });
       const edited = applyCommand(added, {
-        type: 'update-modification', profileId: 'p1', modification: cookie('second'),
+        type: 'update-modification',
+        profileId: 'p1',
+        modification: cookie('second'),
       });
       expect(edited.customCookieNames).toEqual(['first', 'second']);
     });
@@ -263,10 +297,14 @@ describe('state transition commands', () => {
     // 프리셋에 없는 이름으로 잰다 — 프리셋에 있는 것은 아래 규칙에 먼저 걸려 중복을 못 본다.
     it('같은 값은 두 번 남지 않는다 (대소문자 무시)', () => {
       const once = applyCommand(state(), {
-        type: 'add-modification', profileId: 'p1', modification: cookie('My_Sid'),
+        type: 'add-modification',
+        profileId: 'p1',
+        modification: cookie('My_Sid'),
       });
       const twice = applyCommand(once, {
-        type: 'add-modification', profileId: 'p1', modification: cookie('my_sid'),
+        type: 'add-modification',
+        profileId: 'p1',
+        modification: cookie('my_sid'),
       });
       expect(twice.customCookieNames).toEqual(['My_Sid']);
     });
@@ -277,14 +315,18 @@ describe('state transition commands', () => {
      */
     it('프리셋에 있는 이름은 이력에 남기지 않는다', () => {
       const next = applyCommand(state(), {
-        type: 'add-modification', profileId: 'p1', modification: cookie('session_id'),
+        type: 'add-modification',
+        profileId: 'p1',
+        modification: cookie('session_id'),
       });
       expect(next.customCookieNames).toEqual([]);
     });
 
     it('빈 값은 남기지 않는다', () => {
       const next = applyCommand(state(), {
-        type: 'add-modification', profileId: 'p1', modification: cookie('   '),
+        type: 'add-modification',
+        profileId: 'p1',
+        modification: cookie('   '),
       });
       expect(next.customCookieNames).toEqual([]);
     });
@@ -296,7 +338,9 @@ describe('state transition commands', () => {
      */
     it('헤더 규칙을 저장하면 그 이름이 다음 제안에 남는다', () => {
       const next = applyCommand(state(), {
-        type: 'add-modification', profileId: 'p1', modification: modification('m9', 'X-Zed'),
+        type: 'add-modification',
+        profileId: 'p1',
+        modification: modification('m9', 'X-Zed'),
       });
       expect(next.customHeaderNames).toEqual(['X-Zed']);
       // 헤더는 헤더 목록에만 — 세 이력이 서로를 오염시키지 않는다.
@@ -306,21 +350,29 @@ describe('state transition commands', () => {
 
     it('헤더 이름도 같은 네 단계를 지난다 — 빈 값·중복·표준 사전은 남지 않는다', () => {
       const once = applyCommand(state(), {
-        type: 'add-modification', profileId: 'p1', modification: modification('m9', 'X-Zed'),
+        type: 'add-modification',
+        profileId: 'p1',
+        modification: modification('m9', 'X-Zed'),
       });
       // 대소문자 무시 중복
       const twice = applyCommand(once, {
-        type: 'add-modification', profileId: 'p1', modification: modification('m10', 'x-zed'),
+        type: 'add-modification',
+        profileId: 'p1',
+        modification: modification('m10', 'x-zed'),
       });
       expect(twice.customHeaderNames).toEqual(['X-Zed']);
       // 표준 사전에 있는 이름은 남기지 않는다 — 목록에 같은 이름이 두 번 서는 것을 막는다.
       const std = applyCommand(once, {
-        type: 'add-modification', profileId: 'p1', modification: modification('m11', 'accept'),
+        type: 'add-modification',
+        profileId: 'p1',
+        modification: modification('m11', 'accept'),
       });
       expect(std.customHeaderNames).toEqual(['X-Zed']);
       // 빈 이름
       const blank = applyCommand(state(), {
-        type: 'add-modification', profileId: 'p1', modification: modification('m12', '   '),
+        type: 'add-modification',
+        profileId: 'p1',
+        modification: modification('m12', '   '),
       });
       expect(blank.customHeaderNames).toEqual([]);
     });
@@ -328,7 +380,9 @@ describe('state transition commands', () => {
     it('이름이 없는 종류는 어느 이력도 건드리지 않는다', () => {
       const block: Modification = { kind: 'block', id: 'b1', enabled: true, comment: '' };
       const next = applyCommand(state(), {
-        type: 'add-modification', profileId: 'p1', modification: block,
+        type: 'add-modification',
+        profileId: 'p1',
+        modification: block,
       });
       expect(next.customHeaderNames).toEqual([]);
       expect(next.customCookieNames).toEqual([]);
@@ -342,7 +396,9 @@ describe('state transition commands', () => {
      */
     it('없는 프로필에 더하면 이력도 남지 않는다', () => {
       const next = applyCommand(state(), {
-        type: 'add-modification', profileId: 'no-such-profile', modification: cookie('ghost'),
+        type: 'add-modification',
+        profileId: 'no-such-profile',
+        modification: cookie('ghost'),
       });
       expect(next.profiles.flatMap((p) => p.modifications).some((m) => m.id === 'c1')).toBe(false);
       expect(next.customCookieNames).toEqual([]);
@@ -350,7 +406,9 @@ describe('state transition commands', () => {
 
     it('없는 규칙을 고치면 이력도 남지 않는다', () => {
       const next = applyCommand(state(), {
-        type: 'update-modification', profileId: 'p1', modification: cookie('never_saved'),
+        type: 'update-modification',
+        profileId: 'p1',
+        modification: cookie('never_saved'),
       });
       expect(next.profiles[0]?.modifications.some((m) => m.id === 'c1')).toBe(false);
       expect(next.customCookieNames).toEqual([]);
@@ -359,11 +417,19 @@ describe('state transition commands', () => {
     /** 응답 쿠키의 이름도 쿠키 이름이다 — 두 종류가 같은 목록에 남는다. */
     it('응답 쿠키 규칙의 이름도 이력에 남는다', () => {
       const setCookie: Modification = {
-        kind: 'set-cookie', id: 's1', name: 'sc_smoke', value: 'v',
-        enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
+        kind: 'set-cookie',
+        id: 's1',
+        name: 'sc_smoke',
+        value: 'v',
+        enabled: true,
+        mode: 'override',
+        emptyMeans: 'remove',
+        comment: '',
       };
       const next = applyCommand(state(), {
-        type: 'add-modification', profileId: 'p1', modification: setCookie,
+        type: 'add-modification',
+        profileId: 'p1',
+        modification: setCookie,
       });
       expect(next.customCookieNames).toEqual(['sc_smoke']);
     });
@@ -376,7 +442,9 @@ describe('state transition commands', () => {
       let current = state();
       for (let i = 0; i < 30; i += 1) {
         current = applyCommand(current, {
-          type: 'add-modification', profileId: 'p1', modification: cookie(`name_${i}`),
+          type: 'add-modification',
+          profileId: 'p1',
+          modification: cookie(`name_${i}`),
         });
       }
       expect(current.customCookieNames).toHaveLength(30);

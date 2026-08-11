@@ -240,12 +240,8 @@ describe('sync 저장 스위치 (R-1 — 단순 계약)', () => {
   it('quota는 대상 저장소에 맞춘다 — sync 예산을 넘는 페이로드도 local에는 들어간다', () => {
     const big = 'x'.repeat(120_000);
 
-    expect(planBackup({}, big, { profileCount: 1 }, deps(), backupLimits('sync')).kind).toBe(
-      'too-large',
-    );
-    expect(planBackup({}, big, { profileCount: 1 }, deps(), backupLimits('local')).kind).toBe(
-      'write',
-    );
+    expect(planBackup({}, big, { profileCount: 1 }, deps(), backupLimits('sync')).kind).toBe('too-large');
+    expect(planBackup({}, big, { profileCount: 1 }, deps(), backupLimits('local')).kind).toBe('write');
   });
 });
 

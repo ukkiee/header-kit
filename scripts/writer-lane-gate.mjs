@@ -208,6 +208,4 @@ if (leaked.length > 0) {
   );
 }
 
-console.log(
-  `PASS writer-lane-gate: 레인 생성 자리 각 1 · 워커 밖 ${outsideWorker.length}개 번들에 표지 0`,
-);
+console.log(`PASS writer-lane-gate: 레인 생성 자리 각 1 · 워커 밖 ${outsideWorker.length}개 번들에 표지 0`);

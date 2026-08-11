@@ -132,7 +132,9 @@ for (const violation of deferredViolations) console.error(`  지연 계약 위�
 if (!sizePass || deferredViolations.length > 0) {
   fail(
     [
-      ...(sizePass ? [] : [`즉시 로드 합계 증가 ${increase.toFixed(1)}KB가 한도 +${MAX_INCREASE_KB}KB를 넘었다`]),
+      ...(sizePass
+        ? []
+        : [`즉시 로드 합계 증가 ${increase.toFixed(1)}KB가 한도 +${MAX_INCREASE_KB}KB를 넘었다`]),
       ...(deferredViolations.length > 0 ? [`지연 계약 위반 ${deferredViolations.length}건`] : []),
     ].join(' · '),
   );

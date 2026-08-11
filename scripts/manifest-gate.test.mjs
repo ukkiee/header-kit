@@ -75,7 +75,10 @@ describe('manifest-gate — 프로덕션 매니페스트의 불변식', () => {
   it('권한이 하나 늘면 FAIL이다 — 부분집합 비교였다면 통과했을 자리다', () => {
     // 이 게이트의 존재 이유. `tabs`는 실제로 뺐던 권한이고(wxt.config.ts의 주석),
     // 그 주석이 검사가 됐는지를 여기서 잰다.
-    const r = runGate(['--artifacts', artifacts({ permissions: ['declarativeNetRequest', 'storage', 'tabs'] })]);
+    const r = runGate([
+      '--artifacts',
+      artifacts({ permissions: ['declarativeNetRequest', 'storage', 'tabs'] }),
+    ]);
     fails(r, /tabs/);
   });
 
@@ -125,7 +128,10 @@ describe('manifest-gate — 선언되지 않은 최상위 키', () => {
   });
 
   it('externally_connectable가 생기면 FAIL이다', () => {
-    fails(runGate(['--artifacts', artifacts({ externally_connectable: { matches: ['https://x.com/*'] } })]), /externally_connectable/);
+    fails(
+      runGate(['--artifacts', artifacts({ externally_connectable: { matches: ['https://x.com/*'] } })]),
+      /externally_connectable/,
+    );
   });
 
   it('선언된 키가 사라져도 FAIL이다 — 선언과 산출물은 양방향으로 같아야 한다', () => {
@@ -142,7 +148,10 @@ describe('manifest-gate — 최소 크롬 버전은 하한과 정확히 같아�
   });
 
   it('하한보다 낮으면 FAIL이다 — 존재 검사였다면 통과했을 자리다', () => {
-    fails(runGate(['--artifacts', artifacts({ minimum_chrome_version: '80' })]), /minimum_chrome_version.*80/);
+    fails(
+      runGate(['--artifacts', artifacts({ minimum_chrome_version: '80' })]),
+      /minimum_chrome_version.*80/,
+    );
   });
 
   it('값이 숫자가 아니면 FAIL이다', () => {
@@ -151,7 +160,10 @@ describe('manifest-gate — 최소 크롬 버전은 하한과 정확히 같아�
 
   it('아예 없으면 FAIL이다', () => {
     const { minimum_chrome_version: _, ...withoutFloor } = PROD;
-    fails(runGate(['--artifacts', artifacts({}, { raw: JSON.stringify(withoutFloor) })]), /minimum_chrome_version/);
+    fails(
+      runGate(['--artifacts', artifacts({}, { raw: JSON.stringify(withoutFloor) })]),
+      /minimum_chrome_version/,
+    );
   });
 
   it('선언된 값보다 높아도 FAIL이다 — 이 검사는 "하한 이상"이 아니라 동등이다', () => {
@@ -172,7 +184,7 @@ describe('manifest-gate — 프로덕션 CSP', () => {
     fails(runGate(['--artifacts', artifacts({ content_security_policy: csp })]), /unsafe-eval/);
   });
 
-  it("wasm-unsafe-eval만 있으면 통과한다 — 부분 문자열로 쟀다면 거짓 빨강이 났을 자리다", () => {
+  it('wasm-unsafe-eval만 있으면 통과한다 — 부분 문자열로 쟀다면 거짓 빨강이 났을 자리다', () => {
     // `'wasm-unsafe-eval'`은 WASM 컴파일을 여는 별개의 토큰이고 MV3가 허용한다.
     // 이 케이스가 없으면 게이트가 평범한 변경을 막는 빨강을 낸다.
     const csp = { extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';" };

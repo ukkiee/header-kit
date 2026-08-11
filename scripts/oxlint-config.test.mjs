@@ -88,7 +88,9 @@ describe('레이어 방향 — 상향만 거절된다', () => {
     const { rows } = lint(fixture(files));
 
     const reported = new Set(
-      rows.filter((r) => r.rule === 'eslint/no-restricted-imports').map((r) => r.file.replace(/^.*\/src\//, 'src/')),
+      rows
+        .filter((r) => r.rule === 'eslint/no-restricted-imports')
+        .map((r) => r.file.replace(/^.*\/src\//, 'src/')),
     );
     const upward = [];
     const downward = [];
@@ -198,7 +200,9 @@ describe('순환 import — 규칙이 실제로 돈다', () => {
 
   it('자기 자신 import가 FAIL이다 — no-cycle은 이것을 잡지 못한다', () => {
     const { code, rows } = lint(
-      fixture({ 'src/core/self.ts': "import { x } from './self';\nexport const x = 1;\nexport const y = x;\n" }),
+      fixture({
+        'src/core/self.ts': "import { x } from './self';\nexport const x = 1;\nexport const y = x;\n",
+      }),
     );
     expect(rows.filter((r) => r.rule === 'import/no-self-import').length).toBeGreaterThan(0);
     expect(code).toBe(1);

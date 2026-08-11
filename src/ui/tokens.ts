@@ -87,7 +87,6 @@ export const tooltipPopup =
 /** 앱 캔버스(본문 배경+글자색) — App main / Storybook 프리뷰 래퍼가 공유한다. 시맨틱 토큰(ADR 0015). */
 export const canvas = 'bg-background text-foreground';
 
-
 /** 작은 배지 알약 — 규칙 종류 배지·조건 배지가 색만 달리해 공유한다. */
 export const badgePill = 'rounded px-1 py-px text-[10px] font-medium';
 
@@ -144,5 +143,4 @@ export const selectFixedWidth = 'w-40';
  * 키보드 포커스 링 — Button·IconButton·SwitcherChip·아코디언 헤더·사이드바 그립이 공유한다(offset 일관).
  * 색은 시맨틱 `ring` — accentBg와 같은 이유로 raw blue 램프를 쓰지 않는다(S2-1).
  */
-export const focusRing =
-  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+export const focusRing = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';

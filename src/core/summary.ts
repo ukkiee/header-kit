@@ -104,10 +104,7 @@ export function profileRowStatus(
   };
 }
 
-export function summarizeCompile(
-  result: CompileResult,
-  context: SummaryContext,
-): StatusSummary {
+export function summarizeCompile(result: CompileResult, context: SummaryContext): StatusSummary {
   const warnings = result.warnings.map(toView);
   const active = context.paused ? [] : context.profiles.filter((p) => p.active);
   return {

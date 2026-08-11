@@ -23,10 +23,15 @@ let sequence = 0;
 /** 스냅샷 하나를 실제 계획대로 커밋한다 (backup.test.ts와 같은 방식). */
 function commit(kv: SyncKV, text: string): SyncKV {
   sequence += 1;
-  const plan = planBackup(kv, text, { profileCount: 1 }, {
-    id: () => `snap-${sequence}`,
-    now: () => 1_000 + sequence,
-  });
+  const plan = planBackup(
+    kv,
+    text,
+    { profileCount: 1 },
+    {
+      id: () => `snap-${sequence}`,
+      now: () => 1_000 + sequence,
+    },
+  );
   if (plan.kind === 'skip') return kv;
   if (plan.kind !== 'write') throw new Error(`unexpected plan: ${plan.kind}`);
   const next: SyncKV = { ...kv };

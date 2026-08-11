@@ -15,7 +15,10 @@ const COMMAND_MESSAGE = 'headerkit:command';
 /** 읽을 수 없는 저장 상태로 로드가 멈췄다는 **타입화된** 오류 (R-3) — 기본 상태로 접으면
  *  화면은 "프로필이 사라진" 모습을 오류 없이 그리고 재조정은 빈 규칙을 적용한다. */
 export class StateLoadError extends Error {
-  constructor(readonly reason: 'newer' | 'unmigratable', readonly storedVersion: number) {
+  constructor(
+    readonly reason: 'newer' | 'unmigratable',
+    readonly storedVersion: number,
+  ) {
     super(`Stored state is unreadable (${reason}, v${storedVersion}). Your data is left intact.`);
     this.name = 'StateLoadError';
   }
@@ -159,9 +162,7 @@ export function onSummaryChanged(listener: () => void): void {
   });
 }
 
-export type CommandResult =
-  | { ok: true; state: StoredState }
-  | { ok: false; error: string };
+export type CommandResult = { ok: true; state: StoredState } | { ok: false; error: string };
 
 /**
  * UI가 단일 writer(background)로 전이 명령을 보낸다.
@@ -204,9 +205,7 @@ const BACKUP_MUTATION_MESSAGE = 'headerkit:backup-mutation';
  * 전이 명령(`sendCommand`)과 채널을 가르는 이유: 백업 변이는 권위 상태를 바꾸지 않고 결과가
  * `CommandResult`가 아니라 잔여 개수를 든 `BackupMutationResult`다.
  */
-export async function requestBackupMutation(
-  mutation: BackupMutation,
-): Promise<BackupMutationResult> {
+export async function requestBackupMutation(mutation: BackupMutation): Promise<BackupMutationResult> {
   try {
     return (await browser.runtime.sendMessage({
       type: BACKUP_MUTATION_MESSAGE,
@@ -227,9 +226,7 @@ export async function requestBackupMutation(
 }
 
 /** background에서 백업 변이 요청을 구독한다 — 실패도 결과 객체로 돌려준다(던지지 않는다). */
-export function onBackupMutation(
-  handler: (mutation: BackupMutation) => Promise<BackupMutationResult>,
-): void {
+export function onBackupMutation(handler: (mutation: BackupMutation) => Promise<BackupMutationResult>): void {
   browser.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (
       typeof message === 'object' &&

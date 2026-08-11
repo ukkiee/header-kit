@@ -6,13 +6,7 @@ import {
   type Modification,
   type ModificationKind,
 } from '@/core/schema';
-import {
-  convergeDraft,
-  initialMatchType,
-  switchDraftKind,
-  tidyDraft,
-  visibleMatchType,
-} from './rule-draft';
+import { convergeDraft, initialMatchType, switchDraftKind, tidyDraft, visibleMatchType } from './rule-draft';
 
 const header = (over: Partial<Extract<Modification, { kind: 'request-header' }>> = {}): Modification => ({
   kind: 'request-header',
@@ -138,8 +132,9 @@ describe('tidyDraft — 저장 직전 정리', () => {
   });
 
   it('값이 있는 조건은 남는다', () => {
-    expect(tidyDraft(header({ conditions: { requestMethods: ['get'] } })).conditions)
-      .toEqual({ requestMethods: ['get'] });
+    expect(tidyDraft(header({ conditions: { requestMethods: ['get'] } })).conditions).toEqual({
+      requestMethods: ['get'],
+    });
   });
 });
 
@@ -153,10 +148,12 @@ describe('tidyDraft — 저장 직전 정리', () => {
  */
 describe('convergeDraft — 수렴 저장', () => {
   it('매치 방식이 폼이 보여 준 둘 중 하나로 굳는다', () => {
-    expect(convergeDraft(header({ urlFilter: 'a.example', urlMatchType: 'domain' }), 'contains'))
-      .toMatchObject({ urlMatchType: 'contains' });
-    expect(convergeDraft(header({ urlFilter: 'a.example', urlMatchType: 'prefix' }), 'regex'))
-      .toMatchObject({ urlMatchType: 'regex' });
+    expect(
+      convergeDraft(header({ urlFilter: 'a.example', urlMatchType: 'domain' }), 'contains'),
+    ).toMatchObject({ urlMatchType: 'contains' });
+    expect(convergeDraft(header({ urlFilter: 'a.example', urlMatchType: 'prefix' }), 'regex')).toMatchObject({
+      urlMatchType: 'regex',
+    });
   });
 
   it('리소스 묶음이 그 묶음 전체로 넓어진다 — 폼이 묶음 칩으로 보여 줬기 때문이다', () => {
@@ -255,7 +252,11 @@ describe('숨은 필드 3종 × 규칙 종류 8종', () => {
   });
 
   it.each(HAS_SCOPE)('%s — 매치 방식이 폼이 보여 준 값으로 수렴한다', (kind) => {
-    const scoped = { ...createModification(kind, 'k1'), urlFilter: 'a.example', urlMatchType: 'domain' } as Modification;
+    const scoped = {
+      ...createModification(kind, 'k1'),
+      urlFilter: 'a.example',
+      urlMatchType: 'domain',
+    } as Modification;
     expect(convergeDraft(tidyDraft(scoped), 'contains')).toMatchObject({
       urlMatchType: 'contains',
     });

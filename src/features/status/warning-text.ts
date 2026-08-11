@@ -28,9 +28,7 @@ function detailKey(warning: WarningView): MessageKey {
     case 'regex-too-long':
       return 'warnRegexTooLongDetail';
     case 'quota-exceeded':
-      return warning.params.quota === 'total-rules'
-        ? 'warnQuotaTotalDetail'
-        : 'warnQuotaRegexDetail';
+      return warning.params.quota === 'total-rules' ? 'warnQuotaTotalDetail' : 'warnQuotaRegexDetail';
     case 'missing-materialization':
       return 'warnMissingMaterializationDetail';
     case 'append-not-allowed':

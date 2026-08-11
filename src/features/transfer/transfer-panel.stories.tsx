@@ -26,7 +26,16 @@ const sampleState: StoredState = {
       active: true,
       color: '#d97706',
       modifications: [
-        { kind: 'request-header', id: 'm1', name: 'Authorization', value: 'Bearer x', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+        {
+          kind: 'request-header',
+          id: 'm1',
+          name: 'Authorization',
+          value: 'Bearer x',
+          enabled: true,
+          mode: 'override',
+          emptyMeans: 'remove',
+          comment: '',
+        },
       ],
     },
     {

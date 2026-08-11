@@ -382,7 +382,6 @@ export type Filter =
   | { kind: 'tab-domain'; id: string; enabled: boolean; domain: string }
   | { kind: 'time'; id: string; enabled: boolean; expiresAt: number };
 
-
 export interface Profile {
   id: string;
   name: string;
@@ -554,9 +553,7 @@ export function createModification(kind: ModificationKind, id: string = crypto.r
 }
 
 /** 기존 호출부 호환용 — Request Header 생성 단축. */
-export function createRequestHeaderModification(
-  id: string = crypto.randomUUID(),
-): RequestHeaderModification {
+export function createRequestHeaderModification(id: string = crypto.randomUUID()): RequestHeaderModification {
   return createHeaderModification('request-header', id) as RequestHeaderModification;
 }
 

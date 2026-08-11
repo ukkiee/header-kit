@@ -49,12 +49,7 @@ export interface PreferencesPanelProps {
  * 카드 하나에 세 묶음이다. 시안의 설정 화면이 그렇고, 셋 다 "한 번 정하고 잊는" 값이라
  * 서로를 밀어낼 만큼 길지 않다.
  */
-export function PreferencesPanel({
-  theme,
-  locale,
-  badgeVisible,
-  onCommand,
-}: PreferencesPanelProps) {
+export function PreferencesPanel({ theme, locale, badgeVisible, onCommand }: PreferencesPanelProps) {
   const t = useT();
 
   return (

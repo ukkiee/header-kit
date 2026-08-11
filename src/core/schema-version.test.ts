@@ -132,10 +132,7 @@ describe('내보내기·가져오기 포맷 버전', () => {
   });
 
   it('내보내기는 현재 포맷 버전으로 기록한다', () => {
-    const file = exportProfiles(
-      { ...createDefaultState(), profiles: [profile()] } as never,
-      ['p1'],
-    );
+    const file = exportProfiles({ ...createDefaultState(), profiles: [profile()] } as never, ['p1']);
     expect(file.headerkit).toBe(EXPORT_FORMAT_VERSION);
     expect(file.profiles).toHaveLength(1);
   });
@@ -190,7 +187,6 @@ describe('isBlockedFromOverwrite — 쓰기 가드', () => {
   });
 });
 
-
 /**
  * v3 경계 (티켓 01, ADR 0017).
  *
@@ -208,9 +204,21 @@ describe('v2→v3 — 응답 쿠키 재구조화', () => {
     paused: false,
     profiles: [
       {
-        id: 'p1', name: 'P', active: true, shortLabel: 'P', color: '#2563eb',
+        id: 'p1',
+        name: 'P',
+        active: true,
+        shortLabel: 'P',
+        color: '#2563eb',
         modifications: [
-          { kind: 'set-cookie', id: 'm1', value, enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+          {
+            kind: 'set-cookie',
+            id: 'm1',
+            value,
+            enabled: true,
+            mode: 'override',
+            emptyMeans: 'remove',
+            comment: '',
+          },
         ],
       },
     ],
@@ -235,12 +243,18 @@ describe('v2→v3 — 응답 쿠키 재구조화', () => {
   });
 
   it('모호함 없는 원시 값은 이름·값·속성으로 갈라진다', () => {
-    expect(migratedSetCookie('sid=abc; Domain=localhost; Path=/; Max-Age=60; SameSite=None; Secure; HttpOnly'))
-      .toMatchObject({
-        name: 'sid', value: 'abc',
-        domain: 'localhost', path: '/', maxAge: '60',
-        sameSite: 'none', secure: true, httpOnly: true,
-      });
+    expect(
+      migratedSetCookie('sid=abc; Domain=localhost; Path=/; Max-Age=60; SameSite=None; Secure; HttpOnly'),
+    ).toMatchObject({
+      name: 'sid',
+      value: 'abc',
+      domain: 'localhost',
+      path: '/',
+      maxAge: '60',
+      sameSite: 'none',
+      secure: true,
+      httpOnly: true,
+    });
   });
 
   it('갈라진 항목에는 원시 보존값이 남지 않는다', () => {
@@ -294,9 +308,21 @@ describe('v1 → v2 → v3 체인', () => {
     paused: false,
     profiles: [
       {
-        id: 'p1', name: 'Legacy', active: true, shortLabel: 'LG', color: '#2563eb',
+        id: 'p1',
+        name: 'Legacy',
+        active: true,
+        shortLabel: 'LG',
+        color: '#2563eb',
         modifications: [
-          { kind: 'set-cookie', id: 'm1', value: 'sid=abc; Path=/; Secure', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+          {
+            kind: 'set-cookie',
+            id: 'm1',
+            value: 'sid=abc; Path=/; Secure',
+            enabled: true,
+            mode: 'override',
+            emptyMeans: 'remove',
+            comment: '',
+          },
         ],
         // 실체화되기 **전**의 모습 — 조건은 아직 존재하지 않는다.
         filters: [
@@ -349,12 +375,18 @@ describe('v1 → v2 → v3 체인', () => {
       profiles: [{ ...realV1().profiles[0], filters: undefined }],
     };
     const fromV2 = readStoredState(v2Equivalent);
-    if (fromV1.status !== 'migrated' || fromV2.status !== 'migrated') throw new Error('둘 다 migrated여야 한다');
+    if (fromV1.status !== 'migrated' || fromV2.status !== 'migrated')
+      throw new Error('둘 다 migrated여야 한다');
     const a = fromV1.state.profiles[0]?.modifications[0];
     const b = fromV2.state.profiles[0]?.modifications[0];
     if (a?.kind !== 'set-cookie' || b?.kind !== 'set-cookie') throw new Error('set-cookie가 아니다');
-    expect({ name: a.name, value: a.value, path: a.path, secure: a.secure, raw: a.raw })
-      .toEqual({ name: b.name, value: b.value, path: b.path, secure: b.secure, raw: b.raw });
+    expect({ name: a.name, value: a.value, path: a.path, secure: a.secure, raw: a.raw }).toEqual({
+      name: b.name,
+      value: b.value,
+      path: b.path,
+      secure: b.secure,
+      raw: b.raw,
+    });
   });
 
   it('레거시 필터의 검증 케이스가 살아 있어 부분 마이그레이션이 유지된다', () => {
@@ -379,9 +411,21 @@ describe('가져오기 — v2 파일의 응답 쿠키', () => {
       headerkit: 2,
       profiles: [
         {
-          id: 'p1', name: 'P', active: true, shortLabel: 'P', color: '#2563eb',
+          id: 'p1',
+          name: 'P',
+          active: true,
+          shortLabel: 'P',
+          color: '#2563eb',
           modifications: [
-            { kind: 'set-cookie', id: 'm1', value, enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+            {
+              kind: 'set-cookie',
+              id: 'm1',
+              value,
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+            },
           ],
         },
       ],
@@ -404,8 +448,9 @@ describe('가져오기 — v2 파일의 응답 쿠키', () => {
   });
 
   it('모호한 줄은 로드 경로와 같게 원시로 보존된다', () => {
-    expect(imported('sid=abc; Expires=Wed, 21 Oct 2026 07:28:00 GMT').raw)
-      .toBe('sid=abc; Expires=Wed, 21 Oct 2026 07:28:00 GMT');
+    expect(imported('sid=abc; Expires=Wed, 21 Oct 2026 07:28:00 GMT').raw).toBe(
+      'sid=abc; Expires=Wed, 21 Oct 2026 07:28:00 GMT',
+    );
   });
 });
 
@@ -418,7 +463,12 @@ describe('가져오기 — v2 파일의 응답 쿠키', () => {
  */
 describe('응답 쿠키 — 표현은 하나뿐', () => {
   const record = (over: Record<string, unknown>) => ({
-    kind: 'set-cookie', id: 'm1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
+    kind: 'set-cookie',
+    id: 'm1',
+    enabled: true,
+    mode: 'override',
+    emptyMeans: 'remove',
+    comment: '',
     ...over,
   });
 
@@ -453,9 +503,21 @@ describe('응답 쿠키 — 표현은 하나뿐', () => {
  */
 describe('저장소와 가져오기가 같은 곳에 도착한다', () => {
   const legacyProfile = () => ({
-    id: 'p1', name: 'Legacy', active: true, shortLabel: 'LG', color: '#2563eb',
+    id: 'p1',
+    name: 'Legacy',
+    active: true,
+    shortLabel: 'LG',
+    color: '#2563eb',
     modifications: [
-      { kind: 'set-cookie', id: 'm1', value: 'sid=abc; Path=/', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+      {
+        kind: 'set-cookie',
+        id: 'm1',
+        value: 'sid=abc; Path=/',
+        enabled: true,
+        mode: 'override',
+        emptyMeans: 'remove',
+        comment: '',
+      },
     ],
     filters: [
       { kind: 'request-method', id: 'f1', enabled: true, methods: ['head'] },
@@ -465,7 +527,11 @@ describe('저장소와 가져오기가 같은 곳에 도착한다', () => {
 
   const fromStorage = () => {
     const read = readStoredState({
-      schemaVersion: 1, paused: false, profiles: [legacyProfile()], materialized: {}, customHeaderNames: [],
+      schemaVersion: 1,
+      paused: false,
+      profiles: [legacyProfile()],
+      materialized: {},
+      customHeaderNames: [],
     });
     if (read.status !== 'migrated') throw new Error('migrated가 아니다');
     return read.state.profiles[0]!.modifications[0]!;
@@ -481,8 +547,12 @@ describe('저장소와 가져오기가 같은 곳에 도착한다', () => {
     const a = fromStorage();
     const b = fromImport();
     if (a.kind !== 'set-cookie' || b.kind !== 'set-cookie') throw new Error('set-cookie가 아니다');
-    expect({ name: a.name, value: a.value, path: a.path, raw: a.raw })
-      .toEqual({ name: b.name, value: b.value, path: b.path, raw: b.raw });
+    expect({ name: a.name, value: a.value, path: a.path, raw: a.raw }).toEqual({
+      name: b.name,
+      value: b.value,
+      path: b.path,
+      raw: b.raw,
+    });
   });
 
   it('레거시 필터도 같은 조건으로 실체화된다', () => {
@@ -490,7 +560,10 @@ describe('저장소와 가져오기가 같은 곳에 도착한다', () => {
   });
 
   it('무효한 레거시 필터는 여전히 파일 전체를 거부한다 — 조용히 삼키지 않는다', () => {
-    const broken = { ...legacyProfile(), filters: [{ kind: 'request-method', id: 'f1', enabled: true, methods: 'nope' }] };
+    const broken = {
+      ...legacyProfile(),
+      filters: [{ kind: 'request-method', id: 'f1', enabled: true, methods: 'nope' }],
+    };
     const result = parseImport(JSON.stringify({ headerkit: 1, profiles: [broken] }));
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.errors.map((e) => e.code)).toContain('unreadable-legacy-filter');
@@ -510,10 +583,23 @@ describe('v2→v3 — 퇴역 조건·메서드', () => {
     paused: false,
     profiles: [
       {
-        id: 'p1', name: 'P', active: true, shortLabel: 'P', color: '#2563eb',
+        id: 'p1',
+        name: 'P',
+        active: true,
+        shortLabel: 'P',
+        color: '#2563eb',
         modifications: [
-          { kind: 'request-header', id: 'm1', name: 'X', value: '1', enabled: true,
-            mode: 'override', emptyMeans: 'remove', comment: '', conditions },
+          {
+            kind: 'request-header',
+            id: 'm1',
+            name: 'X',
+            value: '1',
+            enabled: true,
+            mode: 'override',
+            emptyMeans: 'remove',
+            comment: '',
+            conditions,
+          },
         ],
       },
     ],
@@ -552,8 +638,10 @@ describe('v2→v3 — 퇴역 조건·메서드', () => {
 
   it('살아남는 조건만 가진 규칙은 세지 않는다 — 아무것도 넓어지지 않았다', () => {
     const state = upgraded({ resourceTypes: ['script'], requestMethods: ['get'] });
-    expect(state.profiles[0]?.modifications[0]?.conditions)
-      .toEqual({ resourceTypes: ['script'], requestMethods: ['get'] });
+    expect(state.profiles[0]?.modifications[0]?.conditions).toEqual({
+      resourceTypes: ['script'],
+      requestMethods: ['get'],
+    });
     expect(state.retirementNotice).toBeUndefined();
   });
 
@@ -584,10 +672,22 @@ describe('v1 레거시 필터 → 실체화 → 퇴역', () => {
     paused: false,
     profiles: [
       {
-        id: 'p1', name: 'Legacy', active: true, shortLabel: 'LG', color: '#2563eb',
+        id: 'p1',
+        name: 'Legacy',
+        active: true,
+        shortLabel: 'LG',
+        color: '#2563eb',
         modifications: [
-          { kind: 'request-header', id: 'm1', name: 'X', value: '1', enabled: true,
-            mode: 'override', emptyMeans: 'remove', comment: '' },
+          {
+            kind: 'request-header',
+            id: 'm1',
+            name: 'X',
+            value: '1',
+            enabled: true,
+            mode: 'override',
+            emptyMeans: 'remove',
+            comment: '',
+          },
         ],
         filters: [
           { kind: 'request-method', id: 'f1', enabled: true, methods: ['head', 'get'] },

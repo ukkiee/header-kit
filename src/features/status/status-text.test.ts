@@ -24,8 +24,9 @@ describe('statusCountsText — 본문 헤더 부제', () => {
   });
 
   it('하나일 때 단수형을 고른다 — 로케일마다 그 선택이 다르다', () => {
-    expect(statusCountsText(summary({ ruleCount: 1, activeProfileCount: 1 }), at('en')))
-      .toBe('1 active rule · 1 active profile');
+    expect(statusCountsText(summary({ ruleCount: 1, activeProfileCount: 1 }), at('en'))).toBe(
+      '1 active rule · 1 active profile',
+    );
   });
 
   /*
@@ -40,8 +41,9 @@ describe('statusCountsText — 본문 헤더 부제', () => {
   });
 
   it('0도 그대로 말한다 — 빈칸은 "없다"와 "아직 모른다"를 구별해 주지 않는다', () => {
-    expect(statusCountsText(summary({ ruleCount: 0, activeProfileCount: 0 }), at('en')))
-      .toBe('0 active rules · 0 active profiles');
+    expect(statusCountsText(summary({ ruleCount: 0, activeProfileCount: 0 }), at('en'))).toBe(
+      '0 active rules · 0 active profiles',
+    );
   });
 
   /*
@@ -49,8 +51,9 @@ describe('statusCountsText — 본문 헤더 부제', () => {
    * 두 곳에서 접으면 한쪽만 고쳤을 때 헤더와 레일 하단이 다른 수를 말한다.
    */
   it('정지 중이라는 사실 자체는 이 문장이 말하지 않는다', () => {
-    expect(statusCountsText(summary({ paused: true, ruleCount: 0, activeProfileCount: 0 }), at('ko')))
-      .toBe('적용 중인 규칙 0개 · 활성 프로필 0개');
+    expect(statusCountsText(summary({ paused: true, ruleCount: 0, activeProfileCount: 0 }), at('ko'))).toBe(
+      '적용 중인 규칙 0개 · 활성 프로필 0개',
+    );
   });
 });
 
@@ -73,10 +76,8 @@ describe('profileRowMetaText — 프로필 행 메타', () => {
   });
 
   it('하나일 때 단수형을 고른다 — 한국어는 굴절하지 않는다', () => {
-    expect(profileRowMetaText(status({ enabledModificationCount: 1 }), at('en')))
-      .toBe('1 rule · applied');
-    expect(profileRowMetaText(status({ enabledModificationCount: 1 }), at('ko')))
-      .toBe('규칙 1개 · 적용');
+    expect(profileRowMetaText(status({ enabledModificationCount: 1 }), at('en'))).toBe('1 rule · applied');
+    expect(profileRowMetaText(status({ enabledModificationCount: 1 }), at('ko'))).toBe('규칙 1개 · 적용');
   });
 
   it('꺼진 프로필은 미적용이라 말한다', () => {
@@ -103,7 +104,8 @@ describe('profileRowMetaText — 프로필 행 메타', () => {
   });
 
   it('0도 그대로 말한다', () => {
-    expect(profileRowMetaText(status({ enabledModificationCount: 0, state: 'off' }), at('en')))
-      .toBe('0 rules · not applied');
+    expect(profileRowMetaText(status({ enabledModificationCount: 0, state: 'off' }), at('en'))).toBe(
+      '0 rules · not applied',
+    );
   });
 });

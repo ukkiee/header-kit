@@ -14,23 +14,12 @@ import {
 } from '@/core/backup';
 import type { Command } from '@/core/commands';
 import type { BackupMutation, BackupMutationResult } from '@/core/state-writer';
-import {
-  createDefaultState,
-  isBlockedFromOverwrite,
-  SCHEMA_VERSION,
-  type StoredState,
-} from '@/core/schema';
+import { createDefaultState, isBlockedFromOverwrite, SCHEMA_VERSION, type StoredState } from '@/core/schema';
 import { createWriterLane, type WritePermit } from '@/core/writer-lane';
-import {
-  commitMigration,
-  loadState,
-  persistState,
-  publishSummary,
-} from '@/platform/stateStore';
+import { commitMigration, loadState, persistState, publishSummary } from '@/platform/stateStore';
 import { listBackupSnapshots } from '@/platform/backupStore';
 import { createStateWriter } from '@/platform/state-writer';
 import { bootstrap, type BackgroundDeps } from '@/runtime/background-bootstrap';
-
 
 /**
  * S3 — 서비스워커 통합 시임 (ADR 0016, spec.md Testing Decisions).
@@ -523,10 +512,7 @@ function v1StateTwoProfiles(): StoredV1 {
   const base = v1State();
   return {
     ...base,
-    profiles: [
-      ...base.profiles,
-      { ...base.profiles[0]!, id: 'p2', name: 'Legacy Two', modifications: [] },
-    ],
+    profiles: [...base.profiles, { ...base.profiles[0]!, id: 'p2', name: 'Legacy Two', modifications: [] }],
   };
 }
 
@@ -587,13 +573,18 @@ function orphanChunks(kv: Kv): string[] {
 
 /** 매니페스트에 남은 스냅샷 id (정렬) — 목록에 무엇이 보이는가. */
 function snapshotIds(kv: Kv): string[] {
-  return readManifest(kv).snapshots.map((entry) => entry.id).sort();
+  return readManifest(kv)
+    .snapshots.map((entry) => entry.id)
+    .sort();
 }
 
 /** 활성 Profile id 집합 — 편집이 살아남았는지를 값 하나로 본다. */
 function activeIds(state: unknown): string[] {
   const profiles = (state as StoredState | undefined)?.profiles ?? [];
-  return profiles.filter((profile) => profile.active).map((profile) => profile.id).sort();
+  return profiles
+    .filter((profile) => profile.active)
+    .map((profile) => profile.id)
+    .sort();
 }
 
 /**
@@ -866,7 +857,7 @@ describe('S3 — 서비스워커 통합 시임', () => {
     expect(orderings).toBeGreaterThan(0);
   });
 
-/*
+  /*
    * ── 티켓 02: 백업 네임스페이스 (`bk:`) ─────────────────────────────────────
    *
    * `backupStore.test.ts`의 `스냅샷 삭제 ↔ 동시 자동 Backup (어댑터)` 두 건과
@@ -918,7 +909,9 @@ describe('S3 — 서비스워커 통합 시임', () => {
         // 검증하지 않는다 (티켓 02 코드리뷰가 잡은 것).
         harness.stateChanged();
         harness.fireBackupTimers(); // 디바운스된 자동 Backup이 삭제와 겹친다
-        return { deleting: harness.mutateBackup({ op: 'delete-snapshot', snapshotId: 's1', target: 'local' }) };
+        return {
+          deleting: harness.mutateBackup({ op: 'delete-snapshot', snapshotId: 's1', target: 'local' }),
+        };
       },
       check: (outcomes, harness) => {
         // **정방향**: 삭제가 성공을 보고한다. `verifySnapshotDeleteComplete`가 그 사이 커밋된
@@ -1229,9 +1222,7 @@ describe('S3 — 서비스워커 통합 시임', () => {
       start: () => ({}),
       check: (outcomes, harness) => {
         expect(outcomes.early?.status).toBe('rejected');
-        expect(String((outcomes.early as PromiseRejectedResult).reason)).toContain(
-          'Refusing to overwrite',
-        );
+        expect(String((outcomes.early as PromiseRejectedResult).reason)).toContain('Refusing to overwrite');
         // 저장소에는 더 새 포맷이 그대로 남는다 — 이 버전이 아무것도 덮지 않았다.
         expect((harness.local[STATE_KEY] as StoredState).schemaVersion).toBe(SCHEMA_VERSION + 1);
         expect(harness.stateWrites()).toBe(0);
@@ -1345,8 +1336,7 @@ describe('쓰기 서비스가 저장소를 고치는 유일한 문이다', () =>
   it('검증이 거부한 명령은 상태를 바꾸지 않는다', async () => {
     const store = seeded(twoProfiles());
     const writer = createStateWriter({
-      validateCommand: async (command) =>
-        command.type === 'add-modification' ? 'Invalid regex' : null,
+      validateCommand: async (command) => (command.type === 'add-modification' ? 'Invalid regex' : null),
     });
 
     await expect(

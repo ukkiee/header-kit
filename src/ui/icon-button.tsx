@@ -52,8 +52,7 @@ export function IconTooltipProvider({ children }: { children: ReactNode }) {
 }
 
 export interface IconButtonProps
-  extends Omit<MotionButtonAttributes, 'children'>,
-    VariantProps<typeof iconButton> {
+  extends Omit<MotionButtonAttributes, 'children'>, VariantProps<typeof iconButton> {
   /** aria-label 겸 기본 툴팁 텍스트. */
   label: string;
   /** 툴팁 표시 문구 덮어쓰기 (aria-label은 label 유지). */

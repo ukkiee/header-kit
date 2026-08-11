@@ -5,11 +5,7 @@ import type { Modification, Profile } from '@/core/schema';
 import { Button } from '@/ui/press-button';
 import { useEffect, useState } from 'react';
 import { AnimatePresence, MotionRow, useReducedMotion } from '@/ui/motion-row';
-import {
-  ruleFormIntentProps,
-  RuleFormSlot,
-  useRuleForm,
-} from '@/features/modifications/lazy-rule-form';
+import { ruleFormIntentProps, RuleFormSlot, useRuleForm } from '@/features/modifications/lazy-rule-form';
 import { RuleRow } from '@/features/modifications/rule-row';
 import { useT } from '@/ui/i18n-context';
 
@@ -104,9 +100,7 @@ export function ProfileSection({
   const ordered = editing
     ? [editing, ...profile.modifications.filter((m) => m !== editing)]
     : profile.modifications;
-  const orderedModifications = heldRowId
-    ? ordered.filter((m) => m.id !== heldRowId)
-    : ordered;
+  const orderedModifications = heldRowId ? ordered.filter((m) => m.id !== heldRowId) : ordered;
 
   /*
    * **빈 상태는 마지막 행이 다 접힌 뒤에 선다.**
@@ -211,10 +205,7 @@ export function ProfileSection({
               {/* 폼으로 가는 길목 셋째 — 행 어디에 포인터가 닿거나 포커스가 들어오면 청크를
                   받기 시작한다. 연필 아이콘까지 뚫고 내려보내는 대신 여기에 두면 배선이 한
                   곳이고, 행에 닿는 것 자체가 이미 편집 의도에 가깝다. */}
-              <div
-                className={`px-2.5 ${open ? expandedCard : collapsedCard}`}
-                {...ruleFormIntentProps}
-              >
+              <div className={`px-2.5 ${open ? expandedCard : collapsedCard}`} {...ruleFormIntentProps}>
                 <RuleRow
                   modification={modification}
                   paused={paused}

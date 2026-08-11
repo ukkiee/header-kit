@@ -10,11 +10,7 @@ import { backupKeys, verifyBackupsCleared, type BackupTarget, type SyncKV } from
  */
 
 /** 실패를 어느 단계에서 멈췄는지로 말한다 — 다시 누를 때 무엇이 남았는지가 그대로 읽힌다. */
-export type ResetStep =
-  | 'clear-local-backups'
-  | 'clear-sync-backups'
-  | 'reset-state'
-  | 'clear-summary';
+export type ResetStep = 'clear-local-backups' | 'clear-sync-backups' | 'reset-state' | 'clear-summary';
 
 /**
  * 백업 스냅샷은 두 저장소 어디에나 있을 수 있다 — 활성 대상만 지우면 잔재가 남는다.

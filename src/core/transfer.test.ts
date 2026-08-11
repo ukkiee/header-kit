@@ -50,7 +50,18 @@ function importText(profiles: unknown[]): string {
 }
 
 function state(profiles: Profile[], materialized: Record<string, string> = {}): StoredState {
-  return { schemaVersion: SCHEMA_VERSION, paused: false, theme: 'system', badgeVisible: true, syncBackup: true, profiles, materialized, customHeaderNames: [], customCookieNames: [], customUserAgents: [] };
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    paused: false,
+    theme: 'system',
+    badgeVisible: true,
+    syncBackup: true,
+    profiles,
+    materialized,
+    customHeaderNames: [],
+    customCookieNames: [],
+    customUserAgents: [],
+  };
 }
 
 describe('exportProfiles', () => {
@@ -105,9 +116,7 @@ describe('parseImport', () => {
     if (!first.ok || !second.ok) throw new Error('unexpected');
 
     expect(first.profiles[0]?.id).not.toBe(second.profiles[0]?.id);
-    expect(first.profiles[0]?.modifications[0]?.id).not.toBe(
-      second.profiles[0]?.modifications[0]?.id,
-    );
+    expect(first.profiles[0]?.modifications[0]?.id).not.toBe(second.profiles[0]?.modifications[0]?.id);
   });
 
   it('레거시 filters는 규칙 단위 조건으로 이주된다 — URL은 OR 조인, 나머지는 conditions 복사', () => {
@@ -123,10 +132,7 @@ describe('parseImport', () => {
           { kind: 'time', id: 'f7', enabled: true, expiresAt: 200 },
         ],
         {
-          modifications: [
-            mod('m1'),
-            { ...mod('m2'), urlFilter: 'own\\.example', urlMatchType: 'contains' },
-          ],
+          modifications: [mod('m1'), { ...mod('m2'), urlFilter: 'own\\.example', urlMatchType: 'contains' }],
         },
       ),
     ]);
@@ -186,9 +192,7 @@ describe('parseImport', () => {
     // 대응물이 없으므로 규칙에는 아무것도 이식되지 않는다
     expect(imported.modifications[0]).not.toHaveProperty('urlFilter');
     expect(imported.modifications[0]?.conditions).toBeUndefined();
-    expect(result.notices).toEqual([
-      { code: 'dropped-lost-filters', params: { name: 'Alpha', count: 3 } },
-    ]);
+    expect(result.notices).toEqual([{ code: 'dropped-lost-filters', params: { name: 'Alpha', count: 3 } }]);
   });
 
   it('레거시 filters가 있으면 형을 검증한다 — 무효 항목은 전량 거부', () => {
@@ -218,7 +222,13 @@ describe('parseImport', () => {
     const legacyCsp = {
       ...profile(),
       modifications: [
-        { kind: 'csp', id: 'c1', directives: [{ name: 'default-src', value: "'self'" }], comment: '', enabled: true },
+        {
+          kind: 'csp',
+          id: 'c1',
+          directives: [{ name: 'default-src', value: "'self'" }],
+          comment: '',
+          enabled: true,
+        },
         mod('m1', 'kept'),
       ],
     };
@@ -273,9 +283,7 @@ describe('parseImport', () => {
 
 describe('normalizeImportedProfiles', () => {
   it('빈 레거시 filters 배열은 알림 없이 제거된다', () => {
-    const { profiles, notices } = normalizeImportedProfiles([
-      legacyEntry([]) as unknown as Profile,
-    ]);
+    const { profiles, notices } = normalizeImportedProfiles([legacyEntry([]) as unknown as Profile]);
 
     expect(notices).toEqual([]);
     expect('filters' in profiles[0]!).toBe(false);

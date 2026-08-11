@@ -194,12 +194,9 @@ describe('스냅샷 삭제 — 검증 실패 보고 (어댑터)', () => {
   });
 
   it('저장소가 던지면 사유와 함께 실패를 돌려준다 — 던지지 않는다', async () => {
-    installFakeStorage(
-      { [BACKUP_MANIFEST_KEY]: { snapshots: [entry('s1', 'text-s1')] } },
-      () => {
-        throw new Error('QUOTA_BYTES quota exceeded');
-      },
-    );
+    installFakeStorage({ [BACKUP_MANIFEST_KEY]: { snapshots: [entry('s1', 'text-s1')] } }, () => {
+      throw new Error('QUOTA_BYTES quota exceeded');
+    });
 
     expect(await deleteInLane('s1', 'sync')).toEqual({
       ok: false,

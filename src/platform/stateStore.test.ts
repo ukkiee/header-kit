@@ -33,9 +33,25 @@ const V1 = {
   schemaVersion: 1,
   paused: false,
   profiles: [
-    { id: 'p1', name: 'Legacy', color: '#2563eb', shortLabel: 'LG', active: true,
-      modifications: [{ kind: 'request-header', id: 'm1', name: 'Authorization', value: 'Bearer dev',
-        enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }] },
+    {
+      id: 'p1',
+      name: 'Legacy',
+      color: '#2563eb',
+      shortLabel: 'LG',
+      active: true,
+      modifications: [
+        {
+          kind: 'request-header',
+          id: 'm1',
+          name: 'Authorization',
+          value: 'Bearer dev',
+          enabled: true,
+          mode: 'override',
+          emptyMeans: 'remove',
+          comment: '',
+        },
+      ],
+    },
   ],
   materialized: {},
   customHeaderNames: ['X-Custom'],
@@ -66,7 +82,10 @@ describe('commitMigration — v1 마이그레이션 커밋 (storage.local)', () 
     expect(await commit()).toBe(true);
     expect((await loadState()).schemaVersion).toBe(SCHEMA_VERSION);
     // 메모리 변환만이면 다음 로드가 같은 v1을 다시 만난다 — 저장소가 v2로 굳어야 한다.
-    expect(kv.state).toMatchObject({ schemaVersion: SCHEMA_VERSION, profiles: [{ modifications: [{ id: 'm1' }] }] });
+    expect(kv.state).toMatchObject({
+      schemaVersion: SCHEMA_VERSION,
+      profiles: [{ modifications: [{ id: 'm1' }] }],
+    });
   });
 
   it('올릴 수 없는 v1은 default로 접지 않고 오류로 알리며 아무것도 쓰지 않는다', async () => {
@@ -103,9 +122,24 @@ describe('commitMigration — v2 응답 쿠키 재구조화 커밋', () => {
     schemaVersion: 2,
     paused: false,
     profiles: [
-      { id: 'p1', name: 'P', color: '#2563eb', shortLabel: 'P', active: true,
-        modifications: [{ kind: 'set-cookie', id: 'm1', value: 'sid=abc; Path=/',
-          enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }] },
+      {
+        id: 'p1',
+        name: 'P',
+        color: '#2563eb',
+        shortLabel: 'P',
+        active: true,
+        modifications: [
+          {
+            kind: 'set-cookie',
+            id: 'm1',
+            value: 'sid=abc; Path=/',
+            enabled: true,
+            mode: 'override',
+            emptyMeans: 'remove',
+            comment: '',
+          },
+        ],
+      },
     ],
     materialized: {},
     customHeaderNames: [],
@@ -130,8 +164,8 @@ describe('commitMigration — v2 응답 쿠키 재구조화 커밋', () => {
 
   it('쓰기가 실패하면 저장소는 v2로 남아 다음 기회에 다시 시도된다', async () => {
     const kv = seedLocal(V2);
-    const local = (globalThis as unknown as { browser: { storage: { local: { set: unknown } } } })
-      .browser.storage.local;
+    const local = (globalThis as unknown as { browser: { storage: { local: { set: unknown } } } }).browser
+      .storage.local;
     const failing = local.set;
     local.set = async () => {
       throw new Error('quota');
@@ -157,10 +191,26 @@ describe('퇴역 공지 — 저장소에서의 수명', () => {
     schemaVersion: 2,
     paused: false,
     profiles: [
-      { id: 'p1', name: 'P', color: '#2563eb', shortLabel: 'P', active: true,
-        modifications: [{ kind: 'request-header', id: 'm1', name: 'X', value: '1',
-          enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
-          conditions: { tabDomains: ['tab.io'] } }] },
+      {
+        id: 'p1',
+        name: 'P',
+        color: '#2563eb',
+        shortLabel: 'P',
+        active: true,
+        modifications: [
+          {
+            kind: 'request-header',
+            id: 'm1',
+            name: 'X',
+            value: '1',
+            enabled: true,
+            mode: 'override',
+            emptyMeans: 'remove',
+            comment: '',
+            conditions: { tabDomains: ['tab.io'] },
+          },
+        ],
+      },
     ],
     materialized: {},
     customHeaderNames: [],
@@ -214,8 +264,8 @@ describe('퇴역 공지 — 저장소에서의 수명', () => {
     await commit();
     const loaded = await loadState();
 
-    const local = (globalThis as unknown as { browser: { storage: { local: { set: unknown } } } })
-      .browser.storage.local;
+    const local = (globalThis as unknown as { browser: { storage: { local: { set: unknown } } } }).browser
+      .storage.local;
     const working = local.set;
     local.set = async () => {
       throw new Error('quota');
@@ -267,8 +317,15 @@ describe('persistState — 온전하지 않은 상태는 쓰지 않는다', () =
     await expect(
       write(
         withModification({
-          kind: 'set-cookie', id: 'm1', enabled: true, mode: 'override', emptyMeans: 'remove',
-          comment: '', name: 'sid', value: 'abc', raw: 'sid=abc',
+          kind: 'set-cookie',
+          id: 'm1',
+          enabled: true,
+          mode: 'override',
+          emptyMeans: 'remove',
+          comment: '',
+          name: 'sid',
+          value: 'abc',
+          raw: 'sid=abc',
         }),
       ),
     ).rejects.toThrow();
@@ -278,8 +335,9 @@ describe('persistState — 온전하지 않은 상태는 쓰지 않는다', () =
 
   it('종류를 알 수 없는 규칙도 같은 문에서 막힌다', async () => {
     seedLocal(good());
-    await expect(write(withModification({ kind: 'quantum', id: 'm1', enabled: true, comment: '' })))
-      .rejects.toThrow();
+    await expect(
+      write(withModification({ kind: 'quantum', id: 'm1', enabled: true, comment: '' })),
+    ).rejects.toThrow();
     expect(writes).toBe(0);
   });
 
@@ -289,10 +347,26 @@ describe('persistState — 온전하지 않은 상태는 쓰지 않는다', () =
    */
   it('두 변형 다 정상 편집으로 통과한다', async () => {
     for (const modification of [
-      { kind: 'set-cookie', id: 'm1', enabled: true, mode: 'override', emptyMeans: 'remove',
-        comment: '', name: 'sid', value: 'abc', path: '/' },
-      { kind: 'set-cookie', id: 'm2', enabled: true, mode: 'append', emptyMeans: 'remove',
-        comment: '', raw: 'sid=abc; Expires=Wed, 21 Oct 2026 07:28:00 GMT' },
+      {
+        kind: 'set-cookie',
+        id: 'm1',
+        enabled: true,
+        mode: 'override',
+        emptyMeans: 'remove',
+        comment: '',
+        name: 'sid',
+        value: 'abc',
+        path: '/',
+      },
+      {
+        kind: 'set-cookie',
+        id: 'm2',
+        enabled: true,
+        mode: 'append',
+        emptyMeans: 'remove',
+        comment: '',
+        raw: 'sid=abc; Expires=Wed, 21 Oct 2026 07:28:00 GMT',
+      },
     ]) {
       seedLocal(good());
       await write(withModification(modification));
@@ -332,7 +406,11 @@ describe('전송 거부는 던지지 않고 결과 객체로 돌아온다 (릴�
    */
   const rejectingRuntime = (message: string) => {
     (globalThis as unknown as { browser: unknown }).browser = {
-      runtime: { sendMessage: async () => { throw new Error(message); } },
+      runtime: {
+        sendMessage: async () => {
+          throw new Error(message);
+        },
+      },
     };
   };
 
@@ -352,7 +430,11 @@ describe('전송 거부는 던지지 않고 결과 객체로 돌아온다 (릴�
 
   it('던진 것이 Error가 아니어도 문자열로 담아 돌려준다', async () => {
     (globalThis as unknown as { browser: unknown }).browser = {
-      runtime: { sendMessage: async () => { throw 'raw string rejection'; } },
+      runtime: {
+        sendMessage: async () => {
+          throw 'raw string rejection';
+        },
+      },
     };
     expect(await sendCommand({ type: 'toggle-pause' })).toMatchObject({
       ok: false,

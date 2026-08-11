@@ -4,7 +4,16 @@ import { profileRowStatus, summarizeCompile } from './summary';
 import type { Modification, Profile } from './schema';
 
 function mod(id: string, name: string, value = 'v'): Modification {
-  return { kind: 'request-header', id, name, value, enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' };
+  return {
+    kind: 'request-header',
+    id,
+    name,
+    value,
+    enabled: true,
+    mode: 'override',
+    emptyMeans: 'remove',
+    comment: '',
+  };
 }
 
 function profile(overrides: Partial<Profile> = {}): Profile {
@@ -108,7 +117,8 @@ describe('profileRowStatus', () => {
       ).enabledModificationCount,
     ).toBe(2);
     expect(
-      profileRowStatus(profile({ modifications: [mod('a1', 'X-A'), mod('a2', 'X-B')] }), false).enabledModificationCount,
+      profileRowStatus(profile({ modifications: [mod('a1', 'X-A'), mod('a2', 'X-B')] }), false)
+        .enabledModificationCount,
     ).toBe(2);
   });
 

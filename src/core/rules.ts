@@ -46,8 +46,11 @@ export type RequestMethod = (typeof REQUEST_METHODS)[number];
  * 부류라 같은 문으로 보냈다. 목록이 **한 곳**에 있어야 폼이 보여 주는 것과 업그레이드가
  * 걷어 가는 것이 갈라지지 않는다.
  */
-export const RETIRED_REQUEST_METHODS = ['head', 'connect', 'other'] as const satisfies
-  readonly RequestMethod[];
+export const RETIRED_REQUEST_METHODS = [
+  'head',
+  'connect',
+  'other',
+] as const satisfies readonly RequestMethod[];
 
 /** 폼이 보여 주는 여섯 — GET·POST·PUT·PATCH·DELETE·OPTIONS (story 27). */
 export const SELECTABLE_REQUEST_METHODS: readonly RequestMethod[] = REQUEST_METHODS.filter(

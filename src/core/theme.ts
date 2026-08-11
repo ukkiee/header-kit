@@ -25,10 +25,7 @@ export function isThemePreference(value: unknown): value is ThemePreference {
  * 선호값 + 시스템 상태 → 그릴 명암. 앱 전체 명암의 단일 판단 지점이다.
  * 'system'일 때만 시스템 상태를 본다 — 명시 선호가 시스템에 밀리면 스위치가 무의미해진다.
  */
-export function resolveTheme(
-  preference: ThemePreference,
-  systemPrefersDark: boolean,
-): ResolvedTheme {
+export function resolveTheme(preference: ThemePreference, systemPrefersDark: boolean): ResolvedTheme {
   if (preference === 'system') return systemPrefersDark ? 'dark' : 'light';
   return preference;
 }

@@ -36,12 +36,6 @@ export interface AlertBannerProps extends HTMLAttributes<HTMLElement>, VariantPr
   as?: ElementType;
 }
 
-export function AlertBanner({
-  as: Tag = 'p',
-  severity,
-  size,
-  className,
-  ...props
-}: AlertBannerProps) {
+export function AlertBanner({ as: Tag = 'p', severity, size, className, ...props }: AlertBannerProps) {
   return <Tag className={cn(alert({ severity, size }), className)} {...props} />;
 }

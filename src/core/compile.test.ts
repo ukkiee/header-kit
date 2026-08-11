@@ -17,11 +17,38 @@ function profile(overrides: Partial<Profile> = {}): Profile {
 describe('compile', () => {
   it('규칙 conditions가 그 규칙의 DNR 조건으로 직접 내려간다 (ADR 0010)', () => {
     const { rules, warnings } = compile(
-      [profile({ modifications: [
-        { kind: 'request-header', id: 'm1', name: 'X-C', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
-          conditions: { excludedDomains: ['skip.io'], resourceTypes: ['script'], requestMethods: ['post'], initiatorDomains: ['init.io'] } },
-        { kind: 'request-header', id: 'm2', name: 'X-Free', value: '2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
-      ] })],
+      [
+        profile({
+          modifications: [
+            {
+              kind: 'request-header',
+              id: 'm1',
+              name: 'X-C',
+              value: '1',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+              conditions: {
+                excludedDomains: ['skip.io'],
+                resourceTypes: ['script'],
+                requestMethods: ['post'],
+                initiatorDomains: ['init.io'],
+              },
+            },
+            {
+              kind: 'request-header',
+              id: 'm2',
+              name: 'X-Free',
+              value: '2',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+            },
+          ],
+        }),
+      ],
       { paused: false, materialized: {} },
     );
     expect(warnings).toEqual([]);
@@ -47,10 +74,23 @@ describe('compile', () => {
    */
   it('저장소에 남은 퇴역 조건은 방출을 막지 않는다', () => {
     const { rules } = compile(
-      [profile({ modifications: [
-        { kind: 'request-header', id: 'm1', name: 'X-Stale', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
-          conditions: { expiresAt: 100, tabDomains: ['closed.io'] } },
-      ] })],
+      [
+        profile({
+          modifications: [
+            {
+              kind: 'request-header',
+              id: 'm1',
+              name: 'X-Stale',
+              value: '1',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+              conditions: { expiresAt: 100, tabDomains: ['closed.io'] },
+            },
+          ],
+        }),
+      ],
       { paused: false, materialized: {} },
     );
     expect(rules.map((r) => r.action.requestHeaders?.[0]?.header)).toEqual(['X-Stale']);
@@ -64,10 +104,32 @@ describe('compile', () => {
    * 다시 끌어들이면(예: 만료 가드를 되살리면) 이 단언이 먼저 깨진다.
    */
   it('같은 상태를 두 번 컴파일하면 같은 규칙이 나온다 — 시각에 의존하지 않는다', () => {
-    const state = [profile({ modifications: [
-      { kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
-      { kind: 'request-header', id: 'm2', name: 'X-B', value: '2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
-    ] })];
+    const state = [
+      profile({
+        modifications: [
+          {
+            kind: 'request-header',
+            id: 'm1',
+            name: 'X-A',
+            value: '1',
+            enabled: true,
+            mode: 'override',
+            emptyMeans: 'remove',
+            comment: '',
+          },
+          {
+            kind: 'request-header',
+            id: 'm2',
+            name: 'X-B',
+            value: '2',
+            enabled: true,
+            mode: 'override',
+            emptyMeans: 'remove',
+            comment: '',
+          },
+        ],
+      }),
+    ];
     const first = compile(state, { paused: false, materialized: {} });
     const second = compile(state, { paused: false, materialized: {} });
     expect(second.rules).toEqual(first.rules);
@@ -76,10 +138,21 @@ describe('compile', () => {
 
   it('redirect도 conditions를 상속하되 regexFilter는 자기 pattern이다', () => {
     const { rules } = compile(
-      [profile({ modifications: [
-        { kind: 'redirect', id: 'r1', pattern: '^https://a/(.*)', substitution: 'https://b/\\1', enabled: true, comment: '',
-          conditions: { requestMethods: ['get'] } },
-      ] })],
+      [
+        profile({
+          modifications: [
+            {
+              kind: 'redirect',
+              id: 'r1',
+              pattern: '^https://a/(.*)',
+              substitution: 'https://b/\\1',
+              enabled: true,
+              comment: '',
+              conditions: { requestMethods: ['get'] },
+            },
+          ],
+        }),
+      ],
       { paused: false, materialized: {} },
     );
     expect(rules[0]?.condition.regexFilter).toBe('^https://a/(.*)');
@@ -88,11 +161,27 @@ describe('compile', () => {
 
   it('urlMatchType이 비정규식이면 DNR urlFilter로 매핑되고 regex 카운터를 안 쓴다 (ADR 0008)', () => {
     const mk = (id: string, urlFilter: string, urlMatchType: 'domain' | 'contains' | 'prefix') => ({
-      kind: 'request-header' as const, id, name: `X-${id}`, value: '1', enabled: true,
-      mode: 'override' as const, emptyMeans: 'remove' as const, comment: '', urlFilter, urlMatchType,
+      kind: 'request-header' as const,
+      id,
+      name: `X-${id}`,
+      value: '1',
+      enabled: true,
+      mode: 'override' as const,
+      emptyMeans: 'remove' as const,
+      comment: '',
+      urlFilter,
+      urlMatchType,
     });
     const { rules, warnings } = compile(
-      [profile({ modifications: [mk('d', 'example.com', 'domain'), mk('c', '/api/', 'contains'), mk('p', 'https://a.io/', 'prefix')] })],
+      [
+        profile({
+          modifications: [
+            mk('d', 'example.com', 'domain'),
+            mk('c', '/api/', 'contains'),
+            mk('p', 'https://a.io/', 'prefix'),
+          ],
+        }),
+      ],
       { paused: false, materialized: {} },
     );
     expect(warnings).toEqual([]);
@@ -105,9 +194,23 @@ describe('compile', () => {
 
   it('urlMatchType 부재 + urlFilter 존재 = regex (하위 호환)', () => {
     const { rules } = compile(
-      [profile({ modifications: [
-        { kind: 'request-header', id: 'm1', name: 'X', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '', urlFilter: 'legacy\\.regex' },
-      ] })],
+      [
+        profile({
+          modifications: [
+            {
+              kind: 'request-header',
+              id: 'm1',
+              name: 'X',
+              value: '1',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+              urlFilter: 'legacy\\.regex',
+            },
+          ],
+        }),
+      ],
       { paused: false, materialized: {} },
     );
     expect(rules[0]?.condition.regexFilter).toBe('legacy\\.regex');
@@ -116,9 +219,24 @@ describe('compile', () => {
 
   it('비정규식 방식도 길이 한도 초과 시 방출하지 않고 경고한다', () => {
     const { rules, warnings } = compile(
-      [profile({ modifications: [
-        { kind: 'request-header', id: 'm1', name: 'X', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '', urlFilter: 'a'.repeat(3000), urlMatchType: 'contains' },
-      ] })],
+      [
+        profile({
+          modifications: [
+            {
+              kind: 'request-header',
+              id: 'm1',
+              name: 'X',
+              value: '1',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+              urlFilter: 'a'.repeat(3000),
+              urlMatchType: 'contains',
+            },
+          ],
+        }),
+      ],
       { paused: false, materialized: {} },
     );
     expect(rules).toHaveLength(0);
@@ -130,8 +248,27 @@ describe('compile', () => {
       [
         profile({
           modifications: [
-            { kind: 'request-header', id: 'm1', name: 'X-Own', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '', urlFilter: 'own\\.scope' },
-            { kind: 'request-header', id: 'm2', name: 'X-Free', value: '2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+            {
+              kind: 'request-header',
+              id: 'm1',
+              name: 'X-Own',
+              value: '1',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+              urlFilter: 'own\\.scope',
+            },
+            {
+              kind: 'request-header',
+              id: 'm2',
+              name: 'X-Free',
+              value: '2',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+            },
           ],
         }),
       ],
@@ -150,7 +287,17 @@ describe('compile', () => {
       [
         profile({
           modifications: [
-            { kind: 'request-header', id: 'm1', name: 'X-Long', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '', urlFilter: 'a'.repeat(3000) },
+            {
+              kind: 'request-header',
+              id: 'm1',
+              name: 'X-Long',
+              value: '1',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+              urlFilter: 'a'.repeat(3000),
+            },
           ],
         }),
       ],
@@ -165,7 +312,17 @@ describe('compile', () => {
       [
         profile({
           modifications: [
-            { kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '', urlFilter: '   ' },
+            {
+              kind: 'request-header',
+              id: 'm1',
+              name: 'X-A',
+              value: '1',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+              urlFilter: '   ',
+            },
           ],
         }),
       ],
@@ -180,8 +337,26 @@ describe('compile', () => {
       [
         profile({
           modifications: [
-            { kind: 'request-header', id: 'm1', name: 'X-Debug', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
-            { kind: 'request-header', id: 'm2', name: 'X-Trace', value: 'abc', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+            {
+              kind: 'request-header',
+              id: 'm1',
+              name: 'X-Debug',
+              value: 'on',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+            },
+            {
+              kind: 'request-header',
+              id: 'm2',
+              name: 'X-Trace',
+              value: 'abc',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+            },
           ],
         }),
       ],
@@ -201,9 +376,7 @@ describe('compile', () => {
       condition: { resourceTypes: [...ALL_RESOURCE_TYPES] },
     });
     expect(rules[1]?.id).toBe(2);
-    expect(rules[1]?.action.requestHeaders).toEqual([
-      { header: 'X-Trace', operation: 'set', value: 'abc' },
-    ]);
+    expect(rules[1]?.action.requestHeaders).toEqual([{ header: 'X-Trace', operation: 'set', value: 'abc' }]);
   });
 
   it('비활성 Profile과 disabled Modification은 규칙을 만들지 않는다', () => {
@@ -211,11 +384,33 @@ describe('compile', () => {
       [
         profile({
           active: false,
-          modifications: [{ kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
+          modifications: [
+            {
+              kind: 'request-header',
+              id: 'm1',
+              name: 'X-A',
+              value: '1',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+            },
+          ],
         }),
         profile({
           id: 'p2',
-          modifications: [{ kind: 'request-header', id: 'm2', name: 'X-B', value: '2', enabled: false, mode: 'override', emptyMeans: 'remove', comment: '' }],
+          modifications: [
+            {
+              kind: 'request-header',
+              id: 'm2',
+              name: 'X-B',
+              value: '2',
+              enabled: false,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+            },
+          ],
         }),
       ],
       { paused: false, materialized: {} },
@@ -226,7 +421,22 @@ describe('compile', () => {
 
   it('Pause 상태에서는 규칙이 없다', () => {
     const { rules } = compile(
-      [profile({ modifications: [{ kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }] })],
+      [
+        profile({
+          modifications: [
+            {
+              kind: 'request-header',
+              id: 'm1',
+              name: 'X-A',
+              value: '1',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+            },
+          ],
+        }),
+      ],
       { paused: true, materialized: {} },
     );
 
@@ -238,8 +448,26 @@ describe('compile', () => {
       [
         profile({
           modifications: [
-            { kind: 'request-header', id: 'm1', name: '  ', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
-            { kind: 'request-header', id: 'm2', name: 'X-Ok', value: '2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+            {
+              kind: 'request-header',
+              id: 'm1',
+              name: '  ',
+              value: '1',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+            },
+            {
+              kind: 'request-header',
+              id: 'm2',
+              name: 'X-Ok',
+              value: '2',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+            },
           ],
         }),
       ],
@@ -258,7 +486,22 @@ describe('compile', () => {
 
   it('빈 값은 기본(emptyMeans=remove)으로 제거 연산이 된다 (이슈 02에서 세분화)', () => {
     const { rules } = compile(
-      [profile({ modifications: [{ kind: 'request-header', id: 'm1', name: 'X-Empty', value: '', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }] })],
+      [
+        profile({
+          modifications: [
+            {
+              kind: 'request-header',
+              id: 'm1',
+              name: 'X-Empty',
+              value: '',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+            },
+          ],
+        }),
+      ],
       { paused: false, materialized: {} },
     );
 
@@ -271,14 +514,41 @@ describe('compile', () => {
         profile({
           id: 'top',
           modifications: [
-            { kind: 'request-header', id: 'a1', name: 'X-Conf', value: 'top-1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
-            { kind: 'request-header', id: 'a2', name: 'X-Other', value: 'top-2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+            {
+              kind: 'request-header',
+              id: 'a1',
+              name: 'X-Conf',
+              value: 'top-1',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+            },
+            {
+              kind: 'request-header',
+              id: 'a2',
+              name: 'X-Other',
+              value: 'top-2',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+            },
           ],
         }),
         profile({
           id: 'bottom',
           modifications: [
-            { kind: 'request-header', id: 'b1', name: 'X-Conf', value: 'bottom-1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+            {
+              kind: 'request-header',
+              id: 'b1',
+              name: 'X-Conf',
+              value: 'bottom-1',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+            },
           ],
         }),
       ],
@@ -302,13 +572,31 @@ describe('compile', () => {
           id: 'top',
           active: false,
           modifications: [
-            { kind: 'request-header', id: 'a1', name: 'X-A', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+            {
+              kind: 'request-header',
+              id: 'a1',
+              name: 'X-A',
+              value: '1',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+            },
           ],
         }),
         profile({
           id: 'bottom',
           modifications: [
-            { kind: 'request-header', id: 'b1', name: 'X-B', value: '2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+            {
+              kind: 'request-header',
+              id: 'b1',
+              name: 'X-B',
+              value: '2',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+            },
           ],
         }),
       ],
@@ -319,7 +607,16 @@ describe('compile', () => {
         profile({
           id: 'bottom',
           modifications: [
-            { kind: 'request-header', id: 'b1', name: 'X-B', value: '2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+            {
+              kind: 'request-header',
+              id: 'b1',
+              name: 'X-B',
+              value: '2',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+            },
           ],
         }),
       ],
@@ -335,13 +632,31 @@ describe('compile', () => {
         profile({
           id: 'top',
           modifications: [
-            { kind: 'request-header', id: 'a1', name: 'X-Conf', value: 'a', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+            {
+              kind: 'request-header',
+              id: 'a1',
+              name: 'X-Conf',
+              value: 'a',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+            },
           ],
         }),
         profile({
           id: 'bottom',
           modifications: [
-            { kind: 'request-header', id: 'b1', name: 'x-conf', value: 'b', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+            {
+              kind: 'request-header',
+              id: 'b1',
+              name: 'x-conf',
+              value: 'b',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+            },
           ],
         }),
       ],
@@ -362,22 +677,67 @@ describe('compile', () => {
         profile({
           id: 'top',
           modifications: [
-            { kind: 'request-header', id: 'a1', name: 'X-Conf', value: 'a', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
-            { kind: 'request-header', id: 'a2', name: 'X-Conf', value: 'a2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
-            { kind: 'request-header', id: 'a3', name: 'X-Off', value: 'x', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+            {
+              kind: 'request-header',
+              id: 'a1',
+              name: 'X-Conf',
+              value: 'a',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+            },
+            {
+              kind: 'request-header',
+              id: 'a2',
+              name: 'X-Conf',
+              value: 'a2',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+            },
+            {
+              kind: 'request-header',
+              id: 'a3',
+              name: 'X-Off',
+              value: 'x',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+            },
           ],
         }),
         profile({
           id: 'mid',
           active: false,
           modifications: [
-            { kind: 'request-header', id: 'c1', name: 'X-Conf', value: 'c', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+            {
+              kind: 'request-header',
+              id: 'c1',
+              name: 'X-Conf',
+              value: 'c',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+            },
           ],
         }),
         profile({
           id: 'bottom',
           modifications: [
-            { kind: 'request-header', id: 'b1', name: 'X-Off', value: 'b', enabled: false, mode: 'override', emptyMeans: 'remove', comment: '' },
+            {
+              kind: 'request-header',
+              id: 'b1',
+              name: 'X-Off',
+              value: 'b',
+              enabled: false,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+            },
           ],
         }),
       ],
@@ -389,7 +749,20 @@ describe('compile', () => {
 
   it('같은 입력은 같은 출력을 낸다 (순수성 스모크)', () => {
     const profiles = [
-      profile({ modifications: [{ kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }] }),
+      profile({
+        modifications: [
+          {
+            kind: 'request-header',
+            id: 'm1',
+            name: 'X-A',
+            value: '1',
+            enabled: true,
+            mode: 'override',
+            emptyMeans: 'remove',
+            comment: '',
+          },
+        ],
+      }),
     ];
     const a = compile(profiles, { paused: false, materialized: {} });
     const b = compile(profiles, { paused: false, materialized: {} });

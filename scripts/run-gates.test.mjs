@@ -78,8 +78,8 @@ function tree({
   // 그것이 게이트 행으로 읽히던 결함을 이 픽스처가 계속 재현한다.
   const decoy = '| `PASS` | 돌았고 만족했다 |\n| `N/A` | 잴 대상이 없다 |';
   const body = markers
-    ? `${decoy}\n\n${TABLE_BEGIN}\n${tableRows.map(cell).join("\n")}\n${TABLE_END}`
-    : `${decoy}\n\n${tableRows.map(cell).join("\n")}`;
+    ? `${decoy}\n\n${TABLE_BEGIN}\n${tableRows.map(cell).join('\n')}\n${TABLE_END}`
+    : `${decoy}\n\n${tableRows.map(cell).join('\n')}`;
   writeFileSync(join(dir, 'docs', 'agents', 'verification.md'), `# 검증\n\n${body}\n`);
 
   if (workflow) {
@@ -112,8 +112,7 @@ const ROW = (id, script, over = {}) => {
 };
 
 /** 상태 줄을 찍는 게이트를 만든다 — verdict: token 계약을 재는 데 쓴다. */
-const says = (token, id, code) =>
-  `node -e "console.log('${token} ${id}: detail'); process.exit(${code})"`;
+const says = (token, id, code) => `node -e "console.log('${token} ${id}: detail'); process.exit(${code})"`;
 
 const OK = 'node -e "process.exit(0)"';
 const BAD = 'node -e "console.log(\'boom: the decisive line\'); process.exit(1)"';
@@ -308,7 +307,10 @@ describe('run-gates — 게이트 표를 어디서 읽는가', () => {
   it('마커 쌍이 둘이면 실패한다', () => {
     const dir = tree({ gates: [ROW('alpha', 'alpha')], scripts: { alpha: OK } });
     const doc = join(dir, 'docs', 'agents', 'verification.md');
-    writeFileSync(doc, `${readFileSync(doc, 'utf8')}\n${TABLE_BEGIN}\n| \`beta\` | x | y | z |\n${TABLE_END}\n`);
+    writeFileSync(
+      doc,
+      `${readFileSync(doc, 'utf8')}\n${TABLE_BEGIN}\n| \`beta\` | x | y | z |\n${TABLE_END}\n`,
+    );
     const r = run(['--dir', dir, '--check-only']);
     expect(r.out).toMatch(/^FAIL run-gates:/m);
     expect(r.code).toBe(1);
@@ -456,7 +458,7 @@ describe('run-gates — 큰 출력을 버리지 않는다', () => {
     // 파이프로 캡처하면 `bun run`이 약 64KB에서 조용히 자른다(실측: 2MB -> 65,697바이트).
     // 실패한 게이트의 결정적인 줄은 보통 출력의 끝에 있어 정확히 그 자리가 위험하다.
     const LOUD =
-      'node -e "process.stdout.write(\'x\'.repeat(2*1024*1024)+\'\\nDECISIVE-LINE\\n\'); process.exit(1)"';
+      "node -e \"process.stdout.write('x'.repeat(2*1024*1024)+'\\nDECISIVE-LINE\\n'); process.exit(1)\"";
     const dir = tree({ gates: [ROW('loud', 'loud')], scripts: { loud: LOUD } });
     const r = run(['--dir', dir]);
     expect(r.out).toContain('DECISIVE-LINE');
@@ -789,10 +791,7 @@ describe('run-gates — CI는 러너를 한 번 부른다', () => {
 
   it('선행까지 ci: yes면 통과한다', () => {
     const dir = tree({
-      gates: [
-        ROW('base', 'base', { ci: 'yes' }),
-        ROW('consumer', 'consumer', { ci: 'yes', needs: 'base' }),
-      ],
+      gates: [ROW('base', 'base', { ci: 'yes' }), ROW('consumer', 'consumer', { ci: 'yes', needs: 'base' })],
       scripts: { base: OK, consumer: OK, 'gate:ci': CI_OK },
       files: CI_WF('      - run: bun run gate:ci\n'),
     });
@@ -897,7 +896,10 @@ async function waitFor(cond, { tries = 200, delay = 50 } = {}) {
 }
 
 const jsonLines = (dir, file) =>
-  readFileSync(join(dir, file), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  readFileSync(join(dir, file), 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
 const buildLog = (dir) => jsonLines(dir, 'build-log.txt');
 const consumerLog = (dir) => jsonLines(dir, 'consumer-log.txt');
 
@@ -978,7 +980,7 @@ describe('run-gates — 겹친 실행은 경로 분리로 격리된다 (D4a)', (
   /** 빌드 구간을 늘려 두 러너가 그 안에서 겹치게 만든다. */
   const SLOW_BUILD_MJS = BUILD_MJS.replace(
     'if (out) {',
-    "await new Promise((r) => setTimeout(r, 1500));\nif (out) {",
+    'await new Promise((r) => setTimeout(r, 1500));\nif (out) {',
   );
 
   it('겹친 두 러너가 서로 다른 디렉터리를 쓰고 각자 자기 회차의 빌드만 잰다', async () => {
@@ -1164,7 +1166,10 @@ describe('산출물 소비 게이트 스크립트 — 인자와 판정 (실제 �
     );
     const art = join(dir, 'out');
     mkdirSync(art, { recursive: true });
-    writeFileSync(join(art, 'manifest.json'), JSON.stringify({ background: { service_worker: 'background.js' } }));
+    writeFileSync(
+      join(art, 'manifest.json'),
+      JSON.stringify({ background: { service_worker: 'background.js' } }),
+    );
     writeFileSync(join(art, 'background.js'), 'throw new Error("writer-lane:service-worker-only")');
     writeFileSync(join(art, 'popup.js'), 'console.log("ui")');
     return { dir, art };

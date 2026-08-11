@@ -89,10 +89,7 @@ export function RuleRow({
         <div className="mt-1 flex flex-wrap items-center gap-1">
           <ScopeChipView scope={view.scope} />
           {view.chips.map((chip, i) => (
-            <span
-              key={i}
-              className={`max-w-full truncate bg-secondary text-muted-foreground ${badgePill}`}
-            >
+            <span key={i} className={`max-w-full truncate bg-secondary text-muted-foreground ${badgePill}`}>
               {chip}
             </span>
           ))}

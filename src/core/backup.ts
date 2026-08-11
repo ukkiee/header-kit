@@ -102,7 +102,12 @@ export function chunkKey(snapshotId: string, index: number): string {
 
 /** Backup 페이로드 — Export와 동일 형식(템플릿만), 전체 Profile 대상. */
 export function backupPayload(state: StoredState): string {
-  return serializeExport(exportProfiles(state, state.profiles.map((p) => p.id)));
+  return serializeExport(
+    exportProfiles(
+      state,
+      state.profiles.map((p) => p.id),
+    ),
+  );
 }
 
 /**
@@ -217,14 +222,10 @@ export function planBackup(
     checksum: sum,
     profileCount: meta.profileCount,
   };
-  const newBytes = chunks.reduce(
-    (s, c, i) => s + jsonBytes(c) + chunkKey(entry.id, i).length,
-    0,
-  );
+  const newBytes = chunks.reduce((s, c, i) => s + jsonBytes(c) + chunkKey(entry.id, i).length, 0);
   // 매니페스트 항목 자체도 quota를 먹는다 — 최대 보존 개수 기준으로 보수 추정.
   const manifestBytes =
-    BACKUP_MANIFEST_KEY.length +
-    jsonBytes({ snapshots: Array.from({ length: MAX_SNAPSHOTS }, () => entry) });
+    BACKUP_MANIFEST_KEY.length + jsonBytes({ snapshots: Array.from({ length: MAX_SNAPSHOTS }, () => entry) });
   if (newBytes + manifestBytes > limits.budgetBytes) {
     return { kind: 'too-large' };
   }
@@ -331,9 +332,7 @@ export function backupKeys(kv: SyncKV): string[] {
  * "이 브라우저에만 저장됩니다"가 거짓 표시가 된다. 남은 키를 그대로 돌려주어 호출부가
  * 성공으로 접지 못하게 한다.
  */
-export function verifyBackupsCleared(
-  kv: SyncKV,
-): { ok: true } | { ok: false; remaining: string[] } {
+export function verifyBackupsCleared(kv: SyncKV): { ok: true } | { ok: false; remaining: string[] } {
   const remaining = backupKeys(kv);
   return remaining.length === 0 ? { ok: true } : { ok: false, remaining };
 }

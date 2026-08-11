@@ -119,7 +119,10 @@ function readRegistry(path) {
     if (!line) continue;
     const at = `${path}:${i + 1}`;
     if (line.startsWith('gate:')) {
-      const f = line.slice('gate:'.length).split('|').map((s) => s.trim());
+      const f = line
+        .slice('gate:'.length)
+        .split('|')
+        .map((s) => s.trim());
       if (f.length !== 8) fail(`${at} — gate 행은 8칸이어야 하는데 ${f.length}칸이다`);
       if (f.some((x) => x === '')) fail(`${at} — 빈 칸이 있다`);
       const [id, script, kind, ci, needs, browser, verdict, na] = f;
@@ -130,7 +133,10 @@ function readRegistry(path) {
       if (na !== 'never') fail(`${at} — na 조건을 아직 다루지 못한다: ${na}`);
       gates.push({ id, script, kind, ci, needs, browser, verdict, na, at });
     } else if (line.startsWith('deferred:')) {
-      const f = line.slice('deferred:'.length).split('|').map((s) => s.trim());
+      const f = line
+        .slice('deferred:'.length)
+        .split('|')
+        .map((s) => s.trim());
       if (f.length !== 2 || f.some((x) => x === '')) {
         fail(`${at} — deferred 행은 "<파일> | <이유>" 두 칸이어야 한다`);
       }
@@ -181,7 +187,10 @@ function readTableRows(path) {
   for (const raw of lines.slice(from + 1, to)) {
     const line = raw.trim();
     if (!line.startsWith('|')) continue;
-    const cells = line.split('|').slice(1, -1).map((c) => c.trim());
+    const cells = line
+      .split('|')
+      .slice(1, -1)
+      .map((c) => c.trim());
     const m = /^`([^`]+)`$/.exec(cells[0] ?? '');
     if (!m) continue;
     // 표 칸: 게이트 | 명령 | 임계값 | kind | N/A 조건
@@ -219,7 +228,10 @@ function readWorkflowInvocations(dir) {
       // `run:` 단계의 값만 실행으로 센다. `echo "bun run gate:ci"`는 실행이 아니다.
       const step = /^-?\s*run\s*:\s*(.*)$/.exec(line);
       if (!step) continue;
-      const cmd = step[1].trim().replace(/^['"]|['"]$/g, '').replace(/\s+/g, ' ');
+      const cmd = step[1]
+        .trim()
+        .replace(/^['"]|['"]$/g, '')
+        .replace(/\s+/g, ' ');
       if (/^echo\b/.test(cmd)) continue;
       // 셸 연산자가 있으면 무엇이 실제로 돌고 무엇이 가려지는지 이 파서로는 판정할 수 없다.
       if (SHELL_OPERATORS.test(cmd)) guards.push(cmd);
@@ -306,11 +318,14 @@ function checkPlaces(dir, registryPath) {
     }
     const direct = wf.keys.filter((k) => gates.some((g) => g.script === k));
     if (direct.length > 0) {
-      fail(`게이트 워크플로가 게이트를 직접 부른다(선행 관계를 건너뛴다): ${direct.join(', ')} — ${CI_ENTRYPOINT} 하나만 부른다`);
+      fail(
+        `게이트 워크플로가 게이트를 직접 부른다(선행 관계를 건너뛴다): ${direct.join(', ')} — ${CI_ENTRYPOINT} 하나만 부른다`,
+      );
     }
     const entry = wf.keys.filter((k) => k === CI_ENTRYPOINT);
     if (ciRows.length > 0 && entry.length === 0) fail(`게이트 워크플로가 ${CI_ENTRYPOINT}를 부르지 않는다`);
-    if (entry.length > 1) fail(`게이트 워크플로가 ${CI_ENTRYPOINT}를 ${entry.length}번 부른다 — 한 번이어야 한다`);
+    if (entry.length > 1)
+      fail(`게이트 워크플로가 ${CI_ENTRYPOINT}를 ${entry.length}번 부른다 — 한 번이어야 한다`);
     if (ciRows.length === 0 && entry.length > 0) {
       fail(`ci: yes인 게이트가 없는데 워크플로가 ${CI_ENTRYPOINT}를 부른다`);
     }
@@ -439,8 +454,7 @@ function runGates(dir, gates) {
 
       // build 게이트가 곧 산출물 생산자다 — 빌드는 이 회차에 **한 번만** 돈다.
       const env = runDir !== null && g.id === BUILD_GATE_ID ? { [OUT_DIR_ENV]: runDir } : {};
-      const args =
-        artifactsDir !== null && g.needs === BUILD_GATE_ID ? ['--artifacts', artifactsDir] : [];
+      const args = artifactsDir !== null && g.needs === BUILD_GATE_ID ? ['--artifacts', artifactsDir] : [];
       const { status, out } = runOne(dir, g.script, args, env);
       const { state: verdict, why } = classify(g, status, out);
       state.set(g.id, verdict);

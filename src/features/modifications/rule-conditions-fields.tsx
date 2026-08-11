@@ -1,5 +1,10 @@
 import { SELECTABLE_REQUEST_METHODS } from '@/core/rules';
-import { expandResourceGroups, foldResourceTypes, RESOURCE_GROUPS, RESOURCE_GROUP_LABELS } from '@/core/resource-groups';
+import {
+  expandResourceGroups,
+  foldResourceTypes,
+  RESOURCE_GROUPS,
+  RESOURCE_GROUP_LABELS,
+} from '@/core/resource-groups';
 import type { RuleConditions } from '@/core/schema';
 import { ChipGroup } from '@/ui/chip-group';
 import { fieldCaption } from '@/ui/field-labeled';

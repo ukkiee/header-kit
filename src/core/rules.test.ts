@@ -13,14 +13,7 @@ import { REQUEST_METHODS, RETIRED_REQUEST_METHODS, SELECTABLE_REQUEST_METHODS } 
  */
 describe('선택 가능한 요청 메서드', () => {
   it('여섯이다 — GET·POST·PUT·PATCH·DELETE·OPTIONS', () => {
-    expect(SELECTABLE_REQUEST_METHODS).toEqual([
-      'get',
-      'post',
-      'put',
-      'patch',
-      'delete',
-      'options',
-    ]);
+    expect(SELECTABLE_REQUEST_METHODS).toEqual(['get', 'post', 'put', 'patch', 'delete', 'options']);
   });
 
   it('퇴역 셋은 고를 수 없다', () => {

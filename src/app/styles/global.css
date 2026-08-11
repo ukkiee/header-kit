@@ -48,8 +48,7 @@
  */
 @theme {
   /* 타이포 — Geist·Geist Mono 로컬 번들 (ADR 0015). 시스템 스택은 폰트 로드 전 폴백. */
-  --font-sans: 'Geist Variable', -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', Roboto,
-    sans-serif;
+  --font-sans: 'Geist Variable', -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'Geist Mono Variable', ui-monospace, 'SF Mono', 'Menlo', monospace;
 
   /*

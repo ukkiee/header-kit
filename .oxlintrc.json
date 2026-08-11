@@ -22,12 +22,17 @@
     "typescript/no-floating-promises": "error",
     // src/ 밖(스크립트·설정)에도 별칭 철자 규율은 같게 적용한다. 상대경로 금지는 여기 없다 —
     // `scripts/`는 별칭을 해석하지 않으므로 `../src/...`가 소스를 부르는 유일한 길이다.
-    "no-restricted-imports": ["error", { "patterns": [
+    "no-restricted-imports": [
+      "error",
       {
-        "group": ["~", "~/**", "@@", "@@/**", "~~", "~~/**"],
-        "message": "층을 가리키는 별칭은 '@/' 하나만 쓴다 — WXT가 정의하는 나머지 철자(~, @@, ~~)로 쓰면 위 규칙을 그대로 지나간다"
+        "patterns": [
+          {
+            "group": ["~", "~/**", "@@", "@@/**", "~~", "~~/**"],
+            "message": "층을 가리키는 별칭은 '@/' 하나만 쓴다 — WXT가 정의하는 나머지 철자(~, @@, ~~)로 쓰면 위 규칙을 그대로 지나간다"
+          }
+        ]
       }
-    ] }]
+    ]
   },
 
   // 레이어 방향: core → runtime → platform → ui → features → app → entrypoints. 뒤가 앞을 import하고 그 반대는 없다.
@@ -39,130 +44,205 @@
     {
       "files": ["src/core/**"],
       "rules": {
-        "no-restricted-imports": ["error", { "patterns": [
-      {
-        "group": ["@/runtime", "@/runtime/**", "@/platform", "@/platform/**", "@/ui", "@/ui/**", "@/features", "@/features/**", "@/app", "@/app/**", "@/entrypoints", "@/entrypoints/**"],
-        "message": "레이어 방향 위반: core는 뒤 층을 import할 수 없다 (core → runtime → platform → ui → features → app → entrypoints)"
-      },
-      {
-        "group": ["../**"],
-        "message": "src/ 안에서는 상대경로로 디렉터리를 거슬러 올라가지 않는다 — 같은 층 안은 './', 층 사이는 '@/<층>/'. 거슬러 올라가는 길이 위 규칙을 지나간다"
-      },
-      {
-        "group": ["~", "~/**", "@@", "@@/**", "~~", "~~/**"],
-        "message": "층을 가리키는 별칭은 '@/' 하나만 쓴다 — WXT가 정의하는 나머지 철자(~, @@, ~~)로 쓰면 위 규칙을 그대로 지나간다"
-      }
-        ] }]
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@/runtime",
+                  "@/runtime/**",
+                  "@/platform",
+                  "@/platform/**",
+                  "@/ui",
+                  "@/ui/**",
+                  "@/features",
+                  "@/features/**",
+                  "@/app",
+                  "@/app/**",
+                  "@/entrypoints",
+                  "@/entrypoints/**"
+                ],
+                "message": "레이어 방향 위반: core는 뒤 층을 import할 수 없다 (core → runtime → platform → ui → features → app → entrypoints)"
+              },
+              {
+                "group": ["../**"],
+                "message": "src/ 안에서는 상대경로로 디렉터리를 거슬러 올라가지 않는다 — 같은 층 안은 './', 층 사이는 '@/<층>/'. 거슬러 올라가는 길이 위 규칙을 지나간다"
+              },
+              {
+                "group": ["~", "~/**", "@@", "@@/**", "~~", "~~/**"],
+                "message": "층을 가리키는 별칭은 '@/' 하나만 쓴다 — WXT가 정의하는 나머지 철자(~, @@, ~~)로 쓰면 위 규칙을 그대로 지나간다"
+              }
+            ]
+          }
+        ]
       }
     },
     {
       "files": ["src/runtime/**"],
       "rules": {
-        "no-restricted-imports": ["error", { "patterns": [
-      {
-        "group": ["@/platform", "@/platform/**", "@/ui", "@/ui/**", "@/features", "@/features/**", "@/app", "@/app/**", "@/entrypoints", "@/entrypoints/**"],
-        "message": "레이어 방향 위반: runtime는 뒤 층을 import할 수 없다"
-      },
-      {
-        "group": ["../**"],
-        "message": "src/ 안에서는 상대경로로 디렉터리를 거슬러 올라가지 않는다 — 같은 층 안은 './', 층 사이는 '@/<층>/'. 거슬러 올라가는 길이 위 규칙을 지나간다"
-      },
-      {
-        "group": ["~", "~/**", "@@", "@@/**", "~~", "~~/**"],
-        "message": "층을 가리키는 별칭은 '@/' 하나만 쓴다 — WXT가 정의하는 나머지 철자(~, @@, ~~)로 쓰면 위 규칙을 그대로 지나간다"
-      }
-        ] }]
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@/platform",
+                  "@/platform/**",
+                  "@/ui",
+                  "@/ui/**",
+                  "@/features",
+                  "@/features/**",
+                  "@/app",
+                  "@/app/**",
+                  "@/entrypoints",
+                  "@/entrypoints/**"
+                ],
+                "message": "레이어 방향 위반: runtime는 뒤 층을 import할 수 없다"
+              },
+              {
+                "group": ["../**"],
+                "message": "src/ 안에서는 상대경로로 디렉터리를 거슬러 올라가지 않는다 — 같은 층 안은 './', 층 사이는 '@/<층>/'. 거슬러 올라가는 길이 위 규칙을 지나간다"
+              },
+              {
+                "group": ["~", "~/**", "@@", "@@/**", "~~", "~~/**"],
+                "message": "층을 가리키는 별칭은 '@/' 하나만 쓴다 — WXT가 정의하는 나머지 철자(~, @@, ~~)로 쓰면 위 규칙을 그대로 지나간다"
+              }
+            ]
+          }
+        ]
       }
     },
     {
       "files": ["src/platform/**"],
       "rules": {
-        "no-restricted-imports": ["error", { "patterns": [
-      {
-        "group": ["@/ui", "@/ui/**", "@/features", "@/features/**", "@/app", "@/app/**", "@/entrypoints", "@/entrypoints/**"],
-        "message": "레이어 방향 위반: platform는 뒤 층을 import할 수 없다"
-      },
-      {
-        "group": ["../**"],
-        "message": "src/ 안에서는 상대경로로 디렉터리를 거슬러 올라가지 않는다 — 같은 층 안은 './', 층 사이는 '@/<층>/'. 거슬러 올라가는 길이 위 규칙을 지나간다"
-      },
-      {
-        "group": ["~", "~/**", "@@", "@@/**", "~~", "~~/**"],
-        "message": "층을 가리키는 별칭은 '@/' 하나만 쓴다 — WXT가 정의하는 나머지 철자(~, @@, ~~)로 쓰면 위 규칙을 그대로 지나간다"
-      }
-        ] }]
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@/ui",
+                  "@/ui/**",
+                  "@/features",
+                  "@/features/**",
+                  "@/app",
+                  "@/app/**",
+                  "@/entrypoints",
+                  "@/entrypoints/**"
+                ],
+                "message": "레이어 방향 위반: platform는 뒤 층을 import할 수 없다"
+              },
+              {
+                "group": ["../**"],
+                "message": "src/ 안에서는 상대경로로 디렉터리를 거슬러 올라가지 않는다 — 같은 층 안은 './', 층 사이는 '@/<층>/'. 거슬러 올라가는 길이 위 규칙을 지나간다"
+              },
+              {
+                "group": ["~", "~/**", "@@", "@@/**", "~~", "~~/**"],
+                "message": "층을 가리키는 별칭은 '@/' 하나만 쓴다 — WXT가 정의하는 나머지 철자(~, @@, ~~)로 쓰면 위 규칙을 그대로 지나간다"
+              }
+            ]
+          }
+        ]
       }
     },
     {
       "files": ["src/ui/**"],
       "rules": {
-        "no-restricted-imports": ["error", { "patterns": [
-      {
-        "group": ["@/features", "@/features/**", "@/app", "@/app/**", "@/entrypoints", "@/entrypoints/**"],
-        "message": "레이어 방향 위반: ui는 뒤 층을 import할 수 없다"
-      },
-      {
-        "group": ["../**"],
-        "message": "src/ 안에서는 상대경로로 디렉터리를 거슬러 올라가지 않는다 — 같은 층 안은 './', 층 사이는 '@/<층>/'. 거슬러 올라가는 길이 위 규칙을 지나간다"
-      },
-      {
-        "group": ["~", "~/**", "@@", "@@/**", "~~", "~~/**"],
-        "message": "층을 가리키는 별칭은 '@/' 하나만 쓴다 — WXT가 정의하는 나머지 철자(~, @@, ~~)로 쓰면 위 규칙을 그대로 지나간다"
-      }
-        ] }]
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@/features",
+                  "@/features/**",
+                  "@/app",
+                  "@/app/**",
+                  "@/entrypoints",
+                  "@/entrypoints/**"
+                ],
+                "message": "레이어 방향 위반: ui는 뒤 층을 import할 수 없다"
+              },
+              {
+                "group": ["../**"],
+                "message": "src/ 안에서는 상대경로로 디렉터리를 거슬러 올라가지 않는다 — 같은 층 안은 './', 층 사이는 '@/<층>/'. 거슬러 올라가는 길이 위 규칙을 지나간다"
+              },
+              {
+                "group": ["~", "~/**", "@@", "@@/**", "~~", "~~/**"],
+                "message": "층을 가리키는 별칭은 '@/' 하나만 쓴다 — WXT가 정의하는 나머지 철자(~, @@, ~~)로 쓰면 위 규칙을 그대로 지나간다"
+              }
+            ]
+          }
+        ]
       }
     },
     {
       "files": ["src/features/**"],
       "rules": {
-        "no-restricted-imports": ["error", { "patterns": [
-      {
-        "group": ["@/app", "@/app/**", "@/entrypoints", "@/entrypoints/**"],
-        "message": "레이어 방향 위반: features는 뒤 층을 import할 수 없다"
-      },
-      {
-        "group": ["../**"],
-        "message": "src/ 안에서는 상대경로로 디렉터리를 거슬러 올라가지 않는다 — 같은 층 안은 './', 층 사이는 '@/<층>/'. 거슬러 올라가는 길이 위 규칙을 지나간다"
-      },
-      {
-        "group": ["~", "~/**", "@@", "@@/**", "~~", "~~/**"],
-        "message": "층을 가리키는 별칭은 '@/' 하나만 쓴다 — WXT가 정의하는 나머지 철자(~, @@, ~~)로 쓰면 위 규칙을 그대로 지나간다"
-      }
-        ] }]
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@/app", "@/app/**", "@/entrypoints", "@/entrypoints/**"],
+                "message": "레이어 방향 위반: features는 뒤 층을 import할 수 없다"
+              },
+              {
+                "group": ["../**"],
+                "message": "src/ 안에서는 상대경로로 디렉터리를 거슬러 올라가지 않는다 — 같은 층 안은 './', 층 사이는 '@/<층>/'. 거슬러 올라가는 길이 위 규칙을 지나간다"
+              },
+              {
+                "group": ["~", "~/**", "@@", "@@/**", "~~", "~~/**"],
+                "message": "층을 가리키는 별칭은 '@/' 하나만 쓴다 — WXT가 정의하는 나머지 철자(~, @@, ~~)로 쓰면 위 규칙을 그대로 지나간다"
+              }
+            ]
+          }
+        ]
       }
     },
     {
       "files": ["src/app/**"],
       "rules": {
-        "no-restricted-imports": ["error", { "patterns": [
-      {
-        "group": ["@/entrypoints", "@/entrypoints/**"],
-        "message": "레이어 방향 위반: app는 뒤 층을 import할 수 없다"
-      },
-      {
-        "group": ["../**"],
-        "message": "src/ 안에서는 상대경로로 디렉터리를 거슬러 올라가지 않는다 — 같은 층 안은 './', 층 사이는 '@/<층>/'. 거슬러 올라가는 길이 위 규칙을 지나간다"
-      },
-      {
-        "group": ["~", "~/**", "@@", "@@/**", "~~", "~~/**"],
-        "message": "층을 가리키는 별칭은 '@/' 하나만 쓴다 — WXT가 정의하는 나머지 철자(~, @@, ~~)로 쓰면 위 규칙을 그대로 지나간다"
-      }
-        ] }]
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@/entrypoints", "@/entrypoints/**"],
+                "message": "레이어 방향 위반: app는 뒤 층을 import할 수 없다"
+              },
+              {
+                "group": ["../**"],
+                "message": "src/ 안에서는 상대경로로 디렉터리를 거슬러 올라가지 않는다 — 같은 층 안은 './', 층 사이는 '@/<층>/'. 거슬러 올라가는 길이 위 규칙을 지나간다"
+              },
+              {
+                "group": ["~", "~/**", "@@", "@@/**", "~~", "~~/**"],
+                "message": "층을 가리키는 별칭은 '@/' 하나만 쓴다 — WXT가 정의하는 나머지 철자(~, @@, ~~)로 쓰면 위 규칙을 그대로 지나간다"
+              }
+            ]
+          }
+        ]
       }
     },
     {
       "files": ["src/entrypoints/**"],
       "rules": {
-        "no-restricted-imports": ["error", { "patterns": [
-      {
-        "group": ["../**"],
-        "message": "src/ 안에서는 상대경로로 디렉터리를 거슬러 올라가지 않는다 — 같은 층 안은 './', 층 사이는 '@/<층>/'. 거슬러 올라가는 길이 위 규칙을 지나간다"
-      },
-      {
-        "group": ["~", "~/**", "@@", "@@/**", "~~", "~~/**"],
-        "message": "층을 가리키는 별칭은 '@/' 하나만 쓴다 — WXT가 정의하는 나머지 철자(~, @@, ~~)로 쓰면 위 규칙을 그대로 지나간다"
-      }
-        ] }]
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["../**"],
+                "message": "src/ 안에서는 상대경로로 디렉터리를 거슬러 올라가지 않는다 — 같은 층 안은 './', 층 사이는 '@/<층>/'. 거슬러 올라가는 길이 위 규칙을 지나간다"
+              },
+              {
+                "group": ["~", "~/**", "@@", "@@/**", "~~", "~~/**"],
+                "message": "층을 가리키는 별칭은 '@/' 하나만 쓴다 — WXT가 정의하는 나머지 철자(~, @@, ~~)로 쓰면 위 규칙을 그대로 지나간다"
+              }
+            ]
+          }
+        ]
       }
     },
 

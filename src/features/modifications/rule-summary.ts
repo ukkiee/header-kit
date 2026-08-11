@@ -150,9 +150,7 @@ function emptyEffect(m: { emptyMeans: 'remove' | 'send-empty' }, t: Translator):
 function conditionChips(conditions: RuleConditions | undefined, t: Translator): string[] {
   if (!conditions) return [];
   return [
-    ...foldResourceTypes(conditions.resourceTypes ?? []).map((group) =>
-      t(RESOURCE_GROUP_LABELS[group]),
-    ),
+    ...foldResourceTypes(conditions.resourceTypes ?? []).map((group) => t(RESOURCE_GROUP_LABELS[group])),
     ...(conditions.requestMethods ?? []).map((method) => method.toUpperCase()),
   ];
 }

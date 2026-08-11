@@ -66,9 +66,7 @@ function reasonText(reason: unknown): string {
  * 아무 설명도 받지 못한다 — 읽기 경로가 이미 `reasonText`로 배너에 올리는 것과 같은 처리를
  * 쓰기 경로에도 준다.
  */
-async function settledMutation(
-  run: () => Promise<BackupMutationResult>,
-): Promise<BackupMutationResult> {
+async function settledMutation(run: () => Promise<BackupMutationResult>): Promise<BackupMutationResult> {
   try {
     return await run();
   } catch (reason) {
@@ -302,9 +300,7 @@ export function BackupPanel({
       <SectionCard title={t('cloudSync')}>
         <div className="flex items-start justify-between gap-2">
           <div className="flex flex-col">
-            <span className="text-muted-foreground">
-              {syncBackup ? t('cloudSyncOn') : t('cloudSyncOff')}
-            </span>
+            <span className="text-muted-foreground">{syncBackup ? t('cloudSyncOn') : t('cloudSyncOff')}</span>
             <span className="text-muted-foreground">
               {backedUpAt === null
                 ? format(t('lastBackupNever'), { store: storeName })

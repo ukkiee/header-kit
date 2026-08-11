@@ -13,11 +13,34 @@ describe('parseStoredState', () => {
       paused: false,
       profiles: [
         {
-          id: 'p1', name: 'P', active: true, color: '#2563eb',
+          id: 'p1',
+          name: 'P',
+          active: true,
+          color: '#2563eb',
           modifications: [
-            { kind: 'request-header', id: 'm1', name: 'X', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+            {
+              kind: 'request-header',
+              id: 'm1',
+              name: 'X',
+              value: '1',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+            },
             // 자체 urlFilter가 있는 규칙은 URL 스코프를 유지한다 (0007 의미론)
-            { kind: 'request-header', id: 'm2', name: 'Y', value: '2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '', urlFilter: 'own', urlMatchType: 'contains' },
+            {
+              kind: 'request-header',
+              id: 'm2',
+              name: 'Y',
+              value: '2',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+              urlFilter: 'own',
+              urlMatchType: 'contains',
+            },
           ],
           filters: [
             { kind: 'url', id: 'f1', enabled: true, pattern: 'a\\.com' },
@@ -58,9 +81,21 @@ describe('parseStoredState', () => {
       paused: false,
       profiles: [
         {
-          id: 'p1', name: 'P', active: true, color: '#2563eb',
+          id: 'p1',
+          name: 'P',
+          active: true,
+          color: '#2563eb',
           modifications: [
-            { kind: 'request-header', id: 'm1', name: 'X', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+            {
+              kind: 'request-header',
+              id: 'm1',
+              name: 'X',
+              value: '1',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+            },
           ],
           filters: [{ kind: 'resource-type', id: 'f1', enabled: false, resourceTypes: ['image'] }],
         },
@@ -75,8 +110,22 @@ describe('parseStoredState', () => {
       paused: false,
       profiles: [
         {
-          id: 'p1', name: 'P', active: true, color: '#2563eb',          modifications: [
-            { kind: 'request-header', id: 'm1', name: 'X', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '', urlFilter: 'api\\.example' },
+          id: 'p1',
+          name: 'P',
+          active: true,
+          color: '#2563eb',
+          modifications: [
+            {
+              kind: 'request-header',
+              id: 'm1',
+              name: 'X',
+              value: '1',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+              urlFilter: 'api\\.example',
+            },
           ],
         },
       ],
@@ -93,7 +142,15 @@ describe('parseStoredState', () => {
     // redirect에 urlFilter → 치유(필드 제거) — 전체 상태 리셋 대신 프로필 보존
     const redirectBad = structuredClone(base);
     redirectBad.profiles[0]!.modifications = [
-      { kind: 'redirect', id: 'r1', pattern: '^a', substitution: 'b', enabled: true, comment: '', urlFilter: 'x' } as never,
+      {
+        kind: 'redirect',
+        id: 'r1',
+        pattern: '^a',
+        substitution: 'b',
+        enabled: true,
+        comment: '',
+        urlFilter: 'x',
+      } as never,
     ];
     const healed = parseStoredState(redirectBad);
     expect(healed.profiles[0]?.id).toBe('p1');
@@ -106,11 +163,36 @@ describe('parseStoredState', () => {
       paused: false,
       profiles: [
         {
-          id: 'p1', name: 'Kept', active: true, color: '#2563eb',
+          id: 'p1',
+          name: 'Kept',
+          active: true,
+          color: '#2563eb',
           modifications: [
-            { kind: 'csp', id: 'c1', directives: [{ name: 'default-src', value: "'self'" }], comment: '', enabled: true },
-            { kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
-            { kind: 'redirect', id: 'r1', pattern: '^https://a/(.*)', substitution: 'https://b/\\1', comment: '', enabled: true },
+            {
+              kind: 'csp',
+              id: 'c1',
+              directives: [{ name: 'default-src', value: "'self'" }],
+              comment: '',
+              enabled: true,
+            },
+            {
+              kind: 'request-header',
+              id: 'm1',
+              name: 'X-A',
+              value: '1',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+            },
+            {
+              kind: 'redirect',
+              id: 'r1',
+              pattern: '^https://a/(.*)',
+              substitution: 'https://b/\\1',
+              comment: '',
+              enabled: true,
+            },
           ],
         },
         { id: 'p2', name: 'Other', active: false, color: '#16a34a', modifications: [] },
@@ -142,7 +224,18 @@ describe('parseStoredState', () => {
           name: 'P',
           active: true,
           color: '#2563eb',
-          modifications: [{ kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
+          modifications: [
+            {
+              kind: 'request-header',
+              id: 'm1',
+              name: 'X-A',
+              value: '1',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+            },
+          ],
         },
       ],
       materialized: { m1: 'trace-abc' },
@@ -168,7 +261,10 @@ describe('parseStoredState', () => {
       syncBackup: true,
       profiles: [
         {
-          id: 'p1', name: 'P', active: true, color: '#2563eb',
+          id: 'p1',
+          name: 'P',
+          active: true,
+          color: '#2563eb',
           modifications: [],
         },
       ],
@@ -235,7 +331,16 @@ describe('parseStoredState', () => {
           name: 'kept',
           active: true,
           modifications: [
-            { kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+            {
+              kind: 'request-header',
+              id: 'm1',
+              name: 'X-A',
+              value: '1',
+              enabled: true,
+              mode: 'override',
+              emptyMeans: 'remove',
+              comment: '',
+            },
           ],
         },
       ],
@@ -266,7 +371,18 @@ describe('parseStoredState', () => {
             name: 'P',
             active: true,
             color: '#2563eb',
-            modifications: [{ kind: 'request-header', id: 'm1', name: 'X', value: 1, enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }],
+            modifications: [
+              {
+                kind: 'request-header',
+                id: 'm1',
+                name: 'X',
+                value: 1,
+                enabled: true,
+                mode: 'override',
+                emptyMeans: 'remove',
+                comment: '',
+              },
+            ],
           },
         ],
       },

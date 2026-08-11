@@ -23,10 +23,7 @@ export function hasPlaceholders(template: string): boolean {
 }
 
 /** 템플릿의 모든 Placeholder를 실제 값으로 치환한다. {{uuid}}는 등장마다 새 값. */
-export function materializeValue(
-  template: string,
-  deps: MaterializeDeps = defaultMaterializeDeps,
-): string {
+export function materializeValue(template: string, deps: MaterializeDeps = defaultMaterializeDeps): string {
   return template.replace(new RegExp(PLACEHOLDER_SOURCE, 'g'), (_match, token) => {
     switch (token) {
       case 'uuid':

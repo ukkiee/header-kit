@@ -26,7 +26,16 @@ describe('fieldIssues — 저장되면 반드시 동작하는 규칙만 통과 (
   });
 
   it('요청 쿠키는 이름이 필수', () => {
-    const cookie = { kind: 'cookie', id: 'c', name: '', value: 'x', enabled: true, mode: 'append', emptyMeans: 'remove', comment: '' } as const;
+    const cookie = {
+      kind: 'cookie',
+      id: 'c',
+      name: '',
+      value: 'x',
+      enabled: true,
+      mode: 'append',
+      emptyMeans: 'remove',
+      comment: '',
+    } as const;
     expect(fieldIssues(cookie as Modification)).toEqual([required('name')]);
     expect(fieldIssues({ ...cookie, name: 'sid' } as Modification)).toEqual([]);
   });
@@ -36,19 +45,18 @@ describe('fieldIssues — 저장되면 반드시 동작하는 규칙만 통과 (
    * `as Modification`으로 캐스팅해 재고 있었다 — 그래서 v3의 "이름 칸과 값 칸이 둘 다
    * 비었다"를 한 번도 덮지 못했다. v3 구조화 모양으로 올리고 세 갈래로 가른다.
    */
-  const setCookie = (
-    over: Partial<Extract<Modification, { kind: 'set-cookie' }>> = {},
-  ): Modification => ({
-    kind: 'set-cookie',
-    id: 's',
-    name: '',
-    value: '',
-    enabled: true,
-    mode: 'override',
-    emptyMeans: 'remove',
-    comment: '',
-    ...over,
-  } as Modification);
+  const setCookie = (over: Partial<Extract<Modification, { kind: 'set-cookie' }>> = {}): Modification =>
+    ({
+      kind: 'set-cookie',
+      id: 's',
+      name: '',
+      value: '',
+      enabled: true,
+      mode: 'override',
+      emptyMeans: 'remove',
+      comment: '',
+      ...over,
+    }) as Modification;
 
   it('응답 쿠키 — 이름·값이 둘 다 비면 통과한다 (서버 Set-Cookie 차단 사용례)', () => {
     expect(fieldIssues(setCookie())).toEqual([]);
@@ -72,7 +80,15 @@ describe('fieldIssues — 저장되면 반드시 동작하는 규칙만 통과 (
   });
 
   it('원시로 보존된 응답 쿠키는 그대로 통과한다 — 가를 수 없는 줄에 재료를 요구할 수 없다', () => {
-    const raw = { kind: 'set-cookie', id: 's', raw: 'sid=abc; Path=/; Secure', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' } as const;
+    const raw = {
+      kind: 'set-cookie',
+      id: 's',
+      raw: 'sid=abc; Path=/; Secure',
+      enabled: true,
+      mode: 'override',
+      emptyMeans: 'remove',
+      comment: '',
+    } as const;
     expect(fieldIssues(raw as unknown as Modification)).toEqual([]);
   });
 
@@ -131,9 +147,16 @@ describe('fieldIssues — 저장되면 반드시 동작하는 규칙만 통과 (
       const bad = '^https://(ads)\\.example\\.com/\\1';
       expect(fieldIssues(block(bad, 'regex'))).toEqual([unsupported]);
       const header: Modification = {
-        kind: 'request-header', id: 'h', name: 'X-A', value: '1', enabled: true,
-        mode: 'override', emptyMeans: 'remove', comment: '',
-        urlFilter: bad, urlMatchType: 'regex',
+        kind: 'request-header',
+        id: 'h',
+        name: 'X-A',
+        value: '1',
+        enabled: true,
+        mode: 'override',
+        emptyMeans: 'remove',
+        comment: '',
+        urlFilter: bad,
+        urlMatchType: 'regex',
       } as Modification;
       expect(fieldIssues(header)).toEqual([]);
     });

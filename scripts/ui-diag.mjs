@@ -44,8 +44,7 @@ const METRICS = [
 ];
 
 /** 배수만 쓰면 작은 절대값에서 과민해지고 절대값만 쓰면 느린 기기에서 무뎌지므로 병용한다. */
-const perfCeiling = (baseline) =>
-  Math.max(baseline * PERF_TOLERANCE_RATIO, baseline + PERF_TOLERANCE_ABS_MS);
+const perfCeiling = (baseline) => Math.max(baseline * PERF_TOLERANCE_RATIO, baseline + PERF_TOLERANCE_ABS_MS);
 
 const median = (values) => {
   const sorted = [...values].sort((a, b) => a - b);
@@ -156,24 +155,98 @@ const richState = {
          * 옛 파일 가져오기로 저장소에 도달할 수 있는 값이라, 화면이 그것을 조용히 그리거나
          * 규칙을 걸러 버리지 않는지 눈으로 보는 것이 이 진단 시드의 일이다.
          */
-        { kind: 'request-header', id: 'm1', name: 'Authorization', value: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.veryLongTokenValueThatShouldNotBreakTheRowLayoutAtAll.{{uuid}}', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '스테이징 토큰',
+        {
+          kind: 'request-header',
+          id: 'm1',
+          name: 'Authorization',
+          value:
+            'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.veryLongTokenValueThatShouldNotBreakTheRowLayoutAtAll.{{uuid}}',
+          enabled: true,
+          mode: 'override',
+          emptyMeans: 'remove',
+          comment: '스테이징 토큰',
           urlFilter: 'api\\.staging\\.example\\.com',
-          conditions: { resourceTypes: ['xmlhttprequest', 'script'], tabDomains: ['example.com'], expiresAt: Date.now() + 3_600_000 } },
-        { kind: 'response-header', id: 'm2', name: 'X-Frame-Options', value: 'DENY', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
-          conditions: { excludedDomains: ['cdn.example.com'] } },
-        { kind: 'cookie', id: 'm3', name: 'session', value: 'abc', enabled: true, mode: 'append', emptyMeans: 'remove', comment: '' },
-        { kind: 'set-cookie', id: 'm4', value: 'sid=abc; Path=/', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
-        { kind: 'redirect', id: 'm5', pattern: '^https://prod\\.example\\.com/(.*)', substitution: 'http://localhost:3000/\\1', comment: '', enabled: true },
+          conditions: {
+            resourceTypes: ['xmlhttprequest', 'script'],
+            tabDomains: ['example.com'],
+            expiresAt: Date.now() + 3_600_000,
+          },
+        },
+        {
+          kind: 'response-header',
+          id: 'm2',
+          name: 'X-Frame-Options',
+          value: 'DENY',
+          enabled: true,
+          mode: 'override',
+          emptyMeans: 'remove',
+          comment: '',
+          conditions: { excludedDomains: ['cdn.example.com'] },
+        },
+        {
+          kind: 'cookie',
+          id: 'm3',
+          name: 'session',
+          value: 'abc',
+          enabled: true,
+          mode: 'append',
+          emptyMeans: 'remove',
+          comment: '',
+        },
+        {
+          kind: 'set-cookie',
+          id: 'm4',
+          value: 'sid=abc; Path=/',
+          enabled: true,
+          mode: 'override',
+          emptyMeans: 'remove',
+          comment: '',
+        },
+        {
+          kind: 'redirect',
+          id: 'm5',
+          pattern: '^https://prod\\.example\\.com/(.*)',
+          substitution: 'http://localhost:3000/\\1',
+          comment: '',
+          enabled: true,
+        },
         // 새 종류(ADR 0015)도 행을 그린다 — 픽스처에 없으면 UA/DEL 행이 진단에 한 번도 렌더되지 않는다.
-        { kind: 'user-agent', id: 'm6', value: 'Mozilla/5.0 (Macintosh) HeaderKit/diag', comment: '', enabled: true },
+        {
+          kind: 'user-agent',
+          id: 'm6',
+          value: 'Mozilla/5.0 (Macintosh) HeaderKit/diag',
+          comment: '',
+          enabled: true,
+        },
         { kind: 'header-removal', id: 'm7', name: 'X-Powered-By', comment: '', enabled: true },
-        { kind: 'block', id: 'm8', urlFilter: 'ads.example.com', urlMatchType: 'domain', comment: '', enabled: true },
+        {
+          kind: 'block',
+          id: 'm8',
+          urlFilter: 'ads.example.com',
+          urlMatchType: 'domain',
+          comment: '',
+          enabled: true,
+        },
       ],
     },
     { id: 'p2', name: '두 번째 프로필', active: false, shortLabel: '2', color: '#2563eb', modifications: [] },
     // 사이드바 truncate 경계 — 긴 en/ko 이름 + 다수 프로필 (ADR 0005 단일 셸).
-    { id: 'p3', name: '아주 길고 긴 한국어 프로필 이름은 목록에서 잘려야 한다', active: true, shortLabel: '긴', color: '#16a34a', modifications: [] },
-    { id: 'p4', name: 'A very long English profile name that must truncate', active: false, shortLabel: 'EN', color: '#dc2626', modifications: [] },
+    {
+      id: 'p3',
+      name: '아주 길고 긴 한국어 프로필 이름은 목록에서 잘려야 한다',
+      active: true,
+      shortLabel: '긴',
+      color: '#16a34a',
+      modifications: [],
+    },
+    {
+      id: 'p4',
+      name: 'A very long English profile name that must truncate',
+      active: false,
+      shortLabel: 'EN',
+      color: '#dc2626',
+      modifications: [],
+    },
     { id: 'p5', name: 'QA', active: true, shortLabel: 'QA', color: '#7c3aed', modifications: [] },
     { id: 'p6', name: 'Perf', active: false, shortLabel: 'PF', color: '#0891b2', modifications: [] },
   ],
@@ -323,9 +396,10 @@ try {
   // 오버플로가 없어야 한다. 오버플로는 진단 실패(exit 1)로 처리한다.
   const boundaryProfiles = Array.from({ length: 12 }, (_, i) => ({
     id: `bnd${i}`,
-    name: i % 2
-      ? `아주 길고 긴 한국어 프로필 이름 경계 검증 ${i} — 칩과 사이드바에서 반드시 잘려야 한다`
-      : `An extremely long English profile name for boundary verification ${i} that must truncate`,
+    name:
+      i % 2
+        ? `아주 길고 긴 한국어 프로필 이름 경계 검증 ${i} — 칩과 사이드바에서 반드시 잘려야 한다`
+        : `An extremely long English profile name for boundary verification ${i} that must truncate`,
     active: i % 3 === 0,
     shortLabel: `B${i % 10}`,
     color: '#2563eb',
@@ -370,7 +444,9 @@ try {
     `shot 6: popup boundary (18 profiles, max-length names) — overflow=${overflowPx}px, inner-scrollers=${innerScrollers.length}`,
   );
   if (overflowPx > 0 || innerScrollers.length > 0) {
-    console.error(`FAIL: horizontal overflow (${overflowPx}px) or inner scrollers [${innerScrollers.join(', ')}]`);
+    console.error(
+      `FAIL: horizontal overflow (${overflowPx}px) or inner scrollers [${innerScrollers.join(', ')}]`,
+    );
     process.exitCode = 1;
   }
 } finally {

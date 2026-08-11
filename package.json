@@ -1,10 +1,10 @@
 {
   "name": "header-kit",
-  "description": "Profile-based HTTP request/response modification extension for Chromium browsers",
-  "private": true,
   "version": "0.1.0",
-  "type": "module",
+  "private": true,
+  "description": "Profile-based HTTP request/response modification extension for Chromium browsers",
   "license": "MIT",
+  "type": "module",
   "scripts": {
     "dev": "wxt",
     "build": "wxt build",

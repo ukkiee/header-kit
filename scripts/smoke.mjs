@@ -133,10 +133,11 @@ function pollBadgeText(sw, expected, timeoutMs = 3000) {
 
 async function pollSessionRuleCount(sw, expected, timeoutMs = 15000) {
   const count = await pollUntil(
-    () => sw.evaluate(async () => {
-      const rules = await chrome.declarativeNetRequest.getSessionRules();
-      return rules.length;
-    }),
+    () =>
+      sw.evaluate(async () => {
+        const rules = await chrome.declarativeNetRequest.getSessionRules();
+        return rules.length;
+      }),
     (c) => c === expected,
     timeoutMs,
     100,
@@ -184,8 +185,10 @@ const headerOps = (rules) =>
   rules.flatMap((r) => [...(r.action?.requestHeaders ?? []), ...(r.action?.responseHeaders ?? [])]);
 
 /** "이 헤더에 이런 연산이 실린 규칙이 지금 설치돼 있다" — 이번 시드의 양성 증거. */
-const headerOpLive = (name, match = () => true) => (rules) =>
-  headerOps(rules).some((h) => h.header?.toLowerCase() === name.toLowerCase() && match(h));
+const headerOpLive =
+  (name, match = () => true) =>
+  (rules) =>
+    headerOps(rules).some((h) => h.header?.toLowerCase() === name.toLowerCase() && match(h));
 
 /*
  * 안정화 폴링 (티켓 14) — 전이 **중간 프레임**을 표본으로 삼지 않는다.
@@ -216,16 +219,11 @@ const context = await chromium.launchPersistentContext('', {
   channel: 'chromium',
   headless: true,
   // UI 언어를 고정해 i18n 라벨(Pause/Open in tab…)이 결정적이게 한다.
-  args: [
-    `--disable-extensions-except=${EXT_PATH}`,
-    `--load-extension=${EXT_PATH}`,
-    '--lang=en-US',
-  ],
+  args: [`--disable-extensions-except=${EXT_PATH}`, `--load-extension=${EXT_PATH}`, '--lang=en-US'],
 });
 
 try {
-  const sw =
-    context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
+  const sw = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
   const extensionId = new URL(sw.url()).host;
 
   // ---------- A. 팝업 UI → 상태 → 규칙 → 실요청 ----------
@@ -243,7 +241,16 @@ try {
             shortLabel: 'S',
             color: '#2563eb',
             modifications: [
-              { kind: 'request-header', id: 'm1', name: 'X-HeaderKit-Smoke', value: 'ok', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+              {
+                kind: 'request-header',
+                id: 'm1',
+                name: 'X-HeaderKit-Smoke',
+                value: 'ok',
+                enabled: true,
+                mode: 'override',
+                emptyMeans: 'remove',
+                comment: '',
+              },
             ],
           },
         ],
@@ -261,14 +268,20 @@ try {
   const page = await context.newPage();
   await page.goto(origin);
   let headers = await fetchEchoHeaders(page);
-  record('A1: 팝업 토글 on → 헤더가 실요청에 적용', headers['x-headerkit-smoke'] === 'ok',
-    `x-headerkit-smoke=${headers['x-headerkit-smoke']}`);
+  record(
+    'A1: 팝업 토글 on → 헤더가 실요청에 적용',
+    headers['x-headerkit-smoke'] === 'ok',
+    `x-headerkit-smoke=${headers['x-headerkit-smoke']}`,
+  );
 
   await toggle.click();
   await pollSessionRuleCount(sw, 0);
   headers = await fetchEchoHeaders(page);
-  record('A2: 팝업 토글 off → 헤더 즉시 제거', headers['x-headerkit-smoke'] === undefined,
-    `x-headerkit-smoke=${headers['x-headerkit-smoke']}`);
+  record(
+    'A2: 팝업 토글 off → 헤더 즉시 제거',
+    headers['x-headerkit-smoke'] === undefined,
+    `x-headerkit-smoke=${headers['x-headerkit-smoke']}`,
+  );
 
   // ---------- B. 검증 항목 ①: allow vs modifyHeaders ----------
   const applyExp = (rules) =>
@@ -298,13 +311,19 @@ try {
 
   await applyExp([modifyRule(9001, 1), allowRule(9002, 2)]);
   headers = await fetchEchoHeaders(page);
-  record('B1: 높은 priority allow가 낮은 priority modifyHeaders를 무효화',
-    headers['x-exp-one'] === undefined, `x-exp-one=${headers['x-exp-one']}`);
+  record(
+    'B1: 높은 priority allow가 낮은 priority modifyHeaders를 무효화',
+    headers['x-exp-one'] === undefined,
+    `x-exp-one=${headers['x-exp-one']}`,
+  );
 
   await applyExp([modifyRule(9001, 2), allowRule(9002, 1)]);
   headers = await fetchEchoHeaders(page);
-  record('B2: modifyHeaders가 allow보다 높은 priority면 적용됨',
-    headers['x-exp-one'] === 'mod', `x-exp-one=${headers['x-exp-one']}`);
+  record(
+    'B2: modifyHeaders가 allow보다 높은 priority면 적용됨',
+    headers['x-exp-one'] === 'mod',
+    `x-exp-one=${headers['x-exp-one']}`,
+  );
 
   // ---------- C. 검증 항목 ②: 5,000 규칙 전량 교체 ----------
   const bulk = (count) =>
@@ -321,8 +340,8 @@ try {
   const t0 = Date.now();
   await applyExp(bulk(5000));
   const addMs = Date.now() - t0;
-  const bulkCount = await sw.evaluate(async () =>
-    (await chrome.declarativeNetRequest.getSessionRules()).length,
+  const bulkCount = await sw.evaluate(
+    async () => (await chrome.declarativeNetRequest.getSessionRules()).length,
   );
   record('C1: 5,000 규칙 일괄 등록', bulkCount === 5000, `count=${bulkCount}, ${addMs}ms`);
 
@@ -346,25 +365,30 @@ try {
   } catch (e) {
     overflowError = String(e.message ?? e);
   }
-  record('C2: 5,001번째 규칙은 quota 초과로 거부', overflowError !== '',
-    overflowError.slice(0, 120) || 'no error raised');
+  record(
+    'C2: 5,001번째 규칙은 quota 초과로 거부',
+    overflowError !== '',
+    overflowError.slice(0, 120) || 'no error raised',
+  );
 
   const t1 = Date.now();
   await applyExp(bulk(5000));
   const replaceMs = Date.now() - t1;
-  const afterReplace = await sw.evaluate(async () =>
-    (await chrome.declarativeNetRequest.getSessionRules()).length,
+  const afterReplace = await sw.evaluate(
+    async () => (await chrome.declarativeNetRequest.getSessionRules()).length,
   );
-  record('C3: 5,000 규칙 전량 교체(제거+재등록)', afterReplace === 5000,
-    `count=${afterReplace}, ${replaceMs}ms`);
+  record(
+    'C3: 5,000 규칙 전량 교체(제거+재등록)',
+    afterReplace === 5000,
+    `count=${afterReplace}, ${replaceMs}ms`,
+  );
 
   const t2 = Date.now();
   await applyExp([]);
-  const afterClear = await sw.evaluate(async () =>
-    (await chrome.declarativeNetRequest.getSessionRules()).length,
+  const afterClear = await sw.evaluate(
+    async () => (await chrome.declarativeNetRequest.getSessionRules()).length,
   );
-  record('C4: 전량 제거로 원상복구', afterClear === 0,
-    `count=${afterClear}, ${Date.now() - t2}ms`);
+  record('C4: 전량 제거로 원상복구', afterClear === 0, `count=${afterClear}, ${Date.now() - t2}ms`);
 
   // ---------- D. 이슈 04: 충돌 의미론 · Pause · 배지 ----------
   await sw.evaluate(async () => {
@@ -380,7 +404,16 @@ try {
             shortLabel: 'T',
             color: '#d97706',
             modifications: [
-              { kind: 'request-header', id: 't1', name: 'X-Conf', value: 'top-wins', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+              {
+                kind: 'request-header',
+                id: 't1',
+                name: 'X-Conf',
+                value: 'top-wins',
+                enabled: true,
+                mode: 'override',
+                emptyMeans: 'remove',
+                comment: '',
+              },
             ],
           },
           {
@@ -390,7 +423,16 @@ try {
             shortLabel: 'B',
             color: '#16a34a',
             modifications: [
-              { kind: 'request-header', id: 'b1', name: 'X-Conf', value: 'bottom', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+              {
+                kind: 'request-header',
+                id: 'b1',
+                name: 'X-Conf',
+                value: 'bottom',
+                enabled: true,
+                mode: 'override',
+                emptyMeans: 'remove',
+                comment: '',
+              },
             ],
           },
         ],
@@ -400,8 +442,11 @@ try {
   await pollSessionRuleCount(sw, 2);
 
   headers = await fetchEchoHeaders(page);
-  record('D1: 두 활성 Profile이 같은 헤더 수정 시 목록 위쪽이 승리', headers['x-conf'] === 'top-wins',
-    `x-conf=${headers['x-conf']}`);
+  record(
+    'D1: 두 활성 Profile이 같은 헤더 수정 시 목록 위쪽이 승리',
+    headers['x-conf'] === 'top-wins',
+    `x-conf=${headers['x-conf']}`,
+  );
 
   const multiBadge = await pollBadgeText(sw, '2');
   record('D2: 다중 활성 시 배지에 활성 개수 표시', multiBadge === '2', `badge="${multiBadge}"`);
@@ -412,15 +457,20 @@ try {
   await pollSessionRuleCount(sw, 0);
   headers = await fetchEchoHeaders(page);
   const pausedBadge = await pollBadgeText(sw, 'II');
-  record('D3: 팝업 Pause → 즉시 전체 중단 + 배지 II',
+  record(
+    'D3: 팝업 Pause → 즉시 전체 중단 + 배지 II',
     headers['x-conf'] === undefined && pausedBadge === 'II',
-    `x-conf=${headers['x-conf']}, badge="${pausedBadge}"`);
+    `x-conf=${headers['x-conf']}, badge="${pausedBadge}"`,
+  );
 
   await popup.getByRole('button', { name: 'Resume' }).click();
   await pollSessionRuleCount(sw, 2);
   headers = await fetchEchoHeaders(page);
-  record('D4: Resume → 이전 활성 상태 그대로 복원', headers['x-conf'] === 'top-wins',
-    `x-conf=${headers['x-conf']}`);
+  record(
+    'D4: Resume → 이전 활성 상태 그대로 복원',
+    headers['x-conf'] === 'top-wins',
+    `x-conf=${headers['x-conf']}`,
+  );
 
   // ---------- E. 규칙 조건 (ADR 0010) — DNR 네이티브 매핑 ----------
   const seedProfiles = (profiles) =>
@@ -440,16 +490,29 @@ try {
   // E1: 레거시 프로필 필터 시드 → 로드 마이그레이션이 규칙 스코프로 반영 (ADR 0010)
   await seedProfiles([
     {
-      ...baseProfile('p-url', 'UrlF',
-        [{ kind: 'request-header', id: 'm1', name: 'X-F5', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }]),
+      ...baseProfile('p-url', 'UrlF', [
+        {
+          kind: 'request-header',
+          id: 'm1',
+          name: 'X-F5',
+          value: 'on',
+          enabled: true,
+          mode: 'override',
+          emptyMeans: 'remove',
+          comment: '',
+        },
+      ]),
       filters: [{ kind: 'url', id: 'f1', enabled: true, pattern: 'tagged' }],
     },
   ]);
   await pollSessionRuleCount(sw, 1);
   const tagged = await fetchEchoHeaders(page, '/headers?tagged=1');
   const untagged = await fetchEchoHeaders(page, '/headers');
-  record('E1: 레거시 URL 필터 → 로드 마이그레이션이 규칙 스코프로 적용', tagged['x-f5'] === 'on' && untagged['x-f5'] === undefined,
-    `tagged=${tagged['x-f5']}, untagged=${untagged['x-f5']}`);
+  record(
+    'E1: 레거시 URL 필터 → 로드 마이그레이션이 규칙 스코프로 적용',
+    tagged['x-f5'] === 'on' && untagged['x-f5'] === undefined,
+    `tagged=${tagged['x-f5']}, untagged=${untagged['x-f5']}`,
+  );
 
   /*
    * E2: 제외 도메인은 **퇴역했다** (ADR 0017, 티켓 02) — 좁히지 않고, 규칙이 그만큼 넓어진다.
@@ -461,13 +524,27 @@ try {
    * 그 넓어짐이 여기서 눈에 보인다.
    */
   await seedProfiles([
-    baseProfile('p-ex', 'Ex',
-      [{ kind: 'request-header', id: 'm1', name: 'X-Ex', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
-        conditions: { excludedDomains: ['localhost'] } }]),
+    baseProfile('p-ex', 'Ex', [
+      {
+        kind: 'request-header',
+        id: 'm1',
+        name: 'X-Ex',
+        value: 'on',
+        enabled: true,
+        mode: 'override',
+        emptyMeans: 'remove',
+        comment: '',
+        conditions: { excludedDomains: ['localhost'] },
+      },
+    ]),
   ]);
   await pollSessionRuleCount(sw, 1);
   // 개수 1 → 1이라 위 배리어는 E1의 규칙 세트로도 만족된다 — 내용·효과를 양성 확인한다.
-  await pollSessionRuleMatch(sw, headerOpLive('X-Ex', (h) => h.value === 'on'), 'E2 X-Ex=on');
+  await pollSessionRuleMatch(
+    sw,
+    headerOpLive('X-Ex', (h) => h.value === 'on'),
+    'E2 X-Ex=on',
+  );
   const onIncluded = await pollUntil(
     () => fetchEchoHeaders(page, '/headers'),
     (h) => h['x-ex'] === 'on',
@@ -485,46 +562,79 @@ try {
     (h) => h['x-ex'] === 'on',
   );
   await page.goto(origin);
-  record('E2: 제외 도메인 퇴역 — 좁히지 않고 그 도메인에도 적용된다',
+  record(
+    'E2: 제외 도메인 퇴역 — 좁히지 않고 그 도메인에도 적용된다',
     onIncluded['x-ex'] === 'on' && onceExcluded['x-ex'] === 'on' && noExcludedCondition,
-    `127.0.0.1=${onIncluded['x-ex']}, localhost=${onceExcluded['x-ex']}, 제외조건부재=${noExcludedCondition}`);
+    `127.0.0.1=${onIncluded['x-ex']}, localhost=${onceExcluded['x-ex']}, 제외조건부재=${noExcludedCondition}`,
+  );
 
   // E3: 메서드 조건
   await seedProfiles([
-    baseProfile('p-method', 'Meth',
-      [{ kind: 'request-header', id: 'm1', name: 'X-Post-Only', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
-        conditions: { requestMethods: ['post'] } }]),
+    baseProfile('p-method', 'Meth', [
+      {
+        kind: 'request-header',
+        id: 'm1',
+        name: 'X-Post-Only',
+        value: 'on',
+        enabled: true,
+        mode: 'override',
+        emptyMeans: 'remove',
+        comment: '',
+        conditions: { requestMethods: ['post'] },
+      },
+    ]),
   ]);
   await pollSessionRuleCount(sw, 1);
   await pollSessionRuleMatch(
-    sw, headerOpLive('X-Post-Only', (h) => h.value === 'on'), 'E3 X-Post-Only=on');
+    sw,
+    headerOpLive('X-Post-Only', (h) => h.value === 'on'),
+    'E3 X-Post-Only=on',
+  );
   // 양성 절반(POST)을 먼저 폴링해 적용을 관측하고, 음성 절반(GET)은 그 뒤 한 번만 읽는다.
   const viaPost = await pollUntil(
     () => fetchEchoHeaders(page, '/headers', 'POST'),
     (h) => h['x-post-only'] === 'on',
   );
   const viaGet = await fetchEchoHeaders(page, '/headers');
-  record('E3: 메서드 조건 — POST에만 적용', viaGet['x-post-only'] === undefined && viaPost['x-post-only'] === 'on',
-    `GET=${viaGet['x-post-only']}, POST=${viaPost['x-post-only']}`);
+  record(
+    'E3: 메서드 조건 — POST에만 적용',
+    viaGet['x-post-only'] === undefined && viaPost['x-post-only'] === 'on',
+    `GET=${viaGet['x-post-only']}, POST=${viaPost['x-post-only']}`,
+  );
 
   // E5: 리소스 종류 조건 — main_frame 내비게이션에만 적용, XHR 제외
   await seedProfiles([
-    baseProfile('p-rt', 'Rt',
-      [{ kind: 'request-header', id: 'm1', name: 'X-Doc-Only', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
-        conditions: { resourceTypes: ['main_frame'] } }]),
+    baseProfile('p-rt', 'Rt', [
+      {
+        kind: 'request-header',
+        id: 'm1',
+        name: 'X-Doc-Only',
+        value: 'on',
+        enabled: true,
+        mode: 'override',
+        emptyMeans: 'remove',
+        comment: '',
+        conditions: { resourceTypes: ['main_frame'] },
+      },
+    ]),
   ]);
   await pollSessionRuleCount(sw, 1);
   // 음성 절반(XHR 제외)이 먼저라 부재를 폴링할 수 없다 — 새 시드의 내용을 양성 확인한 뒤
   // 한 번만 읽고, 양성 절반(내비게이션)은 goto가 실제 문서 요청을 낸다.
   await pollSessionRuleMatch(
-    sw, headerOpLive('X-Doc-Only', (h) => h.value === 'on'), 'E5 X-Doc-Only=on');
+    sw,
+    headerOpLive('X-Doc-Only', (h) => h.value === 'on'),
+    'E5 X-Doc-Only=on',
+  );
   const viaXhr = await fetchEchoHeaders(page, '/headers');
   await page.goto(`${origin}/headers?nav=1`);
   const viaNav = JSON.parse(await page.evaluate(() => document.body.innerText));
   await page.goto(origin);
-  record('E5: 리소스 종류 조건 — 문서 요청에만 적용',
+  record(
+    'E5: 리소스 종류 조건 — 문서 요청에만 적용',
     viaXhr['x-doc-only'] === undefined && viaNav['x-doc-only'] === 'on',
-    `xhr=${viaXhr['x-doc-only']}, nav=${viaNav['x-doc-only']}`);
+    `xhr=${viaXhr['x-doc-only']}, nav=${viaNav['x-doc-only']}`,
+  );
 
   /*
    * E6: 요청 출처 도메인도 **퇴역했다** (ADR 0017, 티켓 02) — E2와 같은 이유로 뒤집었다.
@@ -534,22 +644,37 @@ try {
    * 재야 하는 유일한 것이다.
    */
   const idProfile = (domain) => [
-    baseProfile('p-id', 'Id',
-      [{ kind: 'request-header', id: 'm1', name: 'X-From-Local', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
-        conditions: { initiatorDomains: [domain] } }]),
+    baseProfile('p-id', 'Id', [
+      {
+        kind: 'request-header',
+        id: 'm1',
+        name: 'X-From-Local',
+        value: 'on',
+        enabled: true,
+        mode: 'override',
+        emptyMeans: 'remove',
+        comment: '',
+        conditions: { initiatorDomains: [domain] },
+      },
+    ]),
   ];
   await seedProfiles(idProfile('nomatch.example'));
   await pollSessionRuleCount(sw, 1);
   await pollSessionRuleMatch(
-    sw, headerOpLive('X-From-Local', (h) => h.value === 'on'), 'E6 X-From-Local=on');
+    sw,
+    headerOpLive('X-From-Local', (h) => h.value === 'on'),
+    'E6 X-From-Local=on',
+  );
   const onceUnmatched = await pollUntil(
     () => fetchEchoHeaders(page, '/headers'),
     (h) => h['x-from-local'] === 'on',
   );
   const noInitiatorCondition = await noRuleCondition('initiatorDomains');
-  record('E6: 요청 출처 도메인 퇴역 — 맞지 않는 출처를 심어도 적용된다',
+  record(
+    'E6: 요청 출처 도메인 퇴역 — 맞지 않는 출처를 심어도 적용된다',
     onceUnmatched['x-from-local'] === 'on' && noInitiatorCondition,
-    `nomatch에서 적용=${onceUnmatched['x-from-local']}, 출처조건부재=${noInitiatorCondition}`);
+    `nomatch에서 적용=${onceUnmatched['x-from-local']}, 출처조건부재=${noInitiatorCondition}`,
+  );
 
   // E4: 유효하지 않은 규칙 regex 스코프는 저장 시점(권위 경로)에 거부된다
   const rejection = await popup.evaluate(async () => {
@@ -558,8 +683,18 @@ try {
       command: {
         type: 'add-modification',
         profileId: 'p-id',
-        modification: { kind: 'request-header', id: 'bad', name: 'X-Bad', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
-          urlFilter: '(unclosed', urlMatchType: 'regex' },
+        modification: {
+          kind: 'request-header',
+          id: 'bad',
+          name: 'X-Bad',
+          value: '1',
+          enabled: true,
+          mode: 'override',
+          emptyMeans: 'remove',
+          comment: '',
+          urlFilter: '(unclosed',
+          urlMatchType: 'regex',
+        },
       },
     });
   });
@@ -567,9 +702,11 @@ try {
     const { state } = await chrome.storage.local.get('state');
     return state.profiles[0].modifications.length;
   });
-  record('E4: invalid regex 스코프 명령이 오류로 거부되고 저장되지 않음',
+  record(
+    'E4: invalid regex 스코프 명령이 오류로 거부되고 저장되지 않음',
     rejection?.ok === false && /regex/i.test(rejection?.error ?? '') && stateAfter === 1,
-    `ok=${rejection?.ok}, error="${rejection?.error}", mods=${stateAfter}`);
+    `ok=${rejection?.ok}, error="${rejection?.error}", mods=${stateAfter}`,
+  );
 
   /*
    * ---------- F. 탭 도메인 · 자동 해제 시각의 퇴역 (ADR 0017, 티켓 02) ----------
@@ -587,9 +724,19 @@ try {
    * 없으면 그 규칙이 아예 방출되지 않아 개수가 0이었다. 개수 1이 곧 조건이 걷혔다는 증거다.
    */
   await seedProfiles([
-    baseProfile('p-td', 'Td',
-      [{ kind: 'request-header', id: 'm1', name: 'X-Tab-Domain', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
-        conditions: { tabDomains: ['nomatch.example'] } }]),
+    baseProfile('p-td', 'Td', [
+      {
+        kind: 'request-header',
+        id: 'm1',
+        name: 'X-Tab-Domain',
+        value: 'on',
+        enabled: true,
+        mode: 'override',
+        emptyMeans: 'remove',
+        comment: '',
+        conditions: { tabDomains: ['nomatch.example'] },
+      },
+    ]),
   ]);
   await pollSessionRuleCount(sw, 1); // 예전이면 매칭 탭이 없어 0이었다
   // 세션 규칙이 등록됐다(count=1)고 곧바로 요청에 적용된 건 아니다 — updateSessionRules
@@ -598,9 +745,11 @@ try {
     () => fetchEchoHeaders(pageB, '/headers'),
     (h) => h['x-tab-domain'] === 'on',
   );
-  record('F1: 탭 도메인 퇴역 — 맞는 탭이 없어도 규칙이 나가고 적용된다',
+  record(
+    'F1: 탭 도메인 퇴역 — 맞는 탭이 없어도 규칙이 나가고 적용된다',
     noMatchingTab['x-tab-domain'] === 'on',
-    `매칭 탭 없음에서 적용=${noMatchingTab['x-tab-domain']}`);
+    `매칭 탭 없음에서 적용=${noMatchingTab['x-tab-domain']}`,
+  );
   await pageB.goto(origin);
 
   /*
@@ -616,12 +765,29 @@ try {
    * 직접 잰다. 배지 수 확인은 여기 남는다: 이 표본은 만료와 무관한 **켜진 규칙 둘**이다.
    */
   await seedProfiles([
-    baseProfile('p-time', 'Ti',
-      [
-        { kind: 'request-header', id: 'm1', name: 'X-Timed', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
-          conditions: { expiresAt: Date.now() - 1000, tabDomains: ['closed.example'] } },
-        { kind: 'request-header', id: 'm2', name: 'X-Stays', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
-      ]),
+    baseProfile('p-time', 'Ti', [
+      {
+        kind: 'request-header',
+        id: 'm1',
+        name: 'X-Timed',
+        value: 'on',
+        enabled: true,
+        mode: 'override',
+        emptyMeans: 'remove',
+        comment: '',
+        conditions: { expiresAt: Date.now() - 1000, tabDomains: ['closed.example'] },
+      },
+      {
+        kind: 'request-header',
+        id: 'm2',
+        name: 'X-Stays',
+        value: 'on',
+        enabled: true,
+        mode: 'override',
+        emptyMeans: 'remove',
+        comment: '',
+      },
+    ]),
   ]);
   await pollSessionRuleCount(sw, 2); // 예전이면 지난 시각·닫힌 탭의 규칙이 걸러져 1이었다
   const pastExpiry = await pollUntil(
@@ -633,10 +799,14 @@ try {
     return state.profiles[0].modifications[0].enabled;
   });
   const badgeAfter = await pollBadgeText(sw, '2');
-  record('F3: 퇴역 조건(지난 해제 시각·탭 도메인)이 남아 있어도 규칙이 그대로 걸린다',
-    pastExpiry['x-timed'] === 'on' && pastExpiry['x-stays'] === 'on'
-      && stillEnabled === true && badgeAfter === '2',
-    `적용=[${pastExpiry['x-timed']},${pastExpiry['x-stays']}], enabled=${stillEnabled}, badge="${badgeAfter}"`);
+  record(
+    'F3: 퇴역 조건(지난 해제 시각·탭 도메인)이 남아 있어도 규칙이 그대로 걸린다',
+    pastExpiry['x-timed'] === 'on' &&
+      pastExpiry['x-stays'] === 'on' &&
+      stillEnabled === true &&
+      badgeAfter === '2',
+    `적용=[${pastExpiry['x-timed']},${pastExpiry['x-stays']}], enabled=${stillEnabled}, badge="${badgeAfter}"`,
+  );
 
   // ---------- G. 이슈 07: Placeholder 실체화 수명주기 ----------
   const UUID_RE = /^req-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -644,8 +814,9 @@ try {
   // 비활성으로 심고, 활성화는 실제 팝업 토글(활성화 경계 = 명령 경로)로 수행한다.
   await seedProfiles([
     {
-      ...baseProfile('p-ph', 'Ph',
-        [{ kind: 'request-header', id: 'm1', name: 'X-Trace-Id', value: 'req-{{uuid}}', enabled: true }]),
+      ...baseProfile('p-ph', 'Ph', [
+        { kind: 'request-header', id: 'm1', name: 'X-Trace-Id', value: 'req-{{uuid}}', enabled: true },
+      ]),
       active: false,
     },
   ]);
@@ -655,8 +826,7 @@ try {
   await phToggle.click();
   await pollSessionRuleCount(sw, 1);
   const first = (await fetchEchoHeaders(pageB, '/headers'))['x-trace-id'];
-  record('G1: 활성화 경계에서 실체화된 uuid가 실요청에 적용', UUID_RE.test(first ?? ''),
-    `value=${first}`);
+  record('G1: 활성화 경계에서 실체화된 uuid가 실요청에 적용', UUID_RE.test(first ?? ''), `value=${first}`);
 
   // 탭 이벤트(재컴파일 트리거) 후에도 값 불변 — Compile은 소비만
   const tempTab = await context.newPage();
@@ -672,8 +842,11 @@ try {
   await phToggle.click();
   await pollSessionRuleCount(sw, 1);
   const reactivated = (await fetchEchoHeaders(pageB, '/headers'))['x-trace-id'];
-  record('G3: 재활성화가 새 값을 만든다', UUID_RE.test(reactivated ?? '') && reactivated !== first,
-    `old=${first}, new=${reactivated}`);
+  record(
+    'G3: 재활성화가 새 값을 만든다',
+    UUID_RE.test(reactivated ?? '') && reactivated !== first,
+    `old=${first}, new=${reactivated}`,
+  );
 
   // 활성 중 템플릿 편집 → 그 항목만 즉시 재실체화
   const editResult = await popup.evaluate(async () => {
@@ -682,14 +855,23 @@ try {
       command: {
         type: 'update-modification',
         profileId: 'p-ph',
-        modification: { kind: 'request-header', id: 'm1', name: 'X-Trace-Id', value: 'edit-{{uuid}}', enabled: true },
+        modification: {
+          kind: 'request-header',
+          id: 'm1',
+          name: 'X-Trace-Id',
+          value: 'edit-{{uuid}}',
+          enabled: true,
+        },
       },
     });
   });
   await new Promise((r) => setTimeout(r, 400));
   const afterEdit = (await fetchEchoHeaders(pageB, '/headers'))['x-trace-id'];
-  record('G4: 활성 중 템플릿 편집 → 즉시 재실체화', editResult?.ok === true && (afterEdit ?? '').startsWith('edit-'),
-    `value=${afterEdit}`);
+  record(
+    'G4: 활성 중 템플릿 편집 → 즉시 재실체화',
+    editResult?.ok === true && (afterEdit ?? '').startsWith('edit-'),
+    `value=${afterEdit}`,
+  );
 
   // ---------- H. 이슈 08: Import/Export ----------
   // 깨끗한 상태에서 시작해 팝업 UI로 Import를 수행한다.
@@ -707,11 +889,15 @@ try {
         shortLabel: 'IM',
         color: '#9333ea',
         modifications: [
-          { kind: 'request-header', id: 'src-m1', name: 'X-Imported-Id', value: 'imp-{{uuid}}', enabled: true },
+          {
+            kind: 'request-header',
+            id: 'src-m1',
+            name: 'X-Imported-Id',
+            value: 'imp-{{uuid}}',
+            enabled: true,
+          },
         ],
-        filters: [
-          { kind: 'tab', id: 'src-f1', enabled: true, tabId: 4242 },
-        ],
+        filters: [{ kind: 'tab', id: 'src-f1', enabled: true, tabId: 4242 }],
       },
     ],
   });
@@ -722,7 +908,9 @@ try {
   await popup.getByRole('button', { name: 'Import…' }).click();
   // 가져오기는 **파일 하나**만 받는다 — 붙여넣기 칸이 사라졌다(놓기와 파일 선택이 같은 문).
   await popup.getByLabel('Import file').setInputFiles({
-    name: 'headerkit-profiles.json', mimeType: 'application/json', buffer: Buffer.from(exportJson),
+    name: 'headerkit-profiles.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(exportJson),
   });
   await popup.getByRole('button', { name: 'Run import' }).click();
   await pollSessionRuleCount(sw, 1); // 레거시 tab 필터는 마이그레이션에서 소실 → 규칙이 전 탭에 적용된다
@@ -732,16 +920,20 @@ try {
   });
   const importedProfile = importedState.profiles.find((p) => p.name === 'Imported');
   const importedHeader = (await fetchEchoHeaders(pageB, '/headers'))['x-imported-id'];
-  record('H1: 활성 Import → id 재생성 + 레거시 필터 소실(ADR 0010) + 활성화 경계 실체화',
+  record(
+    'H1: 활성 Import → id 재생성 + 레거시 필터 소실(ADR 0010) + 활성화 경계 실체화',
     importedProfile !== undefined &&
-    importedProfile.id !== 'src-p1' &&
-    importedProfile.filters === undefined &&
-    /^imp-[0-9a-f-]{36}$/.test(importedHeader ?? ''),
-    `id=${importedProfile?.id?.slice(0, 8)}, filters=${JSON.stringify(importedProfile?.filters)}, header=${importedHeader}`);
+      importedProfile.id !== 'src-p1' &&
+      importedProfile.filters === undefined &&
+      /^imp-[0-9a-f-]{36}$/.test(importedHeader ?? ''),
+    `id=${importedProfile?.id?.slice(0, 8)}, filters=${JSON.stringify(importedProfile?.filters)}, header=${importedHeader}`,
+  );
 
   await popup.getByRole('button', { name: 'Import…' }).click();
   await popup.getByLabel('Import file').setInputFiles({
-    name: 'broken.json', mimeType: 'application/json', buffer: Buffer.from('{broken json'),
+    name: 'broken.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from('{broken json'),
   });
   await popup.getByRole('button', { name: 'Run import' }).click();
   // 백업 화면에는 스냅샷 패널도 자기 오류 배너를 가질 수 있다 — Import 패널이 위에 서므로
@@ -751,8 +943,11 @@ try {
     const { state } = await chrome.storage.local.get('state');
     return state.profiles.length;
   });
-  record('H2: 깨진 Import는 거부되고 상태가 불변', /JSON/i.test(importError ?? '') && profileCountAfter === 1,
-    `error="${importError}", profiles=${profileCountAfter}`);
+  record(
+    'H2: 깨진 Import는 거부되고 상태가 불변',
+    /JSON/i.test(importError ?? '') && profileCountAfter === 1,
+    `error="${importError}", profiles=${profileCountAfter}`,
+  );
 
   /*
    * H2b: 그 거부 문구가 **전송 패널 자신의 것**인지 (티켓 09 리뷰 R-7).
@@ -772,9 +967,11 @@ try {
   const transferAlerts = transferSection.getByRole('alert');
   const transferAlertCount = await transferAlerts.count();
   const transferImportError = transferAlertCount > 0 ? await transferAlerts.first().textContent() : null;
-  record('H2b: 거부 문구는 전송 패널 자신의 경고다',
+  record(
+    'H2b: 거부 문구는 전송 패널 자신의 경고다',
     transferSectionCount === 1 && transferAlertCount > 0 && /JSON/i.test(transferImportError ?? ''),
-    `sections=${transferSectionCount}, alerts=${transferAlertCount}, error="${transferImportError}"`);
+    `sections=${transferSectionCount}, alerts=${transferAlertCount}, error="${transferImportError}"`,
+  );
 
   // ---------- I. 이슈 09: 자동 Backup · 복원 ----------
   // 이전 섹션들의 누적 백업을 지우고 자족적으로 시작한다.
@@ -784,8 +981,12 @@ try {
   // 우연히 샘플링할 때만 통과했다(역대 플레이크의 실체). 비활성 시드 후 실제
   // 팝업 토글로 활성화 경계를 태운다.
   await seedProfiles([
-    { ...baseProfile('p-bk', 'Backupable',
-      [{ kind: 'request-header', id: 'm1', name: 'X-Restored-Id', value: 'rst-{{uuid}}', enabled: true }]), active: false },
+    {
+      ...baseProfile('p-bk', 'Backupable', [
+        { kind: 'request-header', id: 'm1', name: 'X-Restored-Id', value: 'rst-{{uuid}}', enabled: true },
+      ]),
+      active: false,
+    },
   ]);
   await popup.reload();
   await popup.getByRole('switch', { name: 'Toggle Backupable' }).click();
@@ -796,16 +997,20 @@ try {
   // 스로틀(30s) 위로 넉넉히(25s) 여유를 준다 — 백업이 뜨면 pollUntil이 즉시 반환하므로
   // 정상 경로의 소요는 그대로다(상한만 올라간다).
   const backupCount = await pollUntil(
-    () => sw.evaluate(async () => {
-      const kv = await chrome.storage.sync.get('bk:manifest');
-      return kv['bk:manifest']?.snapshots?.length ?? 0;
-    }),
+    () =>
+      sw.evaluate(async () => {
+        const kv = await chrome.storage.sync.get('bk:manifest');
+        return kv['bk:manifest']?.snapshots?.length ?? 0;
+      }),
     (count) => count >= 1,
     55_000,
     500,
   );
-  record('I1: Profile 변경 후 자동 Backup 생성 (manifest-last 커밋)', backupCount >= 1,
-    `snapshots=${backupCount}`);
+  record(
+    'I1: Profile 변경 후 자동 Backup 생성 (manifest-last 커밋)',
+    backupCount >= 1,
+    `snapshots=${backupCount}`,
+  );
 
   // 상태를 비운 뒤, 방금 만든 스냅샷으로 복원한다 (전체 교체 + 활성화 경계).
   await seedProfiles([]);
@@ -819,10 +1024,11 @@ try {
   await restoreRow.getByRole('button', { name: 'Restore backup' }).click();
 
   const restoredState = await pollUntil(
-    () => sw.evaluate(async () => {
-      const { state } = await chrome.storage.local.get('state');
-      return state;
-    }),
+    () =>
+      sw.evaluate(async () => {
+        const { state } = await chrome.storage.local.get('state');
+        return state;
+      }),
     (s) => s.profiles.length === 1 && s.profiles[0].name === 'Backupable',
     8_000,
     300,
@@ -830,20 +1036,39 @@ try {
   const restoredOk = restoredState.profiles.length === 1 && restoredState.profiles[0].name === 'Backupable';
   await pollSessionRuleCount(sw, 1);
   const restoredHeader = (await fetchEchoHeaders(pageB, '/headers'))['x-restored-id'];
-  record('I2: 스냅샷 복원 → 전체 교체 + 활성화 경계 재실체화',
+  record(
+    'I2: 스냅샷 복원 → 전체 교체 + 활성화 경계 재실체화',
     restoredOk && /^rst-[0-9a-f-]{36}$/.test(restoredHeader ?? ''),
-    `restored=${restoredOk}, header=${restoredHeader}`);
+    `restored=${restoredOk}, header=${restoredHeader}`,
+  );
 
   // ---------- J. 이슈 10: 탭 앱 + 적용 상태 가시성 ----------
   const extId = new URL(sw.url()).host;
 
   // J1: 탭 앱이 열리고 팝업과 같은 상태를 본다
   await seedProfiles([
-    baseProfile('p-app', 'AppView',
-      [
-        { kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
-        { kind: 'request-header', id: 'm2', name: 'X-B', value: '2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
-      ]),
+    baseProfile('p-app', 'AppView', [
+      {
+        kind: 'request-header',
+        id: 'm1',
+        name: 'X-A',
+        value: '1',
+        enabled: true,
+        mode: 'override',
+        emptyMeans: 'remove',
+        comment: '',
+      },
+      {
+        kind: 'request-header',
+        id: 'm2',
+        name: 'X-B',
+        value: '2',
+        enabled: true,
+        mode: 'override',
+        emptyMeans: 'remove',
+        comment: '',
+      },
+    ]),
   ]);
   await pollSessionRuleCount(sw, 2);
 
@@ -853,14 +1078,38 @@ try {
   await tabApp.getByRole('button', { name: 'Show profiles', exact: true }).waitFor();
   const shownRuleCount = await tabApp.getByText(/active rule/).textContent();
   const shownProfileCount = await tabApp.getByText(/active profile/).textContent();
-  record('J1: 탭 앱이 활성 규칙·프로필 수를 표시한다 (요약이 Compile과 일치)',
+  record(
+    'J1: 탭 앱이 활성 규칙·프로필 수를 표시한다 (요약이 Compile과 일치)',
     /2\s*active rule/.test(shownRuleCount ?? '') && /1\s*active profile/.test(shownProfileCount ?? ''),
-    `rules="${(shownRuleCount ?? '').trim()}", profiles="${(shownProfileCount ?? '').trim()}"`);
+    `rules="${(shownRuleCount ?? '').trim()}", profiles="${(shownProfileCount ?? '').trim()}"`,
+  );
 
   // J2: 겹침 경고가 요약에 노출된다 (두 활성 Profile이 같은 헤더 수정)
   await seedProfiles([
-    baseProfile('p-x', 'X', [{ kind: 'request-header', id: 'm1', name: 'X-Dup', value: 'a', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }]),
-    baseProfile('p-y', 'Y', [{ kind: 'request-header', id: 'm2', name: 'X-Dup', value: 'b', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }]),
+    baseProfile('p-x', 'X', [
+      {
+        kind: 'request-header',
+        id: 'm1',
+        name: 'X-Dup',
+        value: 'a',
+        enabled: true,
+        mode: 'override',
+        emptyMeans: 'remove',
+        comment: '',
+      },
+    ]),
+    baseProfile('p-y', 'Y', [
+      {
+        kind: 'request-header',
+        id: 'm2',
+        name: 'X-Dup',
+        value: 'b',
+        enabled: true,
+        mode: 'override',
+        emptyMeans: 'remove',
+        comment: '',
+      },
+    ]),
   ]);
   await tabApp.reload();
   const overlapShown = await tabApp
@@ -871,12 +1120,26 @@ try {
 
   // J3: 대형 편집기로 긴 값을 저장하면 반영된다
   await seedProfiles([
-    baseProfile('p-le', 'LE', [{ kind: 'request-header', id: 'm1', name: 'X-Long', value: 'short', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }]),
+    baseProfile('p-le', 'LE', [
+      {
+        kind: 'request-header',
+        id: 'm1',
+        name: 'X-Long',
+        value: 'short',
+        enabled: true,
+        mode: 'override',
+        emptyMeans: 'remove',
+        comment: '',
+      },
+    ]),
   ]);
   await tabApp.reload();
   // 대형 편집기는 규칙 폼 안에 있다 — Edit로 폼을 연다 (ADR 0006)
   await tabApp.getByRole('button', { name: 'Edit', exact: true }).first().click();
-  await tabApp.getByRole('button', { name: /open large editor/i }).first().click();
+  await tabApp
+    .getByRole('button', { name: /open large editor/i })
+    .first()
+    .click();
   const longValue = 'x'.repeat(300);
   await tabApp.getByRole('textbox', { name: /Value —/ }).fill(longValue);
   await tabApp.getByRole('button', { name: 'Save large editor' }).click();
@@ -887,10 +1150,11 @@ try {
   // 에디터는 초안에만 반영 — 폼 Save가 원자 저장한다 (ADR 0006)
   await tabApp.getByRole('button', { name: SAVE_BUTTON }).click();
   const savedValue = await pollUntil(
-    () => sw.evaluate(async () => {
-      const { state } = await chrome.storage.local.get('state');
-      return state.profiles[0].modifications[0].value;
-    }),
+    () =>
+      sw.evaluate(async () => {
+        const { state } = await chrome.storage.local.get('state');
+        return state.profiles[0].modifications[0].value;
+      }),
     (v) => v === longValue,
   );
   record('J3: 대형 편집기 저장이 값에 반영된다', savedValue === longValue, `len=${savedValue?.length}`);
@@ -907,19 +1171,24 @@ try {
 
   // K1: Response Header 수정이 실응답에 반영된다
   await seedProfiles([
-    baseProfile('p-res', 'Res',
-      [hdr({ kind: 'response-header', id: 'm1', name: 'X-Injected-Resp', value: 'yes' })]),
+    baseProfile('p-res', 'Res', [
+      hdr({ kind: 'response-header', id: 'm1', name: 'X-Injected-Resp', value: 'yes' }),
+    ]),
   ]);
   await pollSessionRuleCount(sw, 1);
   // 개수가 1 → 1이라 위 배리어는 이전 시드의 규칙 세트로도 만족된다 — 내용을 양성 확인한다.
   await pollSessionRuleMatch(
-    sw, headerOpLive('X-Injected-Resp', (h) => h.value === 'yes'), 'K1 X-Injected-Resp=yes');
+    sw,
+    headerOpLive('X-Injected-Resp', (h) => h.value === 'yes'),
+    'K1 X-Injected-Resp=yes',
+  );
   // 설치와 네트워크 반영 사이에도 지연이 있다 — 효과 자체를 폴링한다 (F1과 같은 패턴).
   const respHeader = await pollUntil(
-    () => pageB.evaluate(async () => {
-      const res = await fetch('/headers', { cache: 'no-store' });
-      return res.headers.get('x-injected-resp');
-    }),
+    () =>
+      pageB.evaluate(async () => {
+        const res = await fetch('/headers', { cache: 'no-store' });
+        return res.headers.get('x-injected-resp');
+      }),
     (v) => v === 'yes',
   );
   record('K1: Response Header 수정이 실응답에 반영', respHeader === 'yes', `x-injected-resp=${respHeader}`);
@@ -931,7 +1200,10 @@ try {
   await pollSessionRuleCount(sw, 1);
   // 두 시드가 같은 헤더를 쓰므로 이름만으로는 구분되지 않는다 — 연산까지 본다.
   await pollSessionRuleMatch(
-    sw, headerOpLive('X-Empty-Test', (h) => h.operation === 'set'), 'K2 X-Empty-Test set');
+    sw,
+    headerOpLive('X-Empty-Test', (h) => h.operation === 'set'),
+    'K2 X-Empty-Test set',
+  );
   // 양성 절반(빈 문자열 전송)은 효과를 폴링한다.
   const sentEmpty = await pollUntil(
     () => fetchEchoHeaders(pageB, '/headers'),
@@ -944,43 +1216,55 @@ try {
   // 매직 넘버 300ms 대기를 걷어내고, 새 시드의 remove 연산이 살아 있음을 양성 확인한 뒤
   // 한 번만 관측한다.
   await pollSessionRuleMatch(
-    sw, headerOpLive('X-Empty-Test', (h) => h.operation === 'remove'), 'K2 X-Empty-Test remove');
+    sw,
+    headerOpLive('X-Empty-Test', (h) => h.operation === 'remove'),
+    'K2 X-Empty-Test remove',
+  );
   const afterRemove = await fetchEchoHeaders(pageB, '/headers');
-  record('K2: send-empty는 빈 값 전송, remove는 헤더 없음',
+  record(
+    'K2: send-empty는 빈 값 전송, remove는 헤더 없음',
     sentEmpty['x-empty-test'] === '' && afterRemove['x-empty-test'] === undefined,
-    `send-empty="${sentEmpty['x-empty-test']}", remove=${afterRemove['x-empty-test']}`);
+    `send-empty="${sentEmpty['x-empty-test']}", remove=${afterRemove['x-empty-test']}`,
+  );
 
   // K3: 허용 목록 요청 헤더의 append가 누적된다
   await seedProfiles([
-    baseProfile('p-ap', 'Ap',
-      [hdr({ id: 'm1', name: 'Accept-Language', value: 'ko', mode: 'append' })]),
+    baseProfile('p-ap', 'Ap', [hdr({ id: 'm1', name: 'Accept-Language', value: 'ko', mode: 'append' })]),
   ]);
   await pollSessionRuleCount(sw, 1);
   await pollSessionRuleMatch(
-    sw, headerOpLive('Accept-Language', (h) => h.operation === 'append' && h.value === 'ko'),
-    'K3 Accept-Language append=ko');
-  const appended = (await pollUntil(
-    () => fetchEchoHeaders(pageB, '/headers'),
-    (h) => /ko/.test(h['accept-language'] ?? ''),
-  ))['accept-language'];
-  record('K3: 허용 목록 요청 헤더 append가 기존 값에 누적', /ko/.test(appended ?? '') && (appended ?? '').includes(','),
-    `accept-language=${appended}`);
+    sw,
+    headerOpLive('Accept-Language', (h) => h.operation === 'append' && h.value === 'ko'),
+    'K3 Accept-Language append=ko',
+  );
+  const appended = (
+    await pollUntil(
+      () => fetchEchoHeaders(pageB, '/headers'),
+      (h) => /ko/.test(h['accept-language'] ?? ''),
+    )
+  )['accept-language'];
+  record(
+    'K3: 허용 목록 요청 헤더 append가 기존 값에 누적',
+    /ko/.test(appended ?? '') && (appended ?? '').includes(','),
+    `accept-language=${appended}`,
+  );
 
   // ---------- L. 이슈 11: 보조 UX 마감 ----------
   // L1: Pause 단축키(toggle-pause)가 manifest에 등록돼 있고, 그 핸들러가 쓰는
   //     set-paused 경로가 실제로 전체를 중단한다 (실제 키 입력은 headless 불가).
-  const shortcutRegistered = await sw.evaluate(
-    async () => (await chrome.commands.getAll()).some((c) => c.name === 'toggle-pause'),
+  const shortcutRegistered = await sw.evaluate(async () =>
+    (await chrome.commands.getAll()).some((c) => c.name === 'toggle-pause'),
   );
-  await seedProfiles([
-    baseProfile('p-ux', 'Ux', [hdr({ id: 'm1', name: 'X-Ux', value: '1' })]),
-  ]);
+  await seedProfiles([baseProfile('p-ux', 'Ux', [hdr({ id: 'm1', name: 'X-Ux', value: '1' })])]);
   await pollSessionRuleCount(sw, 1);
   await popup.reload();
   await popup.getByRole('button', { name: 'Pause' }).click();
   await pollSessionRuleCount(sw, 0);
-  record('L1: Pause 단축키 등록 + set-paused가 전체 중단', shortcutRegistered,
-    `toggle-pause 등록=${shortcutRegistered}, 규칙=0`);
+  record(
+    'L1: Pause 단축키 등록 + set-paused가 전체 중단',
+    shortcutRegistered,
+    `toggle-pause 등록=${shortcutRegistered}, 규칙=0`,
+  );
 
   /*
    * L2: 사용자 헤더 이름이 제안에 오른다.
@@ -990,9 +1274,7 @@ try {
    * (`withRememberedValues`), 쿠키 이름·User-Agent가 이미 그랬던 것과 같은 경로다.
    * 그래서 여기서도 규칙 하나를 그 이름으로 저장하는 것이 등록이다.
    */
-  await seedProfiles([
-    baseProfile('p-ac', 'Ac', [hdr({ id: 'm1', name: '', value: 'v' })]),
-  ]);
+  await seedProfiles([baseProfile('p-ac', 'Ac', [hdr({ id: 'm1', name: '', value: 'v' })])]);
   await popup.reload();
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
   const seedName = popup.getByLabel('Header name', { exact: true }).first();
@@ -1019,7 +1301,10 @@ try {
       null,
       { timeout: 5000 },
     )
-    .then(() => true, () => false);
+    .then(
+      () => true,
+      () => false,
+    );
 
   await acNameInput.click();
   // 필드를 먼저 비운다 — 이제 이 규칙은 방금 저장한 이름을 **이미 들고 있어서**, 지우지 않고
@@ -1028,12 +1313,16 @@ try {
   await acNameInput.pressSequentially('X', { delay: 20 });
   await popup.getByRole('option').first().waitFor({ timeout: 5000 });
   const options = await popup.getByRole('option').allTextContents();
-  record('L2a: autocomplete — 규칙 저장이 기억한 이름이 앱 팝업 제안에 앞서 뜬다',
+  record(
+    'L2a: autocomplete — 규칙 저장이 기억한 이름이 앱 팝업 제안에 앞서 뜬다',
     isCombobox &&
-      Array.isArray(savedCustom) && savedCustom.includes('X-Team-Custom') &&
+      Array.isArray(savedCustom) &&
+      savedCustom.includes('X-Team-Custom') &&
       options[0] === 'X-Team-Custom' &&
-      options.length > 1 && options.every((name) => name.toLowerCase().startsWith('x')),
-    `combobox=${isCombobox}, custom=${JSON.stringify(savedCustom)}, options=${JSON.stringify(options)}`);
+      options.length > 1 &&
+      options.every((name) => name.toLowerCase().startsWith('x')),
+    `combobox=${isCombobox}, custom=${JSON.stringify(savedCustom)}, options=${JSON.stringify(options)}`,
+  );
 
   // L2b: 마우스 없이 화살표+Enter로 고른다
   await acNameInput.fill('');
@@ -1052,9 +1341,11 @@ try {
   await popup.waitForTimeout(200);
   const optionsAfterEsc = await popup.getByRole('option').count();
   const formAfterEsc = await popup.getByRole('button', { name: 'Cancel' }).count();
-  record('L2c: Esc는 제안 팝업만 닫고 폼은 유지',
+  record(
+    'L2c: Esc는 제안 팝업만 닫고 폼은 유지',
     optionsAfterEsc === 0 && formAfterEsc > 0,
-    `options=${optionsAfterEsc}, form=${formAfterEsc}`);
+    `options=${optionsAfterEsc}, form=${formAfterEsc}`,
+  );
 
   // L2d: 후보가 **없는** 이름 — 커스텀 헤더를 치는 가장 흔한 경우다. 이때 팝업이 열리면
   // 빈 상자가 뜨고, 팝업이 열린 동안 바깥이 aria-hidden 처리돼 폼 전체가 보조기술에서
@@ -1068,9 +1359,11 @@ try {
     expanded: await acNameInput.getAttribute('aria-expanded'),
     formReachable: await popup.getByRole('button', { name: 'Cancel' }).count(),
   };
-  record('L2d: 후보가 없으면 팝업이 열리지 않고 폼이 가려지지 않는다',
+  record(
+    'L2d: 후보가 없으면 팝업이 열리지 않고 폼이 가려지지 않는다',
     noMatch.options === 0 && noMatch.expanded === 'false' && noMatch.formReachable > 0,
-    `options=${noMatch.options}, aria-expanded=${noMatch.expanded}, form=${noMatch.formReachable}`);
+    `options=${noMatch.options}, aria-expanded=${noMatch.expanded}, form=${noMatch.formReachable}`,
+  );
 
   await popup.getByRole('button', { name: 'Cancel' }).click();
 
@@ -1097,7 +1390,10 @@ try {
         null,
         { timeout },
       )
-      .then(() => true, () => false);
+      .then(
+        () => true,
+        () => false,
+      );
   const openRuleFormAt = async (page) => {
     await page.setViewportSize({ width: 760, height: 580 });
     await page.goto(`chrome-extension://${extensionId}/popup.html?locale=en`);
@@ -1115,17 +1411,18 @@ try {
     const delayedName = delayed.getByLabel('Header name', { exact: true }).first();
     // 폴백 창이 실제로 열렸는지부터 본다 — 교체가 이미 끝난 뒤라면 이 테스트는 공허하다.
     const fallbackWindow =
-      (await delayedName.getAttribute('role')) === null &&
-      (await delayedName.getAttribute('list')) !== null;
+      (await delayedName.getAttribute('role')) === null && (await delayedName.getAttribute('list')) !== null;
     const delayedValue = delayed.getByLabel('Value', { exact: true }).first();
     await delayedValue.click();
     const swapped = await waitForCombobox(delayed);
     await delayed.waitForTimeout(150);
     // Value 입력은 aria-label이 아니라 Field 라벨로 이름을 얻으므로 요소 동일성으로 본다.
     const keptFocus = await delayedValue.evaluate((el) => el === document.activeElement);
-    record('L2e: 지연 교체가 사용자가 옮긴 포커스를 뺏지 않는다',
+    record(
+      'L2e: 지연 교체가 사용자가 옮긴 포커스를 뺏지 않는다',
       fallbackWindow && swapped && keptFocus,
-      `폴백 창=${fallbackWindow}, 교체됨=${swapped}, Value 포커스 유지=${keptFocus}`);
+      `폴백 창=${fallbackWindow}, 교체됨=${swapped}, Value 포커스 유지=${keptFocus}`,
+    );
     await delayed.close();
   }
 
@@ -1138,9 +1435,11 @@ try {
       .getByLabel('Header name', { exact: true })
       .first()
       .evaluate((el) => el === document.activeElement);
-    record('L2f: 정상 교체 후에도 헤더 이름이 포커스를 갖는다',
+    record(
+      'L2f: 정상 교체 후에도 헤더 이름이 포커스를 갖는다',
       swapped && nameFocused,
-      `교체됨=${swapped}, 헤더 이름 포커스=${nameFocused}`);
+      `교체됨=${swapped}, 헤더 이름 포커스=${nameFocused}`,
+    );
     await prompt.close();
   }
 
@@ -1191,11 +1490,16 @@ try {
     await broken.getByRole('button', { name: 'Edit', exact: true }).first().click();
     const recovered = await waitForCombobox(broken);
 
-    record('L2g: 청크 실패 — 폴백으로 저장까지 동작, 같은 문서엔 재요청 없음, 새 문서에서 회복',
-      degraded.role === null && degraded.hasDatalist &&
+    record(
+      'L2g: 청크 실패 — 폴백으로 저장까지 동작, 같은 문서엔 재요청 없음, 새 문서에서 회복',
+      degraded.role === null &&
+        degraded.hasDatalist &&
         storedName === 'X-Fallback-Works' &&
-        reopened.role === null && reopened.requests === 1 && recovered,
-      `폴백 datalist=${degraded.hasDatalist}, 저장="${storedName}", 재개봉 role=${reopened.role} 요청누계=${reopened.requests}, 새 문서 회복=${recovered}`);
+        reopened.role === null &&
+        reopened.requests === 1 &&
+        recovered,
+      `폴백 datalist=${degraded.hasDatalist}, 저장="${storedName}", 재개봉 role=${reopened.role} 요청누계=${reopened.requests}, 새 문서 회복=${recovered}`,
+    );
     await broken.close();
   }
 
@@ -1212,42 +1516,58 @@ try {
 
   // M1: Request Cookie append → Cookie 헤더에 name=value 누적
   await seedProfiles([
-    baseProfile('p-ck', 'Ck',
-      [modBase('cookie', { name: 'smoke_sid', value: 'xyz', mode: 'append', emptyMeans: 'remove' })]),
+    baseProfile('p-ck', 'Ck', [
+      modBase('cookie', { name: 'smoke_sid', value: 'xyz', mode: 'append', emptyMeans: 'remove' }),
+    ]),
   ]);
   await pollSessionRuleCount(sw, 1);
   await pollSessionRuleMatch(
-    sw, headerOpLive('Cookie', (h) => (h.value ?? '').includes('smoke_sid=xyz')), 'M1 Cookie smoke_sid=xyz');
+    sw,
+    headerOpLive('Cookie', (h) => (h.value ?? '').includes('smoke_sid=xyz')),
+    'M1 Cookie smoke_sid=xyz',
+  );
   const cookieEcho = await pollUntil(
-    () => pageB.evaluate(async () => {
-      const res = await fetch('/setcookie', { cache: 'no-store' });
-      return res.json();
-    }),
+    () =>
+      pageB.evaluate(async () => {
+        const res = await fetch('/setcookie', { cache: 'no-store' });
+        return res.json();
+      }),
     (v) => /smoke_sid=xyz/.test(v?.cookie ?? ''),
   );
-  record('M1: Request Cookie append가 Cookie 헤더에 반영', /smoke_sid=xyz/.test(cookieEcho.cookie ?? ''),
-    `cookie=${cookieEcho.cookie}`);
+  record(
+    'M1: Request Cookie append가 Cookie 헤더에 반영',
+    /smoke_sid=xyz/.test(cookieEcho.cookie ?? ''),
+    `cookie=${cookieEcho.cookie}`,
+  );
 
   // M2: Set-Cookie 응답 헤더 주입
   await seedProfiles([
-    baseProfile('p-sc', 'Sc',
-      [modBase('set-cookie', { value: 'injected=1; Path=/', mode: 'append', emptyMeans: 'remove' })]),
+    baseProfile('p-sc', 'Sc', [
+      modBase('set-cookie', { value: 'injected=1; Path=/', mode: 'append', emptyMeans: 'remove' }),
+    ]),
   ]);
   await pollSessionRuleCount(sw, 1);
   await pollSessionRuleMatch(
-    sw, headerOpLive('Set-Cookie', (h) => (h.value ?? '').includes('injected=1')), 'M2 Set-Cookie injected=1');
+    sw,
+    headerOpLive('Set-Cookie', (h) => (h.value ?? '').includes('injected=1')),
+    'M2 Set-Cookie injected=1',
+  );
   // 브라우저는 fetch 응답의 Set-Cookie를 JS에 숨기므로, 실제 쿠키가 설정됐는지
   // document.cookie로 확인한다 (DNR이 append한 Set-Cookie를 브라우저가 처리).
   const docCookie = await pollUntil(
-    () => pageB.evaluate(async () => {
-      await fetch('/headers', { cache: 'no-store' });
-      await new Promise((r) => setTimeout(r, 100));
-      return document.cookie;
-    }),
+    () =>
+      pageB.evaluate(async () => {
+        await fetch('/headers', { cache: 'no-store' });
+        await new Promise((r) => setTimeout(r, 100));
+        return document.cookie;
+      }),
     (v) => /injected=1/.test(v ?? ''),
   );
-  record('M2: Set-Cookie 응답 헤더 주입 → 브라우저 쿠키 설정', /injected=1/.test(docCookie),
-    `document.cookie=${docCookie}`);
+  record(
+    'M2: Set-Cookie 응답 헤더 주입 → 브라우저 쿠키 설정',
+    /injected=1/.test(docCookie),
+    `document.cookie=${docCookie}`,
+  );
 
   // 쿠키 오염 방지: 이후 테스트 전에 document.cookie를 비운다.
   const clearCookies = () =>
@@ -1264,103 +1584,141 @@ try {
     document.cookie = 'existing=preset; path=/';
   });
   await seedProfiles([
-    baseProfile('p-cko', 'Co',
-      [modBase('cookie', { name: 'session', value: 'new', mode: 'override', emptyMeans: 'remove' })]),
+    baseProfile('p-cko', 'Co', [
+      modBase('cookie', { name: 'session', value: 'new', mode: 'override', emptyMeans: 'remove' }),
+    ]),
   ]);
   await pollSessionRuleCount(sw, 1);
   // 이 자리가 흔들림의 진원이었다 — 개수 1 → 1이라 배리어가 M2의 규칙 세트로 즉시 만족돼
   // 아직 규칙이 안 걸린 `existing=preset`(브라우저 원본값)을 관측했다.
   await pollSessionRuleMatch(
-    sw, headerOpLive('Cookie', (h) => h.value === 'session=new'), 'M2b Cookie=session=new');
-  const overridden = (await pollUntil(
-    () => pageB.evaluate(async () => {
-      const res = await fetch('/setcookie', { cache: 'no-store' });
-      return res.json();
-    }),
-    (v) => v?.cookie === 'session=new',
-  )).cookie;
-  record('M2b: Cookie override가 기존 Cookie 헤더를 통째 교체', overridden === 'session=new',
-    `cookie=${overridden}`);
+    sw,
+    headerOpLive('Cookie', (h) => h.value === 'session=new'),
+    'M2b Cookie=session=new',
+  );
+  const overridden = (
+    await pollUntil(
+      () =>
+        pageB.evaluate(async () => {
+          const res = await fetch('/setcookie', { cache: 'no-store' });
+          return res.json();
+        }),
+      (v) => v?.cookie === 'session=new',
+    )
+  ).cookie;
+  record(
+    'M2b: Cookie override가 기존 Cookie 헤더를 통째 교체',
+    overridden === 'session=new',
+    `cookie=${overridden}`,
+  );
 
   // M2c: Request Cookie remove는 기존 Cookie가 있어도 헤더를 제거한다
   await seedProfiles([
-    baseProfile('p-ckr', 'Cr',
-      [modBase('cookie', { name: 'anything', value: '', mode: 'override', emptyMeans: 'remove' })]),
+    baseProfile('p-ckr', 'Cr', [
+      modBase('cookie', { name: 'anything', value: '', mode: 'override', emptyMeans: 'remove' }),
+    ]),
   ]);
   await pollSessionRuleCount(sw, 1);
   // 음성 단언(헤더 부재)이라 **부재를 폴링하면 안 된다** — 새 시드의 remove 연산이 살아
   // 있음을 양성 확인한 뒤 한 번만 관측한다.
   await pollSessionRuleMatch(
-    sw, headerOpLive('Cookie', (h) => h.operation === 'remove'), 'M2c Cookie remove');
-  const removedCookie = (await pageB.evaluate(async () => {
-    const res = await fetch('/setcookie', { cache: 'no-store' });
-    return res.json();
-  })).cookie;
-  record('M2c: Cookie remove가 기존 Cookie 헤더를 제거', removedCookie === null || removedCookie === undefined,
-    `cookie=${removedCookie}`);
+    sw,
+    headerOpLive('Cookie', (h) => h.operation === 'remove'),
+    'M2c Cookie remove',
+  );
+  const removedCookie = (
+    await pageB.evaluate(async () => {
+      const res = await fetch('/setcookie', { cache: 'no-store' });
+      return res.json();
+    })
+  ).cookie;
+  record(
+    'M2c: Cookie remove가 기존 Cookie 헤더를 제거',
+    removedCookie === null || removedCookie === undefined,
+    `cookie=${removedCookie}`,
+  );
 
   // M2d: Set-Cookie override는 서버가 보낸 Set-Cookie를 대체한다
   await clearCookies();
   await seedProfiles([
-    baseProfile('p-sco', 'So',
-      [modBase('set-cookie', { value: 'replaced=1; Path=/', mode: 'override', emptyMeans: 'remove' })]),
+    baseProfile('p-sco', 'So', [
+      modBase('set-cookie', { value: 'replaced=1; Path=/', mode: 'override', emptyMeans: 'remove' }),
+    ]),
   ]);
   await pollSessionRuleCount(sw, 1);
   await pollSessionRuleMatch(
-    sw, headerOpLive('Set-Cookie', (h) => (h.value ?? '').includes('replaced=1')), 'M2d Set-Cookie replaced=1');
+    sw,
+    headerOpLive('Set-Cookie', (h) => (h.value ?? '').includes('replaced=1')),
+    'M2d Set-Cookie replaced=1',
+  );
   // 양성(replaced=1)을 폴링하고 음성(!server_cookie=base)은 **같은 응답에서** 단언한다 —
   // 음성만 따로 폴링하면 이전 규칙 세트가 그 조건을 즉시 만족시킨다.
   const afterScOverride = await pollUntil(
-    () => pageB.evaluate(async () => {
-      await fetch('/withcookie', { cache: 'no-store' });
-      await new Promise((r) => setTimeout(r, 100));
-      return document.cookie;
-    }),
+    () =>
+      pageB.evaluate(async () => {
+        await fetch('/withcookie', { cache: 'no-store' });
+        await new Promise((r) => setTimeout(r, 100));
+        return document.cookie;
+      }),
     (v) => /replaced=1/.test(v ?? ''),
   );
-  record('M2d: Set-Cookie override가 서버 Set-Cookie를 대체',
+  record(
+    'M2d: Set-Cookie override가 서버 Set-Cookie를 대체',
     /replaced=1/.test(afterScOverride) && !/server_cookie=base/.test(afterScOverride),
-    `document.cookie=${afterScOverride}`);
+    `document.cookie=${afterScOverride}`,
+  );
 
   // M2e: Set-Cookie block(빈 값+remove)은 서버 Set-Cookie를 차단한다
   await clearCookies();
   await seedProfiles([
-    baseProfile('p-scb', 'Sb',
-      [modBase('set-cookie', { value: '', mode: 'override', emptyMeans: 'remove' })]),
+    baseProfile('p-scb', 'Sb', [
+      modBase('set-cookie', { value: '', mode: 'override', emptyMeans: 'remove' }),
+    ]),
   ]);
   await pollSessionRuleCount(sw, 1);
   // 순수 음성 단언 — 새 시드의 Set-Cookie remove가 살아 있음을 양성 확인한 뒤 한 번만 관측.
   await pollSessionRuleMatch(
-    sw, headerOpLive('Set-Cookie', (h) => h.operation === 'remove'), 'M2e Set-Cookie remove');
+    sw,
+    headerOpLive('Set-Cookie', (h) => h.operation === 'remove'),
+    'M2e Set-Cookie remove',
+  );
   const afterScBlock = await pageB.evaluate(async () => {
     await fetch('/withcookie', { cache: 'no-store' });
     await new Promise((r) => setTimeout(r, 100));
     return document.cookie;
   });
-  record('M2e: Set-Cookie block이 서버 Set-Cookie를 차단', !/server_cookie=base/.test(afterScBlock),
-    `document.cookie=${afterScBlock}`);
+  record(
+    'M2e: Set-Cookie block이 서버 Set-Cookie를 차단',
+    !/server_cookie=base/.test(afterScBlock),
+    `document.cookie=${afterScBlock}`,
+  );
   await clearCookies();
 
   // M4: Redirect regex + 캡처 그룹 치환
   await seedProfiles([
-    baseProfile('p-rd', 'Rd',
-      [modBase('redirect', {
+    baseProfile('p-rd', 'Rd', [
+      modBase('redirect', {
         pattern: `^http://127\\.0\\.0\\.1:${port}/redir-src(.*)`,
         substitution: `http://127.0.0.1:${port}/redir-dst\\1`,
-      })]),
+      }),
+    ]),
   ]);
   await pollSessionRuleCount(sw, 1);
   // 리다이렉트는 헤더 연산이 아니다 — 이번 시드의 치환 대상으로 내용을 확인한다.
   await pollSessionRuleMatch(
     sw,
-    (rules) => rules.some((r) =>
-      r.action?.type === 'redirect' && /redir-dst/.test(r.action?.redirect?.regexSubstitution ?? '')),
-    'M4 redirect → /redir-dst');
+    (rules) =>
+      rules.some(
+        (r) => r.action?.type === 'redirect' && /redir-dst/.test(r.action?.redirect?.regexSubstitution ?? ''),
+      ),
+    'M4 redirect → /redir-dst',
+  );
   const landed = await pollUntil(
-    () => pageB.evaluate(async () => {
-      const res = await fetch('/redir-src?q=1', { cache: 'no-store', redirect: 'follow' });
-      return res.text();
-    }),
+    () =>
+      pageB.evaluate(async () => {
+        const res = await fetch('/redir-src?q=1', { cache: 'no-store', redirect: 'follow' });
+        return res.text();
+      }),
     (v) => /\/redir-dst\?q=1/.test(v ?? ''),
   );
   record('M4: Redirect regex 캡처 그룹 치환', /\/redir-dst\?q=1/.test(landed), `landed=${landed}`);
@@ -1370,12 +1728,11 @@ try {
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
   await popup.getByLabel('Redirect to').fill(`http://127.0.0.1:${port}/redir-alt\\1`);
   await popup.getByRole('button', { name: SAVE_BUTTON }).click();
-  const fetchLanding = (path) => (
+  const fetchLanding = (path) =>
     pageB.evaluate(async (p) => {
       const res = await fetch(p, { cache: 'no-store', redirect: 'follow' });
       return res.text();
-    }, path)
-  );
+    }, path);
   const landedEdited = await pollUntil(
     () => fetchLanding('/redir-src?q=1'),
     (v) => /\/redir-alt\?q=1/.test(v),
@@ -1389,9 +1746,11 @@ try {
     () => fetchLanding('/redir-two?q=2'),
     (v) => /\/redir-alt\?q=2/.test(v),
   );
-  record('M4b: UI 확장 편집으로 치환·패턴 변경 → 실리다이렉트 반영',
+  record(
+    'M4b: UI 확장 편집으로 치환·패턴 변경 → 실리다이렉트 반영',
     /\/redir-alt\?q=1/.test(landedEdited) && /\/redir-alt\?q=2/.test(landedPattern),
-    `sub=${/\/redir-alt\?q=1/.test(landedEdited)}, pattern-landed=${landedPattern?.slice(-30)}`);
+    `sub=${/\/redir-alt\?q=1/.test(landedEdited)}, pattern-landed=${landedPattern?.slice(-30)}`,
+  );
 
   // M5: 유효하지 않은 redirect 패턴은 저장 시점에 거부된다
   const redirectReject = await popup.evaluate(async () => {
@@ -1400,18 +1759,38 @@ try {
       command: {
         type: 'add-modification',
         profileId: 'p-rd',
-        modification: { kind: 'redirect', id: 'bad', pattern: '(unclosed', substitution: 'x', comment: '', enabled: true },
+        modification: {
+          kind: 'redirect',
+          id: 'bad',
+          pattern: '(unclosed',
+          substitution: 'x',
+          comment: '',
+          enabled: true,
+        },
       },
     });
   });
-  record('M5: invalid redirect 패턴이 저장 시점에 거부', redirectReject?.ok === false && /regex/i.test(redirectReject?.error ?? ''),
-    `ok=${redirectReject?.ok}, error="${redirectReject?.error}"`);
+  record(
+    'M5: invalid redirect 패턴이 저장 시점에 거부',
+    redirectReject?.ok === false && /regex/i.test(redirectReject?.error ?? ''),
+    `ok=${redirectReject?.ok}, error="${redirectReject?.error}"`,
+  );
 
   // ---------- N. 단일 프로필 뷰 + 사이드바 (ADR 0005 단일 셸) ----------
   // N1: 칩 클릭 → 본문이 해당 프로필로 전환된다
   await seedProfiles([
-    baseProfile('n-a', 'Alpha',
-      [{ kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }]),
+    baseProfile('n-a', 'Alpha', [
+      {
+        kind: 'request-header',
+        id: 'm1',
+        name: 'X-A',
+        value: '1',
+        enabled: true,
+        mode: 'override',
+        emptyMeans: 'remove',
+        comment: '',
+      },
+    ]),
     { ...baseProfile('n-b', 'Beta', []), active: false },
   ]);
   await popup.reload();
@@ -1421,7 +1800,17 @@ try {
    * 없어졌으므로 이제 이 값은 "어느 프로필을 보고 있는가"만 말한다.
    */
   const pollProfileName = (test, timeoutMs = 5000) =>
-    pollUntil(() => popup.locator('main h1').first().textContent().catch(() => ''), test, timeoutMs, 100);
+    pollUntil(
+      () =>
+        popup
+          .locator('main h1')
+          .first()
+          .textContent()
+          .catch(() => ''),
+      test,
+      timeoutMs,
+      100,
+    );
 
   // 첫 활성(Alpha)이 자동 선택 → 사이드바에서 Beta 선택으로 전환
   await popup.getByRole('button', { name: /^Select profile Beta/ }).click();
@@ -1439,7 +1828,10 @@ try {
   const betaOn = await popup
     .getByRole('button', { name: 'Select profile Beta (applied)' })
     .waitFor({ timeout: 5000 })
-    .then(() => true, () => false);
+    .then(
+      () => true,
+      () => false,
+    );
   record('N1b: 사이드바 도트/라벨이 프로필 on/off 반영', betaOff && betaOn, `off=${betaOff}, on=${betaOn}`);
   await popup.getByRole('switch', { name: 'Toggle Beta' }).click();
 
@@ -1459,10 +1851,14 @@ try {
   const createdSelected = await popup
     .getByRole('button', { name: new RegExp(`^Select profile ${createdName} `) })
     .getAttribute('aria-current');
-  record('N2: 새 프로필 — 이름·색 자동, 즉시 선택, 두 글자 라벨 없음',
-    /^New profile \d+$/.test(createdName) && /^#[0-9a-f]{6}$/i.test(createdProfile?.color ?? '') &&
-      createdSelected === 'true' && createdProfile?.hasLabel === false,
-    `name=${createdName}, color=${createdProfile?.color}, selected=${createdSelected}, shortLabel=${createdProfile?.hasLabel}`);
+  record(
+    'N2: 새 프로필 — 이름·색 자동, 즉시 선택, 두 글자 라벨 없음',
+    /^New profile \d+$/.test(createdName) &&
+      /^#[0-9a-f]{6}$/i.test(createdProfile?.color ?? '') &&
+      createdSelected === 'true' &&
+      createdProfile?.hasLabel === false,
+    `name=${createdName}, color=${createdProfile?.color}, selected=${createdSelected}, shortLabel=${createdProfile?.hasLabel}`,
+  );
 
   /*
    * N3: **프로필 편집 컨트롤이 없다** (티켓 04 AC1·AC2, ADR 0017).
@@ -1486,10 +1882,15 @@ try {
     search: await popup.getByLabel('Search profiles…').count(),
     create: await popup.getByRole('button', { name: '+ New profile' }).count(),
   };
-  record('N3: 프로필 편집 컨트롤 부재 — 이름·색·두 글자 라벨·⋯ 메뉴가 없고 남은 넷은 선다',
-    editorControlsGone && survivors.grip > 0 && survivors.toggle > 0 &&
-      survivors.search === 1 && survivors.create === 1,
-    `편집컨트롤제거=${editorControlsGone}, ${JSON.stringify(survivors)}`);
+  record(
+    'N3: 프로필 편집 컨트롤 부재 — 이름·색·두 글자 라벨·⋯ 메뉴가 없고 남은 넷은 선다',
+    editorControlsGone &&
+      survivors.grip > 0 &&
+      survivors.toggle > 0 &&
+      survivors.search === 1 &&
+      survivors.create === 1,
+    `편집컨트롤제거=${editorControlsGone}, ${JSON.stringify(survivors)}`,
+  );
 
   /*
    * N4: 프로필이 하나도 없으면 빈 상태 안내가 보인다.
@@ -1502,7 +1903,10 @@ try {
   const emptyShown = await popup
     .getByText('No profiles yet')
     .waitFor({ timeout: 5000 })
-    .then(() => true, () => false);
+    .then(
+      () => true,
+      () => false,
+    );
   record('N4: 빈 목록 → 빈 상태 안내 표시', emptyShown, `visible=${emptyShown}`);
 
   // 폼 Save 후 닫힘(재렌더)까지 대기 — 다음 Edit 클릭의 인덱스 밀림 방지
@@ -1587,21 +1991,43 @@ try {
 
   // N5: 통합 목록(ADR 0009) — 규칙 행 + '적용 조건' 캡션 + FILTER 행이 한 화면에
   await seedProfiles([
-    baseProfile('n-tab', 'Tabbed',
-      [
-        { kind: 'request-header', id: 'm1', name: 'X-A', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
-        // append 허용목록 헤더 — N7이 폼에서 Append 모드 전환을 검증한다
-        { kind: 'request-header', id: 'm2', name: 'Accept', value: 'application/json', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
-      ]),
+    baseProfile('n-tab', 'Tabbed', [
+      {
+        kind: 'request-header',
+        id: 'm1',
+        name: 'X-A',
+        value: '1',
+        enabled: true,
+        mode: 'override',
+        emptyMeans: 'remove',
+        comment: '',
+      },
+      // append 허용목록 헤더 — N7이 폼에서 Append 모드 전환을 검증한다
+      {
+        kind: 'request-header',
+        id: 'm2',
+        name: 'Accept',
+        value: 'application/json',
+        enabled: true,
+        mode: 'override',
+        emptyMeans: 'remove',
+        comment: '',
+      },
+    ]),
   ]);
   await popup.reload();
   // 목록엔 규칙 행만 있다 — 프로필 수준 '적용 조건' 섹션은 퇴역했다 (ADR 0010)
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().waitFor({ timeout: 5000 });
   const editCount = await popup.getByRole('button', { name: 'Edit', exact: true }).count();
-  const profileCaptionGone = !(await popup.getByText('Conditions (whole profile)').isVisible().catch(() => false));
-  record('N5: 목록은 규칙 행만 — 프로필 조건 섹션 퇴역',
+  const profileCaptionGone = !(await popup
+    .getByText('Conditions (whole profile)')
+    .isVisible()
+    .catch(() => false));
+  record(
+    'N5: 목록은 규칙 행만 — 프로필 조건 섹션 퇴역',
     editCount === 2 && profileCaptionGone,
-    `edit-buttons=${editCount}, profile-caption-gone=${profileCaptionGone}`);
+    `edit-buttons=${editCount}, profile-caption-gone=${profileCaptionGone}`,
+  );
 
   /*
    * N6: 폼 조건 disclosure — 조건 추가 → 배지 표기 → 비우면 conditions 제거 (ADR 0010).
@@ -1613,10 +2039,11 @@ try {
    */
   const pollFirstMod = (test, timeoutMs = 5000) =>
     pollUntil(
-      () => sw.evaluate(async () => {
-        const { state } = await chrome.storage.local.get('state');
-        return state.profiles[0]?.modifications[0] ?? null;
-      }),
+      () =>
+        sw.evaluate(async () => {
+          const { state } = await chrome.storage.local.get('state');
+          return state.profiles[0]?.modifications[0] ?? null;
+        }),
       test,
       timeoutMs,
       100,
@@ -1629,30 +2056,41 @@ try {
   const condAdded = await pollFirstMod((m) => m?.conditions?.requestMethods?.[0] === 'post');
   await waitFormClosed();
   // 조건은 행의 칩 줄로 표시된다 (티켓 05) — 메서드는 대문자 칩
-  const condSummaryShown = await popup.getByText('POST', { exact: true }).first().isVisible().catch(() => false);
+  const condSummaryShown = await popup
+    .getByText('POST', { exact: true })
+    .first()
+    .isVisible()
+    .catch(() => false);
   /*
    * 조건 칩은 **접히지 않고 폼 본문에 바로 선다** (티켓 06). 예전에는 disclosure를 한 번 더
    * 눌러야 보였는데, 남은 것이 칩 두 줄뿐이라 접을 값이 없다 — 접어 두면 조건이 걸린 규칙을
    * 열어도 무엇으로 좁혀져 있는지 한 번 더 눌러야 보인다.
    */
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
-  const chipsVisibleAtOnce = await methodChip('POST').isVisible().catch(() => false);
+  const chipsVisibleAtOnce = await methodChip('POST')
+    .isVisible()
+    .catch(() => false);
   await methodChip('POST').click(); // 선택 해제 → 남는 조건이 없다
   await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   const condCleared = await pollFirstMod((m) => m !== null && m.conditions === undefined);
   await waitFormClosed();
-  record('N6: 폼 조건 편집 — 추가·요약 표기·비우면 제거, 칩은 접지 않고 바로 보인다',
-    condAdded?.conditions?.requestMethods?.[0] === 'post' && condSummaryShown
-      && chipsVisibleAtOnce && condCleared?.conditions === undefined,
-    `added=${JSON.stringify(condAdded?.conditions)}, summary=${condSummaryShown}, 바로보임=${chipsVisibleAtOnce}, cleared=${condCleared?.conditions === undefined}`);
+  record(
+    'N6: 폼 조건 편집 — 추가·요약 표기·비우면 제거, 칩은 접지 않고 바로 보인다',
+    condAdded?.conditions?.requestMethods?.[0] === 'post' &&
+      condSummaryShown &&
+      chipsVisibleAtOnce &&
+      condCleared?.conditions === undefined,
+    `added=${JSON.stringify(condAdded?.conditions)}, summary=${condSummaryShown}, 바로보임=${chipsVisibleAtOnce}, cleared=${condCleared?.conditions === undefined}`,
+  );
 
   // N7: 규칙 폼 편집(ADR 0006) — Edit → 모드·메모 변경 → Save가 원자 반영
   const pollMod = (test, timeoutMs = 5000) =>
     pollUntil(
-      () => sw.evaluate(async () => {
-        const { state } = await chrome.storage.local.get('state');
-        return state.profiles[0]?.modifications[1] ?? null;
-      }),
+      () =>
+        sw.evaluate(async () => {
+          const { state } = await chrome.storage.local.get('state');
+          return state.profiles[0]?.modifications[1] ?? null;
+        }),
       test,
       timeoutMs,
       100,
@@ -1669,9 +2107,11 @@ try {
   await popup.getByLabel('Name', { exact: true }).fill('smoke comment');
   await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   const editedMod = await pollMod((m) => m?.comment === 'smoke comment');
-  record('N7: 규칙 폼 편집 — 폼은 하나만, 이름 원자 저장, 적용 방식 컨트롤 부재',
+  record(
+    'N7: 규칙 폼 편집 — 폼은 하나만, 이름 원자 저장, 적용 방식 컨트롤 부재',
     formCount === 1 && modeGone && editedMod?.comment === 'smoke comment',
-    `forms=${formCount}, mode-gone=${modeGone}, comment="${editedMod?.comment}"`);
+    `forms=${formCount}, mode-gone=${modeGone}, comment="${editedMod?.comment}"`,
+  );
   await waitFormClosed();
 
   /*
@@ -1705,23 +2145,48 @@ try {
   await popup.getByLabel('Name', { exact: true }).fill('hidden-fields-probe');
   await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   const preserved = await pollMod((m) => m?.comment === 'hidden-fields-probe');
-  record('N7b: 숨은 필드(적용 방식·빈 값의 뜻)가 폼 저장을 지나도 그대로다',
+  record(
+    'N7b: 숨은 필드(적용 방식·빈 값의 뜻)가 폼 저장을 지나도 그대로다',
     hiddenControlsGone && preserved?.emptyMeans === 'send-empty' && preserved?.mode === 'append',
-    `컨트롤 부재=${hiddenControlsGone}, emptyMeans=${preserved?.emptyMeans}, mode=${preserved?.mode}`);
+    `컨트롤 부재=${hiddenControlsGone}, emptyMeans=${preserved?.emptyMeans}, mode=${preserved?.mode}`,
+  );
   await waitFormClosed();
 
   // N8: 사이드바 드래그·키보드 재정렬 → 목록 순서 + 겹침 승자 실반영, 메뉴엔 이동 없음 (ui-refine 06)
-  const seedConf = () => seedProfiles([
-    baseProfile('n-top', 'Top',
-      [{ kind: 'request-header', id: 't1', name: 'X-Conf', value: 'top-wins', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }]),
-    baseProfile('n-bottom', 'Bottom',
-      [{ kind: 'request-header', id: 'b1', name: 'X-Conf', value: 'bottom-wins', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }]),
-  ]);
+  const seedConf = () =>
+    seedProfiles([
+      baseProfile('n-top', 'Top', [
+        {
+          kind: 'request-header',
+          id: 't1',
+          name: 'X-Conf',
+          value: 'top-wins',
+          enabled: true,
+          mode: 'override',
+          emptyMeans: 'remove',
+          comment: '',
+        },
+      ]),
+      baseProfile('n-bottom', 'Bottom', [
+        {
+          kind: 'request-header',
+          id: 'b1',
+          name: 'X-Conf',
+          value: 'bottom-wins',
+          enabled: true,
+          mode: 'override',
+          emptyMeans: 'remove',
+          comment: '',
+        },
+      ]),
+    ]);
   // dnd-kit은 지연 청크(ui-refine 08)라 그립이 드래그 가능해질 때까지 기다린다 —
   // useSortable이 그립에 aria-roledescription="sortable"을 붙이는 것이 로드 신호다.
   const waitSortableReady = () =>
-    popup.locator('button[aria-label^="Reorder"][aria-roledescription="sortable"]')
-      .first().waitFor({ timeout: 5000 });
+    popup
+      .locator('button[aria-label^="Reorder"][aria-roledescription="sortable"]')
+      .first()
+      .waitFor({ timeout: 5000 });
 
   await seedConf();
   await popup.reload();
@@ -1757,8 +2222,9 @@ try {
       'mouseup',
       () => {
         requestAnimationFrame(() => {
-          window.__orderAtDrop = [...document.querySelectorAll('[aria-label^="Select profile"]')]
-            .map((el) => el.getAttribute('aria-label'));
+          window.__orderAtDrop = [...document.querySelectorAll('[aria-label^="Select profile"]')].map((el) =>
+            el.getAttribute('aria-label'),
+          );
         });
       },
       { once: true },
@@ -1767,7 +2233,10 @@ try {
   await popup.mouse.up();
   const orderAtDrop = await popup
     .waitForFunction(() => window.__orderAtDrop != null, null, { timeout: 3000 })
-    .then(() => popup.evaluate(() => window.__orderAtDrop), () => null);
+    .then(
+      () => popup.evaluate(() => window.__orderAtDrop),
+      () => null,
+    );
   const droppedInPlace = orderAtDrop?.[0]?.startsWith('Select profile Bottom') === true;
   const dragOrder = await pollUntil(orderNames, (names) => names[0]?.startsWith('Bottom'), 5000, 100);
   const dragWinner = await pollUntil(
@@ -1805,9 +2274,7 @@ try {
   await popup.waitForTimeout(300);
   const afterCancel = await orderNames();
   const cancelKeptOrder = beforeCancel.join('|') === afterCancel.join('|');
-  const focusOnGrip = await popup.evaluate(
-    () => document.activeElement?.getAttribute('aria-label') ?? '',
-  );
+  const focusOnGrip = await popup.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? '');
   const focusKept = /Reorder Bottom/.test(focusOnGrip);
 
   /*
@@ -1816,17 +2283,22 @@ try {
    * 예전에는 여기서 "⋯ 메뉴에 이동 항목이 없다"를 쟀다. 그 메뉴가 통째로 사라졌으므로 재는
    * 것을 옮긴다: 순서를 바꾸는 컨트롤이 그립 말고는 없다 — 위/아래 버튼이 어디에도 서지 않는다.
    */
-  const moveButtonsGone =
-    (await popup.getByRole('button', { name: /Move (up|down)/ }).count()) === 0;
+  const moveButtonsGone = (await popup.getByRole('button', { name: /Move (up|down)/ }).count()) === 0;
 
-  record('N8: 드래그(놓는 프레임에 확정)·키보드 재정렬+Esc 취소(원순서·포커스 유지), 이동 컨트롤은 그립뿐',
-    winnerBefore === 'top-wins'
-      && droppedInPlace
-      && dragOrder[0]?.startsWith('Bottom') && dragWinner === 'bottom-wins'
-      && kbdOrder[0]?.startsWith('Bottom') && kbdWinner === 'bottom-wins'
-      && cancelKeptOrder && focusKept && moveButtonsGone,
+  record(
+    'N8: 드래그(놓는 프레임에 확정)·키보드 재정렬+Esc 취소(원순서·포커스 유지), 이동 컨트롤은 그립뿐',
+    winnerBefore === 'top-wins' &&
+      droppedInPlace &&
+      dragOrder[0]?.startsWith('Bottom') &&
+      dragWinner === 'bottom-wins' &&
+      kbdOrder[0]?.startsWith('Bottom') &&
+      kbdWinner === 'bottom-wins' &&
+      cancelKeptOrder &&
+      focusKept &&
+      moveButtonsGone,
     `drop-frame=${droppedInPlace}(${orderAtDrop?.join('|') ?? 'null'}), ` +
-    `drag=[${dragOrder.join('|')}]/${dragWinner}, kbd=[${kbdOrder.join('|')}]/${kbdWinner}, cancel-kept=${cancelKeptOrder}, focus-kept=${focusKept}, move-buttons-gone=${moveButtonsGone}`);
+      `drag=[${dragOrder.join('|')}]/${dragWinner}, kbd=[${kbdOrder.join('|')}]/${kbdWinner}, cancel-kept=${cancelKeptOrder}, focus-kept=${focusKept}, move-buttons-gone=${moveButtonsGone}`,
+  );
 
   // N9: 탭 앱 셸 — 사이드바 검색·선택, 레일 화면 전환 (슬라이스 08)
   await seedProfiles([
@@ -1843,30 +2315,52 @@ try {
   await tabApp.getByLabel('Search profiles').fill('');
   await tabApp.getByRole('button', { name: 'Select profile Gamma' }).click();
   const sidebarSelected = await pollUntil(
-    () => tabApp.locator('main h1').first().textContent().catch(() => ''),
+    () =>
+      tabApp
+        .locator('main h1')
+        .first()
+        .textContent()
+        .catch(() => ''),
     (v) => v === 'Gamma',
   );
   // 레일 전환은 fade-in(ui-refine 08)이라 대상 화면 렌더를 기다린다(즉시 isVisible 아님).
   await tabApp.getByRole('button', { name: 'Show backups' }).click();
   // 랜드마크가 패널 토글에서 **카드 제목**으로 바뀌었다 (티켓 09) — 접히는 패널이 없어졌다.
-  const backupsShown = await tabApp.getByText('Backup history', { exact: true })
-    .waitFor({ timeout: 5000 }).then(() => true, () => false);
+  const backupsShown = await tabApp
+    .getByText('Backup history', { exact: true })
+    .waitFor({ timeout: 5000 })
+    .then(
+      () => true,
+      () => false,
+    );
   // 넓은 본문에서 **넘치지 않는지**까지 본다 (티켓 09 AC8) — 팝업은 N41g가 재고, 탭은 여기다.
   const backupsOverflow = await tabApp.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
   await tabApp.getByRole('button', { name: 'Show settings' }).click();
-  const prefsShown = await tabApp.getByText('Theme', { exact: true })
-    .waitFor({ timeout: 5000 }).then(() => true, () => false);
+  const prefsShown = await tabApp
+    .getByText('Theme', { exact: true })
+    .waitFor({ timeout: 5000 })
+    .then(
+      () => true,
+      () => false,
+    );
   const prefsOverflow = await tabApp.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
   await tabApp.getByRole('button', { name: 'Show profiles' }).click();
-  record('N9: 탭 앱 셸 — 검색 필터·사이드바 선택·레일 전환, 넓은 본문에서 넘치지 않는다',
-    searchResult.length === 1 && searchResult[0]?.startsWith('Beta') && sidebarSelected === 'Gamma'
-      && backupsShown && prefsShown && backupsOverflow === 0 && prefsOverflow === 0,
+  record(
+    'N9: 탭 앱 셸 — 검색 필터·사이드바 선택·레일 전환, 넓은 본문에서 넘치지 않는다',
+    searchResult.length === 1 &&
+      searchResult[0]?.startsWith('Beta') &&
+      sidebarSelected === 'Gamma' &&
+      backupsShown &&
+      prefsShown &&
+      backupsOverflow === 0 &&
+      prefsOverflow === 0,
     `search=[${searchResult.join('|')}], selected=${sidebarSelected}, backups=${backupsShown}, ` +
-      `prefs=${prefsShown}, overflow 백업=${backupsOverflow}·설정=${prefsOverflow}`);
+      `prefs=${prefsShown}, overflow 백업=${backupsOverflow}·설정=${prefsOverflow}`,
+  );
 
   // N10: 표면 동일성 — 탭 앱에서 규칙 폼으로 추가 → 실제 요청 반영 (ADR 0006 원자 저장)
   /*
@@ -1890,8 +2384,18 @@ try {
 
   // N11: 키보드 경로 마감 — 사이드바·행 확장 토글 (탭=N5, 메뉴=N8과 함께 4종 완성)
   await seedProfiles([
-    baseProfile('k-a', 'KeyA',
-      [{ kind: 'request-header', id: 'm1', name: 'X-K', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }]),
+    baseProfile('k-a', 'KeyA', [
+      {
+        kind: 'request-header',
+        id: 'm1',
+        name: 'X-K',
+        value: '1',
+        enabled: true,
+        mode: 'override',
+        emptyMeans: 'remove',
+        comment: '',
+      },
+    ]),
     { ...baseProfile('k-b', 'KeyB', []), active: false },
   ]);
   await popup.reload();
@@ -1908,11 +2412,16 @@ try {
   const kbFormOpened = await popup
     .getByRole('combobox', { name: 'Type', exact: true })
     .waitFor({ timeout: 5000 })
-    .then(() => true, () => false);
+    .then(
+      () => true,
+      () => false,
+    );
   await popup.getByRole('button', { name: 'Cancel' }).click();
-  record('N11: 키보드 — 사이드바 전환·규칙 폼 열기',
+  record(
+    'N11: 키보드 — 사이드바 전환·규칙 폼 열기',
     kbSwitched === 'KeyB' && kbFormOpened,
-    `sidebar=${kbSwitched}, form=${kbFormOpened}`);
+    `sidebar=${kbSwitched}, form=${kbFormOpened}`,
+  );
 
   /*
    * **N12(프로필 헤더 편집)가 없다** (ADR 0017, 티켓 04). 이름·두 글자 라벨·색을 채우고
@@ -1926,9 +2435,11 @@ try {
     (names) => names.length === 1,
   );
   await popup.getByLabel('Search profiles').fill('');
-  record('N12b: 팝업 사이드바 검색 필터',
+  record(
+    'N12b: 팝업 사이드바 검색 필터',
     popupSearch.length === 1 && popupSearch[0]?.startsWith('KeyA'),
-    `search=[${popupSearch.join('|')}]`);
+    `search=[${popupSearch.join('|')}]`,
+  );
 
   // N13: Export 경로 — 실제 다운로드 캡처 → 페이로드 검증 (release r1 R-2)
   // 현재 상태: KeyA(k-a) + KeyB(k-b). 전체 선택 기본 → 2개 내보내기.
@@ -1939,14 +2450,16 @@ try {
     popup.getByRole('button', { name: /^Export \(2\)$/ }).click(),
   ]);
   const exportPayload = JSON.parse(readFileSync(await exportDownload.path(), 'utf8'));
-  record('N13: Export 다운로드 → 페이로드 검증',
-    exportDownload.suggestedFilename() === 'headerkit-profiles.json'
+  record(
+    'N13: Export 다운로드 → 페이로드 검증',
+    exportDownload.suggestedFilename() === 'headerkit-profiles.json' &&
       // 포맷 버전은 상수를 따라간다 — 리터럴을 박으면 버전을 올릴 때마다 여기서 깨진다.
       // 내보내기는 항상 **현재** 버전으로 쓴다(읽기는 예전 v1도 받는다, ADR 0015).
-      && exportPayload.headerkit === EXPORT_FORMAT_VERSION
-      && exportPayload.profiles?.length === 2
-      && exportPayload.profiles.some((p) => p.name === 'KeyA'),
-    `file=${exportDownload.suggestedFilename()}, profiles=${exportPayload.profiles?.length}, names=[${exportPayload.profiles?.map((p) => p.name).join('|')}]`);
+      exportPayload.headerkit === EXPORT_FORMAT_VERSION &&
+      exportPayload.profiles?.length === 2 &&
+      exportPayload.profiles.some((p) => p.name === 'KeyA'),
+    `file=${exportDownload.suggestedFilename()}, profiles=${exportPayload.profiles?.length}, names=[${exportPayload.profiles?.map((p) => p.name).join('|')}]`,
+  );
   // 뒤 시나리오는 규칙 본문을 만진다 — 프로필 화면으로 돌아간다.
   await popup.getByRole('button', { name: 'Show profiles' }).click();
 
@@ -1957,11 +2470,20 @@ try {
   const koToggle = await popupKo
     .getByRole('switch', { name: 'KeyA 켜고 끄기' })
     .waitFor({ timeout: 5000 })
-    .then(() => true, () => false);
+    .then(
+      () => true,
+      () => false,
+    );
   // ⋯ 메뉴가 사라졌으므로(티켓 04) 그 자리를 **행 메타**가 대신 잰다 — ko 카탈로그를 거친
   // `N개 규칙 · 미적용`이 화면에 서고, 같은 낱말이 행 이름 끝에도 들어간다(WCAG 2.5.3).
-  const koRowMeta = await popupKo.getByText('규칙 0개 · 미적용', { exact: true }).isVisible().catch(() => false);
-  const koSidebarItem = await popupKo.getByRole('button', { name: 'KeyB 프로필 선택 (미적용)' }).isVisible().catch(() => false);
+  const koRowMeta = await popupKo
+    .getByText('규칙 0개 · 미적용', { exact: true })
+    .isVisible()
+    .catch(() => false);
+  const koSidebarItem = await popupKo
+    .getByRole('button', { name: 'KeyB 프로필 선택 (미적용)' })
+    .isVisible()
+    .catch(() => false);
   const koRowToggle = await popupKo
     .getByRole('button', { name: '편집' })
     .first()
@@ -1970,9 +2492,11 @@ try {
   // 아이콘 버튼(ui-refine 03)의 ko aria — 삭제 아이콘이 카탈로그 경유 이름을 갖는다
   const koDeleteIcon = (await popupKo.getByRole('button', { name: '삭제', exact: true }).count()) > 0;
   await popupKo.close();
-  record('N14: ko 접근성 이름 — aria 카탈로그 경유, 행 메타도 같은 낱말',
+  record(
+    'N14: ko 접근성 이름 — aria 카탈로그 경유, 행 메타도 같은 낱말',
     koToggle && koRowMeta && koSidebarItem && koRowToggle && koDeleteIcon,
-    `toggle=${koToggle}, meta=${koRowMeta}, sidebar=${koSidebarItem}, row=${koRowToggle}, delete-icon=${koDeleteIcon}`);
+    `toggle=${koToggle}, meta=${koRowMeta}, sidebar=${koSidebarItem}, row=${koRowToggle}, delete-icon=${koDeleteIcon}`,
+  );
 
   /*
    * N14b: **폼 ko 라벨이 새 구성으로 뜨고, 퇴역한 조건 라벨은 어디에도 없다** (티켓 06).
@@ -1999,9 +2523,11 @@ try {
     await Promise.all(retiredLabels.map((label) => condKo.getByLabel(label, { exact: true }).count()))
   ).every((count) => count === 0);
   await condKo.close();
-  record('N14b: ko 폼 라벨 — 시안 구성이 카탈로그를 거치고, 퇴역 조건 라벨 넷은 없다',
+  record(
+    'N14b: ko 폼 라벨 — 시안 구성이 카탈로그를 거치고, 퇴역 조건 라벨 넷은 없다',
     koFormLabels && retiredGone,
-    `새 라벨=${koFormLabels}, 퇴역 라벨 부재=${retiredGone}`);
+    `새 라벨=${koFormLabels}, 퇴역 라벨 부재=${retiredGone}`,
+  );
 
   // N15: 규칙 단위 URL 필터 (ADR 0007/0008) — contains(비정규식)와 regex 두 방식 모두
   // 매칭 URL에만 적용되고, 무스코프 규칙은 전역이며, 프로필 필터는 건드리지 않는다.
@@ -2024,12 +2550,14 @@ try {
   await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   await waitFormClosed();
   const kaState = await pollUntil(
-    () => sw.evaluate(async () => {
-      const { state } = await chrome.storage.local.get('state');
-      const prof = state.profiles.find((x) => x.id === 'k-a');
-      return { mods: prof?.modifications ?? [] };
-    }),
-    (s) => s.mods.length === 2 && s.mods[0]?.urlFilter === 'scope=1' && s.mods[0]?.urlMatchType === 'contains',
+    () =>
+      sw.evaluate(async () => {
+        const { state } = await chrome.storage.local.get('state');
+        const prof = state.profiles.find((x) => x.id === 'k-a');
+        return { mods: prof?.modifications ?? [] };
+      }),
+    (s) =>
+      s.mods.length === 2 && s.mods[0]?.urlFilter === 'scope=1' && s.mods[0]?.urlMatchType === 'contains',
   );
   const inScope = await pollUntil(
     () => fetchEchoHeaders(pageB, '/headers?scope=1'),
@@ -2046,8 +2574,16 @@ try {
     .filter({ has: popup.getByRole('button', { name: 'Edit', exact: true }) })
     .first();
   const scopedSummary =
-    (await ruleRow.getByText('scope=1', { exact: false }).first().isVisible().catch(() => false)) &&
-    (await ruleRow.getByText(/^X-K: 1$/).first().isVisible().catch(() => false));
+    (await ruleRow
+      .getByText('scope=1', { exact: false })
+      .first()
+      .isVisible()
+      .catch(() => false)) &&
+    (await ruleRow
+      .getByText(/^X-K: 1$/)
+      .first()
+      .isVisible()
+      .catch(() => false));
   // 3) regex(고급) 방식으로 전환 — 실요청 검증
   await waitFormClosed();
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
@@ -2065,28 +2601,48 @@ try {
   await popup.getByLabel('URL filter').fill('');
   await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   const cleared = await pollUntil(
-    () => sw.evaluate(async () => {
-      const { state } = await chrome.storage.local.get('state');
-      const mod = state.profiles.find((x) => x.id === 'k-a')?.modifications[0] ?? {};
-      return { hasFilter: 'urlFilter' in mod, hasType: 'urlMatchType' in mod };
-    }),
+    () =>
+      sw.evaluate(async () => {
+        const { state } = await chrome.storage.local.get('state');
+        const mod = state.profiles.find((x) => x.id === 'k-a')?.modifications[0] ?? {};
+        return { hasFilter: 'urlFilter' in mod, hasType: 'urlMatchType' in mod };
+      }),
     (s) => !s.hasFilter && !s.hasType,
   );
   const clearedHeaders = await pollUntil(
     () => fetchEchoHeaders(pageB, '/headers'),
     (h) => h['x-k'] === '1',
   );
-  record('N15: 규칙 URL 필터 — contains·regex 스코핑, 무스코프 전역, 비우면 해제',
-    kaState.mods.length === 2 && inScope['x-k'] === '1' && inScope['x-u'] === 'u'
-      && outScope['x-k'] === undefined && outScope['x-u'] === 'u'
-      && scopedSummary && regexIn['x-k'] === '1' && regexOut['x-k'] === undefined
-      && !cleared.hasFilter && !cleared.hasType && clearedHeaders['x-k'] === '1',
-    `mods=${kaState.mods.length}, contains=[${inScope['x-k']},${outScope['x-k']}], regex=[${regexIn['x-k']},${regexOut['x-k']}], summary=${scopedSummary}, storage-cleared=[${cleared.hasFilter},${cleared.hasType}], cleared=${clearedHeaders['x-k']}`);
+  record(
+    'N15: 규칙 URL 필터 — contains·regex 스코핑, 무스코프 전역, 비우면 해제',
+    kaState.mods.length === 2 &&
+      inScope['x-k'] === '1' &&
+      inScope['x-u'] === 'u' &&
+      outScope['x-k'] === undefined &&
+      outScope['x-u'] === 'u' &&
+      scopedSummary &&
+      regexIn['x-k'] === '1' &&
+      regexOut['x-k'] === undefined &&
+      !cleared.hasFilter &&
+      !cleared.hasType &&
+      clearedHeaders['x-k'] === '1',
+    `mods=${kaState.mods.length}, contains=[${inScope['x-k']},${outScope['x-k']}], regex=[${regexIn['x-k']},${regexOut['x-k']}], summary=${scopedSummary}, storage-cleared=[${cleared.hasFilter},${cleared.hasType}], cleared=${clearedHeaders['x-k']}`,
+  );
 
   // N16: 칩 그룹 (ADR 0011) — 캡션 호버가 첫 칩에 전파되지 않고, 칩 토글이 저장된다
   await seedProfiles([
-    baseProfile('p-chip', 'Chips',
-      [{ kind: 'request-header', id: 'm1', name: 'X-Chip', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }]),
+    baseProfile('p-chip', 'Chips', [
+      {
+        kind: 'request-header',
+        id: 'm1',
+        name: 'X-Chip',
+        value: '1',
+        enabled: true,
+        mode: 'override',
+        emptyMeans: 'remove',
+        comment: '',
+      },
+    ]),
   ]);
   await popup.reload();
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
@@ -2113,10 +2669,11 @@ try {
   await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   const pollChipConditions = (test) =>
     pollUntil(
-      () => sw.evaluate(async () => {
-        const { state } = await chrome.storage.local.get('state');
-        return state.profiles[0]?.modifications[0]?.conditions ?? null;
-      }),
+      () =>
+        sw.evaluate(async () => {
+          const { state } = await chrome.storage.local.get('state');
+          return state.profiles[0]?.modifications[0]?.conditions ?? null;
+        }),
       test,
     );
   const chipSaved = await pollChipConditions((c) => c?.resourceTypes?.length === 3);
@@ -2126,11 +2683,15 @@ try {
   await popup.getByRole('button', { name: 'XHR', exact: true }).click();
   await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   const chipDeselected = await pollChipConditions((c) => c?.resourceTypes?.length === 2);
-  record('N16: 칩 그룹 — 캡션 호버 비전파, 묶음 토글이 값 여럿으로 펴져 저장, 해제 반영',
-    bgIdle === bgCaptionHover && bgChipHover !== bgIdle && pressedAfterClick === 'true'
-      && chipSaved?.resourceTypes?.join() === 'main_frame,sub_frame,xmlhttprequest'
-      && chipDeselected?.resourceTypes?.join() === 'main_frame,sub_frame',
-    `idle=${bgIdle}, caption-hover=${bgCaptionHover}, chip-hover=${bgChipHover}, pressed=${pressedAfterClick}, saved=${JSON.stringify(chipSaved?.resourceTypes)}, deselected=${JSON.stringify(chipDeselected?.resourceTypes)}`);
+  record(
+    'N16: 칩 그룹 — 캡션 호버 비전파, 묶음 토글이 값 여럿으로 펴져 저장, 해제 반영',
+    bgIdle === bgCaptionHover &&
+      bgChipHover !== bgIdle &&
+      pressedAfterClick === 'true' &&
+      chipSaved?.resourceTypes?.join() === 'main_frame,sub_frame,xmlhttprequest' &&
+      chipDeselected?.resourceTypes?.join() === 'main_frame,sub_frame',
+    `idle=${bgIdle}, caption-hover=${bgCaptionHover}, chip-hover=${bgChipHover}, pressed=${pressedAfterClick}, saved=${JSON.stringify(chipSaved?.resourceTypes)}, deselected=${JSON.stringify(chipDeselected?.resourceTypes)}`,
+  );
 
   // N17: 아이콘 버튼 — 툴팁(호버·포커스), 행 액션 호버 표시, 환경설정 정리 (ui-refine 03)
   await waitFormClosed();
@@ -2145,7 +2706,10 @@ try {
     .getByRole('tooltip')
     .filter({ hasText: 'Edit' })
     .waitFor({ timeout: 5000 })
-    .then(() => true, () => false);
+    .then(
+      () => true,
+      () => false,
+    );
   await popup.mouse.move(0, 0);
   /*
    * 툴팁은 키보드 포커스(focus-visible)에 열린다 — 프로그램적 focus()가 아니라 실제 Tab.
@@ -2159,16 +2723,21 @@ try {
     .getByRole('tooltip')
     .filter({ hasText: 'Edit' })
     .waitFor({ timeout: 5000 })
-    .then(() => true, () => false);
+    .then(
+      () => true,
+      () => false,
+    );
   // 계약이 바뀌었다 — 예전에는 idle이 **0**(호버 전에는 아예 안 보임)이었다. 그때는
   // 편집·삭제가 존재한다는 사실 자체를 호버로만 알 수 있었고, 호버가 없는 입력(터치·펜)과
   // 처음 쓰는 사용자에게는 규칙 편집 경로가 발견 불가였다 (ui-review UI-03).
   //
   // 이제 기본 0.6으로 존재만 알리고 호버·포커스에서 1이 된다. **0이 아니라는 것**이 계약의
   // 핵심이라 값을 그대로 못박는다 — 다시 0으로 돌아가면 여기서 실패한다.
-  record('N17a: 행 액션 — 평소 은은히 보이고 호버·포커스에 또렷 + 아이콘 툴팁',
+  record(
+    'N17a: 행 액션 — 평소 은은히 보이고 호버·포커스에 또렷 + 아이콘 툴팁',
     opacityIdle === '0.6' && opacityRowHover === '1' && tooltipOnHover && tooltipOnFocus,
-    `idle=${opacityIdle}, row-hover=${opacityRowHover}, tooltip-hover=${tooltipOnHover}, tooltip-focus=${tooltipOnFocus}`);
+    `idle=${opacityIdle}, row-hover=${opacityRowHover}, tooltip-hover=${tooltipOnHover}, tooltip-focus=${tooltipOnFocus}`,
+  );
 
   /*
    * N17b: **설정은 셋뿐이다** — 테마 · 배지 표시 · 언어 (티켓 09 AC6·AC7, 스펙 story 78–80).
@@ -2200,15 +2769,26 @@ try {
     debug: await popup.getByText(/Debug/i).count(),
   };
   await popup.getByRole('button', { name: 'Show profiles' }).click();
-  record('N17b: 설정 — 테마·배지·언어 셋만 서고 단축키·자동완성 사전·일본어·디버그는 없다',
-    Object.values(prefsPresent).every((n) => n === 1) &&
-      Object.values(prefsGone).every((n) => n === 0),
-    `있음=${JSON.stringify(prefsPresent)}, 없음=${JSON.stringify(prefsGone)}`);
+  record(
+    'N17b: 설정 — 테마·배지·언어 셋만 서고 단축키·자동완성 사전·일본어·디버그는 없다',
+    Object.values(prefsPresent).every((n) => n === 1) && Object.values(prefsGone).every((n) => n === 0),
+    `있음=${JSON.stringify(prefsPresent)}, 없음=${JSON.stringify(prefsGone)}`,
+  );
 
   // N18: 저장 검증 + 폼 정리 + 폼 키보드 (ui-refine 04)
   await seedProfiles([
-    baseProfile('p-form', 'Form',
-      [{ kind: 'request-header', id: 'm1', name: 'X-Base', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' }]),
+    baseProfile('p-form', 'Form', [
+      {
+        kind: 'request-header',
+        id: 'm1',
+        name: 'X-Base',
+        value: '1',
+        enabled: true,
+        mode: 'override',
+        emptyMeans: 'remove',
+        comment: '',
+      },
+    ]),
   ]);
   await popup.reload();
 
@@ -2235,18 +2815,29 @@ try {
       null,
       { timeout: 500 },
     )
-    .then(() => true, () => false);
+    .then(
+      () => true,
+      () => false,
+    );
   await popup.getByRole('button', { name: SAVE_BUTTON }).click();
-  const inlineError = await popup.getByText('Required.', { exact: true }).first()
-    .waitFor({ timeout: 5000 }).then(() => true, () => false);
+  const inlineError = await popup
+    .getByText('Required.', { exact: true })
+    .first()
+    .waitFor({ timeout: 5000 })
+    .then(
+      () => true,
+      () => false,
+    );
   const ariaInvalid = await nameInput.getAttribute('aria-invalid');
   const modsAfterBlockedSave = await sw.evaluate(async () => {
     const { state } = await chrome.storage.local.get('state');
     return state.profiles[0].modifications.length;
   });
-  record('N18a: 빈 필수 필드 Save 차단 — 인라인 오류·aria-invalid·스토리지 불변·이름 칸 autofocus',
+  record(
+    'N18a: 빈 필수 필드 Save 차단 — 인라인 오류·aria-invalid·스토리지 불변·이름 칸 autofocus',
     autofocused && inlineError && ariaInvalid === 'true' && modsAfterBlockedSave === 1,
-    `autofocus(이름)=${autofocused}, error=${inlineError}, aria-invalid=${ariaInvalid}, mods=${modsAfterBlockedSave}`);
+    `autofocus(이름)=${autofocused}, error=${inlineError}, aria-invalid=${ariaInvalid}, mods=${modsAfterBlockedSave}`,
+  );
 
   // N18f: Type 셀렉트가 더는 CSP를 제공하지 않는다 (ADR 0013). "CSP 없음"만 단언하면
   // 셀렉트가 통째로 깨져도 통과하므로, 남아야 할 종류가 빠짐없이 그대로인지 함께 본다.
@@ -2260,7 +2851,10 @@ try {
   const typeOpened = await popup
     .getByRole('option', { name: 'Redirect', exact: true })
     .waitFor({ timeout: 5000 })
-    .then(() => true, () => false);
+    .then(
+      () => true,
+      () => false,
+    );
   await settledListboxes(popup, 1);
   const kindOptions = (await popup.getByRole('option').allTextContents()).map((n) => n.trim());
   if (typeOpened) {
@@ -2280,15 +2874,22 @@ try {
     'Remove header',
     'Block request',
   ];
-  record('N18f: Type 셀렉트 옵션 — CSP 없음, 살아 있는 8종 정확히 유지',
-    typeOpened && !kindOptions.some((o) => /csp/i.test(o)) &&
-      keptKinds.every((k) => kindOptions.includes(k)) && kindOptions.length === keptKinds.length,
-    `열림=${typeOpened}, options=[${kindOptions.join(' | ')}]`);
+  record(
+    'N18f: Type 셀렉트 옵션 — CSP 없음, 살아 있는 8종 정확히 유지',
+    typeOpened &&
+      !kindOptions.some((o) => /csp/i.test(o)) &&
+      keptKinds.every((k) => kindOptions.includes(k)) &&
+      kindOptions.length === keptKinds.length,
+    `열림=${typeOpened}, options=[${kindOptions.join(' | ')}]`,
+  );
 
   // b: 종류 전환은 이전 종류의 검증 오류를 지운다 — 차단 Save 직후(N18a에서 name 오류
   //    상태) Request cookie로 바꾸면 아직 Save한 적 없으므로 오류가 없어야 한다.
   await pickOption(popup, 'Type', 'Request cookie');
-  const cookieLabelShown = await popup.getByText('Cookie name', { exact: true }).isVisible().catch(() => false);
+  const cookieLabelShown = await popup
+    .getByText('Cookie name', { exact: true })
+    .isVisible()
+    .catch(() => false);
   const noStaleError = (await popup.getByText('Required.', { exact: true }).count()) === 0;
   // Redirect로 바꿔 Save하면 패턴·치환 두 오류가 새로 뜬다
   await pickOption(popup, 'Type', 'Redirect');
@@ -2296,9 +2897,14 @@ try {
   const redirectErrors = await popup.getByText('Required.', { exact: true }).count();
   await pickOption(popup, 'Type', 'Response cookie');
   const setCookieSelected = await popup.getByRole('combobox', { name: 'Type', exact: true }).textContent();
-  record('N18b: 종류 전환 시 스테일 오류 없음 + 응답 쿠키·쿠키 이름 라벨 + Redirect 2필드 오류',
-    cookieLabelShown && noStaleError && redirectErrors === 2 && /Response cookie/.test(setCookieSelected ?? ''),
-    `cookie-label=${cookieLabelShown}, no-stale=${noStaleError}, redirect-errors=${redirectErrors}, kind="${(setCookieSelected ?? '').trim()}"`);
+  record(
+    'N18b: 종류 전환 시 스테일 오류 없음 + 응답 쿠키·쿠키 이름 라벨 + Redirect 2필드 오류',
+    cookieLabelShown &&
+      noStaleError &&
+      redirectErrors === 2 &&
+      /Response cookie/.test(setCookieSelected ?? ''),
+    `cookie-label=${cookieLabelShown}, no-stale=${noStaleError}, redirect-errors=${redirectErrors}, kind="${(setCookieSelected ?? '').trim()}"`,
+  );
 
   /*
    * N18g: 새 종류(ADR 0015)의 폼은 자기에게 맞는 필드만 보인다.
@@ -2328,11 +2934,18 @@ try {
     .getByLabel('URL filter (this rule only)', { exact: true })
     .isVisible()
     .catch(() => false);
-  record('N18g: 새 종류 폼 — UA는 값만, Remove header는 이름만, Block은 스코프만',
-    uaValueShown && uaHidesHeaderName && delNameShown && delHidesValue &&
-      blockHidesName && blockHidesValue && blockScopeShown,
+  record(
+    'N18g: 새 종류 폼 — UA는 값만, Remove header는 이름만, Block은 스코프만',
+    uaValueShown &&
+      uaHidesHeaderName &&
+      delNameShown &&
+      delHidesValue &&
+      blockHidesName &&
+      blockHidesValue &&
+      blockScopeShown,
     `ua: value=${uaValueShown} no-name=${uaHidesHeaderName}, del: name=${delNameShown} no-value=${delHidesValue}, ` +
-      `block: no-name=${blockHidesName} no-value=${blockHidesValue} scope=${blockScopeShown}`);
+      `block: no-name=${blockHidesName} no-value=${blockHidesValue} scope=${blockScopeShown}`,
+  );
 
   /*
    * N18h: **넓은 스코프 Block은 되묻지 않고 그냥 저장된다** (수용 기준, 티켓 07).
@@ -2362,9 +2975,7 @@ try {
   await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   const wideSaved = await pollUntil(blockRuleCount, (n) => n === 1);
   await waitFormClosed();
-  record('N18h: 넓은 스코프 Block — 되묻지 않고 첫 클릭에 저장된다',
-    wideSaved === 1,
-    `saved=${wideSaved}`);
+  record('N18h: 넓은 스코프 Block — 되묻지 않고 첫 클릭에 저장된다', wideSaved === 1, `saved=${wideSaved}`);
 
   /*
    * N18i: 좁은 스코프 Block도 같은 길로 저장되고, 목록이 실효 스코프를 보여 준다.
@@ -2381,9 +2992,11 @@ try {
     .getByText('*://*/*', { exact: true })
     .isVisible()
     .catch(() => false);
-  record('N18i: 좁은 스코프 Block도 바로 저장 + 목록이 실효 스코프를 보여 준다',
+  record(
+    'N18i: 좁은 스코프 Block도 바로 저장 + 목록이 실효 스코프를 보여 준다',
     narrowSaved === 2 && wideScopeVisibleInList,
-    `narrow-saved=${narrowSaved}, wide-scope-in-list=${wideScopeVisibleInList}`);
+    `narrow-saved=${narrowSaved}, wide-scope-in-list=${wideScopeVisibleInList}`,
+  );
 
   // 아래 c~e는 열린 폼을 이어서 굴린다 — Block 저장으로 닫혔으니 다시 연다.
   await popup.getByRole('button', { name: 'Add rule' }).first().click();
@@ -2415,12 +3028,14 @@ try {
   // d: 정규식을 고르면 예시가 그 문법으로 바뀐다 (story 22)
   await pickOption(popup, 'URL match type', 'Regex');
   const regexPlaceholder = await popup.getByLabel('URL filter').getAttribute('placeholder');
-  record('N18c: 숨은 필드 컨트롤 부재 + 매치 방식 2지 + regex placeholder 분기',
+  record(
+    'N18c: 숨은 필드 컨트롤 부재 + 매치 방식 2지 + regex placeholder 분기',
     probeWorks &&
       hiddenFieldControls.every((count) => count === 0) &&
       matchOptions.join('|') === 'Wildcard|Regex' &&
       /\^https/.test(regexPlaceholder ?? ''),
-    `감도대조=${probeWorks}, 숨은 컨트롤=${JSON.stringify(hiddenFieldControls)}, 매치 선택지=${JSON.stringify(matchOptions)}, placeholder="${regexPlaceholder}"`);
+    `감도대조=${probeWorks}, 숨은 컨트롤=${JSON.stringify(hiddenFieldControls)}, 매치 선택지=${JSON.stringify(matchOptions)}, placeholder="${regexPlaceholder}"`,
+  );
 
   // e: 키보드 — Cmd/Ctrl+Enter 저장, Esc 닫기
   await popup.getByLabel('Header name', { exact: true }).fill('X-Kbd');
@@ -2428,10 +3043,11 @@ try {
   await popup.getByLabel('Value', { exact: true }).fill('kbd');
   await popup.keyboard.press(process.platform === 'darwin' ? 'Meta+Enter' : 'Control+Enter');
   const kbdSaved = await pollUntil(
-    () => sw.evaluate(async () => {
-      const { state } = await chrome.storage.local.get('state');
-      return state.profiles[0].modifications.some((m) => m.name === 'X-Kbd');
-    }),
+    () =>
+      sw.evaluate(async () => {
+        const { state } = await chrome.storage.local.get('state');
+        return state.profiles[0].modifications.some((m) => m.name === 'X-Kbd');
+      }),
     (v) => v === true,
   );
   await waitFormClosed();
@@ -2447,14 +3063,24 @@ try {
     3000,
     100,
   );
-  const formStillOpen = await popup.getByRole('button', { name: SAVE_BUTTON }).isVisible().catch(() => false);
+  const formStillOpen = await popup
+    .getByRole('button', { name: SAVE_BUTTON })
+    .isVisible()
+    .catch(() => false);
   // 폼 본문의 Esc는 폼을 닫는다
   await popup.keyboard.press('Escape');
-  const escClosed = await popup.getByRole('button', { name: SAVE_BUTTON })
-    .waitFor({ state: 'detached', timeout: 5000 }).then(() => true, () => false);
-  record('N18d: Cmd/Ctrl+Enter 저장 + Select 팝업 Esc는 폼 유지 + 폼 Esc는 닫힘',
+  const escClosed = await popup
+    .getByRole('button', { name: SAVE_BUTTON })
+    .waitFor({ state: 'detached', timeout: 5000 })
+    .then(
+      () => true,
+      () => false,
+    );
+  record(
+    'N18d: Cmd/Ctrl+Enter 저장 + Select 팝업 Esc는 폼 유지 + 폼 Esc는 닫힘',
     kbdSaved === true && popupClosedFormKept === 0 && formStillOpen && escClosed,
-    `saved=${kbdSaved}, popup-only-close=${popupClosedFormKept === 0 && formStillOpen}, form-esc-closed=${escClosed}`);
+    `saved=${kbdSaved}, popup-only-close=${popupClosedFormKept === 0 && formStillOpen}, form-esc-closed=${escClosed}`,
+  );
 
   /*
    * N19a: 행 둘째 줄의 칩 구성 + 빈 상태 CTA (ADR 0017, 티켓 05).
@@ -2469,15 +3095,36 @@ try {
    */
   await seedProfiles([
     baseProfile('p-badge', 'Badges', [
-      { kind: 'request-header', id: 'm1', name: 'X-Plain', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+      {
+        kind: 'request-header',
+        id: 'm1',
+        name: 'X-Plain',
+        value: '1',
+        enabled: true,
+        mode: 'override',
+        emptyMeans: 'remove',
+        comment: '',
+      },
       // 메모가 실린 규칙 하나 — 제목이 메모로 렌더되는지는 메모가 있어야만 잴 수 있다.
-      { kind: 'request-header', id: 'm2', name: 'X-Cond', value: '2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: 'My note',
-        urlFilter: 'cond\\.example', urlMatchType: 'regex',
-        conditions: { requestMethods: ['post'], resourceTypes: ['script'] } },
+      {
+        kind: 'request-header',
+        id: 'm2',
+        name: 'X-Cond',
+        value: '2',
+        enabled: true,
+        mode: 'override',
+        emptyMeans: 'remove',
+        comment: 'My note',
+        urlFilter: 'cond\\.example',
+        urlMatchType: 'regex',
+        conditions: { requestMethods: ['post'], resourceTypes: ['script'] },
+      },
     ]),
   ]);
   await popup.reload();
-  const rows = popup.locator('.group').filter({ has: popup.getByRole('button', { name: 'Edit', exact: true }) });
+  const rows = popup
+    .locator('.group')
+    .filter({ has: popup.getByRole('button', { name: 'Edit', exact: true }) });
   /**
    * 한 행의 칩 텍스트를 **화면 순서대로** — 스코프가 맨 앞인지는 순서로만 잴 수 있다.
    *
@@ -2522,32 +3169,53 @@ try {
   // 정규식 스코프에는 표시가 붙는다 (story 16) — 와일드카드와 헷갈리면 안 걸리는 이유를 모른다.
   const regexMark = await rows.nth(1).getByLabel('Regex').count();
   const plainHasNoRegexMark = (await rows.nth(0).getByLabel('Regex').count()) === 0;
-  record('N19a: 행 — 제목(메모/종류 이름)·뱃지, 칩 줄은 스코프가 맨 앞, 효과·리소스 묶음(토큰 아님)·메서드 순, 정규식 표시',
+  record(
+    'N19a: 행 — 제목(메모/종류 이름)·뱃지, 칩 줄은 스코프가 맨 앞, 효과·리소스 묶음(토큰 아님)·메서드 순, 정규식 표시',
     headingOk && plainOk && condOk && rawTokenGone && regexMark === 1 && plainHasNoRegexMark,
     `제목·뱃지=${JSON.stringify([plainHeading, condHeading])}=${headingOk}, ` +
-      `plain=${JSON.stringify(plainChips)}, cond=${JSON.stringify(condChips)}, raw-token-gone=${rawTokenGone}, regex-mark=${regexMark}, plain-mark-none=${plainHasNoRegexMark}`);
+      `plain=${JSON.stringify(plainChips)}, cond=${JSON.stringify(condChips)}, raw-token-gone=${rawTokenGone}, regex-mark=${regexMark}, plain-mark-none=${plainHasNoRegexMark}`,
+  );
 
   // 빈 상태: 규칙 0개 프로필 → 안내 + CTA로 폼 열림
   await popup.getByRole('button', { name: '+ New profile' }).click();
   await pollProfileName((v) => /^New profile \d+$/.test(v));
-  const emptyHintShown = await popup.getByText('No rules yet. Add one below.').isVisible().catch(() => false);
+  const emptyHintShown = await popup
+    .getByText('No rules yet. Add one below.')
+    .isVisible()
+    .catch(() => false);
   /*
    * 이 자리가 재는 것은 **빈 상태 상자 안의 CTA**다. 헤더에도 같은 이름의 버튼이 생겼으므로
    * (ADR 0017) `.first()`를 쓰면 헤더를 누르게 되어, 이 테스트가 이름은 CTA인데 실제로는
    * 헤더를 재는 상태가 된다. DOM 순서상 CTA가 뒤이므로 `.last()`로 짚는다.
    */
   await popup.getByRole('button', { name: 'Add rule' }).last().click();
-  const formOpened = await popup.getByRole('combobox', { name: 'Type', exact: true })
-    .waitFor({ timeout: 5000 }).then(() => true, () => false);
-  record('N19b: 빈 상태 안내 + CTA로 규칙 폼 열림',
+  const formOpened = await popup
+    .getByRole('combobox', { name: 'Type', exact: true })
+    .waitFor({ timeout: 5000 })
+    .then(
+      () => true,
+      () => false,
+    );
+  record(
+    'N19b: 빈 상태 안내 + CTA로 규칙 폼 열림',
     emptyHintShown && formOpened,
-    `hint=${emptyHintShown}, form-opened=${formOpened}`);
+    `hint=${emptyHintShown}, form-opened=${formOpened}`,
+  );
 
   // N20: 규칙 삭제 Undo 토스트 (ui-refine 07) — Placeholder 값 보존 원자 복원
   await seedProfiles([
     {
       ...baseProfile('p-undo', 'Undo', [
-        { kind: 'request-header', id: 'm1', name: 'X-Trace', value: 'req-{{uuid}}', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+        {
+          kind: 'request-header',
+          id: 'm1',
+          name: 'X-Trace',
+          value: 'req-{{uuid}}',
+          enabled: true,
+          mode: 'override',
+          emptyMeans: 'remove',
+          comment: '',
+        },
       ]),
       active: false,
     },
@@ -2560,8 +3228,14 @@ try {
   // 삭제 → 규칙 0 + 토스트 노출(텍스트로 즉시 감지 — 토스트 기본 수명 내 Undo)
   await popup.getByRole('button', { name: 'Delete', exact: true }).first().click();
   await pollSessionRuleCount(sw, 0);
-  const toastShown = await popup.getByText('Rule deleted', { exact: true }).first()
-    .waitFor({ timeout: 5000 }).then(() => true, () => false);
+  const toastShown = await popup
+    .getByText('Rule deleted', { exact: true })
+    .first()
+    .waitFor({ timeout: 5000 })
+    .then(
+      () => true,
+      () => false,
+    );
   // Undo → 규칙 복원 + 실요청 값이 삭제 전과 동일(재실체화 없음)
   await popup.getByRole('button', { name: 'Undo', exact: true }).first().click();
   await pollSessionRuleCount(sw, 1);
@@ -2569,9 +3243,11 @@ try {
     () => fetchEchoHeaders(pageB, '/headers').then((h) => h['x-trace']),
     (v) => typeof v === 'string' && v.startsWith('req-'),
   );
-  record('N20a: 삭제 Undo — 토스트 노출 + Placeholder 값 보존 원자 복원',
+  record(
+    'N20a: 삭제 Undo — 토스트 노출 + Placeholder 값 보존 원자 복원',
     /^req-[0-9a-f-]{36}$/.test(beforeDelete ?? '') && toastShown && afterUndo === beforeDelete,
-    `before=${beforeDelete}, toast=${toastShown}, after=${afterUndo}, preserved=${afterUndo === beforeDelete}`);
+    `before=${beforeDelete}, toast=${toastShown}, after=${afterUndo}, preserved=${afterUndo === beforeDelete}`,
+  );
 
   // N20b: Undo를 누르지 않으면 삭제가 유지된다(자동 복원 없음)
   await popup.getByRole('button', { name: 'Delete', exact: true }).first().click();
@@ -2583,15 +3259,31 @@ try {
     const { state } = await chrome.storage.local.get('state');
     return state.profiles[0].modifications.length;
   });
-  record('N20b: Undo 미클릭 시 삭제 유지(자동 복원 없음)',
-    stillDeleted === 0,
-    `mods=${stillDeleted}`);
+  record('N20b: Undo 미클릭 시 삭제 유지(자동 복원 없음)', stillDeleted === 0, `mods=${stillDeleted}`);
 
   // N21: motion 무결성 (ui-refine 08) — 애니메이션이 기능을 깨지 않고, reduced-motion을 존중
   await seedProfiles([
     baseProfile('p-motion', 'Motion', [
-      { kind: 'request-header', id: 'm1', name: 'X-M1', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
-      { kind: 'request-header', id: 'm2', name: 'X-M2', value: '2', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+      {
+        kind: 'request-header',
+        id: 'm1',
+        name: 'X-M1',
+        value: '1',
+        enabled: true,
+        mode: 'override',
+        emptyMeans: 'remove',
+        comment: '',
+      },
+      {
+        kind: 'request-header',
+        id: 'm2',
+        name: 'X-M2',
+        value: '2',
+        enabled: true,
+        mode: 'override',
+        emptyMeans: 'remove',
+        comment: '',
+      },
     ]),
   ]);
   // reduced-motion 강제 — 이 조건에서도 추가/삭제·화면 전환이 정상 동작해야 한다
@@ -2604,19 +3296,32 @@ try {
   await closeSuggestions(popup);
   await popup.getByLabel('Value', { exact: true }).fill('3');
   await popup.getByRole('button', { name: SAVE_BUTTON }).click();
-  const afterAdd = await pollSessionRuleCount(sw, 3).then(() => true, () => false);
+  const afterAdd = await pollSessionRuleCount(sw, 3).then(
+    () => true,
+    () => false,
+  );
   // 규칙 삭제(행 exit): 삭제 → 실요청 반영 + AnimatePresence exit가 상태를 막지 않음
   await popup.getByRole('button', { name: 'Delete', exact: true }).first().click();
-  const afterDelete = await pollSessionRuleCount(sw, 2).then(() => true, () => false);
+  const afterDelete = await pollSessionRuleCount(sw, 2).then(
+    () => true,
+    () => false,
+  );
   // 레일 화면 전환(cross-fade) 후 대상 화면이 뜬다
   await popup.getByRole('button', { name: 'Show settings' }).click();
-  const prefsAfterFade = await popup.getByText('Theme', { exact: true })
-    .waitFor({ timeout: 5000 }).then(() => true, () => false);
+  const prefsAfterFade = await popup
+    .getByText('Theme', { exact: true })
+    .waitFor({ timeout: 5000 })
+    .then(
+      () => true,
+      () => false,
+    );
   await popup.getByRole('button', { name: 'Show profiles' }).click();
   await popup.emulateMedia({ reducedMotion: null });
-  record('N21: motion 무결성 — reduced-motion에서도 행 추가/삭제·화면 전환 정상',
+  record(
+    'N21: motion 무결성 — reduced-motion에서도 행 추가/삭제·화면 전환 정상',
     afterAdd && afterDelete && prefsAfterFade,
-    `add=${afterAdd}, delete=${afterDelete}, rail-fade=${prefsAfterFade}`);
+    `add=${afterAdd}, delete=${afterDelete}, rail-fade=${prefsAfterFade}`,
+  );
 
   // N21b/N21c: 누름·호버 모션 계약 (ui-polish 04, ADR 0012).
   // reduced-motion에서는 애니메이션 prop 자체가 붙지 않으므로 계산 transform이 none으로
@@ -2668,7 +3373,16 @@ try {
 
   await seedProfiles([
     baseProfile('p-press', 'Press', [
-      { kind: 'request-header', id: 'm1', name: 'X-P', value: '1', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+      {
+        kind: 'request-header',
+        id: 'm1',
+        name: 'X-P',
+        value: '1',
+        enabled: true,
+        mode: 'override',
+        emptyMeans: 'remove',
+        comment: '',
+      },
     ]),
   ]);
 
@@ -2681,9 +3395,13 @@ try {
   const allMoving = Object.values(lively).every(
     (s) => s.rest === 'none' && s.hover !== 'none' && s.down !== 'none',
   );
-  record('N21b: 감도 대조 — 버튼·칩·아이콘버튼이 호버·누름에 변형한다',
+  record(
+    'N21b: 감도 대조 — 버튼·칩·아이콘버튼이 호버·누름에 변형한다',
     allMoving,
-    Object.entries(lively).map(([k, v]) => `${k}=${v.hover}/${v.down}`).join(' '));
+    Object.entries(lively)
+      .map(([k, v]) => `${k}=${v.hover}/${v.down}`)
+      .join(' '),
+  );
 
   // N21c: 부재 단언 — 같은 프로브가 reduced-motion에서는 아무 변형도 보지 못한다.
   await popup.emulateMedia({ reducedMotion: 'reduce' });
@@ -2694,9 +3412,13 @@ try {
   const allNone = Object.values(still).every(
     (s) => s.rest === 'none' && s.hover === 'none' && s.down === 'none',
   );
-  record('N21c: reduced-motion — 세 표면 모두 호버·누름에 transform이 없다',
+  record(
+    'N21c: reduced-motion — 세 표면 모두 호버·누름에 transform이 없다',
     allNone,
-    Object.entries(still).map(([k, v]) => `${k}=${v.hover}/${v.down}`).join(' '));
+    Object.entries(still)
+      .map(([k, v]) => `${k}=${v.hover}/${v.down}`)
+      .join(' '),
+  );
   await popup.emulateMedia({ reducedMotion: null });
   await popup.reload();
 
@@ -2708,26 +3430,38 @@ try {
   // Root에도 data-has-overflow-y가 붙으므로 두 속성을 함께 요구해야 트랙만 잡힌다.
   const THUMB = '[data-has-overflow-y][data-orientation="vertical"] > [data-orientation="vertical"]';
   const manyRules = Array.from({ length: 25 }, (_, i) => ({
-    kind: 'request-header', id: `s${i}`, name: `X-S${i}`, value: 'v',
-    enabled: true, mode: 'override', emptyMeans: 'remove', comment: '',
+    kind: 'request-header',
+    id: `s${i}`,
+    name: `X-S${i}`,
+    value: 'v',
+    enabled: true,
+    mode: 'override',
+    emptyMeans: 'remove',
+    comment: '',
   }));
   await seedProfiles([baseProfile('p-scroll', 'Scroll', manyRules)]);
   await popup.emulateMedia({ colorScheme: 'light' });
   await popup.reload();
   await popup.locator(THUMB).first().waitFor({ timeout: 5000 });
-  const thumbLight = await popup.locator(THUMB).first()
+  const thumbLight = await popup
+    .locator(THUMB)
+    .first()
     .evaluate((el) => getComputedStyle(el).backgroundColor);
   await popup.emulateMedia({ colorScheme: 'dark' });
   await popup.waitForTimeout(200);
-  const thumbDark = await popup.locator(THUMB).first()
+  const thumbDark = await popup
+    .locator(THUMB)
+    .first()
     .evaluate((el) => getComputedStyle(el).backgroundColor);
   await popup.emulateMedia({ colorScheme: 'light' });
   const thumbCount = await popup.locator(THUMB).count();
   const opaque = (color) => color !== 'rgba(0, 0, 0, 0)' && color !== 'transparent';
   // count도 함께 본다 — 선택자가 트랙까지 잡으면 투명색을 읽어 조용히 오판한다(실제로 겪음).
-  record('N22a: 스크롤바 테마 — 라이트/다크 색이 다르고 둘 다 불투명',
+  record(
+    'N22a: 스크롤바 테마 — 라이트/다크 색이 다르고 둘 다 불투명',
     thumbCount === 1 && opaque(thumbLight) && opaque(thumbDark) && thumbLight !== thumbDark,
-    `thumbs=${thumbCount}, light=${thumbLight}, dark=${thumbDark}`);
+    `thumbs=${thumbCount}, light=${thumbLight}, dark=${thumbDark}`,
+  );
 
   /*
    * N34: 팔레트 격리 — 두 테마가 **각자의 팔레트**를 쓰고 서로를 끌고 가지 않는다.
@@ -2758,23 +3492,31 @@ try {
   // 줄이 아니라 **블록**으로 억제하는 이유: 포매터가 이 화살표 함수를 두 줄로 나누면
   // `disable-next-line`이 가리키는 줄이 밀려 억제가 조용히 풀린다(실측).
   // oxlint-disable unicorn/no-useless-spread
-  const hex6 = (v) => (/^#[0-9a-f]{3}$/i.test(v) ? '#' + [...v.slice(1)].map((c) => c + c).join('') : v.toLowerCase());
+  const hex6 = (v) =>
+    /^#[0-9a-f]{3}$/i.test(v) ? '#' + [...v.slice(1)].map((c) => c + c).join('') : v.toLowerCase();
   // oxlint-enable unicorn/no-useless-spread
-  const sameHex = (probe, expected) =>
-    Object.keys(expected).every((k) => hex6(probe[k]) === expected[k]);
+  const sameHex = (probe, expected) => Object.keys(expected).every((k) => hex6(probe[k]) === expected[k]);
   // 라이트 = **자기 팔레트**(--color-light-*). 티켓 05가 디자인 다크의 짝으로 파생했다.
   const lightIntact = sameHex(palLight, {
     // 캔버스는 순백이 아니다 — 떠 있는 면(카드·팝업)이 #ffffff로 그 위에 선다.
-    bg: '#f7f7f8', fg: '#18181b', primary: '#1d4ed8', border: '#e2e2e6',
+    bg: '#f7f7f8',
+    fg: '#18181b',
+    primary: '#1d4ed8',
+    border: '#e2e2e6',
   });
   // 다크 = 디자인 near-black 팔레트(ADR 0015). primary는 티켓 05가 대비 3:1을 위해
   // 디자인의 짝 중 밝은 쪽(#2563eb)으로 올렸다 — #1d4ed8은 near-black에서 2.95:1이었다.
   const darkRedesigned = sameHex(palDark, {
-    bg: '#0a0a0a', fg: '#ededed', primary: '#2563eb', border: '#262626',
+    bg: '#0a0a0a',
+    fg: '#ededed',
+    primary: '#2563eb',
+    border: '#262626',
   });
-  record('N34: 팔레트 격리 — 두 테마가 각자의 팔레트를 쓴다',
+  record(
+    'N34: 팔레트 격리 — 두 테마가 각자의 팔레트를 쓴다',
     lightIntact && darkRedesigned,
-    `light=${JSON.stringify(palLight)}, dark=${JSON.stringify(palDark)}`);
+    `light=${JSON.stringify(palLight)}, dark=${JSON.stringify(palDark)}`,
+  );
 
   /*
    * N34b: **렌더된** 활성 컨트롤이 시맨틱 accent를 탄다 — 루트 변수만 보는 N34의 사각지대다.
@@ -2800,12 +3542,14 @@ try {
       50,
     );
     if (theme !== scheme) {
-      throw new Error(
-        `N34b: data-theme never flipped to ${scheme} within 5000ms; last seen "${theme}"`);
+      throw new Error(`N34b: data-theme never flipped to ${scheme} within 5000ms; last seen "${theme}"`);
     }
     // 켜져 있는 프로필의 토글 스위치 — data-[checked]로 accent가 칠해지는 대표 컨트롤.
     const swEl = popup.locator('[data-checked]').first();
-    const shown = await swEl.waitFor({ timeout: 5000 }).then(() => true, () => false);
+    const shown = await swEl.waitFor({ timeout: 5000 }).then(
+      () => true,
+      () => false,
+    );
     // 고정 150ms 대기는 toggle-switch의 `transition-colors`(Tailwind 기본 150ms)와 정확히
     // 겹쳐 **전이 중간 프레임**을 표본으로 삼았다. 안정될 때까지만 기다린다 — 기댓값을
     // 향해 폴링하지 않으므로 아래 단언 3개의 강도는 그대로다. 제품(transition-colors)은
@@ -2813,11 +3557,13 @@ try {
     const swBg = shown
       ? await pollStable(
           () => swEl.evaluate((el) => getComputedStyle(el).backgroundColor),
-          `N34b ${scheme} switch background`)
+          `N34b ${scheme} switch background`,
+        )
       : '';
     // 색이 안정된 **뒤에** 읽는다 — 같은 테마의 값이어야 둘을 비교하는 의미가 있다.
     const rootPrimary = await popup.evaluate(() =>
-      getComputedStyle(document.documentElement).getPropertyValue('--primary').trim());
+      getComputedStyle(document.documentElement).getPropertyValue('--primary').trim(),
+    );
     return { rootPrimary, swBg, shown };
   };
   const accLight = await activeAccent('light');
@@ -2829,15 +3575,18 @@ try {
   };
   // 렌더된 스위치 배경 === 그 테마의 --primary. 두 테마 모두에서 성립해야 한다.
   const accentUnified =
-    accLight.shown && accDark.shown &&
+    accLight.shown &&
+    accDark.shown &&
     accLight.swBg === rgbOf(accLight.rootPrimary) &&
     accDark.swBg === rgbOf(accDark.rootPrimary) &&
     // 두 테마가 실제로 다른 accent 값을 쓴다 — 같은 디자인 파랑의 두 단계로, 다크는
     // near-black 위에서 3:1을 넘기려고 밝은 쪽(#2563eb)을 쓴다(티켓 05).
     accLight.swBg !== accDark.swBg;
-  record('N34b: 렌더된 활성 컨트롤이 시맨틱 accent를 탄다 (raw blue 우회 없음)',
+  record(
+    'N34b: 렌더된 활성 컨트롤이 시맨틱 accent를 탄다 (raw blue 우회 없음)',
     accentUnified,
-    `light: switch=${accLight.swBg} primary=${accLight.rootPrimary}, dark: switch=${accDark.swBg} primary=${accDark.rootPrimary}`);
+    `light: switch=${accLight.swBg} primary=${accLight.rootPrimary}, dark: switch=${accDark.swBg} primary=${accDark.rootPrimary}`,
+  );
 
   /*
    * N35: 테마 스위치 (티켓 05, ADR 0015가 ADR 0004의 '스위치 없음'을 개정).
@@ -2871,11 +3620,16 @@ try {
   await popup.getByRole('button', { name: 'Show settings' }).waitFor({ timeout: 5000 });
   const keptAfterReopen = await pollUntil(rootTheme, (v) => v === 'light', 5000, 100);
   await popup.emulateMedia({ colorScheme: 'light' });
-  record('N35: 테마 스위치 — 시스템을 이기고, 색을 바꾸고, 다시 열어도 유지된다',
-    systemResolvedDark && switchedToLight === 'light' && storedTheme === 'light' &&
-      keptAfterReopen === 'light' && bgWhenSystemDark !== bgWhenLight,
+  record(
+    'N35: 테마 스위치 — 시스템을 이기고, 색을 바꾸고, 다시 열어도 유지된다',
+    systemResolvedDark &&
+      switchedToLight === 'light' &&
+      storedTheme === 'light' &&
+      keptAfterReopen === 'light' &&
+      bgWhenSystemDark !== bgWhenLight,
     `system-dark→${systemResolvedDark}, switched=${switchedToLight}, stored=${storedTheme}, ` +
-      `reopen=${keptAfterReopen}, bg ${bgWhenSystemDark}→${bgWhenLight}`);
+      `reopen=${keptAfterReopen}, bg ${bgWhenSystemDark}→${bgWhenLight}`,
+  );
 
   /*
    * N35b: '시스템'으로 되돌리면 다시 OS를 따른다 — 되돌릴 수 없는 스위치는 함정이다.
@@ -2888,9 +3642,11 @@ try {
   const followsSystemDark = await pollUntil(rootTheme, (v) => v === 'dark', 3000, 100);
   await popup.emulateMedia({ colorScheme: 'light' });
   const followsSystemLight = await pollUntil(rootTheme, (v) => v === 'light', 3000, 100);
-  record('N35b: 시스템으로 되돌리면 OS 변화를 다시 따른다',
+  record(
+    'N35b: 시스템으로 되돌리면 OS 변화를 다시 따른다',
     followsSystemDark === 'dark' && followsSystemLight === 'light',
-    `os-dark→${followsSystemDark}, os-light→${followsSystemLight}`);
+    `os-dark→${followsSystemDark}, os-light→${followsSystemLight}`,
+  );
 
   /*
    * N37: 배지 표시 토글 (티켓 06).
@@ -2902,7 +3658,16 @@ try {
    */
   await seedProfiles([
     baseProfile('p-badge-toggle', 'BadgeToggle', [
-      { kind: 'request-header', id: 'bt1', name: 'X-Badge-Count', value: 'on', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+      {
+        kind: 'request-header',
+        id: 'bt1',
+        name: 'X-Badge-Count',
+        value: 'on',
+        enabled: true,
+        mode: 'override',
+        emptyMeans: 'remove',
+        comment: '',
+      },
     ]),
   ]);
   await pollSessionRuleCount(sw, 1);
@@ -2917,8 +3682,9 @@ try {
     () => sw.evaluate(async () => (await chrome.storage.local.get('state')).state?.badgeVisible),
     (v) => v === false,
   );
-  const rulesWhileOff = await sw.evaluate(async () =>
-    (await chrome.declarativeNetRequest.getSessionRules()).length);
+  const rulesWhileOff = await sw.evaluate(
+    async () => (await chrome.declarativeNetRequest.getSessionRules()).length,
+  );
 
   await popup.reload();
   await popup.getByRole('button', { name: 'Show settings' }).click();
@@ -2927,11 +3693,18 @@ try {
   const switchOff = await badgeSwitch().getAttribute('aria-checked');
   await badgeSwitch().click();
   const badgeBack = await pollUntil(badgeText, (t) => t === badgeOn, 5000, 100);
-  record('N37: 배지 토글 — 끄면 사라지고 다시 열어도 꺼진 채, 켜면 같은 수 복귀 (규칙은 그대로)',
-    badgeOn === '1' && badgeOff === '' && storedBadgeOff === false && keptOff === '' &&
-      switchOff === 'false' && badgeBack === '1' && rulesWhileOff === 1,
+  record(
+    'N37: 배지 토글 — 끄면 사라지고 다시 열어도 꺼진 채, 켜면 같은 수 복귀 (규칙은 그대로)',
+    badgeOn === '1' &&
+      badgeOff === '' &&
+      storedBadgeOff === false &&
+      keptOff === '' &&
+      switchOff === 'false' &&
+      badgeBack === '1' &&
+      rulesWhileOff === 1,
     `on="${badgeOn}", off="${badgeOff}", stored=${storedBadgeOff}, reopen="${keptOff}", ` +
-      `switch-checked=${switchOff}, back="${badgeBack}", rules-while-off=${rulesWhileOff}`);
+      `switch-checked=${switchOff}, back="${badgeBack}", rules-while-off=${rulesWhileOff}`,
+  );
 
   /*
    * N36: 두 테마가 대비 기준을 지킨다 — 본문 4.5:1, 비텍스트(필드 경계·accent 표면) 3:1.
@@ -2959,19 +3732,27 @@ try {
         const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
         return (hi + 0.05) / (lo + 0.05);
       };
-      const bg = v('--background'), surface = v('--card'), fill = v('--muted');
+      const bg = v('--background'),
+        surface = v('--card'),
+        fill = v('--muted');
       return {
         // 본문 — 주 글자와 보조 글자가 놓이는 모든 면 위에서.
         text: [
-          ratio(v('--foreground'), bg), ratio(v('--foreground'), surface), ratio(v('--foreground'), fill),
-          ratio(v('--muted-foreground'), bg), ratio(v('--muted-foreground'), surface),
+          ratio(v('--foreground'), bg),
+          ratio(v('--foreground'), surface),
+          ratio(v('--foreground'), fill),
+          ratio(v('--muted-foreground'), bg),
+          ratio(v('--muted-foreground'), surface),
           ratio(v('--muted-foreground'), fill),
           ratio(v('--primary-foreground'), v('--primary')),
         ],
         // 비텍스트 — 필드 경계와 accent 표면, 포커스 링.
         nonText: [
-          ratio(v('--input'), bg), ratio(v('--input'), surface), ratio(v('--input'), fill),
-          ratio(v('--primary'), bg), ratio(v('--ring'), bg),
+          ratio(v('--input'), bg),
+          ratio(v('--input'), surface),
+          ratio(v('--input'), fill),
+          ratio(v('--primary'), bg),
+          ratio(v('--ring'), bg),
         ],
       };
     });
@@ -2981,10 +3762,12 @@ try {
   await popup.emulateMedia({ colorScheme: 'light' });
   const worst = (xs) => Math.min(...xs);
   const meets = (c) => worst(c.text) >= 4.5 && worst(c.nonText) >= 3;
-  record('N36: 두 테마 대비 기준 — 본문 4.5:1 · 비텍스트 3:1',
+  record(
+    'N36: 두 테마 대비 기준 — 본문 4.5:1 · 비텍스트 3:1',
     meets(cLight) && meets(cDark),
     `light: 본문 최저 ${worst(cLight.text).toFixed(2)} 비텍스트 최저 ${worst(cLight.nonText).toFixed(2)}, ` +
-      `dark: 본문 최저 ${worst(cDark.text).toFixed(2)} 비텍스트 최저 ${worst(cDark.nonText).toFixed(2)}`);
+      `dark: 본문 최저 ${worst(cDark.text).toFixed(2)} 비텍스트 최저 ${worst(cDark.nonText).toFixed(2)}`,
+  );
 
   /*
    * N36b: **렌더된** 필드의 placeholder가 실제로 칠해진 면 위에서 4.5:1을 넘는다 —
@@ -3004,15 +3787,22 @@ try {
     return popup.getByPlaceholder('Search profiles…').evaluate((el) => {
       const parseRgb = (s) => (s.match(/\d+(\.\d+)?/g) ?? []).map(Number);
       // 투명한 면은 조상에서 실제 칠해진 색을 찾아 올라간다 — 합성 결과가 곧 배경이다.
-      let node = el, bg = [255, 255, 255];
+      let node = el,
+        bg = [255, 255, 255];
       while (node) {
         const c = parseRgb(getComputedStyle(node).backgroundColor);
-        if (c.length >= 3 && (c[3] === undefined || c[3] > 0)) { bg = c.slice(0, 3); break; }
+        if (c.length >= 3 && (c[3] === undefined || c[3] > 0)) {
+          bg = c.slice(0, 3);
+          break;
+        }
         node = node.parentElement;
       }
       const ph = parseRgb(getComputedStyle(el, '::placeholder').color).slice(0, 3);
       const lum = (rgb) => {
-        const lin = rgb.map((v) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
+        const lin = rgb.map((v) => {
+          const c = v / 255;
+          return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+        });
         return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
       };
       const [hi, lo] = [lum(ph), lum(bg)].sort((a, b) => b - a);
@@ -3022,9 +3812,11 @@ try {
   const fLight = await fieldContrast('light');
   const fDark = await fieldContrast('dark');
   await popup.emulateMedia({ colorScheme: 'light' });
-  record('N36b: 렌더된 필드의 placeholder가 실제 칠해진 면 위에서 4.5:1을 넘는다',
+  record(
+    'N36b: 렌더된 필드의 placeholder가 실제 칠해진 면 위에서 4.5:1을 넘는다',
     fLight.ratio >= 4.5 && fDark.ratio >= 4.5,
-    `light ${fLight.ratio.toFixed(2)}:1 (면 ${fLight.bg}), dark ${fDark.ratio.toFixed(2)}:1 (면 ${fDark.bg})`);
+    `light ${fLight.ratio.toFixed(2)}:1 (면 ${fLight.bg}), dark ${fDark.ratio.toFixed(2)}:1 (면 ${fDark.bg})`,
+  );
 
   // 넘치지 않으면 스크롤바가 DOM에 아예 없어야 한다 — 트랙을 기본 노출(opacity-60)로 둔
   // 근거가 이것이다. 보이면 곧 "넘치는 내용이 있다"는 신호여야 어포던스가 성립한다.
@@ -3032,9 +3824,11 @@ try {
   await popup.reload();
   await popup.getByRole('button', { name: 'Add rule' }).first().waitFor({ timeout: 5000 });
   const thumbsWhenShort = await popup.locator(THUMB).count();
-  record('N22b: 넘치지 않으면 스크롤바가 렌더되지 않는다',
+  record(
+    'N22b: 넘치지 않으면 스크롤바가 렌더되지 않는다',
     thumbsWhenShort === 0,
-    `thumbs=${thumbsWhenShort}`);
+    `thumbs=${thumbsWhenShort}`,
+  );
 
   // N22c: 탭 표면도 ScrollArea가 세로 스크롤을 소유한다 (ui-polish structure r1 S-2).
   // 셸 높이가 min-h-screen이면 행이 내용만큼 늘어나 뷰포트가 넘칠 일이 없고, 스크롤이
@@ -3046,18 +3840,29 @@ try {
   await tabScroll.goto(`chrome-extension://${extId}/app.html?locale=en`);
   // 스크롤바가 안 뜨는 것이 바로 이 테스트가 잡으려는 회귀다 — waitFor가 던져 스위트를
   // 중단시키면 FAIL로 기록되지 않으므로, 실패를 값으로 받는다.
-  const tabThumbAppeared = await tabScroll.locator(THUMB).first()
+  const tabThumbAppeared = await tabScroll
+    .locator(THUMB)
+    .first()
     .waitFor({ timeout: 5000 })
-    .then(() => true, () => false);
+    .then(
+      () => true,
+      () => false,
+    );
   const tabOverflow = await tabScroll.evaluate(() => {
     const root = document.documentElement;
-    return { docScrolls: root.scrollHeight > root.clientHeight, scrollH: root.scrollHeight, clientH: root.clientHeight };
+    return {
+      docScrolls: root.scrollHeight > root.clientHeight,
+      scrollH: root.scrollHeight,
+      clientH: root.clientHeight,
+    };
   });
   const tabThumbs = await tabScroll.locator(THUMB).count();
   await tabScroll.close();
-  record('N22c: 탭 표면도 ScrollArea가 스크롤을 소유한다(문서가 스크롤되지 않는다)',
+  record(
+    'N22c: 탭 표면도 ScrollArea가 스크롤을 소유한다(문서가 스크롤되지 않는다)',
     tabThumbAppeared && !tabOverflow.docScrolls && tabThumbs >= 1,
-    `thumbAppeared=${tabThumbAppeared}, docScrolls=${tabOverflow.docScrolls} (${tabOverflow.scrollH}>${tabOverflow.clientH}), thumbs=${tabThumbs}`);
+    `thumbAppeared=${tabThumbAppeared}, docScrolls=${tabOverflow.docScrolls} (${tabOverflow.scrollH}>${tabOverflow.clientH}), thumbs=${tabThumbs}`,
+  );
 
   /*
    * **N23a/b/c(메뉴 순차 등장 · 삭제 2단 확인 라벨 · 메뉴 조작)가 없다** (티켓 04).
@@ -3124,9 +3929,10 @@ try {
     // 값 입력에 포커스가 남은 채로 시작해야 진행 중 재시도가 실제로 save()까지 간다.
     await page.getByLabel('Value', { exact: true }).first().focus();
     await page.keyboard.press('Control+Enter');
-    const labelSwapped = await savingButton
-      .waitFor({ timeout: 3000 })
-      .then(() => true, () => false);
+    const labelSwapped = await savingButton.waitFor({ timeout: 3000 }).then(
+      () => true,
+      () => false,
+    );
     const inFlight = {
       label: labelSwapped ? 'Saving…' : await page.getByRole('button', { name: /Sav/ }).first().textContent(),
       saveDisabled: labelSwapped ? await savingButton.isDisabled() : false,
@@ -3151,16 +3957,25 @@ try {
       calls: window.__commandCalls,
       formOpen: [...document.querySelectorAll('button')].some((b) => b.textContent?.trim() === 'Cancel'),
     }));
-    const storedRules = await sw.evaluate(async () =>
-      (await chrome.storage.local.get('state')).state.profiles[0].modifications.length);
+    const storedRules = await sw.evaluate(
+      async () => (await chrome.storage.local.get('state')).state.profiles[0].modifications.length,
+    );
     await page.close();
-    record('N24a: 저장 중 — 라벨 교체·두 버튼 비활성·재시도 무시(명령 1회)·폼 닫힘',
-      inFlight.label === 'Saving…' && inFlight.saveDisabled && inFlight.cancelDisabled &&
-        callsDuringFlight === 1 && after.calls === 1 && after.formOpen === false && storedRules === 1 &&
-        disabledTransform === 'none' && survivedEscape,
+    record(
+      'N24a: 저장 중 — 라벨 교체·두 버튼 비활성·재시도 무시(명령 1회)·폼 닫힘',
+      inFlight.label === 'Saving…' &&
+        inFlight.saveDisabled &&
+        inFlight.cancelDisabled &&
+        callsDuringFlight === 1 &&
+        after.calls === 1 &&
+        after.formOpen === false &&
+        storedRules === 1 &&
+        disabledTransform === 'none' &&
+        survivedEscape,
       `label="${inFlight.label}", save-disabled=${inFlight.saveDisabled}, cancel-disabled=${inFlight.cancelDisabled}, ` +
-      `calls=${callsDuringFlight}/${after.calls}, esc-survived=${survivedEscape}, form-open=${after.formOpen}, ` +
-      `rules=${storedRules}, disabled-transform=${disabledTransform}`);
+        `calls=${callsDuringFlight}/${after.calls}, esc-survived=${survivedEscape}, form-open=${after.formOpen}, ` +
+        `rules=${storedRules}, disabled-transform=${disabledTransform}`,
+    );
   }
 
   // N24b: 거부 — 라벨 복귀, 폼 유지, 초안 보존, 거부 메시지 노출.
@@ -3169,8 +3984,15 @@ try {
     const page = await openDelayedCommandPopup({ reject: true });
     await fillNewRule(page, 'X-Rejected');
     await page.getByRole('button', { name: SAVE_BUTTON }).click();
-    const alertShown = await page.getByRole('alert').filter({ hasText: 'Injected refusal' }).first()
-      .waitFor({ timeout: 5000 }).then(() => true, () => false);
+    const alertShown = await page
+      .getByRole('alert')
+      .filter({ hasText: 'Injected refusal' })
+      .first()
+      .waitFor({ timeout: 5000 })
+      .then(
+        () => true,
+        () => false,
+      );
     const afterReject = await page.evaluate(() => {
       const buttons = [...document.querySelectorAll('button')];
       const save = buttons.find((b) => /^(Save|Saving…)$/.test(b.textContent?.trim() ?? ''));
@@ -3185,14 +4007,22 @@ try {
     // DOM 질의로는 잡히지 않는다(getByLabel은 둘 다 본다).
     const draftName = await page.getByLabel('Header name', { exact: true }).first().inputValue();
     const draftValue = await page.getByLabel('Value', { exact: true }).first().inputValue();
-    const storedAfterReject = await sw.evaluate(async () =>
-      (await chrome.storage.local.get('state')).state.profiles[0].modifications.length);
+    const storedAfterReject = await sw.evaluate(
+      async () => (await chrome.storage.local.get('state')).state.profiles[0].modifications.length,
+    );
     await page.close();
-    record('N24b: 저장 거부 — 라벨 복귀·버튼 재활성·폼과 초안 유지·거부 메시지',
-      alertShown && afterReject.label === 'Save' && afterReject.saveEnabled && afterReject.cancelEnabled &&
-        draftName === 'X-Rejected' && draftValue === 'v' && storedAfterReject === 0,
+    record(
+      'N24b: 저장 거부 — 라벨 복귀·버튼 재활성·폼과 초안 유지·거부 메시지',
+      alertShown &&
+        afterReject.label === 'Save' &&
+        afterReject.saveEnabled &&
+        afterReject.cancelEnabled &&
+        draftName === 'X-Rejected' &&
+        draftValue === 'v' &&
+        storedAfterReject === 0,
       `alert(role)=${alertShown}, label="${afterReject.label}", save-enabled=${afterReject.saveEnabled}, ` +
-      `cancel-enabled=${afterReject.cancelEnabled}, draft="${draftName}"/"${draftValue}", stored=${storedAfterReject}`);
+        `cancel-enabled=${afterReject.cancelEnabled}, draft="${draftName}"/"${draftValue}", stored=${storedAfterReject}`,
+    );
   }
 
   // N24bb: 왕복이 **던지는** 경로 — MV3에서 워커가 내려가면 sendMessage는 값이 아니라
@@ -3206,7 +4036,10 @@ try {
     const recovered = await page
       .getByRole('button', { name: SAVE_BUTTON })
       .waitFor({ timeout: 5000 })
-      .then(() => true, () => false);
+      .then(
+        () => true,
+        () => false,
+      );
     const state = await page.evaluate(() => {
       const buttons = [...document.querySelectorAll('button')];
       const save = buttons.find((b) => /^(Save|Saving…)$/.test(b.textContent?.trim() ?? ''));
@@ -3222,15 +4055,26 @@ try {
     let escaped = false;
     if (state.cancelEnabled) {
       await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-      escaped = await page.getByRole('button', { name: 'Cancel', exact: true })
-        .waitFor({ state: 'detached', timeout: 3000 }).then(() => true, () => false);
+      escaped = await page
+        .getByRole('button', { name: 'Cancel', exact: true })
+        .waitFor({ state: 'detached', timeout: 3000 })
+        .then(
+          () => true,
+          () => false,
+        );
     }
     await page.close();
-    record('N24bb: 왕복이 예외로 끝나도 폼이 갇히지 않는다 — 버튼 복귀·오류 노출·취소 가능',
-      recovered && state.label === 'Save' && state.saveEnabled && state.cancelEnabled &&
-        state.errorShown && escaped,
+    record(
+      'N24bb: 왕복이 예외로 끝나도 폼이 갇히지 않는다 — 버튼 복귀·오류 노출·취소 가능',
+      recovered &&
+        state.label === 'Save' &&
+        state.saveEnabled &&
+        state.cancelEnabled &&
+        state.errorShown &&
+        escaped,
       `label="${state.label}", save-enabled=${state.saveEnabled}, cancel-enabled=${state.cancelEnabled}, ` +
-      `alert=${state.errorShown}, escaped=${escaped}`);
+        `alert=${state.errorShown}, escaped=${escaped}`,
+    );
   }
 
   // N24c: 폼 닫힘 — reduced-motion에서는 exit 창 없이 즉시 제거된다(스펙의 관측 계약).
@@ -3239,27 +4083,30 @@ try {
     await page.getByRole('button', { name: 'Add rule' }).first().click();
     await page.getByRole('button', { name: 'Cancel' }).waitFor({ timeout: 5000 });
     if (via === 'save') {
-      await page.getByLabel('Header name', { exact: true }).first().fill(`X-Close-${Date.now() % 100000}`);
+      await page
+        .getByLabel('Header name', { exact: true })
+        .first()
+        .fill(`X-Close-${Date.now() % 100000}`);
       await page.getByLabel('Value', { exact: true }).first().fill('v');
     }
     await page.evaluate(() => {
       window.__formGoneMs = null;
       const start = performance.now();
       const tick = () => {
-        const open = [...document.querySelectorAll('button')].some(
-          (b) => b.textContent?.trim() === 'Cancel');
+        const open = [...document.querySelectorAll('button')].some((b) => b.textContent?.trim() === 'Cancel');
         if (!open) window.__formGoneMs = performance.now() - start;
         else requestAnimationFrame(tick);
       };
       window.__armFormProbe = () => requestAnimationFrame(tick);
     });
     await page.evaluate(() => window.__armFormProbe());
-    await page
-      .getByRole('button', { name: via === 'save' ? 'Save' : 'Cancel', exact: true })
-      .click();
+    await page.getByRole('button', { name: via === 'save' ? 'Save' : 'Cancel', exact: true }).click();
     const observed = await page
       .waitForFunction(() => window.__formGoneMs != null, null, { timeout: 5000 })
-      .then(() => true, () => false);
+      .then(
+        () => true,
+        () => false,
+      );
     return observed ? page.evaluate(() => window.__formGoneMs) : null;
   };
   const exitWindowMs = ROW_TRANSITION.duration * 1000;
@@ -3276,13 +4123,19 @@ try {
   const reducedClose = await measureFormRemoval(popup, { via: 'cancel' });
   const reducedSave = await measureFormRemoval(popup, { via: 'save' });
   await popup.emulateMedia({ reducedMotion: null });
-  record('N24c: 폼 닫힘 — reduced-motion은 exit 창 없이 즉시, 기본 모션은 전이만큼 남는다',
-    typeof reducedClose === 'number' && reducedClose < exitWindowMs &&
-      typeof livelyClose === 'number' && livelyClose >= exitWindowMs &&
-      typeof reducedSave === 'number' && reducedSave < exitWindowMs &&
-      typeof livelySave === 'number' && livelySave >= exitWindowMs,
+  record(
+    'N24c: 폼 닫힘 — reduced-motion은 exit 창 없이 즉시, 기본 모션은 전이만큼 남는다',
+    typeof reducedClose === 'number' &&
+      reducedClose < exitWindowMs &&
+      typeof livelyClose === 'number' &&
+      livelyClose >= exitWindowMs &&
+      typeof reducedSave === 'number' &&
+      reducedSave < exitWindowMs &&
+      typeof livelySave === 'number' &&
+      livelySave >= exitWindowMs,
     `취소 reduced=${reducedClose?.toFixed?.(0)}ms/lively=${livelyClose?.toFixed?.(0)}ms, ` +
-    `저장 reduced=${reducedSave?.toFixed?.(0)}ms/lively=${livelySave?.toFixed?.(0)}ms (exit 창 ${exitWindowMs}ms)`);
+      `저장 reduced=${reducedSave?.toFixed?.(0)}ms/lively=${livelySave?.toFixed?.(0)}ms (exit 창 ${exitWindowMs}ms)`,
+  );
 
   /*
    * N25: 셀렉트 폭 계약 (ui-polish 07, stories 1·2·3) — **앱의 모든 셀렉트가 같은 고정 폭이고,
@@ -3326,18 +4179,14 @@ try {
        * 안 잡히지만 `querySelectorAll('[role="option"]')`에는 그대로 잡힌다. 문서 전체를
        * 훑으면 앞서 열었던 셀렉트의 항목이 섞여 들어와 "고른 항목이 둘"이 된다.
        */
-      const list = [...document.querySelectorAll('[role="listbox"]')].find((el) =>
-        el.checkVisibility(),
-      );
+      const list = [...document.querySelectorAll('[role="listbox"]')].find((el) => el.checkVisibility());
       const items = list ? [...list.querySelectorAll('[role="option"]')] : [];
       const bg = (el) => getComputedStyle(el).backgroundColor;
       const selected = items.filter((el) => el.getAttribute('aria-selected') === 'true');
       return {
         count: items.length,
         // 항목은 `whitespace-nowrap`이라 넘치면 접히지 않고 넘친다 — 그래야 여기서 보인다.
-        clipped: items
-          .filter((el) => el.scrollWidth > el.clientWidth + 1)
-          .map((el) => el.textContent.trim()),
+        clipped: items.filter((el) => el.scrollWidth > el.clientWidth + 1).map((el) => el.textContent.trim()),
         selectedCount: selected.length,
         selectedBg: selected.map(bg),
         otherBgs: items.filter((el) => !selected.includes(el)).map(bg),
@@ -3380,8 +4229,17 @@ try {
 
   await seedProfiles([
     baseProfile('p-width', 'Width', [
-      { kind: 'request-header', id: 'm1', name: 'Accept', value: 'v', enabled: true, mode: 'override',
-        emptyMeans: 'remove', comment: '', urlFilter: 'example.com' },
+      {
+        kind: 'request-header',
+        id: 'm1',
+        name: 'Accept',
+        value: 'v',
+        enabled: true,
+        mode: 'override',
+        emptyMeans: 'remove',
+        comment: '',
+        urlFilter: 'example.com',
+      },
     ]),
   ]);
   await popup.reload();
@@ -3410,8 +4268,7 @@ try {
 
   const measured = [widthEn, kindEn, widthKo, kindKo];
   const stableWidth = (rows) =>
-    rows.length > 1 &&
-    Math.max(...rows.map((r) => r.width)) - Math.min(...rows.map((r) => r.width)) <= 0.5;
+    rows.length > 1 && Math.max(...rows.map((r) => r.width)) - Math.min(...rows.map((r) => r.width)) <= 0.5;
   // 노드를 못 찾으면(-1) 통과시키지 않는다 — R-2가 지키려는 단 하나의 단언이라
   // 공허하게 참이 되면 안 된다.
   const noClipping = (rows) =>
@@ -3430,20 +4287,22 @@ try {
     p.selectedBg[0] !== 'rgba(0, 0, 0, 0)' &&
     p.otherBgs.every((bg) => bg !== p.selectedBg[0]);
   const patternStable =
-    patternLeftEdges.length > 1 &&
-    Math.max(...patternLeftEdges) - Math.min(...patternLeftEdges) <= 0.5;
-  record('N25: 셀렉트 — en/ko 두 셀렉트 모두 같은 고정 폭·트리거/팝업 미절단, 선택은 면으로, 패턴 입력 고정',
+    patternLeftEdges.length > 1 && Math.max(...patternLeftEdges) - Math.min(...patternLeftEdges) <= 0.5;
+  record(
+    'N25: 셀렉트 — en/ko 두 셀렉트 모두 같은 고정 폭·트리거/팝업 미절단, 선택은 면으로, 패턴 입력 고정',
     measured.every((m) => stableWidth(m.rows) && noClipping(m.rows) && m.popupAtLeastAnchor) &&
       measured.every((m) => m.popupProbe.clipped.length === 0) &&
       measured.every((m) => selectionShown(m.popupProbe)) &&
-      oneWidth && patternStable,
+      oneWidth &&
+      patternStable,
     `폭=${[...new Set(allWidths)].join('/')} 한폭=${oneWidth}, ` +
-    `트리거 미절단=${measured.map((m) => noClipping(m.rows)).join('/')}, ` +
-    `팝업 절단=${JSON.stringify(measured.flatMap((m) => m.popupProbe.clipped))}, ` +
-    `선택 표시=${measured.map((m) => selectionShown(m.popupProbe)).join('/')} ` +
-    `(체크 svg=${measured.map((m) => m.popupProbe.glyphs).join('/')}, ` +
-    `선택 면=${measured.map((m) => m.popupProbe.selectedBg[0]).join(' | ')}), ` +
-    `패턴 좌변=${[...new Set(patternLeftEdges)].join('/')}`);
+      `트리거 미절단=${measured.map((m) => noClipping(m.rows)).join('/')}, ` +
+      `팝업 절단=${JSON.stringify(measured.flatMap((m) => m.popupProbe.clipped))}, ` +
+      `선택 표시=${measured.map((m) => selectionShown(m.popupProbe)).join('/')} ` +
+      `(체크 svg=${measured.map((m) => m.popupProbe.glyphs).join('/')}, ` +
+      `선택 면=${measured.map((m) => m.popupProbe.selectedBg[0]).join(' | ')}), ` +
+      `패턴 좌변=${[...new Set(patternLeftEdges)].join('/')}`,
+  );
 
   // N26: 검증 실패 시 첫 누락 입력으로 포커스 (ui-polish 08, stories 12~16).
   // 저장 전에 포커스를 일부러 딴 곳(종류 셀렉트)에 둔다 — 폼 열림 autoFocus가 남아
@@ -3468,7 +4327,10 @@ try {
     // 기대 요소와 **동일한 노드**인지 본다. 시간 상한을 둬 회귀가 기본 30초 타임아웃으로
     // 번지지 않게 한다 — 없는 요소를 기다리는 것도 실패이지 지연이 아니다.
     const target = expected(page).first();
-    const present = await target.waitFor({ timeout: 2000 }).then(() => true, () => false);
+    const present = await target.waitFor({ timeout: 2000 }).then(
+      () => true,
+      () => false,
+    );
     const onTarget = present
       ? await target.evaluate((el) => document.activeElement === el).catch(() => false)
       : false;
@@ -3527,11 +4389,13 @@ try {
   const allTypeable = Object.values(focusCases).every((r) => r.typeable);
   const allErrorsShown = Object.values(focusCases).every((r) => r.errorShown);
   const allErrorsCleared = Object.values(focusCases).every((r) => r.errorClears);
-  record('N26: 검증 차단 시 첫 누락 입력으로 포커스 — 종류별 매핑·즉시 타이핑·오류는 막힐 때 뜨고 채우면 사라진다',
+  record(
+    'N26: 검증 차단 시 첫 누락 입력으로 포커스 — 종류별 매핑·즉시 타이핑·오류는 막힐 때 뜨고 채우면 사라진다',
     allOnTarget && allTypeable && allErrorsShown && allErrorsCleared,
     Object.entries(focusCases)
       .map(([k, r]) => `${k}=${r.onTarget ? (r.typeable ? 'ok' : '포커스만') : 'MISS'}`)
-      .join(' ') + `, 막힐 때 표시=${allErrorsShown}, 채우면 사라짐=${allErrorsCleared}`);
+      .join(' ') + `, 막힐 때 표시=${allErrorsShown}, 채우면 사라짐=${allErrorsCleared}`,
+  );
 
   /*
    * **N27(아코디언 헤더 전체가 클릭 대상)이 없다** (티켓 09).
@@ -3578,8 +4442,7 @@ try {
       // 항상 opacity 1만 읽혀 전이가 없는 것처럼 보인다(실제로 겪었다 — 팝업은 정상적으로
       // 페이드하는데 단언만 실패했다). Popup을 우선 잡고, 없으면 예전 구조로 물러난다.
       const pop =
-        document.querySelector('[data-slot="select-content"]') ??
-        document.querySelector('[role="listbox"]');
+        document.querySelector('[data-slot="select-content"]') ?? document.querySelector('[role="listbox"]');
       const opacity = [];
       const ys = [];
       const t0 = performance.now();
@@ -3613,12 +4476,18 @@ try {
   const reducedSelect = await selectTrace(popup);
   await popup.emulateMedia({ reducedMotion: null });
 
-  record('N30: Select 팝업 — 트리거 아래·좌변 정렬, 위에서 아래로 내려옴(reduced는 즉시)',
-    livelySelect.below && livelySelect.leftDelta === 0 && livelySelect.atLeastAnchorWidth &&
-      livelySelect.steps > 3 && livelySelect.yTo > livelySelect.yFrom &&
-      reducedSelect.below && reducedSelect.steps <= 2,
+  record(
+    'N30: Select 팝업 — 트리거 아래·좌변 정렬, 위에서 아래로 내려옴(reduced는 즉시)',
+    livelySelect.below &&
+      livelySelect.leftDelta === 0 &&
+      livelySelect.atLeastAnchorWidth &&
+      livelySelect.steps > 3 &&
+      livelySelect.yTo > livelySelect.yFrom &&
+      reducedSelect.below &&
+      reducedSelect.steps <= 2,
     `아래=${livelySelect.below} 좌변차=${livelySelect.leftDelta}px 간격=${livelySelect.gap}px 앵커폭이상=${livelySelect.atLeastAnchorWidth}, ` +
-    `opacity 단계 기본=${livelySelect.steps}/reduced=${reducedSelect.steps}, y ${livelySelect.yFrom}→${livelySelect.yTo}`);
+      `opacity 단계 기본=${livelySelect.steps}/reduced=${reducedSelect.steps}, y ${livelySelect.yFrom}→${livelySelect.yTo}`,
+  );
 
   // N31: 폼 액션 쌍 — 취소·저장이 같은 8px 모서리와 넓은 좌우 여백을 쓴다.
   // 기본값은 primary가 pill, ghost가 6px이라 나란히 두면 서로 다른 모양이었다.
@@ -3638,14 +4507,19 @@ try {
     const save = pick('Save changes') ?? pick('Save');
     return cancel && save ? { cancel: read(cancel), save: read(save) } : null;
   });
-  record('N31: 폼 액션 쌍 — 취소·저장이 같은 8px 모서리와 넓은 좌우 여백',
+  record(
+    'N31: 폼 액션 쌍 — 취소·저장이 같은 8px 모서리와 넓은 좌우 여백',
     actionPair !== null &&
-      actionPair.cancel.radius === '8px' && actionPair.save.radius === '8px' &&
-      actionPair.cancel.padL === '16px' && actionPair.save.padL === '16px' &&
-      actionPair.cancel.padR === '16px' && actionPair.save.padR === '16px',
+      actionPair.cancel.radius === '8px' &&
+      actionPair.save.radius === '8px' &&
+      actionPair.cancel.padL === '16px' &&
+      actionPair.save.padL === '16px' &&
+      actionPair.cancel.padR === '16px' &&
+      actionPair.save.padR === '16px',
     actionPair
       ? `취소 r=${actionPair.cancel.radius} px=${actionPair.cancel.padL}/${actionPair.cancel.padR}, 저장 r=${actionPair.save.radius} px=${actionPair.save.padL}/${actionPair.save.padR}`
-      : '버튼을 찾지 못함');
+      : '버튼을 찾지 못함',
+  );
   await popup.getByRole('button', { name: 'Cancel', exact: true }).click();
 
   /*
@@ -3669,7 +4543,8 @@ try {
     await popup.waitForTimeout(300);
     return {
       pressed: await popup.evaluate(() =>
-        [...document.querySelectorAll('nav button')].map((b) => b.getAttribute('aria-pressed'))),
+        [...document.querySelectorAll('nav button')].map((b) => b.getAttribute('aria-pressed')),
+      ),
       selects: await popup.getByRole('button', { name: /^Select profile/ }).count(),
       search: await popup.getByPlaceholder('Search profiles…').count(),
     };
@@ -3680,13 +4555,21 @@ try {
   await popup.getByRole('button', { name: 'Show profiles' }).click();
   await popup.waitForTimeout(200);
 
-  record('N32: 백업·설정에는 고를 프로필이 없다 — 프로필 열이 서지 않는다',
-    onProfilesView.pressed[0] === 'true' && onProfilesView.selects === 2 && onProfilesView.search === 1 &&
-      onSettingsView.pressed[2] === 'true' && onSettingsView.selects === 0 && onSettingsView.search === 0 &&
-      onBackupsView.pressed[1] === 'true' && onBackupsView.selects === 0 && onBackupsView.search === 0,
+  record(
+    'N32: 백업·설정에는 고를 프로필이 없다 — 프로필 열이 서지 않는다',
+    onProfilesView.pressed[0] === 'true' &&
+      onProfilesView.selects === 2 &&
+      onProfilesView.search === 1 &&
+      onSettingsView.pressed[2] === 'true' &&
+      onSettingsView.selects === 0 &&
+      onSettingsView.search === 0 &&
+      onBackupsView.pressed[1] === 'true' &&
+      onBackupsView.selects === 0 &&
+      onBackupsView.search === 0,
     `프로필 pressed=${JSON.stringify(onProfilesView.pressed)} selects=${onProfilesView.selects} search=${onProfilesView.search}, ` +
-    `설정 selects=${onSettingsView.selects} search=${onSettingsView.search}, ` +
-    `백업 selects=${onBackupsView.selects} search=${onBackupsView.search}`);
+      `설정 selects=${onSettingsView.selects} search=${onSettingsView.search}, ` +
+      `백업 selects=${onBackupsView.selects} search=${onBackupsView.search}`,
+  );
 
   /*
    * N45: 퇴역 공지 (티켓 02, ADR 0017) — **보는 것으로는 지워지지 않는다.**
@@ -3702,12 +4585,26 @@ try {
         schemaVersion: 2,
         paused: false,
         profiles: [
-          { id: 'p-ret', name: 'Retired', active: true, shortLabel: 'R', color: '#2563eb',
+          {
+            id: 'p-ret',
+            name: 'Retired',
+            active: true,
+            shortLabel: 'R',
+            color: '#2563eb',
             modifications: [
-              { kind: 'request-header', id: 'm1', name: 'X-Ret', value: 'on', enabled: true,
-                mode: 'override', emptyMeans: 'remove', comment: '',
-                conditions: { tabDomains: ['tab.io'] } },
-            ] },
+              {
+                kind: 'request-header',
+                id: 'm1',
+                name: 'X-Ret',
+                value: 'on',
+                enabled: true,
+                mode: 'override',
+                emptyMeans: 'remove',
+                comment: '',
+                conditions: { tabDomains: ['tab.io'] },
+              },
+            ],
+          },
         ],
         materialized: {},
         customHeaderNames: [],
@@ -3740,8 +4637,11 @@ try {
   // 한쪽을 보고 닫았을 뿐이다 — 남은 창에도, 새로 여는 창에도 그대로 있어야 한다.
   const stillSecond = await noticeSecond.getByText(RETIREMENT_TEXT).count();
   await noticeSecond.getByRole('button', { name: 'Got it' }).click();
-  await noticeSecond.getByText(RETIREMENT_TEXT).first()
-    .waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
+  await noticeSecond
+    .getByText(RETIREMENT_TEXT)
+    .first()
+    .waitFor({ state: 'detached', timeout: 5000 })
+    .catch(() => {});
   const afterAck = await noticeSecond.getByText(RETIREMENT_TEXT).count();
   await noticeSecond.close();
 
@@ -3750,10 +4650,16 @@ try {
   const afterReopen = await noticeThird.getByText(RETIREMENT_TEXT).count();
   await noticeThird.close();
 
-  record('N45: 퇴역 공지 — 두 표면이 함께 보고, 보는 것으로는 안 지워지며, 확인해야 저장소에서 사라진다',
-    seenFirst > 0 && seenSecond > 0 && /\b1 rule\b/.test(noticeBody) && stillSecond > 0 &&
-      afterAck === 0 && afterReopen === 0,
-    `동시=[${seenFirst},${seenSecond}] "${noticeBody}", 한쪽 닫은 뒤=${stillSecond}, ack후=${afterAck}, 재열기=${afterReopen}`);
+  record(
+    'N45: 퇴역 공지 — 두 표면이 함께 보고, 보는 것으로는 안 지워지며, 확인해야 저장소에서 사라진다',
+    seenFirst > 0 &&
+      seenSecond > 0 &&
+      /\b1 rule\b/.test(noticeBody) &&
+      stillSecond > 0 &&
+      afterAck === 0 &&
+      afterReopen === 0,
+    `동시=[${seenFirst},${seenSecond}] "${noticeBody}", 한쪽 닫은 뒤=${stillSecond}, ack후=${afterAck}, 재열기=${afterReopen}`,
+  );
 
   // N33: 스크롤바 트랙의 opacity 전이가 reduced-motion에서 **꺼진다** (릴리스 게이트 R-2).
   //
@@ -3765,8 +4671,7 @@ try {
   // opacity 값(0.6)은 양쪽 다 남는다 — 전이(페이드)만 끄고 어포던스는 유지한다. 그래서
   // `transition-property`를 보지 `opacity`를 보지 않는다.
   await seedProfiles(
-    Array.from({ length: 18 }, (_, i) =>
-      ({ ...baseProfile(`sb-${i}`, `Scroll ${i}`, []), active: i === 0 })),
+    Array.from({ length: 18 }, (_, i) => ({ ...baseProfile(`sb-${i}`, `Scroll ${i}`, []), active: i === 0 })),
   );
   const scrollbarTransition = async (reduced) => {
     const page = await context.newPage();
@@ -3787,18 +4692,25 @@ try {
   };
   const sbLively = await scrollbarTransition(false);
   const sbReduced = await scrollbarTransition(true);
-  record('N33: 스크롤바 페이드 — 기본은 opacity 전이, reduced-motion에서는 부재(값은 유지)',
-    sbLively.present && sbReduced.present &&
-      sbLively.prop.includes('opacity') && sbReduced.prop === 'none' &&
+  record(
+    'N33: 스크롤바 페이드 — 기본은 opacity 전이, reduced-motion에서는 부재(값은 유지)',
+    sbLively.present &&
+      sbReduced.present &&
+      sbLively.prop.includes('opacity') &&
+      sbReduced.prop === 'none' &&
       sbLively.opacity === sbReduced.opacity,
-    `기본 prop=${sbLively.prop} opacity=${sbLively.opacity}, reduced prop=${sbReduced.prop} opacity=${sbReduced.opacity}`);
+    `기본 prop=${sbLively.prop} opacity=${sbLively.opacity}, reduced prop=${sbReduced.prop} opacity=${sbReduced.opacity}`,
+  );
 
   // N28: 레일 아이콘 툴팁 (ui-polish 10, stories 28~30).
   // 레일만 툴팁 없는 맨 버튼이었다 — 다른 아이콘 버튼과 같은 셸로 옮긴다. 셸을 바꾸면
   // 크기가 24×24로 줄어들 수 있어(기존 IconButton 기본값) 클릭 대상 크기도 함께 본다.
   const railProbe = async (page, name) => {
     const button = page.getByRole('button', { name, exact: true });
-    const found = await button.waitFor({ timeout: 5000 }).then(() => true, () => false);
+    const found = await button.waitFor({ timeout: 5000 }).then(
+      () => true,
+      () => false,
+    );
     if (!found) return { found: false, hoverTip: false, focusTip: false, width: 0, height: 0, icon: 0 };
     const geom = await button.evaluate((el) => {
       const rect = el.getBoundingClientRect();
@@ -3817,16 +4729,23 @@ try {
      */
     await page.mouse.move(1, 1);
     await button.hover();
-    const hoverTip = await tip.waitFor({ timeout: 3000 }).then(() => true, () => false);
+    const hoverTip = await tip.waitFor({ timeout: 3000 }).then(
+      () => true,
+      () => false,
+    );
     await page.mouse.move(1, 1);
     // 호버 툴팁이 **사라진 것을 확인하고** 포커스로 넘어간다 — 고정 대기만 두면 뒤이은
     // 포커스 단언이 남아 있는 호버 툴팁을 타고 통과할 수 있다.
-    const hoverTipClosed = await tip
-      .waitFor({ state: 'detached', timeout: 3000 })
-      .then(() => true, () => false);
+    const hoverTipClosed = await tip.waitFor({ state: 'detached', timeout: 3000 }).then(
+      () => true,
+      () => false,
+    );
     // 마우스 없이 포커스만으로도 같은 정보를 얻어야 한다(story 29).
     await button.focus();
-    const focusTip = await tip.waitFor({ timeout: 3000 }).then(() => true, () => false);
+    const focusTip = await tip.waitFor({ timeout: 3000 }).then(
+      () => true,
+      () => false,
+    );
     await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
     await tip.waitFor({ state: 'detached', timeout: 3000 }).catch(() => {});
     return { found: true, ...geom, hoverTip, hoverTipClosed, focusTip };
@@ -3849,7 +4768,10 @@ try {
     .filter({ hasText: 'Show backups' })
     .first()
     .waitFor({ timeout: 3000 })
-    .then(() => true, () => false);
+    .then(
+      () => true,
+      () => false,
+    );
 
   // 선택 표시는 유지된다 — 툴팁을 얻으려고 "지금 보고 있는 화면"을 잃으면 안 된다.
   const railBackups = popup.getByRole('button', { name: 'Show backups', exact: true });
@@ -3878,9 +4800,14 @@ try {
     ...Object.entries(railKo).map(([k, r]) => [`ko:${k}`, r]),
   ];
   const railOkOf = (r) =>
-    r.found && r.hoverTip && r.hoverTipClosed && r.focusTip &&
+    r.found &&
+    r.hoverTip &&
+    r.hoverTipClosed &&
+    r.focusTip &&
     // 셸을 바꾸며 32×28 / 아이콘 16px보다 작아지지 않았는지
-    r.width >= 32 && r.height >= 28 && r.icon >= 16;
+    r.width >= 32 &&
+    r.height >= 28 &&
+    r.icon >= 16;
   const everyIconOk = allRail.every(([, r]) => railOkOf(r));
   /*
    * 실패한 항목을 **이름과 함께** 남긴다. 예시 하나만 찍던 메시지는 여섯 중 다른 하나가
@@ -3888,16 +4815,20 @@ try {
    */
   const railFailures = allRail
     .filter(([, r]) => !railOkOf(r))
-    .map(([name, r]) =>
-      `${name}{found=${r.found},hover=${r.hoverTip},close=${r.hoverTipClosed},focus=${r.focusTip},` +
-      `${r.width}x${r.height},icon=${r.icon}}`)
+    .map(
+      ([name, r]) =>
+        `${name}{found=${r.found},hover=${r.hoverTip},close=${r.hoverTipClosed},focus=${r.focusTip},` +
+        `${r.width}x${r.height},icon=${r.icon}}`,
+    )
     .join(' ');
-  record('N28: 레일 아이콘 셋 — en/ko 호버·포커스·Tab 툴팁, 클릭 대상·선택 표시 유지',
-    everyIconOk && tabTip &&
-      railSelected.pressed === 'true' && railSelected.background !== unselectedBg,
-    `아이콘 ${allRail.length}개 전부 ok=${everyIconOk}` + (railFailures ? ` 실패=[${railFailures}]` : '') + `, ` +
-    `Tab 툴팁=${tabTip}, 선택 배경 ${unselectedBg} → ${railSelected.background} (pressed=${railSelected.pressed})`);
-
+  record(
+    'N28: 레일 아이콘 셋 — en/ko 호버·포커스·Tab 툴팁, 클릭 대상·선택 표시 유지',
+    everyIconOk && tabTip && railSelected.pressed === 'true' && railSelected.background !== unselectedBg,
+    `아이콘 ${allRail.length}개 전부 ok=${everyIconOk}` +
+      (railFailures ? ` 실패=[${railFailures}]` : '') +
+      `, ` +
+      `Tab 툴팁=${tabTip}, 선택 배경 ${unselectedBg} → ${railSelected.background} (pressed=${railSelected.pressed})`,
+  );
 
   /*
    * N41: 셸 구조 재작업 (티켓 10) — 레일 라벨·적용 수, 프로필 열, 두 표면 치수.
@@ -3918,7 +4849,8 @@ try {
       aria: b.getAttribute('aria-label'),
       text: b.textContent.trim(),
       icon: !!b.querySelector('svg'),
-    })));
+    })),
+  );
   // 레일 하단의 적용 수 — background가 발행한 요약이 도착할 때까지 기다린다(규칙 1개).
   const appliedText = await pollUntil(
     () => popup.evaluate(() => document.querySelector('nav p')?.textContent?.trim() ?? ''),
@@ -3957,16 +4889,19 @@ try {
         .map((s) => s.getAttribute('aria-label'))
         .filter((label) => label?.startsWith('Toggle ')),
       search: !!document.querySelector('input[aria-label^="Search profiles"]'),
-      newProfile: [...document.querySelectorAll('button')].some((b) => b.textContent.trim() === '+ New profile'),
+      newProfile: [...document.querySelectorAll('button')].some(
+        (b) => b.textContent.trim() === '+ New profile',
+      ),
     };
   });
   // 인라인 토글이 실제로 상태를 바꾼다 — 프로필을 고르지 않고 목록에서 바로.
   await popup.getByRole('switch', { name: 'Toggle RailB' }).click();
   const inlineToggled = await pollUntil(
-    () => sw.evaluate(async () => {
-      const { state } = await chrome.storage.local.get('state');
-      return state.profiles.find((p) => p.id === 'r-b')?.active;
-    }),
+    () =>
+      sw.evaluate(async () => {
+        const { state } = await chrome.storage.local.get('state');
+        return state.profiles.find((p) => p.id === 'r-b')?.active;
+      }),
     (v) => v === true,
   );
   const columnOk =
@@ -3990,7 +4925,9 @@ try {
       return {
         w: Math.round(r.width),
         h: Math.round(r.height),
-        cols: getComputedStyle(el).gridTemplateColumns.split(' ').map((v) => Math.round(parseFloat(v))),
+        cols: getComputedStyle(el)
+          .gridTemplateColumns.split(' ')
+          .map((v) => Math.round(parseFloat(v))),
       };
     })(),
     overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -4009,19 +4946,26 @@ try {
    * 함께 못박는다(둘 중 하나만 보면 셋 다 같아져도 통과한다).
    */
   const sizeOk =
-    popupShell.w === 760 && popupShell.h === 580 && popupShell.overflow === 0 &&
+    popupShell.w === 760 &&
+    popupShell.h === 580 &&
+    popupShell.overflow === 0 &&
     popupShell.cols[0] < popupShell.cols[1] &&
-    tabShell.w === 1100 && tabShell.h === 700 && tabShell.overflow === 0 &&
-    tabShell.cols[0] === popupShell.cols[0] && tabShell.cols[1] === popupShell.cols[1] &&
+    tabShell.w === 1100 &&
+    tabShell.h === 700 &&
+    tabShell.overflow === 0 &&
+    tabShell.cols[0] === popupShell.cols[0] &&
+    tabShell.cols[1] === popupShell.cols[1] &&
     tabShell.cols[2] > popupShell.cols[2];
 
-  record('N41: 셸 구조 — 레일 라벨·적용 수, 프로필 열(스와치·인라인 토글), 팝업 760×580 · 탭 전폭',
+  record(
+    'N41: 셸 구조 — 레일 라벨·적용 수, 프로필 열(스와치·인라인 토글), 팝업 760×580 · 탭 전폭',
     railOk && appliedText === '1applied' && columnOk && inlineToggled && sizeOk,
     `rail=${JSON.stringify(railStructure.map((r) => r.text))} applied="${appliedText}", ` +
       `열 rows=${column.rows} switches=${JSON.stringify(column.switches)} swatch=${JSON.stringify(column.swatches)} ` +
       `search=${column.search} new=${column.newProfile} inline-toggle=${inlineToggled}, ` +
       `popup=${popupShell.w}x${popupShell.h} cols=${JSON.stringify(popupShell.cols)} overflow=${popupShell.overflow}, ` +
-      `tab=${tabShell.w}x${tabShell.h} cols=${JSON.stringify(tabShell.cols)} overflow=${tabShell.overflow}`);
+      `tab=${tabShell.w}x${tabShell.h} cols=${JSON.stringify(tabShell.cols)} overflow=${tabShell.overflow}`,
+  );
 
   /*
    * N41c: 비활성 스와치의 대비 (fix R-1) — **사용자 색과 무관하게** 보여야 한다.
@@ -4036,9 +4980,7 @@ try {
    * `bg-secondary`일 수도 있어, 토큰 하나를 배경으로 가정하면 실제와 다른 수를 잰다.
    * N41은 디자인 팔레트의 파랑 하나만 보므로 이 구멍을 볼 수 없다.
    */
-  await seedProfiles([
-    { ...baseProfile('sw-w', 'Whiteish', []), active: false, color: '#ffffff' },
-  ]);
+  await seedProfiles([{ ...baseProfile('sw-w', 'Whiteish', []), active: false, color: '#ffffff' }]);
   await popup.reload();
   await popup.getByRole('button', { name: 'Show profiles', exact: true }).waitFor({ timeout: 5000 });
   const whiteSwatch = await popup.evaluate(() => {
@@ -4069,19 +5011,25 @@ try {
       ratio: Number(((hi + 0.05) / (lo + 0.05)).toFixed(2)),
     };
   });
-  record('N41c: 비활성 스와치 — 사용자 색(흰색)과 무관한 중립 채움이 뒤 면에 3:1 (비텍스트)',
-    !!whiteSwatch && whiteSwatch.fill !== 'rgb(255, 255, 255)' &&
-      whiteSwatch.fill !== 'rgba(0, 0, 0, 0)' && whiteSwatch.ratio >= 3,
-    `swatch=${JSON.stringify(whiteSwatch)}`);
+  record(
+    'N41c: 비활성 스와치 — 사용자 색(흰색)과 무관한 중립 채움이 뒤 면에 3:1 (비텍스트)',
+    !!whiteSwatch &&
+      whiteSwatch.fill !== 'rgb(255, 255, 255)' &&
+      whiteSwatch.fill !== 'rgba(0, 0, 0, 0)' &&
+      whiteSwatch.ratio >= 3,
+    `swatch=${JSON.stringify(whiteSwatch)}`,
+  );
 
   /*
    * N41d: 팝업 프로필 열의 하한 (fix R-5) — 총폭 760은 고정이라(ADR 0005) 레일이 넓어진
    * 만큼을 프로필 열에서 빼기 쉽다. 열은 레일 라벨화 이전 폭(14rem = 224px) 아래로
    * 내려가지 않는다. N41의 `cols[0] < cols[1]`·`탭 > 팝업`은 열이 줄어든 것을 보지 못한다.
    */
-  record('N41d: 팝업 프로필 열 ≥ 224px (레일 라벨화 이전 폭 유지)',
+  record(
+    'N41d: 팝업 프로필 열 ≥ 224px (레일 라벨화 이전 폭 유지)',
     popupShell.cols[1] >= 224,
-    `popup cols=${JSON.stringify(popupShell.cols)}`);
+    `popup cols=${JSON.stringify(popupShell.cols)}`,
+  );
 
   /*
    * N41g: 프로필 열은 **프로필 화면에서만** 선다 (ADR 0017이 ADR 0005를 개정).
@@ -4107,19 +5055,23 @@ try {
     backupsShell.cols.length === 2 &&
     settingsShell.cols.length === 2 &&
     // 열이 접힌 상태에서도 셸이 넘치지 않는다 — 팝업은 760×580 고정이라 넘치면 잘린다.
-    profilesShell.overflow === 0 && backupsShell.overflow === 0 && settingsShell.overflow === 0 &&
+    profilesShell.overflow === 0 &&
+    backupsShell.overflow === 0 &&
+    settingsShell.overflow === 0 &&
     // 본문이 그 폭을 실제로 가져갔다 — 숨기기만 하고 자리를 남기면 여기서 걸린다.
     backupsShell.cols[1] > profilesShell.cols[2] &&
     settingsShell.cols[1] > profilesShell.cols[2] &&
     // 레일은 어느 화면에서도 같은 폭이다.
     backupsShell.cols[0] === profilesShell.cols[0];
 
-  record('N41g: 프로필 열은 프로필 화면에서만 — 백업·설정에서는 본문이 그 폭을 가져간다',
+  record(
+    'N41g: 프로필 열은 프로필 화면에서만 — 백업·설정에서는 본문이 그 폭을 가져간다',
     columnHidden,
     `profiles cols=${JSON.stringify(profilesShell.cols)}, ` +
       `backups cols=${JSON.stringify(backupsShell.cols)}, ` +
       `settings cols=${JSON.stringify(settingsShell.cols)}, ` +
-    `overflow=${profilesShell.overflow}/${backupsShell.overflow}/${settingsShell.overflow}`);
+      `overflow=${profilesShell.overflow}/${backupsShell.overflow}/${settingsShell.overflow}`,
+  );
 
   /*
    * N41e: 프로필 행의 규칙 수·전역 정지 (티켓 13, 스펙 story 22·25·38).
@@ -4147,27 +5099,29 @@ try {
    * 행 메타는 이름 칩 **안**의 마지막 `aria-hidden` 요소다 (티켓 04) — 첫 번째는 색 스와치다.
    * 밖에 붙이면 열이 넓어진다(티켓 10 R-5).
    */
-  const profileRows = () => popup.evaluate(() =>
-    [...document.querySelectorAll('[aria-label^="Select profile"]')].map((r) => {
-      const spans = [...r.querySelectorAll('span[aria-hidden]')];
-      const swatch = spans[0];
-      const meta = spans.at(-1);
-      /*
-       * **메타가 이름 아래 줄에 선다** — 이름의 아래변보다 메타의 윗변이 아래다. 한 줄로
-       * 되돌리면 가장 긴 문구(`12 rules · not applied`)가 264px 열에서 이름을 예닐곱 자로
-       * 눌러 버리고, 목록에서 프로필을 짚는 단서가 바로 그 이름이다 (티켓 04).
-       */
-      const name = swatch?.nextElementSibling;
-      const belowName =
-        name && meta ? meta.getBoundingClientRect().top >= name.getBoundingClientRect().bottom : null;
-      return {
-        aria: r.getAttribute('aria-label'),
-        mark: meta?.textContent?.trim() ?? '',
-        glyph: !!meta?.querySelector('svg'),
-        nameShown: name ? Math.round(name.getBoundingClientRect().width) : 0,
-        belowName,
-      };
-    }));
+  const profileRows = () =>
+    popup.evaluate(() =>
+      [...document.querySelectorAll('[aria-label^="Select profile"]')].map((r) => {
+        const spans = [...r.querySelectorAll('span[aria-hidden]')];
+        const swatch = spans[0];
+        const meta = spans.at(-1);
+        /*
+         * **메타가 이름 아래 줄에 선다** — 이름의 아래변보다 메타의 윗변이 아래다. 한 줄로
+         * 되돌리면 가장 긴 문구(`12 rules · not applied`)가 264px 열에서 이름을 예닐곱 자로
+         * 눌러 버리고, 목록에서 프로필을 짚는 단서가 바로 그 이름이다 (티켓 04).
+         */
+        const name = swatch?.nextElementSibling;
+        const belowName =
+          name && meta ? meta.getBoundingClientRect().top >= name.getBoundingClientRect().bottom : null;
+        return {
+          aria: r.getAttribute('aria-label'),
+          mark: meta?.textContent?.trim() ?? '',
+          glyph: !!meta?.querySelector('svg'),
+          nameShown: name ? Math.round(name.getBoundingClientRect().width) : 0,
+          belowName,
+        };
+      }),
+    );
   const rowsRunning = await pollUntil(profileRows, (rows) => rows.length === 2, 5000, 100);
 
   await popup.getByRole('button', { name: 'Pause' }).click();
@@ -4180,10 +5134,11 @@ try {
   // 정지 중에도 목록에서 바로 켠다 — 정지는 저장된 active를 건드리지 않으므로 지금도 고른다.
   await popup.getByRole('switch', { name: 'Toggle CountB' }).click();
   const activeWhilePaused = await pollUntil(
-    () => sw.evaluate(async () => {
-      const { state } = await chrome.storage.local.get('state');
-      return state.profiles.find((p) => p.id === 'pc-b')?.active;
-    }),
+    () =>
+      sw.evaluate(async () => {
+        const { state } = await chrome.storage.local.get('state');
+        return state.profiles.find((p) => p.id === 'pc-b')?.active;
+      }),
     (v) => v === true,
   );
   const rowsStillPaused = await pollUntil(
@@ -4200,18 +5155,26 @@ try {
     5000,
     100,
   );
-  record('N41e: 프로필 행 — `N개 규칙 · 적용` + 정지 표시(형태·낱말·접근성 이름), 정지는 표시만',
-    rowsRunning[0]?.aria === 'Select profile CountA (applied)' && rowsRunning[0]?.mark === '2 rules · applied' &&
-      rowsRunning[1]?.aria === 'Select profile CountB (not applied)' && rowsRunning[1]?.mark === '0 rules · not applied' &&
+  record(
+    'N41e: 프로필 행 — `N개 규칙 · 적용` + 정지 표시(형태·낱말·접근성 이름), 정지는 표시만',
+    rowsRunning[0]?.aria === 'Select profile CountA (applied)' &&
+      rowsRunning[0]?.mark === '2 rules · applied' &&
+      rowsRunning[1]?.aria === 'Select profile CountB (not applied)' &&
+      rowsRunning[1]?.mark === '0 rules · not applied' &&
       rowsPaused.every((r) => r.glyph) &&
-      rowsPaused[0]?.mark === '2 rules · paused' && rowsPaused[1]?.mark === '0 rules · paused' &&
-      activeWhilePaused === true && rowsStillPaused.every((r) => r.aria?.endsWith('(paused)')) &&
-      rowsResumed[0]?.aria === 'Select profile CountA (applied)' && rowsResumed[0]?.mark === '2 rules · applied' &&
-      rowsResumed[1]?.aria === 'Select profile CountB (applied)' && rowsResumed[1]?.mark === '0 rules · applied' &&
+      rowsPaused[0]?.mark === '2 rules · paused' &&
+      rowsPaused[1]?.mark === '0 rules · paused' &&
+      activeWhilePaused === true &&
+      rowsStillPaused.every((r) => r.aria?.endsWith('(paused)')) &&
+      rowsResumed[0]?.aria === 'Select profile CountA (applied)' &&
+      rowsResumed[0]?.mark === '2 rules · applied' &&
+      rowsResumed[1]?.aria === 'Select profile CountB (applied)' &&
+      rowsResumed[1]?.mark === '0 rules · applied' &&
       rowsRunning.every((r) => r.belowName === true && r.nameShown > 0),
     `실행=${JSON.stringify(rowsRunning)}, 정지=${JSON.stringify(rowsPaused)}, ` +
       `정지 중 토글 active=${activeWhilePaused} (여전히 정지=${rowsStillPaused.every((r) => r.aria?.endsWith('(paused)'))}), ` +
-      `재개=${JSON.stringify(rowsResumed)}`);
+      `재개=${JSON.stringify(rowsResumed)}`,
+  );
 
   /*
    * N41f: 정지의 **보이는 텍스트** 채널 (fix R-4, 티켓 13 AC2).
@@ -4232,25 +5195,26 @@ try {
    * 낱말 하나를 찾던 예전 프로브는 그것을 못 보므로, 메타로 끝나는 span을 찾아 잰다.
    * 채널의 성질은 그대로다: 화면에 정지라고 **적혀** 있어야 하고, 크기가 0이면 안 된다.
    */
-  const pausedWord = () => popup.evaluate(() => ({
-    /*
-     * 낱말을 든 **메타 자신**을 잰다 — 마지막 `aria-hidden` span이다 (code-review).
-     * `textContent`로 넓게 찾으면 이름까지 감싼 바깥 상자가 먼저 걸려, 낱말을 sr-only로
-     * 숨겨도 이름 줄의 높이 때문에 w·h가 0이 아니게 나온다 — 가드가 헛돈다.
-     */
-    rows: [...document.querySelectorAll('[aria-label^="Select profile"]')].map((r) => {
-      const el = [...r.querySelectorAll('span[aria-hidden]')].at(-1);
-      if (!el || !(el.textContent?.trim() ?? '').endsWith('· paused')) return null;
-      const box = el.getBoundingClientRect();
-      return { w: Math.round(box.width), h: Math.round(box.height) };
-    }),
-    // 색 채널 — 메타의 글자 세기가 정지에서 바뀐다. 형태·문자와 함께 셋째 채널이다.
-    metaColors: [...document.querySelectorAll('[aria-label^="Select profile"]')].map((r) => {
-      const meta = [...r.querySelectorAll('span[aria-hidden]')].at(-1);
-      return meta ? getComputedStyle(meta).color : null;
-    }),
-    overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-  }));
+  const pausedWord = () =>
+    popup.evaluate(() => ({
+      /*
+       * 낱말을 든 **메타 자신**을 잰다 — 마지막 `aria-hidden` span이다 (code-review).
+       * `textContent`로 넓게 찾으면 이름까지 감싼 바깥 상자가 먼저 걸려, 낱말을 sr-only로
+       * 숨겨도 이름 줄의 높이 때문에 w·h가 0이 아니게 나온다 — 가드가 헛돈다.
+       */
+      rows: [...document.querySelectorAll('[aria-label^="Select profile"]')].map((r) => {
+        const el = [...r.querySelectorAll('span[aria-hidden]')].at(-1);
+        if (!el || !(el.textContent?.trim() ?? '').endsWith('· paused')) return null;
+        const box = el.getBoundingClientRect();
+        return { w: Math.round(box.width), h: Math.round(box.height) };
+      }),
+      // 색 채널 — 메타의 글자 세기가 정지에서 바뀐다. 형태·문자와 함께 셋째 채널이다.
+      metaColors: [...document.querySelectorAll('[aria-label^="Select profile"]')].map((r) => {
+        const meta = [...r.querySelectorAll('span[aria-hidden]')].at(-1);
+        return meta ? getComputedStyle(meta).color : null;
+      }),
+      overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    }));
   const wordRunning = await pausedWord();
   await popup.getByRole('button', { name: 'Pause' }).click();
   // 읽을 수 있는 크기 — sr-only(1×1)도 display:none(0×0)도 이 문턱을 넘지 못한다.
@@ -4276,13 +5240,19 @@ try {
   const colorChanged =
     wordRunning.metaColors.length === 2 &&
     wordRunning.metaColors.every((c, i) => c !== null && c !== wordPaused.metaColors[i]);
-  record('N41f: 정지 — 보이는 낱말이 행에 서고 글자 세기도 바뀐다(형태·문자·색), 재개하면 사라진다',
-    wordRunning.rows.length === 2 && wordRunning.rows.every((p) => p === null) &&
-      wordPaused.rows.length === 2 && wordPaused.rows.every(readable) &&
-      wordPaused.overflow === 0 && colorChanged &&
-      wordResumed.rows.length === 2 && wordResumed.rows.every((p) => p === null),
+  record(
+    'N41f: 정지 — 보이는 낱말이 행에 서고 글자 세기도 바뀐다(형태·문자·색), 재개하면 사라진다',
+    wordRunning.rows.length === 2 &&
+      wordRunning.rows.every((p) => p === null) &&
+      wordPaused.rows.length === 2 &&
+      wordPaused.rows.every(readable) &&
+      wordPaused.overflow === 0 &&
+      colorChanged &&
+      wordResumed.rows.length === 2 &&
+      wordResumed.rows.every((p) => p === null),
     `실행=${JSON.stringify(wordRunning)}, 정지=${JSON.stringify(wordPaused)}, ` +
-      `색 바뀜=${colorChanged}, 재개=${JSON.stringify(wordResumed)}`);
+      `색 바뀜=${colorChanged}, 재개=${JSON.stringify(wordResumed)}`,
+  );
 
   /*
    * N41b: 아코디언 편집 (ADR 0017, 스펙 story 1–6) — **행이 사라지지 않는다.**
@@ -4300,7 +5270,9 @@ try {
     ]),
   ]);
   await popup.reload();
-  const ruleRows = popup.locator('.group').filter({ has: popup.getByRole('button', { name: 'Edit', exact: true }) });
+  const ruleRows = popup
+    .locator('.group')
+    .filter({ has: popup.getByRole('button', { name: 'Edit', exact: true }) });
   const rowLayout = () =>
     ruleRows.evaluateAll((els) =>
       els.map((el) => ({ y: Math.round(el.getBoundingClientRect().y), text: el.textContent.trim() })),
@@ -4329,8 +5301,8 @@ try {
 
   // 펼쳐진 카드의 테두리·배경이 접힌 카드와 다르다 (story 6) — 둘 다 달라야 한다.
   const cardStyles = await popup.evaluate(() => {
-    const cards = [...document.querySelectorAll('[class*="rounded-lg"][class*="border"]')].filter(
-      (el) => el.querySelector('.group'),
+    const cards = [...document.querySelectorAll('[class*="rounded-lg"][class*="border"]')].filter((el) =>
+      el.querySelector('.group'),
     );
     return cards.map((el) => {
       const cs = getComputedStyle(el);
@@ -4355,7 +5327,12 @@ try {
 
   // 같은 버튼을 다시 누르면 접힌다 (story 5).
   await editIcons.nth(0).click();
-  const toggledClosed = await pollUntil(() => typeField.count(), (n) => n === 0, 5000, 100);
+  const toggledClosed = await pollUntil(
+    () => typeField.count(),
+    (n) => n === 0,
+    5000,
+    100,
+  );
 
   /*
    * 순서 복귀는 **저장이든 취소든** 성립해야 한다 (수용 기준). 저장 경로만 재면 취소가
@@ -4366,7 +5343,12 @@ try {
     await popup.getByRole('button', { name: 'Edit', exact: true }).nth(1).click();
     await typeField.waitFor({ timeout: 5000 });
     await popup.getByRole('button', { name: 'Cancel' }).click();
-    await pollUntil(() => typeField.count(), (n) => n === 0, 5000, 100);
+    await pollUntil(
+      () => typeField.count(),
+      (n) => n === 0,
+      5000,
+      100,
+    );
     return pollUntil(rowLayout, (r) => r.length === 2, 5000, 100);
   })();
   const cancelRestoresOrder =
@@ -4376,19 +5358,32 @@ try {
   await popup.getByRole('button', { name: 'Edit', exact: true }).nth(1).click();
   await typeField.waitFor({ timeout: 5000 });
   await popup.getByRole('button', { name: SAVE_BUTTON }).click();
-  const collapsed = await pollUntil(() => typeField.count(), (n) => n === 0, 5000, 100);
+  const collapsed = await pollUntil(
+    () => typeField.count(),
+    (n) => n === 0,
+    5000,
+    100,
+  );
   const orderAfter = await pollUntil(rowLayout, (r) => r.length === 2, 5000, 100);
-  const sameOrder =
-    orderAfter[0]?.text.includes('X-First') && orderAfter[1]?.text.includes('X-Second');
+  const sameOrder = orderAfter[0]?.text.includes('X-First') && orderAfter[1]?.text.includes('X-Second');
 
-  record('N41b: 아코디언 편집 — 행이 남은 채 아래로 펼쳐지고 맨 위로 오며, 아이콘이 눌리고, 저장·취소 둘 다 순서 복귀',
-    orderBefore.length === 2 && orderBefore[0]?.text.includes('X-First') &&
-      stackOk && pressedOpen === 'true' && pressedOther === 'false' && cardsDiffer &&
-      toggledClosed === 0 && cancelRestoresOrder && collapsed === 0 && sameOrder,
+  record(
+    'N41b: 아코디언 편집 — 행이 남은 채 아래로 펼쳐지고 맨 위로 오며, 아이콘이 눌리고, 저장·취소 둘 다 순서 복귀',
+    orderBefore.length === 2 &&
+      orderBefore[0]?.text.includes('X-First') &&
+      stackOk &&
+      pressedOpen === 'true' &&
+      pressedOther === 'false' &&
+      cardsDiffer &&
+      toggledClosed === 0 &&
+      cancelRestoresOrder &&
+      collapsed === 0 &&
+      sameOrder,
     `before=${orderBefore.length}행(첫 X-First=${orderBefore[0]?.text.includes('X-First')}), ` +
       `열림 배치=${JSON.stringify(openLayout.map((r) => ({ y: r.y, first: r.text.includes('X-First') })))} 폼 y=${Math.round(formY)} 세로순서=${stackOk}, ` +
       `눌림=[${pressedOpen},${pressedOther}], 카드 구별=${cardsDiffer}(${JSON.stringify(cardStyles)}), ` +
-      `재클릭 접힘=${toggledClosed}, 취소 순서복귀=${cancelRestoresOrder}, 저장 후 폼=${collapsed}, 순서복귀=${sameOrder}`);
+      `재클릭 접힘=${toggledClosed}, 취소 순서복귀=${cancelRestoresOrder}, 저장 후 폼=${collapsed}, 순서복귀=${sameOrder}`,
+  );
 
   /*
    * N46: 새 규칙 폼 위치 · 흐림 · 응답 쿠키 속성 칩 (ADR 0017, 티켓 05 story 7·12·15).
@@ -4398,13 +5393,26 @@ try {
    */
   await seedProfiles([
     baseProfile('p-chip2', 'Chips2', [
-      { kind: 'set-cookie', id: 'sc1', name: 'sid', value: 'abc', path: '/', secure: true,
-        sameSite: 'lax', enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+      {
+        kind: 'set-cookie',
+        id: 'sc1',
+        name: 'sid',
+        value: 'abc',
+        path: '/',
+        secure: true,
+        sameSite: 'lax',
+        enabled: true,
+        mode: 'override',
+        emptyMeans: 'remove',
+        comment: '',
+      },
       hdr({ id: 'off1', name: 'X-Off', value: '1', enabled: false }),
     ]),
   ]);
   await popup.reload();
-  const chipRows = popup.locator('.group').filter({ has: popup.getByRole('button', { name: 'Edit', exact: true }) });
+  const chipRows = popup
+    .locator('.group')
+    .filter({ has: popup.getByRole('button', { name: 'Edit', exact: true }) });
   await chipRows.first().waitFor({ timeout: 5000 });
 
   // (a) 응답 쿠키 속성 칩 — 나가는 줄을 그대로 가른 것. 비운 Domain·Max-Age는 서지 않는다.
@@ -4430,8 +5438,7 @@ try {
   const pausedColor = await pollStable(titleColor(chipRows.nth(0)), 'N46 정지 중 제목색');
   await popup.getByRole('button', { name: 'Resume' }).click();
   const resumedColor = await pollStable(titleColor(chipRows.nth(0)), 'N46 재개 후 제목색');
-  const dimOk =
-    offColor !== onColor && pausedColor === offColor && resumedColor === onColor;
+  const dimOk = offColor !== onColor && pausedColor === offColor && resumedColor === onColor;
 
   /*
    * (b2) 삭제 아이콘은 호버에서 붉어진다 (수용 기준) — 되돌릴 수 없어 보이는 동작임을
@@ -4474,11 +5481,13 @@ try {
   await popup.getByRole('button', { name: 'Cancel' }).click();
   await newTypeField.waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
 
-  record('N46: 응답 쿠키 속성 칩 · 꺼짐/정지 흐림(같은 농도) · 삭제 호버 붉음 · 새 규칙 폼은 목록 맨 위',
+  record(
+    'N46: 응답 쿠키 속성 칩 · 꺼짐/정지 흐림(같은 농도) · 삭제 호버 붉음 · 새 규칙 폼은 목록 맨 위',
     cookieChipsOk && dimOk && deleteTurnsRed && newFormOnTop,
     `쿠키 칩=${JSON.stringify(cookieChips)}, 흐림 on=${onColor} off=${offColor} paused=${pausedColor} resumed=${resumedColor}, ` +
       `삭제 ${deleteIdle}→${deleteHover}=${deleteTurnsRed}, ` +
-      `새 폼 y=${Math.round(newFormY)} < 첫 행 y=${Math.round(firstRowY)}=${newFormOnTop}`);
+      `새 폼 y=${Math.round(newFormY)} < 첫 행 y=${Math.round(firstRowY)}=${newFormOnTop}`,
+  );
 
   /*
    * N47: 폼 시안 정합 — 머리글·저장 글자·응답 쿠키 속성·수렴 저장·두 열 (티켓 06).
@@ -4490,15 +5499,33 @@ try {
   await seedProfiles([
     baseProfile('p-form', 'FormShape', [
       // 넷 중 **화면에 없는** 방식(domain)으로 저장된 규칙 — 수렴이 여기서 관측된다.
-      { kind: 'request-header', id: 'f1', name: 'X-Conv', value: '1', enabled: true,
-        mode: 'append', emptyMeans: 'send-empty', comment: 'Converge me',
-        urlFilter: 'conv.example', urlMatchType: 'domain',
-        conditions: { resourceTypes: ['sub_frame'] } },
+      {
+        kind: 'request-header',
+        id: 'f1',
+        name: 'X-Conv',
+        value: '1',
+        enabled: true,
+        mode: 'append',
+        emptyMeans: 'send-empty',
+        comment: 'Converge me',
+        urlFilter: 'conv.example',
+        urlMatchType: 'domain',
+        conditions: { resourceTypes: ['sub_frame'] },
+      },
       // 이웃 — 같은 프로필에 있지만 폼을 열지 않는다. 수렴은 저장한 규칙에만 붙어야 한다.
-      { kind: 'request-header', id: 'f2', name: 'X-Untouched', value: '2', enabled: true,
-        mode: 'append', emptyMeans: 'send-empty', comment: 'Leave me',
-        urlFilter: 'untouched.example', urlMatchType: 'prefix',
-        conditions: { resourceTypes: ['sub_frame'] } },
+      {
+        kind: 'request-header',
+        id: 'f2',
+        name: 'X-Untouched',
+        value: '2',
+        enabled: true,
+        mode: 'append',
+        emptyMeans: 'send-empty',
+        comment: 'Leave me',
+        urlFilter: 'untouched.example',
+        urlMatchType: 'prefix',
+        conditions: { resourceTypes: ['sub_frame'] },
+      },
     ]),
   ]);
   await popup.reload();
@@ -4506,20 +5533,30 @@ try {
   // (a) 새 규칙 폼의 머리글과 저장 글자 (story 19·29)
   await popup.getByRole('button', { name: 'Add rule' }).first().click();
   await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
-  const newFormHeading = await popup.getByText('New rule', { exact: true }).isVisible().catch(() => false);
+  const newFormHeading = await popup
+    .getByText('New rule', { exact: true })
+    .isVisible()
+    .catch(() => false);
   const newSaveLabel = (await popup.getByRole('button', { name: 'Save', exact: true }).count()) === 1;
   // 닫기 버튼이 폼을 접는다 — 취소와 같은 일을 하는 두 번째 문이다.
   await popup.getByRole('button', { name: 'Close rule form' }).click();
   const closedByX = await popup
     .getByRole('combobox', { name: 'Type', exact: true })
     .waitFor({ state: 'detached', timeout: 5000 })
-    .then(() => true, () => false);
+    .then(
+      () => true,
+      () => false,
+    );
 
   // (b) 편집 폼의 머리글과 저장 글자 — 같은 자리의 같은 버튼이 다른 일을 한다
   await popup.getByRole('button', { name: 'Edit', exact: true }).first().click();
   await popup.getByRole('combobox', { name: 'Type', exact: true }).waitFor({ timeout: 5000 });
-  const editFormHeading = await popup.getByText('Edit rule', { exact: true }).isVisible().catch(() => false);
-  const editSaveLabel = (await popup.getByRole('button', { name: 'Save changes', exact: true }).count()) === 1;
+  const editFormHeading = await popup
+    .getByText('Edit rule', { exact: true })
+    .isVisible()
+    .catch(() => false);
+  const editSaveLabel =
+    (await popup.getByRole('button', { name: 'Save changes', exact: true }).count()) === 1;
   // 저장된 방식(domain)은 화면에 없다 — 와일드카드로 접혀 보인다 (story 21).
   const foldedMatch = await popup
     .getByRole('combobox', { name: 'URL match type', exact: true })
@@ -4532,10 +5569,11 @@ try {
    */
   await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   const converged = await pollUntil(
-    () => sw.evaluate(async () => {
-      const { state } = await chrome.storage.local.get('state');
-      return state.profiles[0]?.modifications[0] ?? null;
-    }),
+    () =>
+      sw.evaluate(async () => {
+        const { state } = await chrome.storage.local.get('state');
+        return state.profiles[0]?.modifications[0] ?? null;
+      }),
     (m) => m?.urlMatchType === 'contains',
   );
   const convergeOk =
@@ -4587,18 +5625,23 @@ try {
   await sameSiteGroup.getByRole('button', { name: 'Lax', exact: true }).click();
   await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   const cookieSaved = await pollUntil(
-    () => sw.evaluate(async () => {
-      const { state } = await chrome.storage.local.get('state');
-      return state.profiles[0]?.modifications.find((m) => m.kind === 'set-cookie') ?? null;
-    }),
+    () =>
+      sw.evaluate(async () => {
+        const { state } = await chrome.storage.local.get('state');
+        return state.profiles[0]?.modifications.find((m) => m.kind === 'set-cookie') ?? null;
+      }),
     (m) => m?.name === 'sid',
   );
   const cookieOk =
-    cookieSaved.value === 'abc' && cookieSaved.path === '/app' &&
-    cookieSaved.sameSite === 'lax' && cookieSaved.secure === true &&
+    cookieSaved.value === 'abc' &&
+    cookieSaved.path === '/app' &&
+    cookieSaved.sameSite === 'lax' &&
+    cookieSaved.secure === true &&
     // 끔으로 되돌린 HttpOnly와 비운 Domain·Max-Age는 **부재**다 — false로 남지 않는다.
-    httpOnlyOnPressed && cookieSaved.httpOnly === undefined &&
-    cookieSaved.domain === undefined && cookieSaved.maxAge === undefined;
+    httpOnlyOnPressed &&
+    cookieSaved.httpOnly === undefined &&
+    cookieSaved.domain === undefined &&
+    cookieSaved.maxAge === undefined;
   await waitFormClosed();
 
   /*
@@ -4615,15 +5658,18 @@ try {
     .filter({ hasText: 'sid=abc' })
     .first();
   await cookieRow.getByRole('button', { name: 'Edit', exact: true }).click();
-  await popup.getByRole('group', { name: 'SameSite' })
-    .getByRole('button', { name: 'Not set', exact: true }).click();
+  await popup
+    .getByRole('group', { name: 'SameSite' })
+    .getByRole('button', { name: 'Not set', exact: true })
+    .click();
   await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   const sameSiteCleared = await pollUntil(
-    () => sw.evaluate(async () => {
-      const { state } = await chrome.storage.local.get('state');
-      const m = state.profiles[0]?.modifications.find((x) => x.kind === 'set-cookie');
-      return m ? { has: 'sameSite' in m, name: m.name } : null;
-    }),
+    () =>
+      sw.evaluate(async () => {
+        const { state } = await chrome.storage.local.get('state');
+        const m = state.profiles[0]?.modifications.find((x) => x.kind === 'set-cookie');
+        return m ? { has: 'sameSite' in m, name: m.name } : null;
+      }),
     (s) => s?.has === false,
   );
   await waitFormClosed();
@@ -4675,18 +5721,29 @@ try {
   const tabLines = await openFormAndMeasure(tabForm);
   await tabForm.close();
 
-  record('N47: 폼 — 머리글·저장 글자(새/편집)·닫기, 수렴 저장(손대지 않은 규칙은 불변), 응답 쿠키 속성, 팝업 1열·탭 2열',
-    newFormHeading && newSaveLabel && closedByX && editFormHeading && editSaveLabel &&
-      /Wildcard/.test(foldedMatch ?? '') && convergeOk && untouchedIntact && cookieOk &&
+  record(
+    'N47: 폼 — 머리글·저장 글자(새/편집)·닫기, 수렴 저장(손대지 않은 규칙은 불변), 응답 쿠키 속성, 팝업 1열·탭 2열',
+    newFormHeading &&
+      newSaveLabel &&
+      closedByX &&
+      editFormHeading &&
+      editSaveLabel &&
+      /Wildcard/.test(foldedMatch ?? '') &&
+      convergeOk &&
+      untouchedIntact &&
+      cookieOk &&
       sameSiteCleared?.has === false &&
-      popupLines.firstRow === 2 && popupLines.cookieAttrs === 3 &&
-      tabLines.firstRow === 1 && tabLines.cookieAttrs === 1,
+      popupLines.firstRow === 2 &&
+      popupLines.cookieAttrs === 3 &&
+      tabLines.firstRow === 1 &&
+      tabLines.cookieAttrs === 1,
     `새 폼=[${newFormHeading},${newSaveLabel}] X닫기=${closedByX}, 편집=[${editFormHeading},${editSaveLabel}] 접힌 방식="${(foldedMatch ?? '').trim()}", ` +
       `수렴=${convergeOk}(${converged.urlMatchType}/${JSON.stringify(converged.conditions?.resourceTypes)}/${converged.mode}/${converged.emptyMeans}), ` +
       `이웃 불변=${untouchedIntact}(${JSON.stringify(untouched)}), ` +
       `쿠키=${cookieOk}(${JSON.stringify({ v: cookieSaved.value, p: cookieSaved.path, s: cookieSaved.sameSite, sec: cookieSaved.secure, ho: cookieSaved.httpOnly, d: cookieSaved.domain })}), ` +
       `SameSite 안정함=${sameSiteCleared?.has === false}, ` +
-      `줄 수 팝업=[${popupLines.firstRow},${popupLines.cookieAttrs}] 탭=[${tabLines.firstRow},${tabLines.cookieAttrs}]`);
+      `줄 수 팝업=[${popupLines.firstRow},${popupLines.cookieAttrs}] 탭=[${tabLines.firstRow},${tabLines.cookieAttrs}]`,
+  );
 
   /*
    * N48: **못 쓰는 패턴이면 저장 버튼이 죽고 그 사유가 함께 보인다** (티켓 07).
@@ -4707,7 +5764,10 @@ try {
 
   const saveButton = popup.getByRole('button', { name: SAVE_BUTTON });
   const reasonShown = () =>
-    popup.getByText('The browser cannot build a rule from this pattern.').isVisible().catch(() => false);
+    popup
+      .getByText('The browser cannot build a rule from this pattern.')
+      .isVisible()
+      .catch(() => false);
 
   // RE2가 받지 않는 역참조 — 브라우저가 이 패턴으로 규칙을 만들지 못한다.
   await popup.getByLabel('URL filter').fill('^https://(ads)\\.example\\.com/\\1');
@@ -4754,14 +5814,23 @@ try {
    * 못 쓰는 패턴을 치면 그쪽 문구가 서고, 고치면 둘 다 사라져야 한다 — 저장이 남긴 문구가
    * 폴백으로 살아남으면 버튼은 눌리는데 "이 패턴은 못 쓴다"가 그대로 서 있는 화면이 된다.
    */
-  const requiredShown = () => popup.getByText('Required.').isVisible().catch(() => false);
+  const requiredShown = () =>
+    popup
+      .getByText('Required.')
+      .isVisible()
+      .catch(() => false);
   await popup.getByLabel('URL filter').fill('');
   await saveButton.click(); // 빈 스코프 = required — 저장 시도가 그 문구를 남긴다
   const requiredAfterSave = await pollUntil(requiredShown, (v) => v === true, 5000, 100);
   await popup.getByLabel('URL filter').fill('^https://(ads)\\.example\\.com/\\1');
   const liveWins = (await reasonShown()) && !(await requiredShown());
   await popup.getByLabel('URL filter').fill('^https://ads\\.example\\.com/');
-  await pollUntil(() => saveButton.isDisabled(), (d) => d === false, 5000, 100);
+  await pollUntil(
+    () => saveButton.isDisabled(),
+    (d) => d === false,
+    5000,
+    100,
+  );
   const bothGone = !(await reasonShown()) && !(await requiredShown());
 
   /*
@@ -4770,7 +5839,12 @@ try {
    * 버튼을 살려 두는 것을 보고 "다른 종류는 안 걸린다"고 잘못 읽게 된다.
    */
   await popup.getByLabel('URL filter').fill('^https://(ads)\\.example\\.com/\\1');
-  await pollUntil(() => saveButton.isDisabled(), (d) => d === true, 5000, 100);
+  await pollUntil(
+    () => saveButton.isDisabled(),
+    (d) => d === true,
+    5000,
+    100,
+  );
   await pickOption(popup, 'Type', 'Request header');
   await popup.getByLabel('Header name', { exact: true }).fill('X-Not-Blocked');
   await closeSuggestions(popup);
@@ -4792,26 +5866,35 @@ try {
   await popup.getByLabel('URL filter').fill('^https://ads\\.example\\.com/');
   await popup.getByRole('button', { name: SAVE_BUTTON }).click();
   const regexBlockSaved = await pollUntil(
-    () => sw.evaluate(async () => {
-      const { state } = await chrome.storage.local.get('state');
-      const m = state.profiles[0]?.modifications.find((x) => x.kind === 'block');
-      return m ? { filter: m.urlFilter, match: m.urlMatchType } : null;
-    }),
+    () =>
+      sw.evaluate(async () => {
+        const { state } = await chrome.storage.local.get('state');
+        const m = state.profiles[0]?.modifications.find((x) => x.kind === 'block');
+        return m ? { filter: m.urlFilter, match: m.urlMatchType } : null;
+      }),
     (m) => m?.match === 'regex',
   );
   await waitFormClosed();
 
-  record('N48: 못 쓰는 패턴 — 버튼·키보드 둘 다 막히고 사유가 하나뿐이며, 고치면 저장되고 다른 종류는 안 걸린다',
-    blockedDisabled === true && blockedReason && revived === false && reasonGone &&
-      blockedAgain === true && keyboardBlocked &&
-      requiredAfterSave === true && liveWins && bothGone &&
+  record(
+    'N48: 못 쓰는 패턴 — 버튼·키보드 둘 다 막히고 사유가 하나뿐이며, 고치면 저장되고 다른 종류는 안 걸린다',
+    blockedDisabled === true &&
+      blockedReason &&
+      revived === false &&
+      reasonGone &&
+      blockedAgain === true &&
+      keyboardBlocked &&
+      requiredAfterSave === true &&
+      liveWins &&
+      bothGone &&
       otherKindEnabled &&
       regexBlockSaved?.filter === '^https://ads\\.example\\.com/' &&
       regexBlockSaved?.match === 'regex',
     `막힘=${blockedDisabled}(사유=${blockedReason}), 고치면 되살아남=${revived === false}(사유 사라짐=${reasonGone}), ` +
       `다시 막힘=${blockedAgain}, 키보드 저장 막힘=${keyboardBlocked}, ` +
       `사유 하나=[필수=${requiredAfterSave}, 라이브 우선=${liveWins}, 고치면 둘 다 사라짐=${bothGone}], ` +
-      `다른 종류 버튼 살아있음=${otherKindEnabled}, 정규식 Block 저장=${JSON.stringify(regexBlockSaved)}`);
+      `다른 종류 버튼 살아있음=${otherKindEnabled}, 정규식 Block 저장=${JSON.stringify(regexBlockSaved)}`,
+  );
 
   /*
    * N49: 쿠키 이름·User-Agent 제안 (티켓 08).
@@ -4833,9 +5916,10 @@ try {
   const cookieNameInput = popup.getByLabel('Cookie name', { exact: true });
   await cookieNameInput.fill('sess');
   const cookiePresetOption = popup.getByRole('option', { name: 'session_id', exact: true });
-  const cookiePresetShown = await cookiePresetOption
-    .waitFor({ timeout: 5000 })
-    .then(() => true, () => false);
+  const cookiePresetShown = await cookiePresetOption.waitFor({ timeout: 5000 }).then(
+    () => true,
+    () => false,
+  );
   await cookiePresetOption.click();
   const cookiePicked = await cookieNameInput.inputValue();
 
@@ -4858,7 +5942,10 @@ try {
   const uaInput = popup.getByLabel('User-Agent', { exact: true });
   await uaInput.fill('macOS');
   const uaOption = popup.getByRole('option', { name: 'Safari (macOS)', exact: true });
-  const uaLabelShown = await uaOption.waitFor({ timeout: 5000 }).then(() => true, () => false);
+  const uaLabelShown = await uaOption.waitFor({ timeout: 5000 }).then(
+    () => true,
+    () => false,
+  );
   await uaOption.click();
   const uaValue = await uaInput.inputValue();
   const uaInsertedFullString = uaValue.startsWith('Mozilla/5.0 (Macintosh');
@@ -4883,26 +5970,38 @@ try {
   const rememberedCookie = await popup
     .getByRole('option', { name: 'my_smoke_cookie', exact: true })
     .waitFor({ timeout: 5000 })
-    .then(() => true, () => false);
+    .then(
+      () => true,
+      () => false,
+    );
   await closeSuggestions(popup);
   await pickOption(popup, 'Type', 'User-Agent');
   await popup.getByLabel('User-Agent', { exact: true }).fill('SmokeBot');
   const rememberedUa = await popup
     .getByRole('option', { name: 'SmokeBot/9.9', exact: true })
     .waitFor({ timeout: 5000 })
-    .then(() => true, () => false);
+    .then(
+      () => true,
+      () => false,
+    );
   await closeSuggestions(popup);
   await popup.getByRole('button', { name: 'Cancel' }).click();
   await waitFormClosed();
 
-  record('N49: 쿠키 이름·UA 제안 — 프리셋에서 고르고, UA는 라벨로 찾아 값이 들어가며, 직접 친 값이 다음에도 뜬다',
-    cookiePresetShown && cookiePicked === 'session_id' &&
-      uaLabelShown && uaInsertedFullString &&
-      history.cookies?.includes('my_smoke_cookie') && history.agents?.includes('SmokeBot/9.9') &&
-      rememberedCookie && rememberedUa,
+  record(
+    'N49: 쿠키 이름·UA 제안 — 프리셋에서 고르고, UA는 라벨로 찾아 값이 들어가며, 직접 친 값이 다음에도 뜬다',
+    cookiePresetShown &&
+      cookiePicked === 'session_id' &&
+      uaLabelShown &&
+      uaInsertedFullString &&
+      history.cookies?.includes('my_smoke_cookie') &&
+      history.agents?.includes('SmokeBot/9.9') &&
+      rememberedCookie &&
+      rememberedUa,
     `쿠키 프리셋=${cookiePresetShown}(고른 값="${cookiePicked}"), ` +
       `UA 라벨=${uaLabelShown} 값 삽입=${uaInsertedFullString}("${uaValue.slice(0, 28)}…"), ` +
-      `이력 저장=${JSON.stringify(history)}, 다음 제안=[쿠키 ${rememberedCookie}, UA ${rememberedUa}]`);
+      `이력 저장=${JSON.stringify(history)}, 다음 제안=[쿠키 ${rememberedCookie}, UA ${rememberedUa}]`,
+  );
 
   /*
    * N38: 백업 sync 스위치 (티켓 07, R-1 단순 계약).
@@ -4955,13 +6054,19 @@ try {
     () => sw.evaluate(async () => (await chrome.storage.local.get('state')).state?.syncBackup),
     (v) => v === true,
   );
-  record('N38: 백업 sync 스위치 — 선택 유지, 클라우드 스냅샷 보존, 활성 저장소 히스토리',
-    switchOnBefore === 'true' && storedOff === false && switchOffAfterReopen === 'false' &&
-      cloudIntact && rowsWhileOn === syncSnapshots && rowsWhileOff === localSnapshots &&
+  record(
+    'N38: 백업 sync 스위치 — 선택 유지, 클라우드 스냅샷 보존, 활성 저장소 히스토리',
+    switchOnBefore === 'true' &&
+      storedOff === false &&
+      switchOffAfterReopen === 'false' &&
+      cloudIntact &&
+      rowsWhileOn === syncSnapshots &&
+      rowsWhileOff === localSnapshots &&
       rowsBackOn === syncSnapshots,
     `on=${switchOnBefore}→stored-off=${storedOff}, reopen-checked=${switchOffAfterReopen}, ` +
       `cloud ${cloudBefore.length}→${cloudAfter.length} keys (intact=${cloudIntact}), ` +
-      `rows sync ${rowsWhileOn}/${syncSnapshots} → local ${rowsWhileOff}/${localSnapshots} → back ${rowsBackOn}`);
+      `rows sync ${rowsWhileOn}/${syncSnapshots} → local ${rowsWhileOff}/${localSnapshots} → back ${rowsBackOn}`,
+  );
 
   /*
    * N40: 설정·백업 화면 마무리 (티켓 09).
@@ -4991,7 +6096,9 @@ try {
   await popup.getByRole('button', { name: 'Show backups' }).click();
   await popup.getByRole('button', { name: 'Import…' }).click();
   await popup.getByLabel('Import file').setInputFiles({
-    name: 'round-trip.json', mimeType: 'application/json', buffer: Buffer.from(rtJson),
+    name: 'round-trip.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(rtJson),
   });
   await popup.getByRole('button', { name: 'Run import' }).click();
   const rtState = await pollUntil(
@@ -5027,7 +6134,10 @@ try {
   const startedEn = await langPage
     .getByRole('button', { name: 'Pause' })
     .waitFor({ timeout: 5000 })
-    .then(() => true, () => false);
+    .then(
+      () => true,
+      () => false,
+    );
   await langPage.getByRole('button', { name: 'Show settings' }).click();
   await settleScreen(langPage, 'Theme');
   await langPage.getByRole('button', { name: '한국어' }).click();
@@ -5035,13 +6145,19 @@ try {
   const switchedToKo = await langPage
     .getByRole('button', { name: '일시정지' })
     .waitFor({ timeout: 5000 })
-    .then(() => true, () => false);
+    .then(
+      () => true,
+      () => false,
+    );
 
   await langPage.reload();
   const keptKo = await langPage
     .getByRole('button', { name: '일시정지' })
     .waitFor({ timeout: 5000 })
-    .then(() => true, () => false);
+    .then(
+      () => true,
+      () => false,
+    );
 
   /*
    * (c) **단축키 목록을 재지 않는다** (티켓 09). 스펙이 그 화면을 범위 밖에 뒀고
@@ -5059,13 +6175,18 @@ try {
   const switchedBackToEn = await langPage
     .getByRole('button', { name: 'Pause' })
     .waitFor({ timeout: 5000 })
-    .then(() => true, () => false);
+    .then(
+      () => true,
+      () => false,
+    );
   await langPage.close();
 
-  record('N40: 백업 화면 JSON 왕복 + 언어 선택(유지·복귀)',
+  record(
+    'N40: 백업 화면 JSON 왕복 + 언어 선택(유지·복귀)',
     roundTripped && startedEn && switchedToKo && keptKo && switchedBackToEn,
     `왕복=${roundTripped}(${rtProfile?.name}/${rtMod?.name}=${rtMod?.value}), ` +
-      `en시작=${startedEn} → ko=${switchedToKo} → 재열람 ko=${keptKo} → en복귀=${switchedBackToEn}`);
+      `en시작=${startedEn} → ko=${switchedToKo} → 재열람 ko=${keptKo} → en복귀=${switchedBackToEn}`,
+  );
 
   /*
    * N42: "저장 후 바로 활성화" 토글 (티켓 11, story 17).
@@ -5094,8 +6215,7 @@ try {
   // 준비 배리어는 관측이다 — 시드가 실제로 컴파일돼 걸린 뒤에 폼을 만진다.
   await pollSessionRuleMatch(sw, headerOpLive('X-Act-Live'), 'X-Act-Live 시드 방출');
 
-  const activateSwitch = () =>
-    popup.getByRole('switch', { name: 'Enable after saving', exact: true });
+  const activateSwitch = () => popup.getByRole('switch', { name: 'Enable after saving', exact: true });
   const readMod = (name) => () =>
     sw.evaluate(async (n) => {
       const { state } = await chrome.storage.local.get('state');
@@ -5128,22 +6248,15 @@ try {
   const savedOn = defaultMod?.enabled === true;
 
   // (c) 켜진 규칙의 방출을 배리어로 삼아, 같은 세트에서 꺼진 규칙의 부재를 단언한다.
-  const activateRules = await pollSessionRuleMatch(
-    sw,
-    headerOpLive('X-Act-Default'),
-    'X-Act-Default 방출',
-  );
-  const darkNotEmitted = !headerOps(activateRules).some(
-    (h) => h.header?.toLowerCase() === 'x-act-dark',
-  );
+  const activateRules = await pollSessionRuleMatch(sw, headerOpLive('X-Act-Default'), 'X-Act-Default 방출');
+  const darkNotEmitted = !headerOps(activateRules).some((h) => h.header?.toLowerCase() === 'x-act-dark');
   const darkRow = popup
     .locator('.group')
     .filter({ has: popup.getByRole('button', { name: 'Edit', exact: true }) })
     .filter({ hasText: 'X-Act-Dark' })
     .first();
   // 행의 켜고 끄기는 토글 스위치다 (티켓 05) — 예전 체크박스가 시안의 스위치로 바뀌었다.
-  const darkRowOff =
-    (await darkRow.getByRole('switch').getAttribute('aria-checked')) === 'false';
+  const darkRowOff = (await darkRow.getByRole('switch').getAttribute('aria-checked')) === 'false';
 
   // (d) 편집 — 꺼 둔 시드 규칙을 열면 토글도 꺼져 있고, 그대로 저장해도 켜지지 않는다.
   const seededRow = popup
@@ -5168,12 +6281,21 @@ try {
   await popup.getByRole('button', { name: 'Cancel', exact: true }).click();
   await waitFormClosed();
 
-  record('N42: 저장 후 바로 활성화 — 기본 켜짐·끄면 꺼진 채 저장·미방출, 편집은 뒤집지 않고 종류 전환에도 유지',
-    defaultOn && offBeforeSave && savedOff && savedOn && darkNotEmitted && darkRowOff &&
-      editReflectsOff && editKeptOff && keptAcrossKind,
+  record(
+    'N42: 저장 후 바로 활성화 — 기본 켜짐·끄면 꺼진 채 저장·미방출, 편집은 뒤집지 않고 종류 전환에도 유지',
+    defaultOn &&
+      offBeforeSave &&
+      savedOff &&
+      savedOn &&
+      darkNotEmitted &&
+      darkRowOff &&
+      editReflectsOff &&
+      editKeptOff &&
+      keptAcrossKind,
     `기본켜짐=${defaultOn}, 끈뒤=${offBeforeSave}, 꺼진채저장=${savedOff}(enabled=${darkMod?.enabled}), ` +
       `미조작저장=${savedOn}(enabled=${defaultMod?.enabled}), 미방출=${darkNotEmitted}, 행꺼짐=${darkRowOff}, ` +
-      `편집반영=${editReflectsOff}, 편집유지=${editKeptOff}(enabled=${seededAfterEdit?.enabled}), 종류전환유지=${keptAcrossKind}`);
+      `편집반영=${editReflectsOff}, 편집유지=${editKeptOff}(enabled=${seededAfterEdit?.enabled}), 종류전환유지=${keptAcrossKind}`,
+  );
 
   /*
    * N43: 히스토리 한 행 삭제 (티켓 12, story 36).
@@ -5216,18 +6338,21 @@ try {
 
   const snapLanded = await pollUntil(
     () =>
-      sw.evaluate(async ([area, marker]) => {
-        const kv = await chrome.storage[area].get(null);
-        const entry = kv['bk:manifest']?.snapshots?.[0];
-        if (!entry) return false;
-        let text = '';
-        for (let i = 0; i < entry.chunkCount; i += 1) {
-          const part = kv[`bk:${entry.id}:${i}`];
-          if (typeof part !== 'string') return false;
-          text += part;
-        }
-        return text.includes(marker);
-      }, [snapArea, SNAP_MARKER]),
+      sw.evaluate(
+        async ([area, marker]) => {
+          const kv = await chrome.storage[area].get(null);
+          const entry = kv['bk:manifest']?.snapshots?.[0];
+          if (!entry) return false;
+          let text = '';
+          for (let i = 0; i < entry.chunkCount; i += 1) {
+            const part = kv[`bk:${entry.id}:${i}`];
+            if (typeof part !== 'string') return false;
+            text += part;
+          }
+          return text.includes(marker);
+        },
+        [snapArea, SNAP_MARKER],
+      ),
     (landed) => landed === true,
     55_000,
     500,
@@ -5237,35 +6362,38 @@ try {
     throw new Error(`N43 준비 실패: ${snapArea} 저장소에 시드 스냅샷이 착지하지 않았다`);
   }
 
-  const seededSnap = await sw.evaluate(async ([area, other]) => {
-    const kv = await chrome.storage[area].get(null);
-    const manifest = kv['bk:manifest'];
-    const newest = manifest.snapshots[0];
-    const writes = {};
-    // 지울 행: 정상 스냅샷의 복제본(같은 청크·체크섬, 다른 키·id).
-    for (let i = 0; i < newest.chunkCount; i += 1) {
-      writes[`bk:del-row:${i}`] = kv[`bk:${newest.id}:${i}`];
-    }
-    const clone = {
-      ...newest,
-      id: 'del-row',
-      createdAt: Date.UTC(2020, 0, 2, 3, 4),
-      profileCount: 7,
-    };
-    // 복원이 막히는 손상 행 — 청크가 아예 없다.
-    const corrupt = {
-      id: 'del-corrupt',
-      createdAt: Date.UTC(2020, 0, 1, 3, 4),
-      chunkCount: 1,
-      checksum: 'deadbeef',
-      profileCount: 9,
-    };
-    writes['bk:manifest'] = { ...manifest, snapshots: [clone, ...manifest.snapshots, corrupt] };
-    await chrome.storage[area].set(writes);
-    // 반대쪽 저장소의 표식 — 이 삭제가 넘보면 안 되는 구역이다.
-    await chrome.storage[other].set({ 'bk:del-other:0': 'other-store-payload' });
-    return { keptId: newest.id };
-  }, [snapArea, snapOther]);
+  const seededSnap = await sw.evaluate(
+    async ([area, other]) => {
+      const kv = await chrome.storage[area].get(null);
+      const manifest = kv['bk:manifest'];
+      const newest = manifest.snapshots[0];
+      const writes = {};
+      // 지울 행: 정상 스냅샷의 복제본(같은 청크·체크섬, 다른 키·id).
+      for (let i = 0; i < newest.chunkCount; i += 1) {
+        writes[`bk:del-row:${i}`] = kv[`bk:${newest.id}:${i}`];
+      }
+      const clone = {
+        ...newest,
+        id: 'del-row',
+        createdAt: Date.UTC(2020, 0, 2, 3, 4),
+        profileCount: 7,
+      };
+      // 복원이 막히는 손상 행 — 청크가 아예 없다.
+      const corrupt = {
+        id: 'del-corrupt',
+        createdAt: Date.UTC(2020, 0, 1, 3, 4),
+        chunkCount: 1,
+        checksum: 'deadbeef',
+        profileCount: 9,
+      };
+      writes['bk:manifest'] = { ...manifest, snapshots: [clone, ...manifest.snapshots, corrupt] };
+      await chrome.storage[area].set(writes);
+      // 반대쪽 저장소의 표식 — 이 삭제가 넘보면 안 되는 구역이다.
+      await chrome.storage[other].set({ 'bk:del-other:0': 'other-store-payload' });
+      return { keptId: newest.id };
+    },
+    [snapArea, snapOther],
+  );
 
   const bkView = (area) =>
     sw.evaluate(async (a) => {
@@ -5305,8 +6433,7 @@ try {
    * "한 번에 하나뿐"은 이제 `Confirming` 타입이 한 값짜리 유니온인 것으로 강제된다.
    * 남은 관측은 그 되물음이 실제로 사라졌는지다(누르지 않고 센다 — 누르면 복원이 돈다).
    */
-  const restoreHasNoConfirm =
-    (await delRow.getByRole('button', { name: /Confirm restore/ }).count()) === 0;
+  const restoreHasNoConfirm = (await delRow.getByRole('button', { name: /Confirm restore/ }).count()) === 0;
   const deleteStillArmed = await delRow
     .getByRole('button', { name: 'Confirm delete backup', exact: true })
     .isVisible();
@@ -5319,7 +6446,12 @@ try {
     8000,
     200,
   );
-  const rowsLeft = await pollUntil(() => delRow.count(), (n) => n === 0, 5000, 200);
+  const rowsLeft = await pollUntil(
+    () => delRow.count(),
+    (n) => n === 0,
+    5000,
+    200,
+  );
   const otherAfter = await bkView(snapOther);
 
   const deletedGone =
@@ -5327,22 +6459,29 @@ try {
   const othersKept =
     snapAfter.ids.includes(seededSnap.keptId) &&
     snapAfter.ids.includes('del-corrupt') &&
-    snapBefore.keys
-      .filter((k) => !k.startsWith('bk:del-row:'))
-      .every((k) => snapAfter.keys.includes(k));
+    snapBefore.keys.filter((k) => !k.startsWith('bk:del-row:')).every((k) => snapAfter.keys.includes(k));
   const countDropped = snapAfter.ids.length === snapBefore.ids.length - 1;
   const otherIntact =
-    JSON.stringify(otherAfter) === JSON.stringify(otherBefore) &&
-    otherAfter.keys.includes('bk:del-other:0');
+    JSON.stringify(otherAfter) === JSON.stringify(otherBefore) && otherAfter.keys.includes('bk:del-other:0');
 
-  record('N43: 히스토리 한 행 삭제 — 2단계 확인(복원 확인과 상호 취소), 그 행·그 청크만 사라지고 반대쪽 저장소는 무사',
-    corruptDeletable && deleteArmed && armedNothingRemoved && restoreHasNoConfirm &&
-      deleteStillArmed && deletedGone && othersKept && countDropped && rowsLeft === 0 && otherIntact,
+  record(
+    'N43: 히스토리 한 행 삭제 — 2단계 확인(복원 확인과 상호 취소), 그 행·그 청크만 사라지고 반대쪽 저장소는 무사',
+    corruptDeletable &&
+      deleteArmed &&
+      armedNothingRemoved &&
+      restoreHasNoConfirm &&
+      deleteStillArmed &&
+      deletedGone &&
+      othersKept &&
+      countDropped &&
+      rowsLeft === 0 &&
+      otherIntact,
     `손상행 삭제가능=${corruptDeletable}, 1클릭 확인=${deleteArmed}·무삭제=${armedNothingRemoved}, ` +
       `복원 되물음 없음=${restoreHasNoConfirm}(삭제확인 유지=${deleteStillArmed}), ` +
       `매니페스트(${snapArea}) ${snapBefore.ids.length}→${snapAfter.ids.length}, 남은 행=${rowsLeft}, ` +
       `그 청크 잔재=${snapAfter.keys.some((k) => k.startsWith('bk:del-row:'))}, 나머지 보존=${othersKept}, ` +
-      `반대쪽(${snapOther}) 키 ${otherBefore.keys.length}→${otherAfter.keys.length} 동일=${otherIntact}`);
+      `반대쪽(${snapOther}) 키 ${otherBefore.keys.length}→${otherAfter.keys.length} 동일=${otherIntact}`,
+  );
 
   /*
    * N44: 겹친 스냅샷 삭제의 끝단간 정합 (티켓 06, 스펙 S4).
@@ -5462,14 +6601,11 @@ try {
   );
 
   const bothRowsGone = !raceAfter.ids.includes('race-a') && !raceAfter.ids.includes('race-b');
-  const bothDataGone = !raceAfter.keys.some(
-    (k) => k.startsWith('bk:race-a:') || k.startsWith('bk:race-b:'),
-  );
+  const bothDataGone = !raceAfter.keys.some((k) => k.startsWith('bk:race-a:') || k.startsWith('bk:race-b:'));
   const keptListed = raceAfter.ids.includes('race-keep');
-  const keptDataWhole = Array.from(
-    { length: raceSeed.chunkCount },
-    (_, i) => `bk:race-keep:${i}`,
-  ).every((k) => raceAfter.keys.includes(k));
+  const keptDataWhole = Array.from({ length: raceSeed.chunkCount }, (_, i) => `bk:race-keep:${i}`).every(
+    (k) => raceAfter.keys.includes(k),
+  );
   // 레인이 없으면 정확히 이 단언이 깨진다 — 목록에는 있는데 청크가 없는 행이 남는다.
   const noOrphanRows = await sw.evaluate(async (area) => {
     const kv = await chrome.storage[area].get(null);
@@ -5504,9 +6640,10 @@ try {
   await settleScreen(popup, 'Backup history');
   const snapRows = popup.locator('li').filter({ hasText: /active profiles?/ });
   const keepRowAfter = snapRows.filter({ hasText: '13 active profiles' }).first();
-  const keptRowVisible = await keepRowAfter
-    .waitFor({ timeout: 5000 })
-    .then(() => true, () => false);
+  const keptRowVisible = await keepRowAfter.waitFor({ timeout: 5000 }).then(
+    () => true,
+    () => false,
+  );
   // 지운 둘이 사용자가 보는 목록에서도 사라졌다 — 저장소만이 아니라 화면까지 본다.
   const deletedRowsUnlisted =
     (await snapRows.filter({ hasText: '11 active profiles' }).count()) === 0 &&
@@ -5520,7 +6657,14 @@ try {
       const { state } = await chrome.storage.local.get('state');
       state.profiles = [
         ...state.profiles,
-        { id: 'race-dirty', name: marker, active: false, shortLabel: 'D', color: '#16a34a', modifications: [] },
+        {
+          id: 'race-dirty',
+          name: marker,
+          active: false,
+          shortLabel: 'D',
+          color: '#16a34a',
+          modifications: [],
+        },
       ];
       await chrome.storage.local.set({ state });
     }, DIRTY_MARKER);
@@ -5529,11 +6673,14 @@ try {
     restored =
       (await pollUntil(
         () =>
-          sw.evaluate(async ([keptName, dirtyName]) => {
-            const { state } = await chrome.storage.local.get('state');
-            const names = (state?.profiles ?? []).map((p) => p.name);
-            return names.includes(keptName) && !names.includes(dirtyName);
-          }, [SNAP_MARKER, DIRTY_MARKER]),
+          sw.evaluate(
+            async ([keptName, dirtyName]) => {
+              const { state } = await chrome.storage.local.get('state');
+              const names = (state?.profiles ?? []).map((p) => p.name);
+              return names.includes(keptName) && !names.includes(dirtyName);
+            },
+            [SNAP_MARKER, DIRTY_MARKER],
+          ),
         (ok) => ok === true,
         8000,
         200,
@@ -5542,16 +6689,26 @@ try {
 
   const twoFewer = raceAfter.ids.length === raceBefore.ids.length - 2;
 
-  record('N44: 겹친 스냅샷 삭제 — 둘 다 사라지고 그 데이터도 남지 않으며 세 번째는 온전히 복원된다',
-    bothAccepted && bothRowsGone && bothDataGone && twoFewer && keptListed && keptDataWhole &&
-      noOrphanRows && keptRowVisible && deletedRowsUnlisted && restored,
+  record(
+    'N44: 겹친 스냅샷 삭제 — 둘 다 사라지고 그 데이터도 남지 않으며 세 번째는 온전히 복원된다',
+    bothAccepted &&
+      bothRowsGone &&
+      bothDataGone &&
+      twoFewer &&
+      keptListed &&
+      keptDataWhole &&
+      noOrphanRows &&
+      keptRowVisible &&
+      deletedRowsUnlisted &&
+      restored,
     `동시 요청 둘 수락=${bothAccepted}(${JSON.stringify(raceResults)}), ` +
       `매니페스트(${snapArea}) ${raceBefore.ids.length}→${raceAfter.ids.length} ` +
       `[${raceAfter.ids.join(',')}] 둘 줄었나=${twoFewer}, 둘 다 없음=${bothRowsGone}, ` +
       `그 청크 잔재=${!bothDataGone}, 고아 행 없음=${noOrphanRows}, ` +
       `유지 행 목록=${keptListed}·청크 온전=${keptDataWhole}, ` +
       `경합 후 목록 재조회: 유지 행=${keptRowVisible}·지운 둘 부재=${deletedRowsUnlisted}, ` +
-      `복원=${restored}, ${Date.now() - raceT0}ms`);
+      `복원=${restored}, ${Date.now() - raceT0}ms`,
+  );
 
   /*
    * N39: 2단계 전체 초기화 (티켓 08, R-3).
@@ -5569,7 +6726,14 @@ try {
     const { state } = await chrome.storage.local.get('state');
     state.profiles = [
       ...state.profiles,
-      { id: 'reset-marker', name: marker, active: true, shortLabel: 'R', color: '#dc2626', modifications: [] },
+      {
+        id: 'reset-marker',
+        name: marker,
+        active: true,
+        shortLabel: 'R',
+        color: '#dc2626',
+        modifications: [],
+      },
     ];
     state.theme = 'dark';
     state.badgeVisible = false;
@@ -5603,18 +6767,12 @@ try {
   const stateAfterFirst = await readState();
   const dumpAfterFirst = await bkDump();
   const survivedFirstClick =
-    stateAfterFirst.profiles.some((p) => p.name === RESET_MARKER) &&
-    dumpAfterFirst.includes(RESET_MARKER);
+    stateAfterFirst.profiles.some((p) => p.name === RESET_MARKER) && dumpAfterFirst.includes(RESET_MARKER);
 
   // 2단계: 확인 클릭에서만 실행된다.
   await popup.getByRole('button', { name: 'Erase everything?' }).click();
   const stateAfterConfirm = await pollUntil(readState, (s) => s?.profiles?.length === 1, 15000, 200);
-  const dumpAfterConfirm = await pollUntil(
-    bkDump,
-    (dump) => !dump.includes(RESET_MARKER),
-    15000,
-    200,
-  );
+  const dumpAfterConfirm = await pollUntil(bkDump, (dump) => !dump.includes(RESET_MARKER), 15000, 200);
   const rulesAfter = await pollUntil(
     () => sw.evaluate(async () => (await chrome.declarativeNetRequest.getSessionRules()).length),
     (n) => n === 0,
@@ -5629,13 +6787,18 @@ try {
     stateAfterConfirm.syncBackup === true &&
     Object.keys(stateAfterConfirm.materialized ?? {}).length === 0;
 
-  record('N39: 2단계 전체 초기화 — 확인 전에는 무사, 확인 후 상태·두 저장소의 백업이 비워진다',
-    confirmVisible && survivedFirstClick && defaults &&
-      !dumpAfterConfirm.includes(RESET_MARKER) && rulesAfter === 0,
+  record(
+    'N39: 2단계 전체 초기화 — 확인 전에는 무사, 확인 후 상태·두 저장소의 백업이 비워진다',
+    confirmVisible &&
+      survivedFirstClick &&
+      defaults &&
+      !dumpAfterConfirm.includes(RESET_MARKER) &&
+      rulesAfter === 0,
     `1클릭: 확인버튼=${confirmVisible}, 표식 생존=${survivedFirstClick} · ` +
       `2클릭: 프로필 ${stateAfterConfirm.profiles.length}개(${stateAfterConfirm.profiles[0]?.name}), ` +
       `theme=${stateAfterConfirm.theme}, badge=${stateAfterConfirm.badgeVisible}, sync=${stateAfterConfirm.syncBackup}, ` +
-      `표식 잔재=${dumpAfterConfirm.includes(RESET_MARKER)}, 세션 규칙=${rulesAfter}`);
+      `표식 잔재=${dumpAfterConfirm.includes(RESET_MARKER)}, 세션 규칙=${rulesAfter}`,
+  );
 
   /*
    * N50: **백업 화면이 시안의 카드 넷이다** (티켓 09 AC1·AC2·AC3·AC4).
@@ -5674,15 +6837,20 @@ try {
   const borrowsHistoryEmpty = /No backups yet/.test(syncText);
   // 기기 수 — `N devices`·`2 browsers` 같은 표현이 하나도 없어야 한다.
   const saysDeviceCount = /\d+\s*(devices?|browsers?|기기|브라우저)/i.test(syncText);
-  record('N50: 백업 화면 — 카드 넷(JSON·동기화·히스토리·초기화), 동기화는 위치·시각만 말하고 기기 수는 말하지 않는다',
+  record(
+    'N50: 백업 화면 — 카드 넷(JSON·동기화·히스토리·초기화), 동기화는 위치·시각만 말하고 기기 수는 말하지 않는다',
     backupCards.length === 4 &&
       backupCards[0] === 'JSON export & import' &&
       backupCards[1] === 'Cloud sync' &&
       backupCards[2] === 'Backup history' &&
       backupCards[3] === 'Reset everything' &&
-      saysLocation && saysWhen && !saysDeviceCount && !borrowsHistoryEmpty,
+      saysLocation &&
+      saysWhen &&
+      !saysDeviceCount &&
+      !borrowsHistoryEmpty,
     `카드=${JSON.stringify(backupCards)}, 위치=${saysLocation}, 시각(저장소 명시)=${saysWhen}, ` +
-      `기기수=${saysDeviceCount}, 히스토리 문장 차용=${borrowsHistoryEmpty}`);
+      `기기수=${saysDeviceCount}, 히스토리 문장 차용=${borrowsHistoryEmpty}`,
+  );
 
   /*
    * N51: **복원이 걷어 간 것을 말한다** (티켓 02에서 이월한 빚).
@@ -5699,36 +6867,53 @@ try {
     headerkit: 1,
     profiles: [
       {
-        id: 'legacy-restore', name: 'LegacyRestore', active: false, color: '#2563eb',
+        id: 'legacy-restore',
+        name: 'LegacyRestore',
+        active: false,
+        color: '#2563eb',
         modifications: [
-          { kind: 'request-header', id: 'lm1', name: 'X-Legacy-Restore', value: 'lr',
-            enabled: true, mode: 'override', emptyMeans: 'remove', comment: '' },
+          {
+            kind: 'request-header',
+            id: 'lm1',
+            name: 'X-Legacy-Restore',
+            value: 'lr',
+            enabled: true,
+            mode: 'override',
+            emptyMeans: 'remove',
+            comment: '',
+          },
         ],
         filters: [{ kind: 'url', id: 'lf1', enabled: true, pattern: 'legacy\\.example' }],
       },
     ],
   });
-  const seeded = await sw.evaluate(async ([payload]) => {
-    // 제품의 `checksum`과 같은 FNV-1a — 다르면 스냅샷이 손상으로 읽혀 복원이 막힌다.
-    const sum = (text) => {
-      let hash = 0x811c9dc5;
-      for (let i = 0; i < text.length; i += 1) {
-        hash ^= text.charCodeAt(i);
-        hash = Math.imul(hash, 0x01000193);
-      }
-      return (hash >>> 0).toString(16).padStart(8, '0');
-    };
-    const area = (await chrome.storage.local.get('state')).state?.syncBackup ?? true ? 'sync' : 'local';
-    const entry = {
-      id: 'legacy-snap', createdAt: Date.UTC(2021, 4, 6, 7, 8),
-      chunkCount: 1, checksum: sum(payload), profileCount: 1,
-    };
-    await chrome.storage[area].set({
-      'bk:legacy-snap:0': payload,
-      'bk:manifest': { snapshots: [entry] },
-    });
-    return area;
-  }, [legacyPayload]);
+  const seeded = await sw.evaluate(
+    async ([payload]) => {
+      // 제품의 `checksum`과 같은 FNV-1a — 다르면 스냅샷이 손상으로 읽혀 복원이 막힌다.
+      const sum = (text) => {
+        let hash = 0x811c9dc5;
+        for (let i = 0; i < text.length; i += 1) {
+          hash ^= text.charCodeAt(i);
+          hash = Math.imul(hash, 0x01000193);
+        }
+        return (hash >>> 0).toString(16).padStart(8, '0');
+      };
+      const area = ((await chrome.storage.local.get('state')).state?.syncBackup ?? true) ? 'sync' : 'local';
+      const entry = {
+        id: 'legacy-snap',
+        createdAt: Date.UTC(2021, 4, 6, 7, 8),
+        chunkCount: 1,
+        checksum: sum(payload),
+        profileCount: 1,
+      };
+      await chrome.storage[area].set({
+        'bk:legacy-snap:0': payload,
+        'bk:manifest': { snapshots: [entry] },
+      });
+      return area;
+    },
+    [legacyPayload],
+  );
   await popup.reload();
   await popup.getByRole('button', { name: 'Show backups' }).click();
   await settleScreen(popup, 'Backup history');
@@ -5742,12 +6927,15 @@ try {
   );
   const noticeShown = restoreNotice.some((x) => /moved the old profile filters onto each rule/i.test(x));
   const restoredProfile = await pollUntil(
-    () => sw.evaluate(async () => (await chrome.storage.local.get('state')).state.profiles.map((p) => p.name)),
+    () =>
+      sw.evaluate(async () => (await chrome.storage.local.get('state')).state.profiles.map((p) => p.name)),
     (names) => names.includes('LegacyRestore'),
   );
-  record('N51: 복원이 걷어 간 것을 말한다 — 레거시 필터 공지가 화면에 선다 (티켓 02 이월)',
+  record(
+    'N51: 복원이 걷어 간 것을 말한다 — 레거시 필터 공지가 화면에 선다 (티켓 02 이월)',
     noticeShown && restoredProfile.includes('LegacyRestore'),
-    `저장소=${seeded}, 공지=${noticeShown}, 복원된 프로필=${JSON.stringify(restoredProfile)}`);
+    `저장소=${seeded}, 공지=${noticeShown}, 복원된 프로필=${JSON.stringify(restoredProfile)}`,
+  );
 
   /*
    * N52: **권한이 실제로 줄었다** (티켓 10 AC4·AC5, ADR 0002 개정).
@@ -5786,13 +6974,18 @@ try {
   const appTab = context.pages().find((pg) => pg.url().includes('/app.html'));
   if (appTab && appTab !== tabApp) await appTab.close();
 
-  record('N52: 권한 축소 — alarms·tabs가 매니페스트와 런타임 양쪽에서 사라졌고, 탭 열기는 그대로 된다',
-    !perms.includes('alarms') && !perms.includes('tabs') &&
-      perms.includes('declarativeNetRequest') && perms.includes('storage') &&
-      alarmsApiGone && openedTab > beforeTabs,
+  record(
+    'N52: 권한 축소 — alarms·tabs가 매니페스트와 런타임 양쪽에서 사라졌고, 탭 열기는 그대로 된다',
+    !perms.includes('alarms') &&
+      !perms.includes('tabs') &&
+      perms.includes('declarativeNetRequest') &&
+      perms.includes('storage') &&
+      alarmsApiGone &&
+      openedTab > beforeTabs,
     `permissions=${JSON.stringify(perms)}, host=${JSON.stringify(manifest.host_permissions)}, ` +
       `alarms API 부재=${alarmsApiGone}, tabs.query 부재=${tabsQueryGone}, ` +
-      `탭 열림=${openedTab > beforeTabs} (${beforeTabs}→${openedTab})`);
+      `탭 열림=${openedTab > beforeTabs} (${beforeTabs}→${openedTab})`,
+  );
 
   /*
    * N53: 대형 편집기 다이얼로그의 열림·닫힘 전이 (ADR 0012).
@@ -5815,7 +7008,10 @@ try {
    */
   const measureDialogClose = async (page) => {
     await page.getByRole('button', { name: 'Edit', exact: true }).first().click();
-    await page.getByRole('button', { name: /open large editor/i }).first().click();
+    await page
+      .getByRole('button', { name: /open large editor/i })
+      .first()
+      .click();
     await page.getByRole('dialog').waitFor({ timeout: 5000 });
     /*
      * **열림 전이가 끝나기를 기다린다.** 열리는 중에 닫으면 Base UI는 중단된 애니메이션을
@@ -5843,7 +7039,10 @@ try {
     await page.keyboard.press('Escape');
     const observed = await page
       .waitForFunction(() => window.__dialogGoneMs != null, null, { timeout: 5000 })
-      .then(() => true, () => false);
+      .then(
+        () => true,
+        () => false,
+      );
     return {
       transition,
       goneMs: observed ? await page.evaluate(() => window.__dialogGoneMs) : null,
@@ -5852,8 +7051,16 @@ try {
 
   await seedProfiles([
     baseProfile('p-dlg', 'Dialog', [
-      { kind: 'request-header', id: 'm1', name: 'X-Dlg', value: 'v', enabled: true,
-        mode: 'override', emptyMeans: 'remove', comment: '' },
+      {
+        kind: 'request-header',
+        id: 'm1',
+        name: 'X-Dlg',
+        value: 'v',
+        enabled: true,
+        mode: 'override',
+        emptyMeans: 'remove',
+        comment: '',
+      },
     ]),
   ]);
   await popup.emulateMedia({ reducedMotion: null });
@@ -5869,14 +7076,18 @@ try {
   // 기본 180ms(POPUP_FADE_S) 대 즉시(0~1프레임) 사이라 경계가 넓다.
   const dialogFadeMs = POPUP_FADE_S * 1000;
   const movesOn = (t) => typeof t === 'string' && t.includes('opacity') && t.includes('scale');
-  record('N53: 대형 편집기 다이얼로그 — 기본은 opacity·scale 전이만큼 남고 reduced는 전이가 없다',
+  record(
+    'N53: 대형 편집기 다이얼로그 — 기본은 opacity·scale 전이만큼 남고 reduced는 전이가 없다',
     movesOn(livelyDialog.transition) &&
-      typeof livelyDialog.goneMs === 'number' && livelyDialog.goneMs >= dialogFadeMs * 0.66 &&
+      typeof livelyDialog.goneMs === 'number' &&
+      livelyDialog.goneMs >= dialogFadeMs * 0.66 &&
       reducedDialog.transition === 'none' &&
-      typeof reducedDialog.goneMs === 'number' && reducedDialog.goneMs < dialogFadeMs / 3,
+      typeof reducedDialog.goneMs === 'number' &&
+      reducedDialog.goneMs < dialogFadeMs / 3,
     `기본 transition="${livelyDialog.transition}" 잔류=${livelyDialog.goneMs?.toFixed?.(0)}ms, ` +
-    `reduced transition="${reducedDialog.transition}" 잔류=${reducedDialog.goneMs?.toFixed?.(0)}ms ` +
-    `(전이 ${dialogFadeMs}ms)`);
+      `reduced transition="${reducedDialog.transition}" 잔류=${reducedDialog.goneMs?.toFixed?.(0)}ms ` +
+      `(전이 ${dialogFadeMs}ms)`,
+  );
 
   {
     /*
@@ -5890,9 +7101,7 @@ try {
      * 늦춘 것인지(순서인지 모션인지) 구별되지 않는다. 클릭 시각은 페이지 안에서 잡는다 —
      * CDP 왕복을 t0에 넣으면 그 왕복 시간이 계약처럼 보인다.
      */
-    await seedProfiles([
-      baseProfile('p-last', 'LastOne', [hdr({ id: 'only', name: 'X-Only', value: '1' })]),
-    ]);
+    await seedProfiles([baseProfile('p-last', 'LastOne', [hdr({ id: 'only', name: 'X-Only', value: '1' })])]);
     await popup.reload();
     await popup.getByRole('button', { name: 'Delete', exact: true }).first().waitFor({ timeout: 5000 });
     await popup.evaluate(() => {
@@ -5916,11 +7125,16 @@ try {
     await popup.getByRole('button', { name: 'Delete', exact: true }).first().click();
     const emptyAfterMs = await popup
       .waitForFunction(() => window.__emptyMs != null, null, { timeout: 5000 })
-      .then(() => popup.evaluate(() => window.__emptyMs), () => null);
+      .then(
+        () => popup.evaluate(() => window.__emptyMs),
+        () => null,
+      );
     const rowExitMs = ROW_TRANSITION.duration * 1000;
-    record('N19c: 마지막 규칙 삭제 — 빈 상태는 행이 접힌 뒤에 선다 (성급하게 앞서지 않는다)',
+    record(
+      'N19c: 마지막 규칙 삭제 — 빈 상태는 행이 접힌 뒤에 선다 (성급하게 앞서지 않는다)',
       typeof emptyAfterMs === 'number' && emptyAfterMs >= rowExitMs * 0.8 && emptyAfterMs < 3000,
-      `안내 등장=${emptyAfterMs?.toFixed?.(0)}ms (행 접힘 ${rowExitMs}ms)`);
+      `안내 등장=${emptyAfterMs?.toFixed?.(0)}ms (행 접힘 ${rowExitMs}ms)`,
+    );
   }
 
   {
@@ -5964,20 +7178,28 @@ try {
     await popup.getByRole('button', { name: SAVE_BUTTON }).click();
     const rowAfterMs = await popup
       .waitForFunction(() => window.__rowMs != null, null, { timeout: 6000 })
-      .then(() => popup.evaluate(() => window.__rowMs), () => null);
+      .then(
+        () => popup.evaluate(() => window.__rowMs),
+        () => null,
+      );
     // 저장이 실제로 착지했는지도 함께 본다 — 행만 늦게 서고 저장은 안 된 상태를 통과시키지 않는다.
     const savedName = await pollUntil(
-      () => sw.evaluate(async () => {
-        const { state } = await chrome.storage.local.get('state');
-        return state.profiles[0]?.modifications[0]?.name ?? null;
-      }),
+      () =>
+        sw.evaluate(async () => {
+          const { state } = await chrome.storage.local.get('state');
+          return state.profiles[0]?.modifications[0]?.name ?? null;
+        }),
       (v) => v === 'X-Seq',
     );
     const formExitMs = ROW_TRANSITION.duration * 1000;
-    record('N19d: 새 규칙 저장 — 행은 폼이 접힌 뒤에 선다 (겹쳐 움직이지 않는다)',
-      typeof rowAfterMs === 'number' && rowAfterMs >= formExitMs * 0.8 && rowAfterMs < 4000 &&
+    record(
+      'N19d: 새 규칙 저장 — 행은 폼이 접힌 뒤에 선다 (겹쳐 움직이지 않는다)',
+      typeof rowAfterMs === 'number' &&
+        rowAfterMs >= formExitMs * 0.8 &&
+        rowAfterMs < 4000 &&
         savedName === 'X-Seq',
-      `행 등장=${rowAfterMs?.toFixed?.(0)}ms (폼 접힘 ${formExitMs}ms), 저장=${savedName}`);
+      `행 등장=${rowAfterMs?.toFixed?.(0)}ms (폼 접힘 ${formExitMs}ms), 저장=${savedName}`,
+    );
     await waitFormClosed();
   }
 
@@ -6004,7 +7226,9 @@ try {
      * 무장해 둔 버튼이 이유 없이 사라진 것처럼 보인다(실제로 그렇게 헛디뎠다).
      */
     await waitSortableReady();
-    const profileDelRow = popup.locator('li').filter({ has: popup.getByRole('button', { name: 'Delete DelB' }) });
+    const profileDelRow = popup
+      .locator('li')
+      .filter({ has: popup.getByRole('button', { name: 'Delete DelB' }) });
     const profileDelButton = popup.getByRole('button', { name: 'Delete DelB' });
     const rowOpacity = () =>
       profileDelButton.evaluate((el) => Number(getComputedStyle(el.parentElement).opacity));
@@ -6024,7 +7248,10 @@ try {
     const armed = await popup
       .getByRole('button', { name: 'Confirm delete DelB' })
       .waitFor({ timeout: 5000 })
-      .then(() => true, () => false);
+      .then(
+        () => true,
+        () => false,
+      );
     const stillThere = await sw.evaluate(async () => {
       const { state } = await chrome.storage.local.get('state');
       return state.profiles.length;
@@ -6032,10 +7259,11 @@ try {
     // 두 번째 클릭이 지운다.
     await popup.getByRole('button', { name: 'Confirm delete DelB' }).click();
     const afterDelete = await pollUntil(
-      () => sw.evaluate(async () => {
-        const { state } = await chrome.storage.local.get('state');
-        return state.profiles.map((p) => p.id).join('|');
-      }),
+      () =>
+        sw.evaluate(async () => {
+          const { state } = await chrome.storage.local.get('state');
+          return state.profiles.map((p) => p.id).join('|');
+        }),
       (ids) => ids === 'd-1',
     );
 
@@ -6044,28 +7272,37 @@ try {
      * Placeholder 규칙을 갖도록 다시 심어, 걷혔는지를 저장소에서 직접 본다.
      */
     await seedProfiles([
-      { ...baseProfile('d-only', 'DelOnly',
-        [hdr({ id: 'mp', name: 'X-Ph', value: 'v-{{uuid}}' })]), active: false },
+      {
+        ...baseProfile('d-only', 'DelOnly', [hdr({ id: 'mp', name: 'X-Ph', value: 'v-{{uuid}}' })]),
+        active: false,
+      },
     ]);
     await popup.reload();
     await waitSortableReady();
     await popup.getByRole('switch', { name: 'Toggle DelOnly' }).click();
     const materializedBefore = await pollUntil(
-      () => sw.evaluate(async () => {
-        const { state } = await chrome.storage.local.get('state');
-        return Object.keys(state.materialized ?? {}).length;
-      }),
+      () =>
+        sw.evaluate(async () => {
+          const { state } = await chrome.storage.local.get('state');
+          return Object.keys(state.materialized ?? {}).length;
+        }),
       (n) => n === 1,
     );
-    const onlyRow = popup.locator('li').filter({ has: popup.getByRole('button', { name: 'Delete DelOnly' }) });
+    const onlyRow = popup
+      .locator('li')
+      .filter({ has: popup.getByRole('button', { name: 'Delete DelOnly' }) });
     await onlyRow.hover();
     await popup.getByRole('button', { name: 'Delete DelOnly' }).click();
     await popup.getByRole('button', { name: 'Confirm delete DelOnly' }).click();
     const emptied = await pollUntil(
-      () => sw.evaluate(async () => {
-        const { state } = await chrome.storage.local.get('state');
-        return { profiles: state.profiles.length, materialized: Object.keys(state.materialized ?? {}).length };
-      }),
+      () =>
+        sw.evaluate(async () => {
+          const { state } = await chrome.storage.local.get('state');
+          return {
+            profiles: state.profiles.length,
+            materialized: Object.keys(state.materialized ?? {}).length,
+          };
+        }),
       (v) => v.profiles === 0,
     );
     // 프로필이 없어진 화면이 그렇게 말한다 — 빈 목록은 이미 표현 가능한 상태다.
@@ -6073,17 +7310,28 @@ try {
       .getByText('No profiles yet', { exact: false })
       .first()
       .waitFor({ timeout: 5000 })
-      .then(() => true, () => false);
+      .then(
+        () => true,
+        () => false,
+      );
 
-    record('N54: 프로필 삭제 — 호버·포커스에만 보이고, 2단 확인이며, 마지막 하나와 실체화 값까지 걷힌다',
-      hiddenIdle && shownOnHover && shownOnFocus &&
-        armed && stillThere === 2 && afterDelete === 'd-1' &&
-        materializedBefore === 1 && emptied.profiles === 0 && emptied.materialized === 0 &&
+    record(
+      'N54: 프로필 삭제 — 호버·포커스에만 보이고, 2단 확인이며, 마지막 하나와 실체화 값까지 걷힌다',
+      hiddenIdle &&
+        shownOnHover &&
+        shownOnFocus &&
+        armed &&
+        stillThere === 2 &&
+        afterDelete === 'd-1' &&
+        materializedBefore === 1 &&
+        emptied.profiles === 0 &&
+        emptied.materialized === 0 &&
         emptyNoticeShown,
       `숨김=${hiddenIdle} 호버=${shownOnHover} 포커스=${shownOnFocus}, ` +
-      `1클릭 되물음=${armed}(프로필 ${stillThere}개 유지), 2클릭 후=[${afterDelete}], ` +
-      `마지막 하나 삭제=${emptied.profiles === 0} 실체화 ${materializedBefore}→${emptied.materialized}, ` +
-      `빈 안내=${emptyNoticeShown}`);
+        `1클릭 되물음=${armed}(프로필 ${stillThere}개 유지), 2클릭 후=[${afterDelete}], ` +
+        `마지막 하나 삭제=${emptied.profiles === 0} 실체화 ${materializedBefore}→${emptied.materialized}, ` +
+        `빈 안내=${emptyNoticeShown}`,
+    );
   }
 
   const failed = results.filter((r) => !r.ok);

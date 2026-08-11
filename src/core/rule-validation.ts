@@ -68,20 +68,18 @@ export function fieldIssues(modification: Modification): FieldIssue[] {
  * 티켓 01의 v3 재구조화가 재료를 칸으로 가르면서 비로소 표현 가능해진 상태다 — 값 칸이
  * 하나였을 때는 "속성만 채운다"가 존재할 수 없었다.
  */
-function setCookieIssues(
-  modification: Extract<Modification, { kind: 'set-cookie' }>,
-): FieldIssue[] {
+function setCookieIssues(modification: Extract<Modification, { kind: 'set-cookie' }>): FieldIssue[] {
   if (modification.raw !== undefined) return [];
   // compile의 빈 판정과 **글자까지 같아야** 한다 — 갈라지면 여기서 통과한 것이 저기서 버려진다.
   const assemblesNothing = modification.name.trim() === '' && modification.value === '';
   if (!assemblesNothing) return [];
   const carriesAttribute =
-    (modification.domain ?? '') !== ''
-    || (modification.path ?? '') !== ''
-    || (modification.maxAge ?? '') !== ''
-    || modification.sameSite !== undefined
-    || modification.secure === true
-    || modification.httpOnly === true;
+    (modification.domain ?? '') !== '' ||
+    (modification.path ?? '') !== '' ||
+    (modification.maxAge ?? '') !== '' ||
+    modification.sameSite !== undefined ||
+    modification.secure === true ||
+    modification.httpOnly === true;
   return carriesAttribute ? [required('value')] : [];
 }
 

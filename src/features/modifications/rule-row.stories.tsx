@@ -29,7 +29,9 @@ export const WithScope: Story = {
 };
 
 export const AppendMode: Story = {
-  args: { modification: { ...header, name: 'Accept', value: 'application/json', mode: 'append', comment: '' } },
+  args: {
+    modification: { ...header, name: 'Accept', value: 'application/json', mode: 'append', comment: '' },
+  },
 };
 
 export const Redirect: Story = {

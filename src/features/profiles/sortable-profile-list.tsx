@@ -128,20 +128,20 @@ function SortableItem({
       className={isDragging ? 'z-10 opacity-70' : ''}
     >
       <MotionRow>
-      <div className={sidebarRowClass(selected)}>
-      <ProfileGrip label={dragLabel} attributes={attributes} listeners={listeners} />
-      <ProfileSelectRow
-        profile={profile}
-        status={status}
-        selected={selected}
-        onSelect={onSelect}
-        onToggleActive={onToggleActive}
-        onDelete={onDelete}
-        label={profileSelectLabel(profile, t, status.state)}
-        toggleLabel={profileToggleLabel(profile, t)}
-        {...profileDeleteLabels(profile, t)}
-      />
-      </div>
+        <div className={sidebarRowClass(selected)}>
+          <ProfileGrip label={dragLabel} attributes={attributes} listeners={listeners} />
+          <ProfileSelectRow
+            profile={profile}
+            status={status}
+            selected={selected}
+            onSelect={onSelect}
+            onToggleActive={onToggleActive}
+            onDelete={onDelete}
+            label={profileSelectLabel(profile, t, status.state)}
+            toggleLabel={profileToggleLabel(profile, t)}
+            {...profileDeleteLabels(profile, t)}
+          />
+        </div>
       </MotionRow>
     </li>
   );
@@ -210,18 +210,18 @@ export default function SortableProfileList({
           {/* 프로필이 늘거나 줄 때 fade+height — 규칙 목록과 같은 모션이다. `initial={false}`라
               화면을 처음 열 때는 이미 있던 행들이 움직이지 않는다. */}
           <AnimatePresence initial={false}>
-          {shown.map((profile) => (
-            <SortableItem
-              key={profile.id}
-              profile={profile}
-              status={profileRowStatus(profile, paused)}
-              selected={profile.id === selectedId}
-              onSelect={() => onSelect(profile.id)}
-              onToggleActive={(active) => onToggleActive(profile.id, active)}
-              onDelete={() => onDelete(profile.id)}
-              dragLabel={profileReorderLabel(profile, t)}
-            />
-          ))}
+            {shown.map((profile) => (
+              <SortableItem
+                key={profile.id}
+                profile={profile}
+                status={profileRowStatus(profile, paused)}
+                selected={profile.id === selectedId}
+                onSelect={() => onSelect(profile.id)}
+                onToggleActive={(active) => onToggleActive(profile.id, active)}
+                onDelete={() => onDelete(profile.id)}
+                dragLabel={profileReorderLabel(profile, t)}
+              />
+            ))}
           </AnimatePresence>
         </ul>
       </SortableContext>
