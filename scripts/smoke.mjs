@@ -2755,8 +2755,11 @@ try {
   // 브라우저는 커스텀 속성의 hex를 축약해 돌려준다(#ffffff→#fff, #0066cc→#06c) — 축약형을
   // 6자리로 펴서 비교한다. 이걸 안 하면 값이 맞는데도 표기 차이로 실패한다(실제로 겪음).
   // 문자열을 글자 배열로 펴는 것이라 사본이 아니다 — 타입이 없어 규칙이 배열 spread로 읽는다.
-  // oxlint-disable-next-line unicorn/no-useless-spread
+  // 줄이 아니라 **블록**으로 억제하는 이유: 포매터가 이 화살표 함수를 두 줄로 나누면
+  // `disable-next-line`이 가리키는 줄이 밀려 억제가 조용히 풀린다(실측).
+  // oxlint-disable unicorn/no-useless-spread
   const hex6 = (v) => (/^#[0-9a-f]{3}$/i.test(v) ? '#' + [...v.slice(1)].map((c) => c + c).join('') : v.toLowerCase());
+  // oxlint-enable unicorn/no-useless-spread
   const sameHex = (probe, expected) =>
     Object.keys(expected).every((k) => hex6(probe[k]) === expected[k]);
   // 라이트 = **자기 팔레트**(--color-light-*). 티켓 05가 디자인 다크의 짝으로 파생했다.
