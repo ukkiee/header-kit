@@ -24,8 +24,19 @@
 // (ADR 0016의 '모듈 최상단 락'이 물린 바로 그 이유). 두 기제가 서로 다른 구멍을 맡는다.
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { artifactsDirFrom } from './artifacts-arg.mjs';
 
-const OUT_DIR = '.output/chrome-mv3';
+/** 판정은 `PASS|FAIL writer-lane-gate:` 한 줄로 말한다 — 러너의 verdict: token 계약. */
+const fail = (message) => {
+  console.error(`FAIL writer-lane-gate: ${message}`);
+  process.exit(1);
+};
+
+// 러너가 `--artifacts`로 이 회차의 빌드 경로를 넘긴다 (D4a). 인자 없이 직접 부르면
+// 기존 기본 경로다 — 손으로 돌리던 방식이 깨지지 않는다.
+const parsed = artifactsDirFrom(process.argv.slice(2), join('.output', 'chrome-mv3'));
+if (parsed.error) fail(parsed.error);
+const OUT_DIR = parsed.dir;
 const SRC_DIR = 'src';
 /** `src/core/writer-lane.ts`의 표지와 **같은 문자열**이어야 한다. */
 const MARKER = 'writer-lane:service-worker-only';
@@ -37,11 +48,6 @@ const MARKER = 'writer-lane:service-worker-only';
  * 서로를 전혀 막지 않는 꼬리 둘이 생겨 lost update가 되살아난다.
  */
 const LANE_FACTORIES = ['createWriterLane', 'createStateWriter'];
-
-const fail = (message) => {
-  console.error(`FAIL: ${message}`);
-  process.exit(1);
-};
 
 // ── 1. 소스: 레인을 만드는 자리가 하나인가 ──────────────────────────────────
 
@@ -126,7 +132,12 @@ if (strayPermits.length > 0) {
 
 // ── 3. 산출물: 서비스워커 밖에 표지가 있는가 ────────────────────────────────
 
-if (!existsSync(OUT_DIR)) fail(`${OUT_DIR}를 찾을 수 없습니다 — 먼저 \`bun run build\`를 실행하세요.`);
+if (!existsSync(OUT_DIR)) {
+  fail(
+    `빌드 산출물이 없다: ${OUT_DIR} — 러너가 이 회차의 빌드를 만들지 못했거나, ` +
+      `직접 돌렸다면 먼저 \`bun run build\`를 실행하세요.`,
+  );
+}
 
 const manifestPath = join(OUT_DIR, 'manifest.json');
 if (!existsSync(manifestPath)) fail(`${manifestPath}가 없습니다 — 빌드 산출물 형식이 바뀐 것 같습니다.`);
@@ -188,8 +199,7 @@ const inWorker = [...workerReachable].some((f) => readFileSync(join(OUT_DIR, f),
 console.log(
   `writer-lane gate: ${laneSites.map((s) => `${s.symbol} ${s.total}회`).join(' · ')} · ` +
     `허가 노출 ${permitMentions.length}파일(전부 허용) · ` +
-    `산출물 ${allEmitted.length}개 중 워커 밖 ${outsideWorker.length}개 검사 — ` +
-    `${leaked.length === 0 && inWorker ? 'PASS' : 'FAIL'}`,
+    `산출물 ${allEmitted.length}개 중 워커 밖 ${outsideWorker.length}개 검사`,
 );
 
 if (!inWorker) {
@@ -206,3 +216,7 @@ if (leaked.length > 0) {
       `필요한 것이 타입뿐이면 \`import type\`으로 바꾸세요(그것은 지워지므로 번들에 남지 않습니다).`,
   );
 }
+
+console.log(
+  `PASS writer-lane-gate: 레인 생성 자리 각 1 · 워커 밖 ${outsideWorker.length}개 번들에 표지 0`,
+);

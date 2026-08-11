@@ -3,6 +3,10 @@ import { defineConfig } from 'wxt';
 
 export default defineConfig({
   srcDir: 'src',
+  // 게이트 러너가 회차별 산출물 디렉터리로 빌드를 보낼 때 쓴다 (D4a). `wxt build`
+  // CLI에는 출력 경로 옵션이 없어 이 env가 유일한 통로다. 손으로 도는 `bun run build`
+  // 에는 이 변수가 없으므로 기존 `.output` 그대로다.
+  outDir: process.env.HK_BUILD_OUT_DIR || '.output',
   modules: ['@wxt-dev/module-react'],
   vite: () => ({
     plugins: [tailwindcss()],

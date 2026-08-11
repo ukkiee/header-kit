@@ -15,7 +15,9 @@
 #   kind     hard(완료를 막는다) | advisory(관측만 남긴다)
 #   ci       CI 워크플로가 이 게이트를 도는가 (티켓 08이 채운다)
 #   needs    선행 게이트의 id. `-`는 없음. **앞선 행만** 가리킬 수 있다.
-#            선행이 통과하지 못하면 이 게이트는 BLOCKED다 — FAIL도 N/A도 아니다
+#            선행이 통과하지 못하면 이 게이트는 BLOCKED다 — FAIL도 N/A도 아니다.
+#            `needs: build`인 행에는 러너가 이 회차만의 산출물 디렉터리를
+#            `--artifacts <경로>`로 넘긴다 — 낡은 산출물이 판정에 들어오지 않는다 (D4a)
 #   browser  실제 브라우저를 띄우는가. 테스트 분류가 이 값에서 파생된다 (티켓 07)
 #   verdict  판정을 어떻게 말하는가.
 #              exit  — 종료 코드가 계약의 전부. tsc·vitest·wxt처럼 이 저장소가 만들지 않은
@@ -27,11 +29,14 @@
 #
 # `#` 주석과 빈 줄은 무시된다.
 
-gate: check          | check           | hard | no | - | no | exit  | never
-gate: test           | test            | hard | no | - | no | exit  | never
-gate: build          | build           | hard | no | - | no | exit  | never
-gate: storybook      | storybook:build | hard | no | - | no | exit  | never
-gate: smoke-barriers | smoke-barriers  | hard | no | - | no | token | never
+gate: check            | check            | hard | no | -     | no  | exit  | never
+gate: test             | test             | hard | no | -     | no  | exit  | never
+gate: build            | build            | hard | no | -     | no  | exit  | never
+gate: storybook        | storybook:build  | hard | no | -     | no  | exit  | never
+gate: smoke-barriers   | smoke-barriers   | hard | no | -     | no  | token | never
+gate: bundle-gate      | bundle-gate      | hard | no | build | no  | token | never
+gate: writer-lane-gate | writer-lane-gate | hard | no | build | no  | token | never
+gate: smoke            | smoke            | hard | no | build | yes | token | never
 
 # deferred: <스크립트 파일> | <왜 아직 등록하지 않는가>
 #
@@ -42,6 +47,5 @@ gate: smoke-barriers | smoke-barriers  | hard | no | - | no | token | never
 #
 # 이 검출이 미치는 범위는 `*-gate.mjs` 이름 규약 안뿐이다. 규약 밖 이름으로 만든 게이트
 # 스크립트는 **잡지 못한다** — 규약을 넓히면 평범한 스크립트를 오탐하므로 닫는 대신 밝힌다.
-
-deferred: bundle-gate.mjs      | 빌드 산출물을 읽는다. 회차별 산출물 디렉터리가 서는 티켓 02 뒤에 등록한다
-deferred: writer-lane-gate.mjs | 빌드 산출물을 읽는다. 회차별 산출물 디렉터리가 서는 티켓 02 뒤에 등록한다
+#
+# (지금은 선언이 없다 — 티켓 02가 bundle-gate·writer-lane-gate를 등록하며 선언을 지웠다.)

@@ -58,6 +58,23 @@ const CANONICAL_CI_SCRIPT = 'node scripts/run-gates.mjs --ci';
 /** 게이트 워크플로에서 판정할 수 없게 만드는 것들. 셋 다 "돌았다"를 뜻하지 않는다. */
 const SHELL_OPERATORS = /(\|\||&&|;|\||>|<)/;
 const GATE_WORKFLOWS = ['gate.yml', 'gate.yaml'];
+/**
+ * 산출물 배관 (D4a). `needs: build`인 게이트가 이 회차에 하나라도 있으면 러너가
+ * **회차마다 고유한** 디렉터리를 만들어 build 게이트의 출력을 그리로 보내고
+ * (`HK_BUILD_OUT_DIR` — `wxt.config.ts`가 읽는다. `wxt build` CLI에는 출력 경로
+ * 옵션이 없어 이 env가 유일한 통로다: 옵션 목록 실측), 소비자에게는
+ * `--artifacts <경로>`로 명시적으로 넘긴다. 그래야 소비자가 **이 회차의 빌드**를
+ * 재지, 직전 빌드가 기본 경로에 남긴 낡은 산출물을 재지 않는다.
+ *
+ * 겹친 실행은 잠금이 아니라 이 경로 분리가 격리한다. 잠그면 "소유자가 죽었다"를
+ * "쓰는 것이 다 멈췄다"로 읽어야 하는데, 러너가 죽어도 빌드 자식은 살아남아 계속
+ * 쓴다 — 그것을 닫는 것은 부정 증명이라 비용에 바닥이 없다. 회차마다 다른 경로에
+ * 쓰면 잠글 것도 회수할 것도 없다.
+ */
+const BUILD_GATE_ID = 'build';
+const OUT_DIR_ENV = 'HK_BUILD_OUT_DIR';
+/** wxt가 outDir 아래에 만드는 산출물 디렉터리 이름 (outDirTemplate 기본값 · 크롬 MV3). */
+const ARTIFACT_SUBDIR = 'chrome-mv3';
 
 function fail(message) {
   process.stderr.write(`FAIL ${LABEL}: ${message}\n`);
@@ -339,13 +356,21 @@ function checkPlaces(dir, registryPath) {
  * 결정적인 줄은 보통 출력의 끝에 있으므로 정확히 그 자리가 위험하다. 파일로 받으면
  * 2,097,354바이트가 온전히 남는다.
  */
-function runOne(dir, script) {
+function runOne(dir, script, args = [], env = {}) {
   const logDir = mkdtempSync(join(tmpdir(), 'hk-gate-'));
   const logPath = join(logDir, 'gate.log');
   const fd = openSync(logPath, 'w');
+  // 바깥 환경에서 새어 들어온 출력 재지정은 걷어낸다 — 어느 게이트가 어느 산출물을
+  // 보는지는 이 회차의 계약이고, 그것을 정하는 것은 러너뿐이어야 한다.
+  const childEnv = { ...process.env, ...env };
+  if (!(OUT_DIR_ENV in env)) delete childEnv[OUT_DIR_ENV];
   let status;
   try {
-    status = spawnSync('bun', ['run', script], { cwd: dir, stdio: ['ignore', fd, fd] }).status;
+    status = spawnSync('bun', ['run', script, ...args], {
+      cwd: dir,
+      stdio: ['ignore', fd, fd],
+      env: childEnv,
+    }).status;
   } finally {
     closeSync(fd);
   }
@@ -391,36 +416,52 @@ function runGates(dir, gates) {
   const state = new Map();
   let hardFail = 0;
 
-  for (const g of gates) {
-    // 선행이 통과하지 못했으면 이 게이트는 BLOCKED다 — FAIL도 N/A도 아니다. 실패한 것은
-    // 이 게이트가 아니고, 잴 대상이 없었던 것도 아니다. BLOCKED은 완료를 막는다.
-    // 선행을 만족시키는 것은 **PASS뿐**이다. N/A로도 풀리게 두면 "잴 대상이 없었다"가
-    // "확인됐다"와 같은 값을 갖게 되고, 그 둘의 차이가 판정을 넷으로 나눈 이유다.
-    const need = g.needs === '-' ? null : state.get(g.needs);
-    if (need !== null && need !== PASS) {
-      state.set(g.id, BLOCKED);
-      tally[BLOCKED] += 1;
+  // D4a: 이 회차에 산출물 소비 게이트(`needs: build`)가 있을 때만 배관을 세운다 —
+  // 아무도 읽지 않을 산출물을 굽는 회차는 없다. 디렉터리는 회차마다 새로 만든다.
+  const wantsArtifacts = gates.some((g) => g.needs === BUILD_GATE_ID);
+  const runDir = wantsArtifacts ? mkdtempSync(join(tmpdir(), 'hk-artifacts-')) : null;
+  const artifactsDir = runDir === null ? null : join(runDir, ARTIFACT_SUBDIR);
+
+  try {
+    for (const g of gates) {
+      // 선행이 통과하지 못했으면 이 게이트는 BLOCKED다 — FAIL도 N/A도 아니다. 실패한 것은
+      // 이 게이트가 아니고, 잴 대상이 없었던 것도 아니다. BLOCKED은 완료를 막는다.
+      // 선행을 만족시키는 것은 **PASS뿐**이다. N/A로도 풀리게 두면 "잴 대상이 없었다"가
+      // "확인됐다"와 같은 값을 갖게 되고, 그 둘의 차이가 판정을 넷으로 나눈 이유다.
+      const need = g.needs === '-' ? null : state.get(g.needs);
+      if (need !== null && need !== PASS) {
+        state.set(g.id, BLOCKED);
+        tally[BLOCKED] += 1;
+        if (g.kind === 'hard') hardFail += 1;
+        process.stdout.write(`${BLOCKED} ${g.id} — 선행 ${g.needs}이 ${need}\n`);
+        continue;
+      }
+
+      // build 게이트가 곧 산출물 생산자다 — 빌드는 이 회차에 **한 번만** 돈다.
+      const env = runDir !== null && g.id === BUILD_GATE_ID ? { [OUT_DIR_ENV]: runDir } : {};
+      const args =
+        artifactsDir !== null && g.needs === BUILD_GATE_ID ? ['--artifacts', artifactsDir] : [];
+      const { status, out } = runOne(dir, g.script, args, env);
+      const { state: verdict, why } = classify(g, status, out);
+      state.set(g.id, verdict);
+      tally[verdict] += 1;
+
+      if (verdict === PASS || verdict === NA) {
+        process.stdout.write(`${verdict} ${g.id}\n`);
+        continue;
+      }
       if (g.kind === 'hard') hardFail += 1;
-      process.stdout.write(`${BLOCKED} ${g.id} — 선행 ${g.needs}이 ${need}\n`);
-      continue;
+      // 판정 토큰은 넷뿐이다. advisory는 다섯 번째 판정이 아니라 그 행의 kind이므로
+      // 토큰을 만들지 않고 같은 줄의 산문으로 덧붙인다.
+      const note = g.kind === 'advisory' ? ' — advisory 행이라 완료를 막지 않는다' : '';
+      process.stdout.write(`${FAIL} ${g.id}${why ? ` (${why})` : ''}${note}\n`);
+      // 출력을 버리면 빨강이 났을 때 무엇이 실패했는지 영영 알 수 없다.
+      process.stdout.write(`${out.trimEnd()}\n`);
     }
-
-    const { status, out } = runOne(dir, g.script);
-    const { state: verdict, why } = classify(g, status, out);
-    state.set(g.id, verdict);
-    tally[verdict] += 1;
-
-    if (verdict === PASS || verdict === NA) {
-      process.stdout.write(`${verdict} ${g.id}\n`);
-      continue;
-    }
-    if (g.kind === 'hard') hardFail += 1;
-    // 판정 토큰은 넷뿐이다. advisory는 다섯 번째 판정이 아니라 그 행의 kind이므로
-    // 토큰을 만들지 않고 같은 줄의 산문으로 덧붙인다.
-    const note = g.kind === 'advisory' ? ' — advisory 행이라 완료를 막지 않는다' : '';
-    process.stdout.write(`${FAIL} ${g.id}${why ? ` (${why})` : ''}${note}\n`);
-    // 출력을 버리면 빨강이 났을 때 무엇이 실패했는지 영영 알 수 없다.
-    process.stdout.write(`${out.trimEnd()}\n`);
+  } finally {
+    // 회차가 끝나면 산출물은 판정에 반영됐다 — 남겨 두면 tmp만 쌓인다. 도중에 죽은
+    // 러너가 남긴 디렉터리는 OS tmp 청소에 맡긴다: 다음 회차는 어차피 자기 것만 본다.
+    if (runDir !== null) rmSync(runDir, { recursive: true, force: true });
   }
 
   const line = `${gates.length} gate(s): ${tally[PASS]} pass, ${tally[FAIL]} fail, ${tally[NA]} n/a, ${tally[BLOCKED]} blocked`;

@@ -29,6 +29,13 @@
 //     (main 대비 모듈 단위 증감표 · 항목별 지연 가능성 판정 · 상향 대신 줄인 경위)
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { artifactsDirFrom } from './artifacts-arg.mjs';
+
+/** 판정은 `PASS|FAIL bundle-gate:` 한 줄로 말한다 — 러너의 verdict: token 계약. */
+const fail = (message) => {
+  console.error(`FAIL bundle-gate: ${message}`);
+  process.exit(1);
+};
 
 const BASELINE_KB = 386.0; // 기준선(ui-refine 이전 공용 청크, min·비압축)
 /**
@@ -47,7 +54,11 @@ const BASELINE_KB = 386.0; // 기준선(ui-refine 이전 공용 청크, min·비
  * 경위·수치는 위 주석이 가리키는 이슈 파일이 정본이다.
  */
 const MAX_INCREASE_KB = 190;
-const OUT_DIR = '.output/chrome-mv3';
+// 러너가 `--artifacts`로 이 회차의 빌드 경로를 넘긴다 (D4a). 인자 없이 직접 부르면
+// 기존 기본 경로다 — 손으로 돌리던 방식이 깨지지 않는다.
+const parsed = artifactsDirFrom(process.argv.slice(2), join('.output', 'chrome-mv3'));
+if (parsed.error) fail(parsed.error);
+const OUT_DIR = parsed.dir;
 const CHUNKS_DIR = join(OUT_DIR, 'chunks');
 const ENTRY_HTML = join(OUT_DIR, 'popup.html');
 
@@ -69,16 +80,17 @@ const MUST_BE_DEFERRED = [
 ];
 
 if (!existsSync(ENTRY_HTML)) {
-  console.error(`FAIL: ${ENTRY_HTML}를 찾을 수 없습니다 — 먼저 \`bun run build\`를 실행하세요.`);
-  process.exit(1);
+  fail(
+    `빌드 산출물이 없다: ${ENTRY_HTML} — 러너가 이 회차의 빌드를 만들지 못했거나, ` +
+      `직접 돌렸다면 먼저 \`bun run build\`를 실행하세요.`,
+  );
 }
 
 /** popup.html의 엔트리 스크립트 + modulepreload = 즉시 로드의 뿌리. */
 const html = readFileSync(ENTRY_HTML, 'utf8');
 const roots = [...html.matchAll(/(?:src|href)="\/chunks\/([^"]+\.js)"/g)].map((m) => m[1]);
 if (roots.length === 0) {
-  console.error(`FAIL: ${ENTRY_HTML}에서 즉시 로드 청크를 찾지 못했습니다 — 빌드 산출물 형식이 바뀐 것 같습니다.`);
-  process.exit(1);
+  fail(`${ENTRY_HTML}에서 즉시 로드 청크를 찾지 못했다 — 빌드 산출물 형식이 바뀐 것 같다.`);
 }
 
 // 정적 import만 따라간다. 동적 import는 `import(` 형태라 아래 패턴에 걸리지 않는다.
@@ -90,8 +102,7 @@ while (queue.length > 0) {
   if (eager.has(name)) continue;
   const path = join(CHUNKS_DIR, name);
   if (!existsSync(path)) {
-    console.error(`FAIL: 즉시 로드 청크 ${name}이(가) 없습니다 — 빌드 산출물이 깨졌습니다.`);
-    process.exit(1);
+    fail(`즉시 로드 청크 ${name}이(가) 없다 — 빌드 산출물이 깨졌다.`);
   }
   eager.add(name);
   for (const match of readFileSync(path, 'utf8').matchAll(STATIC_IMPORT)) queue.push(match[1]);
@@ -109,7 +120,7 @@ const fmt = (names) => names.map((n) => `${n} ${kb(n).toFixed(1)}KB`).join(', ')
 const sizePass = increase < MAX_INCREASE_KB;
 console.log(
   `bundle gate: popup 즉시 로드 합계 ${totalKb.toFixed(1)}KB = baseline ${BASELINE_KB}KB + ` +
-    `${increase.toFixed(1)}KB (한도 +${MAX_INCREASE_KB}KB) — ${sizePass ? 'PASS' : 'FAIL'}`,
+    `${increase.toFixed(1)}KB (한도 +${MAX_INCREASE_KB}KB) — ${sizePass ? '한도 안' : '한도 초과'}`,
 );
 console.log(`  eager   (${eagerNames.length}): ${fmt(eagerNames)}`);
 console.log(`  deferred(${deferredNames.length}): ${fmt(deferredNames) || '(없음)'}`);
@@ -125,7 +136,17 @@ for (const prefix of MUST_BE_DEFERRED) {
   const leaked = matches.filter((f) => eager.has(f));
   if (leaked.length > 0) deferredViolations.push(`${prefix}-*: 즉시 로드됨 (${leaked.join(', ')})`);
 }
-for (const violation of deferredViolations) console.error(`FAIL: ${violation}`);
+for (const violation of deferredViolations) console.error(`  지연 계약 위반: ${violation}`);
 
-if (!sizePass) console.error('FAIL: popup 즉시 로드 합계 증가가 한도를 초과했습니다.');
-if (!sizePass || deferredViolations.length > 0) process.exit(1);
+if (!sizePass || deferredViolations.length > 0) {
+  fail(
+    [
+      ...(sizePass ? [] : [`즉시 로드 합계 증가 ${increase.toFixed(1)}KB가 한도 +${MAX_INCREASE_KB}KB를 넘었다`]),
+      ...(deferredViolations.length > 0 ? [`지연 계약 위반 ${deferredViolations.length}건`] : []),
+    ].join(' · '),
+  );
+}
+console.log(
+  `PASS bundle-gate: 즉시 로드 ${totalKb.toFixed(1)}KB (baseline+${increase.toFixed(1)}KB, ` +
+    `한도 +${MAX_INCREASE_KB}KB) · 지연 계약 ${MUST_BE_DEFERRED.length}건 유지`,
+);

@@ -1,5 +1,5 @@
-import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -811,6 +811,377 @@ describe('run-gates — CI는 러너를 한 번 부른다', () => {
     expect(r.out).toMatch(/^PASS inci/m);
     expect(r.out).not.toContain('local');
     expect(r.code).toBe(0);
+  });
+});
+
+// ── D4a: 산출물을 읽는 게이트가 이 회차의 빌드만 본다 (티켓 02) ─────────────────
+
+/**
+ * 픽스처의 가짜 빌드. 러너가 재지정한 디렉터리의 chrome-mv3/에 소스 파일
+ * (src-marker.txt)의 **현재** 내용과 자기 pid를 굽고, 호출 사실을 build-log.txt에
+ * 남긴다. 재지정 없이 불리면 아무것도 굽지 않는다 — 소비자 없는 회차의 모양.
+ */
+const BUILD_MJS = `
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+const out = process.env.HK_BUILD_OUT_DIR ?? null;
+appendFileSync('build-log.txt', JSON.stringify({ out, pid: process.pid }) + '\\n');
+if (out) {
+  const dir = join(out, 'chrome-mv3');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'marker.txt'), readFileSync('src-marker.txt', 'utf8'));
+  writeFileSync(join(dir, 'round.txt'), String(process.pid));
+}
+`;
+
+/**
+ * 픽스처의 가짜 소비자. 자기 회차의 산출물이 없으면 FAIL, 산출물이 소스보다 낡았으면
+ * FAIL — 신선도를 스스로 재는 소비자라, 러너가 낡은 경로를 넘기는 순간 여기서 걸린다.
+ *
+ * 무엇을 쟀는지는 consumer-log.txt에 남긴다. 러너는 **통과한 게이트의 출력을 버리는
+ * 것이 계약**이라(증거는 실패에만 남는다), 소비자가 받은 경로는 stdout이 아니라
+ * 트리 안 파일에서 읽어야 한다.
+ */
+const CONSUMER_MJS = `
+import { appendFileSync, existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+const i = process.argv.indexOf('--artifacts');
+const dir = i === -1 ? join('.output', 'chrome-mv3') : process.argv[i + 1];
+if (!existsSync(join(dir, 'marker.txt'))) {
+  console.log('FAIL consumer: 이 회차의 빌드 산출물이 없다: ' + dir);
+  process.exit(1);
+}
+const got = readFileSync(join(dir, 'marker.txt'), 'utf8');
+const want = readFileSync('src-marker.txt', 'utf8');
+if (got !== want) {
+  console.log('FAIL consumer: 낡은 산출물을 쟀다 (산출물 "' + got + '" vs 소스 "' + want + '")');
+  process.exit(1);
+}
+appendFileSync('consumer-log.txt', JSON.stringify({ dir, round: readFileSync(join(dir, 'round.txt'), 'utf8') }) + '\\n');
+console.log('PASS consumer: 이 회차의 산출물을 쟀다');
+`;
+
+/** build + 소비자(needs: build) 두 행짜리 기본 D4a 픽스처. files는 기본 위에 덮인다. */
+function d4aTree(over = {}) {
+  const { files = {}, ...rest } = over;
+  return tree({
+    gates: [ROW('build', 'build'), ROW('consumer', 'consumer', { needs: 'build', verdict: 'token' })],
+    scripts: { build: 'node build.mjs', consumer: 'node consumer.mjs' },
+    files: {
+      'build.mjs': BUILD_MJS,
+      'consumer.mjs': CONSUMER_MJS,
+      'src-marker.txt': 'v1',
+      ...files,
+    },
+    ...rest,
+  });
+}
+
+/** 러너를 비동기로 띄운다 — 겹친 실행과 도중 죽이기는 동기 실행으로는 만들 수 없다. */
+function runAsync(args) {
+  return new Promise((resolve) => {
+    const child = spawn('node', [RUNNER, ...args], { stdio: ['ignore', 'pipe', 'pipe'] });
+    let out = '';
+    child.stdout.on('data', (d) => (out += d));
+    child.stderr.on('data', (d) => (out += d));
+    child.on('close', (code) => resolve({ code, out }));
+  });
+}
+
+async function waitFor(cond, { tries = 200, delay = 50 } = {}) {
+  for (let i = 0; i < tries; i += 1) {
+    if (cond()) return;
+    await new Promise((r) => setTimeout(r, delay));
+  }
+  throw new Error('waitFor: 조건이 시간 안에 참이 되지 않았다');
+}
+
+const jsonLines = (dir, file) =>
+  readFileSync(join(dir, file), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+const buildLog = (dir) => jsonLines(dir, 'build-log.txt');
+const consumerLog = (dir) => jsonLines(dir, 'consumer-log.txt');
+
+describe('run-gates — 회차별 산출물 디렉터리 (D4a)', () => {
+  it('회차마다 고유한 디렉터리에 빌드하고 그 경로를 소비자에게 넘긴다 — 빌드는 한 번만', () => {
+    const dir = d4aTree();
+    const r1 = run(['--dir', dir]);
+    expect(r1.out).toMatch(/^PASS consumer/m);
+    expect(r1.code).toBe(0);
+
+    const r2 = run(['--dir', dir]);
+    expect(r2.out).toMatch(/^PASS consumer/m);
+
+    const log = buildLog(dir);
+    const seen = consumerLog(dir);
+    expect(log).toHaveLength(2); // 회차당 빌드 한 번
+    expect(seen).toHaveLength(2);
+    // 회차마다 다른 디렉터리 — 같은 경로를 다시 쓰면 겹친 실행이 섞일 트리가 생긴다.
+    expect(seen[1].dir).not.toBe(seen[0].dir);
+    // 소비자가 받은 경로는 그 회차의 빌드가 재지정받은 디렉터리 아래다.
+    expect(seen[0].dir.startsWith(log[0].out)).toBe(true);
+    expect(seen[1].dir.startsWith(log[1].out)).toBe(true);
+  });
+
+  it('빌드가 실패하면 소비자는 BLOCKED다 — FAIL도 N/A도 아니다', () => {
+    const dir = d4aTree({ files: { 'build.mjs': 'process.exit(1)' } });
+    const r = run(['--dir', dir]);
+    expect(r.out).toMatch(/^BLOCKED consumer — 선행 build이 FAIL/m);
+    expect(r.out).not.toMatch(/^N\/A consumer/m);
+    expect(r.out).not.toMatch(/^PASS consumer/m);
+    expect(r.code).toBe(1);
+  });
+
+  it('낡은 산출물이 통과를 만들지 못한다 — 소스를 바꾸고 빌드를 막으면 소비자가 돌지 않는다', () => {
+    // 직전 회차가 기본 경로에 남긴 산출물(v1) + 그 뒤 바뀐 소스(v2) + 막힌 빌드.
+    // 고정 경로 설계였다면 소비자가 v1을 재고 초록을 냈을 자리다.
+    const dir = d4aTree({
+      files: {
+        'src-marker.txt': 'v2-new-source',
+        '.output/chrome-mv3/marker.txt': 'v1-stale',
+        '.output/chrome-mv3/round.txt': 'stale',
+        'build.mjs': 'process.exit(1)',
+      },
+    });
+    const r = run(['--dir', dir]);
+    expect(r.out).not.toMatch(/^PASS consumer/m);
+    expect(r.out).toMatch(/^BLOCKED consumer/m);
+    expect(r.code).toBe(1);
+  });
+
+  it('빌드가 성공했는데 산출물이 없으면 소비자는 FAIL이고 사유가 그것을 말한다 — N/A가 아니다', () => {
+    // 대상이 없는 것(N/A)과 대상을 만들지 못한 것(FAIL)은 다르다.
+    const dir = d4aTree({ files: { 'build.mjs': 'process.exit(0)' } });
+    const r = run(['--dir', dir]);
+    expect(r.out).toMatch(/^FAIL consumer/m);
+    expect(r.out).toContain('이 회차의 빌드 산출물이 없다');
+    expect(r.out).not.toMatch(/^N\/A consumer/m);
+    expect(r.code).toBe(1);
+  });
+
+  it('needs: build인 게이트가 하나도 안 돌면 산출물 배관이 서지 않는다', () => {
+    // build는 여느 게이트로 돌되, 회차 디렉터리도 재지정도 없어야 한다.
+    const dir = tree({
+      gates: [ROW('build', 'build'), ROW('other', 'other')],
+      scripts: { build: 'node build.mjs', other: OK },
+      files: { 'build.mjs': BUILD_MJS, 'src-marker.txt': 'v1' },
+    });
+    const r = run(['--dir', dir]);
+    expect(r.out).toMatch(/^PASS build/m);
+    expect(r.code).toBe(0);
+    const log = buildLog(dir);
+    expect(log).toHaveLength(1);
+    expect(log[0].out).toBeNull();
+  });
+});
+
+describe('run-gates — 겹친 실행은 경로 분리로 격리된다 (D4a)', () => {
+  /** 빌드 구간을 늘려 두 러너가 그 안에서 겹치게 만든다. */
+  const SLOW_BUILD_MJS = BUILD_MJS.replace(
+    'if (out) {',
+    "await new Promise((r) => setTimeout(r, 1500));\nif (out) {",
+  );
+
+  it('겹친 두 러너가 서로 다른 디렉터리를 쓰고 각자 자기 회차의 빌드만 잰다', async () => {
+    const dir = d4aTree({ files: { 'build.mjs': SLOW_BUILD_MJS } });
+    const a = runAsync(['--dir', dir]);
+    await waitFor(() => existsSync(join(dir, 'build-log.txt'))); // A가 빌드 구간에 들어갔다
+    const b = runAsync(['--dir', dir]);
+    const [ra, rb] = await Promise.all([a, b]);
+    expect(ra.code).toBe(0);
+    expect(rb.code).toBe(0);
+    expect(ra.out).toMatch(/^PASS consumer/m);
+    expect(rb.out).toMatch(/^PASS consumer/m);
+
+    const builds = buildLog(dir);
+    const seen = consumerLog(dir);
+    expect(builds).toHaveLength(2);
+    expect(seen).toHaveLength(2);
+    expect(seen[0].dir).not.toBe(seen[1].dir); // 서로 다른 디렉터리
+    expect(seen[0].round).not.toBe(seen[1].round); // 서로 다른 회차의 빌드를 쟀다
+    // 각 소비자가 잰 것이 정확히 **자기 회차의** 빌드다 — 경로와 pid가 함께 맞는다.
+    for (const s of seen) {
+      const producer = builds.find((b) => String(b.pid) === s.round);
+      expect(producer).toBeDefined();
+      expect(s.dir.startsWith(producer.out)).toBe(true);
+    }
+  }, 30000);
+
+  /**
+   * 죽은 러너의 빌드 자식이 계속 쓰는 시나리오. slow-build 파일이 있으면: 자기 산출물
+   * 디렉터리에 6초간 계속 쓰는 **떨어져 나간 자식**을 남기고 오래 잔다 — 러너를 여기서
+   * 죽이면 자식들이 살아남는다. 잠금 설계였다면 "소유자가 죽었다 = 회수해도 된다"로
+   * 읽혀 정확히 뚫렸을 모양이다.
+   */
+  const KILLABLE_BUILD_MJS = `
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { spawn } from 'node:child_process';
+const out = process.env.HK_BUILD_OUT_DIR ?? null;
+appendFileSync('build-log.txt', JSON.stringify({ out, pid: process.pid }) + '\\n');
+if (out && existsSync('slow-build')) {
+  const w = spawn(process.execPath, ['orphan-writer.mjs', join(out, 'chrome-mv3')], { detached: true, stdio: 'ignore' });
+  w.unref();
+  appendFileSync('orphan-pids.txt', process.pid + '\\n' + w.pid + '\\n');
+  await new Promise((r) => setTimeout(r, 8000));
+}
+if (out) {
+  const dir = join(out, 'chrome-mv3');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'marker.txt'), readFileSync('src-marker.txt', 'utf8'));
+  writeFileSync(join(dir, 'round.txt'), String(process.pid));
+}
+`;
+
+  const ORPHAN_WRITER_MJS = `
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+const dir = process.argv[2];
+const until = Date.now() + 6000;
+(function tick() {
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'marker.txt'), 'orphan-garbage-' + Date.now());
+  if (Date.now() < until) setTimeout(tick, 50);
+})();
+`;
+
+  it('빌드 도중 죽은 러너의 자식이 계속 써도 다음 회차는 전혀 영향받지 않는다', async () => {
+    const dir = d4aTree({
+      files: {
+        'build.mjs': KILLABLE_BUILD_MJS,
+        'orphan-writer.mjs': ORPHAN_WRITER_MJS,
+        'slow-build': 'x',
+      },
+    });
+    const childA = spawn('node', [RUNNER, '--dir', dir], { stdio: 'ignore' });
+    try {
+      // A의 빌드가 고아 자식을 남길 때까지 기다렸다가 **러너만** 죽인다.
+      await waitFor(() => existsSync(join(dir, 'orphan-pids.txt')));
+      childA.kill('SIGKILL');
+      rmSync(join(dir, 'slow-build'));
+
+      // 두 번째 회차 — A의 고아가 A의 디렉터리에 아직 쓰는 동안 돈다.
+      const rb = run(['--dir', dir]);
+      expect(rb.out).toMatch(/^PASS consumer/m);
+      expect(rb.code).toBe(0);
+
+      const log = buildLog(dir);
+      const seen = consumerLog(dir); // A는 소비자까지 못 갔다 — B의 것 하나뿐
+      // 죽은 A의 회차 디렉터리는 러너가 못 치웠다 — 단언이 던져도 새지 않게 먼저 등록한다.
+      if (log[0]?.out) made.push(log[0].out);
+      expect(log).toHaveLength(2);
+      expect(seen).toHaveLength(1);
+      expect(log[1].out).not.toBe(log[0].out); // B는 A의 디렉터리를 쓰지 않았다
+      expect(seen[0].dir.startsWith(log[1].out)).toBe(true); // B의 소비자는 B의 산출물만 쟀다
+    } finally {
+      childA.kill('SIGKILL');
+      if (existsSync(join(dir, 'orphan-pids.txt'))) {
+        for (const pid of readFileSync(join(dir, 'orphan-pids.txt'), 'utf8').trim().split('\n')) {
+          try {
+            process.kill(Number(pid), 'SIGKILL');
+          } catch {
+            // 이미 죽었다
+          }
+        }
+      }
+    }
+  }, 30000);
+});
+
+describe('산출물 소비 게이트 스크립트 — 인자와 판정 (실제 빌드 없이)', () => {
+  const SCRIPTS_DIR = dirname(RUNNER);
+  const REPO = join(SCRIPTS_DIR, '..');
+
+  function runScript(script, args, cwd) {
+    try {
+      const out = execFileSync('node', [join(SCRIPTS_DIR, script), ...args], {
+        cwd,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        maxBuffer: 64 * 1024 * 1024,
+      });
+      return { code: 0, out };
+    } catch (e) {
+      return { code: e.status ?? 1, out: `${e.stdout ?? ''}${e.stderr ?? ''}` };
+    }
+  }
+
+  it('bundle-gate: --artifacts가 가리키는 곳에 산출물이 없으면 FAIL이고 사유가 경로를 말한다', () => {
+    const empty = mkdtempSync(join(tmpdir(), 'hk-empty-'));
+    made.push(empty);
+    const r = runScript('bundle-gate.mjs', ['--artifacts', join(empty, 'nope')], REPO);
+    expect(r.out).toMatch(/^FAIL bundle-gate:/m);
+    expect(r.out).toContain('nope');
+    expect(r.out).not.toMatch(/^N\/A bundle-gate:/m);
+    expect(r.code).toBe(1);
+  });
+
+  it('bundle-gate: 알 수 없는 인자를 거절한다', () => {
+    // 오타(--artifact)가 조용히 기본 경로를 재게 두면 러너가 넘긴 경로가 사라진다.
+    const r = runScript('bundle-gate.mjs', ['--artifact', '/tmp/x'], REPO);
+    expect(r.out).toMatch(/^FAIL bundle-gate:/m);
+    expect(r.code).toBe(1);
+  });
+
+  it('bundle-gate: 인자가 없으면 기본 경로를 본다 — 손으로 돌리던 방식이 깨지지 않는다', () => {
+    const empty = mkdtempSync(join(tmpdir(), 'hk-cwd-'));
+    made.push(empty);
+    const r = runScript('bundle-gate.mjs', [], empty);
+    expect(r.out).toContain(join('.output', 'chrome-mv3'));
+    expect(r.code).toBe(1); // 빈 트리 — 그 사실을 기본 경로에 대해 말한다
+  });
+
+  it('bundle-gate: 픽스처 산출물 트리로 실제 빌드 없이 통과가 성립한다', () => {
+    const art = mkdtempSync(join(tmpdir(), 'hk-art-'));
+    made.push(art);
+    mkdirSync(join(art, 'chunks'), { recursive: true });
+    writeFileSync(join(art, 'popup.html'), '<script type="module" src="/chunks/entry.js"></script>');
+    writeFileSync(join(art, 'chunks', 'entry.js'), 'console.log("hi")');
+    // 지연 계약 청크 — 존재하되 즉시 집합에 없어야 통과한다.
+    for (const p of ['sortable-profile-list', 'motion', 'suggest-autocomplete', 'rule-form']) {
+      writeFileSync(join(art, 'chunks', `${p}-x.js`), '// deferred');
+    }
+    const r = runScript('bundle-gate.mjs', ['--artifacts', art], REPO);
+    expect(r.out).toMatch(/^PASS bundle-gate:/m);
+    expect(r.code).toBe(0);
+  });
+
+  /** writer-lane-gate는 cwd의 src/도 읽는다 — 소스와 산출물을 함께 갖춘 픽스처 트리. */
+  function laneTree() {
+    const dir = mkdtempSync(join(tmpdir(), 'hk-lane-'));
+    made.push(dir);
+    mkdirSync(join(dir, 'src'), { recursive: true });
+    writeFileSync(
+      join(dir, 'src', 'worker.ts'),
+      'const lane = createWriterLane();\nconst writer = createStateWriter(lane);\n',
+    );
+    const art = join(dir, 'out');
+    mkdirSync(art, { recursive: true });
+    writeFileSync(join(art, 'manifest.json'), JSON.stringify({ background: { service_worker: 'background.js' } }));
+    writeFileSync(join(art, 'background.js'), 'throw new Error("writer-lane:service-worker-only")');
+    writeFileSync(join(art, 'popup.js'), 'console.log("ui")');
+    return { dir, art };
+  }
+
+  it('writer-lane-gate: 픽스처 트리로 실제 빌드 없이 통과가 성립한다', () => {
+    const { dir, art } = laneTree();
+    const r = runScript('writer-lane-gate.mjs', ['--artifacts', art], dir);
+    expect(r.out).toMatch(/^PASS writer-lane-gate:/m);
+    expect(r.code).toBe(0);
+  });
+
+  it('writer-lane-gate: --artifacts가 가리키는 곳에 산출물이 없으면 FAIL이고 사유가 경로를 말한다', () => {
+    const { dir } = laneTree();
+    const r = runScript('writer-lane-gate.mjs', ['--artifacts', join(dir, 'nope')], dir);
+    expect(r.out).toMatch(/^FAIL writer-lane-gate:/m);
+    expect(r.out).toContain('nope');
+    expect(r.code).toBe(1);
+  });
+
+  it('smoke: 산출물이 없으면 브라우저를 띄우기 전에 FAIL이고 사유가 경로를 말한다', () => {
+    const r = runScript('smoke.mjs', ['--artifacts', '/nonexistent-hk-artifacts'], REPO);
+    expect(r.out).toMatch(/^FAIL smoke:/m);
+    expect(r.out).toContain('nonexistent-hk-artifacts');
+    expect(r.code).toBe(1);
   });
 });
 
