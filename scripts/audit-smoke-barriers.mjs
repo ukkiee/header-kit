@@ -32,8 +32,26 @@ const STABLE_BARRIER = /pollStable\(/;
 /** 안정화 배리어는 관측 헬퍼 안에 있을 수 있어 record 직전 창을 본다. */
 const STABLE_WINDOW = 60;
 
+/**
+ * 주석을 걷어낸다. 걷지 않으면 **배리어를 주석으로 접은 파일이 그대로 통과한다** — 흔들리는
+ * 대기를 디버깅하며 `pollSessionRuleMatch(...)` 호출을 잠시 접어 두는 것이 정상 경로이고,
+ * 그 상태에서 초록이 나면 이 감사가 막겠다고 선언한 결함(단언이 한 테스트씩 밀리는 것)이
+ * 그대로 커밋된다. 지우는 것과 접는 것은 런타임 효과가 같은데 판정만 갈렸다(실측).
+ * 형제 둘이 이미 같은 일을 한다 — `browser-parity.mjs`의 `withoutComments`,
+ * `writer-lane-gate.mjs`의 `stripComments`.
+ *
+ * **줄 수를 보존해야 한다.** 이 감사의 창 계산(`STABLE_WINDOW`·시드~record 사이)이 전부 줄
+ * 번호 기준이므로, 블록 주석을 지우면 창이 어긋나고 사유의 줄 번호도 원본과 달라진다. 그래서
+ * 블록 주석은 삭제하지 않고 **같은 길이의 공백으로 덮는다.**
+ *
+ * `://`는 주석 시작으로 보지 않는다 — URL이 든 줄이 통째로 접히면 그 줄의 진짜 배리어 호출도
+ * 함께 사라져 멀쩡한 시나리오가 빨강이 된다.
+ */
+const stripComments = (text) =>
+  text.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' ')).replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+
 const target = process.argv[2] ?? new URL('./smoke.mjs', import.meta.url).pathname;
-const lines = readFileSync(target, 'utf8').split('\n');
+const lines = stripComments(readFileSync(target, 'utf8')).split('\n');
 
 /**
  * `record('<id>: …` 는 한 줄이 아닐 수 있다. 포매터가 인자를 나누면 `record(` 와 id 리터럴이

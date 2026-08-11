@@ -33,22 +33,54 @@ function fixture(lines) {
  * 한 시나리오 블록: 시드 → 준비 배리어 → record. 옵션이 그 관계를 하나씩 깨뜨린다.
  * `record`가 여러 줄로 나뉜 모양(`split`)은 포매터가 실제로 만든 형태다.
  */
-function block(id, { seed = true, barrier = 'pollSessionRuleMatch', split = false, record = true } = {}) {
+function block(
+  id,
+  {
+    seed = true,
+    barrier = 'pollSessionRuleMatch',
+    split = false,
+    record = true,
+    comment = null,
+    url = false,
+  } = {},
+) {
   const out = [];
   if (seed) out.push('  await seedProfiles([{ id: "p1", name: "A" }]);');
-  if (barrier !== null) out.push(`  await ${barrier}(sw, 1);`);
+  if (barrier !== null) {
+    // URL이 배리어 호출 **앞**에 오는 줄. `://`를 주석 시작으로 보면 그 뒤가 통째로 잘려
+    // 호출이 함께 사라진다. URL이 뒤에 있으면 잘려도 호출이 남아 아무것도 재지 못한다.
+    const call = url
+      ? `  const url = 'http://127.0.0.1/x'; await ${barrier}(sw, 1);`
+      : `  await ${barrier}(sw, 1);`;
+    out.push(comment === 'barrier' ? `  // ${call.trim()}` : call);
+  }
   if (!record) return out;
+  const call = split ? null : `  record('${id}: 설명', true);`;
   if (split) out.push('  record(', `    '${id}: 설명',`, '    true,', '  );');
-  else out.push(`  record('${id}: 설명', true);`);
+  else out.push(comment === 'record' ? `  // ${call.trim()}` : call);
   return out;
 }
 
 /** 안정화 배리어를 요구하는 블록. 창은 record 앞 60줄이므로 거리도 픽스처가 정한다. */
-function stableBlock({ pollStable = true, distance = 3, record = true } = {}) {
+function stableBlock({
+  pollStable = true,
+  distance = 3,
+  record = true,
+  comment = null,
+  block: blockComment = false,
+  split = false,
+} = {}) {
   const out = [];
-  if (pollStable) out.push('  await pollStable(probe, "accent");');
-  for (let i = 0; i < distance; i += 1) out.push(`  // 사이 줄 ${i}`);
-  if (record) out.push(`  record('${STABLE_ID}: 설명', true);`);
+  if (pollStable) {
+    const call = '  await pollStable(probe, "accent");';
+    if (comment === 'barrier') out.push(`  // ${call.trim()}`);
+    else if (blockComment) out.push(`  /* ${call.trim()} */`);
+    else out.push(call);
+  }
+  for (let i = 0; i < distance; i += 1) out.push(`  const filler${i} = ${i};`);
+  if (!record) return out;
+  if (split) out.push('  record(', `    '${STABLE_ID}: 설명',`, '    true,', '  );');
+  else out.push(`  record('${STABLE_ID}: 설명', true);`);
   return out;
 }
 
@@ -117,10 +149,59 @@ describe('smoke-barriers — 준비 배리어 감사', () => {
     expect(r.code).toBe(1);
   });
 
+  it('주석으로 접은 배리어는 배리어가 아니다', () => {
+    // **지우는 것과 접는 것은 런타임 효과가 같다.** 흔들리는 대기를 디버깅하며 배리어 호출을
+    // 잠시 접어 두는 것이 정상 경로이고, 그 상태에서 초록이 나면 이 감사가 막겠다고 선언한
+    // 결함이 그대로 커밋된다. 감사가 주석을 걷기 전에는 이 케이스가 통과했다(실측).
+    const r = run(fixture(wholeFile({ M2c: { comment: 'barrier' } })));
+    expect(r.out).toMatch(/^FAIL smoke-barriers:/m);
+    expect(r.out).toContain('M2c');
+    expect(r.out).toContain('준비 배리어가 없다');
+    expect(r.code).toBe(1);
+  });
+
+  it('주석으로 접은 record는 record가 아니다', () => {
+    const r = run(fixture(wholeFile({ M4: { comment: 'record' } })));
+    expect(r.out).toMatch(/^FAIL smoke-barriers:/m);
+    expect(r.out).toContain('M4');
+    expect(r.out).toContain('찾을 수 없다');
+    expect(r.code).toBe(1);
+  });
+
+  it('주석으로 접은 안정화 배리어도 배리어가 아니다 — 줄 주석과 블록 주석 둘 다', () => {
+    for (const opts of [{ comment: 'barrier' }, { block: true }]) {
+      const r = run(fixture(wholeFile({}, opts)));
+      expect(r.out, JSON.stringify(opts)).toMatch(/^FAIL smoke-barriers:/m);
+      expect(r.out, JSON.stringify(opts)).toContain(STABLE_ID);
+      expect(r.code, JSON.stringify(opts)).toBe(1);
+    }
+  });
+
+  it('URL이 든 배리어 줄은 접지 않는다 — `://`를 주석으로 보면 거짓 빨강이다', () => {
+    // 주석 제거가 `://`를 주석 시작으로 보면 그 줄이 통째로 사라지고 **그 줄의 진짜 배리어도
+    // 함께 사라진다.** 멀쩡한 시나리오가 빨강이 되고, 그것을 푸는 유일한 길이 감사를 고치는
+    // 것이 된다. `writer-lane-gate`가 같은 보호에 같은 짝의 픽스처를 갖고 있다.
+    const r = run(
+      fixture(wholeFile(Object.fromEntries(SEED_IDS.map((id) => [id, { url: true, barrier: 'pollUntil' }])))),
+    );
+    expect(r.out).toMatch(/^PASS smoke-barriers:/m);
+    expect(r.code).toBe(0);
+  });
+
   it('포매터가 record를 여러 줄로 나눠도 찾는다 — 없는 것과 모양이 바뀐 것은 다르다', () => {
     // 실측 이력: 포맷 적용에서 8개가 이 모양이 됐고, 한 줄 안에서만 찾던 감사는 그 8개를
     // "찾을 수 없다"로 보고했다. 그 회귀를 이 픽스처가 문다.
     const r = run(fixture(wholeFile(Object.fromEntries(SEED_IDS.map((id) => [id, { split: true }])))));
+    expect(r.out).toMatch(/^PASS smoke-barriers:/m);
+    expect(r.code).toBe(0);
+  });
+
+  it('창의 기준은 id 리터럴 줄이 아니라 `record(` 줄이다 — 경계에서 그 차이가 판정을 가른다', () => {
+    // split된 record에서 감사가 위로 짚는 `record(` 줄이 창의 앵커다. 그 위 스캔을 없애면
+    // 앵커가 id 리터럴 줄로 밀리고, 창이 그만큼 위를 잃는다. 평소에는 티가 나지 않으므로
+    // **경계에 정확히 놓아야** 잡힌다: pollStable을 `record(` 줄에서 딱 60줄 위에 둔다.
+    // 앵커가 한 줄이라도 밀리면 그 배리어가 창 밖으로 나간다.
+    const r = run(fixture(wholeFile({}, { distance: 59, split: true })));
     expect(r.out).toMatch(/^PASS smoke-barriers:/m);
     expect(r.code).toBe(0);
   });

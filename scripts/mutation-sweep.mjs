@@ -5,8 +5,11 @@
 // 실제로 지워 보는 것이고, 이 스크립트가 그 절차를 재현 가능하게 만든다.
 //
 // **종료 코드가 아니라 빨강이 된 테스트의 제목을 센다.** 종료 코드만 보면 "무언가가 물었다"
-// 까지만 알고 무엇이 물었는지는 모르며, 그러면 서로 다른 검사 열여덟을 픽스처 하나가 전부
-// 받아 내는 상태와 구별되지 않는다. 그 구별이 이 도구의 전부다.
+// 까지만 알고 무엇이 물었는지는 모르며, 그러면 서로 다른 검사 전부를 픽스처 하나가 받아 내는
+// 상태와 구별되지 않는다. 그 구별이 이 도구의 전부다.
+//
+// **판정을 얻지 못한 변조도 통과가 아니다.** 앵커가 어긋나거나 vitest의 출력을 읽지 못하면
+// 그 변조는 "물지 않았다"가 아니라 "재지 않았다"이고, 요약이 잰 수를 함께 말한다.
 //
 // **게이트가 아니다.** `scripts/gates.txt`가 그 이유를 적는다 — 매 회차 돌리기에는 느리고
 // (게이트당 변조 수만큼 스위트를 돈다), 무엇보다 대상 파일을 잠시 고쳤다가 되돌리므로
@@ -17,8 +20,8 @@
 //
 // 변조 표는 **이 파일이 소유한다.** 산문에 열거해 두면 게이트가 하나 바뀔 때마다 그 문장이
 // 조용히 낡고, 낡았다는 사실을 알려 줄 것이 없다.
-import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -136,9 +139,23 @@ const TARGETS = [
       ],
       ['시드 호출 부재를 통과로 접기', 'if (seedAt < 0) {', 'if (false) {'],
       [
-        'record( 를 id 리터럴과 같은 줄에서만 찾기',
-        "  for (let i = at; i >= Math.max(0, at - 3); i -= 1) {\n    if (lines[i].includes('record(')) return i;\n  }\n  return at;",
-        "  return lines[at].includes('record(') ? at : -1;",
+        // 위 스캔과 fallback을 **한 행에 묶지 않는다.** 묶으면 어느 쪽이 물렸는지 도구가
+        // 말하지 못한다. 여기 서는 것은 위 스캔 쪽이고, 창 경계 픽스처가 그것을 문다.
+        // fallback(`return at`) 자체를 뒤집는 변조는 어느 픽스처도 물지 않아 표에 없다 —
+        // 그 사실은 `docs/agents/verification.md`가 적는다.
+        'record( 를 위로 짚는 스캔 제거',
+        "  for (let i = at; i >= Math.max(0, at - 3); i -= 1) {\n    if (lines[i].includes('record(')) return i;\n  }\n",
+        '',
+      ],
+      [
+        '주석 제거 무력화',
+        'const stripComments = (text) =>',
+        'const stripComments = (text) => text;\nconst unusedStripComments = (text) =>',
+      ],
+      [
+        '주석 제거의 :// 보호 제거',
+        ".replace(/(^|[^:])\\/\\/[^\\n]*/g, '$1');",
+        ".replace(/\\/\\/[^\\n]*/g, '');",
       ],
       ['안정화 창을 0으로', 'const STABLE_WINDOW = 60;', 'const STABLE_WINDOW = 0;'],
       [
@@ -156,6 +173,12 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] !== '--gate') {
       fail(`알 수 없는 인자: ${argv[i]} — 받는 것은 --gate <id> 뿐이다`);
+      process.exit(1);
+    }
+    // 말없이 마지막 값을 고르지 않는다. 이 도구가 검사하는 게이트들이 `--artifacts` 중복을
+    // 거절하는 것과 같은 이유다 — 어느 쪽을 쟀는지가 호출 문면에서 읽히지 않는다.
+    if (gate !== null) {
+      fail('--gate가 두 번 왔다 — 어느 대상을 재라는 것인지 판정할 수 없다');
       process.exit(1);
     }
     const v = argv[i + 1];
@@ -188,45 +211,91 @@ function redTitles(target, out) {
   };
 }
 
+/**
+ * 스위트를 **비동기로** 띄운다. `execFileSync`로 막으면 이벤트 루프가 멈춰 있어 변조 창 내내
+ * 시그널 핸들러가 실행되지 못한다 — 그러면 Ctrl-C가 변조된 파일을 남긴 채 나간다(실측).
+ * 창의 거의 전부가 이 대기이므로, 여기를 비우는 것이 복원 보증의 대부분이다.
+ */
 function runSuite(target) {
   const args = [VITEST, 'run', target.test, '--reporter=json'];
   if (target.filter) args.push('-t', target.filter);
+  return new Promise((resolve) => {
+    const child = spawn('node', args, { cwd: REPO, stdio: ['ignore', 'pipe', 'pipe'] });
+    running = child;
+    let out = '';
+    child.stdout.on('data', (d) => (out += d));
+    child.stderr.on('data', (d) => (out += d));
+    child.on('error', (e) => {
+      running = null;
+      resolve({ code: 1, out: `${out}\n${e.message}` });
+    });
+    child.on('close', (code) => {
+      running = null;
+      resolve({ code: code ?? 1, out });
+    });
+  });
+}
+
+/**
+ * 하드 종료를 덮는 유일한 형태: 원본을 **디스크에** 두고 시작한다.
+ *
+ * 시그널 핸들러는 SIGKILL·전원 차단을 덮지 못하고, 그때 남는 것은 `if (false) {`로 무장 해제된
+ * 추적 파일이다 — 겹쳐 도는 게이트 회차가 그것을 초록으로 읽는다. 사이드카가 있으면 다음 실행이
+ * 그것을 보고 복구한 뒤 멈춘다. 사람이 손으로 끊는 것이 이 도구의 정상 경로라 이 자리가 넓다.
+ */
+const sidecarOf = (path) => `${path}.sweep-orig`;
+
+function recoverAbandoned() {
+  const abandoned = TARGETS.map((t) => join(HERE, t.script)).filter((p) => existsSync(sidecarOf(p)));
+  if (abandoned.length === 0) return false;
+  for (const path of abandoned) {
+    writeFileSync(path, readFileSync(sidecarOf(path), 'utf8'));
+    rmSync(sidecarOf(path));
+    console.error(`  복구: ${path}`);
+  }
+  fail(
+    `앞선 스윕이 변조 창에서 죽어 대상 ${abandoned.length}개가 변조된 채 남아 있었다 — 원본으로 되돌렸다. ` +
+      `그 사이에 돈 게이트 회차가 있었다면 그 판정은 신뢰할 수 없다.`,
+  );
+  return true;
+}
+
+/** 지금 변조 중인 대상. 시그널 핸들러가 이것만 보고 되돌린다. */
+let inFlight = null;
+let running = null;
+
+function restoreInFlight() {
+  if (inFlight === null) return;
+  const { path, original } = inFlight;
+  inFlight = null;
   try {
-    return {
-      code: 0,
-      out: execFileSync('node', args, {
-        cwd: REPO,
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'pipe'],
-        maxBuffer: 64 * 1024 * 1024,
-      }),
-    };
-  } catch (e) {
-    return { code: e.status ?? 1, out: `${e.stdout ?? ''}${e.stderr ?? ''}` };
+    writeFileSync(path, original);
+    if (existsSync(sidecarOf(path))) rmSync(sidecarOf(path));
+  } catch {
+    // 여기서 더 할 수 있는 것이 없다. 사이드카가 남으면 다음 실행이 복구한다.
   }
 }
 
-function sweep(target) {
+// 핸들러는 **한 번만** 단다. 대상마다 달면 먼저 등록된 것이 `process.exit`으로 뒤엣것의
+// 실행을 막아, 두 번째 대상의 변조가 그대로 남는다(실측).
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+  process.on(signal, () => {
+    if (running !== null) running.kill('SIGKILL');
+    restoreInFlight();
+    process.exit(signal === 'SIGINT' ? 130 : 1);
+  });
+}
+
+async function sweep(target) {
   const path = join(HERE, target.script);
   if (!existsSync(path)) {
     fail(`대상 스크립트가 없다: ${path}`);
     return;
   }
   const original = readFileSync(path, 'utf8');
-  let restored = false;
-  // 신호로 죽어도 되돌린다. 대상은 추적되는 파일이라, 변조된 채 남으면 다음 사람이 그것을
-  // 자기 변경으로 읽는다.
-  const restore = () => {
-    if (!restored) writeFileSync(path, original);
-    restored = true;
-  };
-  process.on('SIGINT', () => {
-    restore();
-    process.exit(130);
-  });
 
   try {
-    const base = runSuite(target);
+    const base = await runSuite(target);
     const baseRed = redTitles(target, base.out);
     if (baseRed.error) {
       fail(`${target.gate}: 기준선을 얻지 못했다 — ${baseRed.error}`);
@@ -242,6 +311,7 @@ function sweep(target) {
     console.log(`\n── ${target.gate} · 픽스처 ${baseRed.ran}개가 기준선에서 초록`);
 
     let unbitten = 0;
+    let measured = 0;
     for (const [name, from, to] of target.mutations) {
       const hits = original.split(from).length - 1;
       if (hits !== 1) {
@@ -249,16 +319,24 @@ function sweep(target) {
         fail(`${target.gate} / ${name}: 변조 대상 문자열이 ${hits}번 나타난다 — 정확히 한 번이어야 한다`);
         continue;
       }
-      writeFileSync(path, original.replace(from, to));
-      const r = runSuite(target);
-      restored = false;
-      writeFileSync(path, original);
-      restored = true;
+      // 사이드카를 먼저 쓴다. 이 줄과 복구 사이의 어느 지점에서 죽어도 다음 실행이 되돌린다.
+      writeFileSync(sidecarOf(path), original);
+      inFlight = { path, original };
+      // `replaceAll`이 아니라 문자열 하나를 바꾸되, `to`의 `$&`·`$1`이 특수 해석되지 않게
+      // 콜백으로 넘긴다 — 정규식 치환의 달러 규칙이 문자열 치환에도 적용된다.
+      writeFileSync(
+        path,
+        original.replace(from, () => to),
+      );
+      const r = await runSuite(target);
+      restoreInFlight();
+
       const red = redTitles(target, r.out);
       if (red.error) {
         fail(`${target.gate} / ${name}: ${red.error}`);
         continue;
       }
+      measured += 1;
       if (red.titles.length === 0) {
         unbitten += 1;
         console.log(`   !! ${name} — 빨강 없음. 이 검사는 재지 않는 자리다`);
@@ -268,13 +346,18 @@ function sweep(target) {
       for (const t of red.titles) console.log(`      빨강: ${t}`);
     }
 
-    if (unbitten > 0) {
-      fail(`${target.gate}: 변조 ${target.mutations.length}건 중 ${unbitten}건이 물리지 않았다`);
+    // **판정을 얻지 못한 변조도 통과가 아니다.** 잰 수를 함께 요구하지 않으면 앵커가 어긋난
+    // 변조를 조용히 건너뛴 회차가 "전부 빨강"을 찍는다 — 이 도구가 없애러 온 모양 그대로다.
+    // `fail()`은 stderr로만 가므로 stdout에도 남긴다: 갈무리된 로그에 거짓 문장이 남지 않게.
+    if (unbitten > 0 || measured !== target.mutations.length) {
+      const note = `변조 ${target.mutations.length}건 중 ${measured}건을 쟀고 ${unbitten}건이 물리지 않았다`;
+      console.log(`   → ${note} — 위 FAIL 사유를 보세요`);
+      fail(`${target.gate}: ${note}`);
     } else {
       console.log(`   → 변조 ${target.mutations.length}건 전부 빨강`);
     }
   } finally {
-    restore();
+    restoreInFlight();
     if (readFileSync(path, 'utf8') !== original) {
       fail(`${target.gate}: 대상을 원상복구하지 못했다 — ${path}를 직접 확인하세요`);
     }
@@ -291,11 +374,16 @@ if (!existsSync(VITEST)) {
   fail(`vitest를 찾지 못했다: ${VITEST} — 먼저 \`bun install\`을 실행하세요`);
   process.exit(1);
 }
+// 앞선 실행이 남긴 변조부터 되돌린다. 그 위에서 새 스윕을 돌리면 기준선이 이미 빨강이라
+// 무엇이 무엇을 물었는지 판정할 수 없다.
+if (recoverAbandoned()) process.exit(1);
 
-for (const target of targets) sweep(target);
+for (const target of targets) await sweep(target);
 
 if (process.exitCode) {
-  console.error(`\nFAIL ${LABEL}: 위 사유를 보세요`);
+  const line = `FAIL ${LABEL}: 위 사유를 보세요`;
+  console.log(`\n${line}`);
+  console.error(line);
 } else {
   const total = targets.reduce((n, t) => n + t.mutations.length, 0);
   console.log(`\nPASS ${LABEL}: 대상 ${targets.length}개 · 변조 ${total}건 전부 빨강`);
