@@ -47,6 +47,16 @@ const TABLE_BEGIN = '<!-- gates:begin -->';
 const TABLE_END = '<!-- gates:end -->';
 /** CI가 불러야 하는 단 하나의 진입점. 게이트를 하나씩 부르면 선행 관계가 무너진다. */
 const CI_ENTRYPOINT = 'gate:ci';
+/**
+ * 그 진입점을 **어떻게** 부르는지까지 못박는다. 부분 문자열로 보면 접미 인자 하나가
+ * 실행 전체를 우회한다 — `bun run gate:ci --check-only`는 `--ci --check-only`로 전달돼
+ * 게이트를 0개 돌고 exit 0을 낸다(실측). `--help`도, `|| true`도 같은 문을 지난다.
+ * 이름표를 묶고 그것이 가리키는 것도 묶었는데 부르는 방식을 안 묶으면 아무것도 묶이지 않는다.
+ */
+const CANONICAL_CI_RUN = `bun run ${CI_ENTRYPOINT}`;
+const CANONICAL_CI_SCRIPT = 'node scripts/run-gates.mjs --ci';
+/** 게이트 워크플로에서 판정할 수 없게 만드는 것들. 셋 다 "돌았다"를 뜻하지 않는다. */
+const SHELL_OPERATORS = /(\|\||&&|;|\||>|<)/;
 const GATE_WORKFLOWS = ['gate.yml', 'gate.yaml'];
 
 function fail(message) {
@@ -192,9 +202,18 @@ function readWorkflowInvocations(dir) {
       // `run:` 단계의 값만 실행으로 센다. `echo "bun run gate:ci"`는 실행이 아니다.
       const step = /^-?\s*run\s*:\s*(.*)$/.exec(line);
       if (!step) continue;
-      const cmd = step[1].trim().replace(/^['"]|['"]$/g, '');
+      const cmd = step[1].trim().replace(/^['"]|['"]$/g, '').replace(/\s+/g, ' ');
       if (/^echo\b/.test(cmd)) continue;
-      for (const m of cmd.matchAll(/\bbun\s+run\s+([A-Za-z0-9:_-]+)/g)) keys.push(m[1]);
+      // 셸 연산자가 있으면 무엇이 실제로 돌고 무엇이 가려지는지 이 파서로는 판정할 수 없다.
+      if (SHELL_OPERATORS.test(cmd)) guards.push(cmd);
+      for (const m of cmd.matchAll(/\bbun\s+run\s+([A-Za-z0-9:_-]+)/g)) {
+        // 진입점은 **정확한 명령**이어야 한다. 접미 인자 하나가 실행을 통째로 우회한다.
+        if (m[1] === CI_ENTRYPOINT && cmd !== CANONICAL_CI_RUN) {
+          guards.push(`진입점 호출이 정확하지 않다: "${cmd}" — "${CANONICAL_CI_RUN}"이어야 한다`);
+          continue;
+        }
+        keys.push(m[1]);
+      }
     }
   }
   return { keys, guards };
@@ -286,8 +305,8 @@ function checkPlaces(dir, registryPath) {
     if (entry.length === 1) {
       const cmd = scripts[CI_ENTRYPOINT];
       if (cmd === undefined) fail(`package.json에 ${CI_ENTRYPOINT} 스크립트가 없다`);
-      if (!commandInvokes(cmd, 'run-gates.mjs') || !/(^|\s)--ci(\s|$)/.test(cmd)) {
-        fail(`${CI_ENTRYPOINT}가 러너를 --ci로 부르지 않는다: "${cmd}"`);
+      if (cmd.trim().replace(/\s+/g, ' ') !== CANONICAL_CI_SCRIPT) {
+        fail(`${CI_ENTRYPOINT}가 정확한 명령이 아니다: "${cmd}" — "${CANONICAL_CI_SCRIPT}"이어야 한다`);
       }
     }
   }

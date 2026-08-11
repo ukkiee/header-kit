@@ -1,0 +1,50 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "structure",
+  "ack": "human-triage",
+  "triageMode": "human",
+  "verdict": "needs-attention",
+  "summary": "Do not ship. Reverification: S2-F1 resolved—`na: never` converts N/A to FAIL and only PASS unlocks dependents (`scripts/run-gates.mjs:361-386`). S2-F2 is still open—the workflow check accepts suffix arguments that bypass execution. S2-F3 resolved—CI dependency closure is checked before filtering (`scripts/run-gates.mjs:250-261,423-425`). All 58 runner tests pass, but a live `bun run gate:ci --check-only` exited 0 after running zero gates. The fix scan found no separate new critical/high issue.",
+  "planFile": "docs/reviews/agent-harness/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 27,
+  "target": "branch diff against main",
+  "reviewer": "codex",
+  "fallbackFrom": null,
+  "fallbackReason": null,
+  "effort": "xhigh",
+  "inputMode": "self-collect",
+  "reviewedSha": "b59fe44d11d9007ffebe94d8928c3ca5862b2861",
+  "reviewedTree": "3267d9e600eb7d35390fe3b6255bc0baadb2d552",
+  "reviewedPlanSha256": "03b62a46745c39ce370241fc99db92aa64ba9b6226dde4ae57bc59a533ab94d2",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "backendExitCode": 0,
+  "parseError": null,
+  "promptDelivery": {
+    "mechanism": "token-echo",
+    "enforcing": false,
+    "verified": true,
+    "echoed": "10bbc9dcd24c5469"
+  },
+  "findingCount": 1,
+  "planFindingCount": 0,
+  "triage": "review-gate SKILL.md § Triage governs: render EVERY finding as a full table row, never inside a dialog; then ask the ROUND before the rows — take every Proposed decision as it stands, or decide row by row — and `as proposed` ends the round in that ONE action; only if row-by-row was chosen, ask per finding with that row's Proposed decision as the first option, a reject or defer taking a free-text reason; echo back ONLY the rows that carried free text, and none if the round was decided by selection alone; max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "S2-F2 remains open: CI accepts a zero-gate invocation",
+      "body": "`readWorkflowInvocations` accepts any inline `run:` value containing `bun run gate:ci`, rather than requiring the canonical command. Therefore `run: bun run gate:ci --check-only` passes parity; Bun forwards the flag, and the runner's check-only branch exits 0 without executing selected gates (`scripts/run-gates.mjs:427-430`). The same parser accepts `|| true`, which masks gate failures. Ticket 08 can consequently install permanently green CI that runs none of the nine-ticket gate graph.",
+      "file": "scripts/run-gates.mjs",
+      "line_start": 193,
+      "line_end": 197,
+      "confidence": 0.99,
+      "recommendation": "Accept only the exact normalized workflow scalar `bun run gate:ci` and exact package script `node scripts/run-gates.mjs --ci`, rejecting suffix arguments and shell operators. Add public-process fixtures for `--check-only`, `--help`, and `|| true`.",
+      "isPlanFinding": false
+    }
+  ],
+  "next_steps": [
+    "Tighten the CI command shapes and rerun the runner suite plus the zero-gate counterexample."
+  ]
+}

@@ -727,6 +727,52 @@ describe('run-gates — CI는 러너를 한 번 부른다', () => {
     expect(r.code).toBe(1);
   });
 
+  it('진입점에 접미 인자가 붙으면 실패한다 — --check-only', () => {
+    // bun이 인자를 전달하므로 `--ci --check-only`가 되어 게이트를 0개 돌고 exit 0을 낸다.
+    // 부분 문자열로 보면 이 워크플로가 CI 일치를 통과한다 — 영구 초록 CI가 세워지는 자리.
+    const dir = tree({
+      gates: [ROW('alpha', 'alpha', { ci: 'yes' })],
+      scripts: { alpha: OK, 'gate:ci': CI_OK },
+      files: CI_WF('      - run: bun run gate:ci --check-only\n'),
+    });
+    const r = run(['--dir', dir, '--check-only']);
+    expect(r.out).toMatch(/^FAIL run-gates:/m);
+    expect(r.code).toBe(1);
+  });
+
+  it('진입점에 접미 인자가 붙으면 실패한다 — --help', () => {
+    const dir = tree({
+      gates: [ROW('alpha', 'alpha', { ci: 'yes' })],
+      scripts: { alpha: OK, 'gate:ci': CI_OK },
+      files: CI_WF('      - run: bun run gate:ci --help\n'),
+    });
+    const r = run(['--dir', dir, '--check-only']);
+    expect(r.out).toMatch(/^FAIL run-gates:/m);
+    expect(r.code).toBe(1);
+  });
+
+  it('셸 연산자로 실패를 가리면 실패한다 — || true', () => {
+    const dir = tree({
+      gates: [ROW('alpha', 'alpha', { ci: 'yes' })],
+      scripts: { alpha: OK, 'gate:ci': CI_OK },
+      files: CI_WF('      - run: bun run gate:ci || true\n'),
+    });
+    const r = run(['--dir', dir, '--check-only']);
+    expect(r.out).toMatch(/^FAIL run-gates:/m);
+    expect(r.code).toBe(1);
+  });
+
+  it('gate:ci 스크립트에 군더더기가 붙으면 실패한다', () => {
+    const dir = tree({
+      gates: [ROW('alpha', 'alpha', { ci: 'yes' })],
+      scripts: { alpha: OK, 'gate:ci': 'node scripts/run-gates.mjs --ci --check-only' },
+      files: CI_WF('      - run: bun run gate:ci\n'),
+    });
+    const r = run(['--dir', dir, '--check-only']);
+    expect(r.out).toMatch(/^FAIL run-gates:/m);
+    expect(r.code).toBe(1);
+  });
+
   it('ci: yes인 게이트의 선행이 ci: no면 실패한다', () => {
     // 선행이 CI 집합에서 빠지면 그 판정이 없어져 소비자가 선행이 없는 것처럼 돈다 —
     // DAG가 CI에서만 조용히 사라진다.

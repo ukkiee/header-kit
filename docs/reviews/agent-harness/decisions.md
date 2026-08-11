@@ -280,3 +280,35 @@ S2-F3 accept — CI mode silently removes prerequisite edges
 structure findings 3 → 3. 줄지 않았다. 다만 성격은 옮겨 갔다 — r1은 **없는 것**(판정 상태
 기계, 표 대조, CI 진입점)을 짚었고, r2는 그것을 세우며 생긴 **틈**(선언과 실행의 모순,
 이름표와 실체의 분리, 필터가 지운 간선)을 짚었다. 셋 다 새로 만든 기계장치 안에 있었다.
+
+### structure r3 (codex)
+
+사용자가 명시적으로 승인한 라운드(상한 2 초과). r2 재검증: S2-F1·S2-F3 resolved,
+**S2-F2는 여전히 열려 있었다.** findings 1건. 사람 결정: `as proposed` — accept.
+
+S3-F1 accept — S2-F2 remains open: CI accepts a zero-gate invocation
+
+#### r2에서 절반만 묶었던 자리
+
+`gate:ci` **스크립트**가 러너를 부르는지는 확인했는데 **워크플로가 그 스크립트를 어떻게
+부르는지**는 여전히 부분 문자열로 봤다. 그래서 접미 인자 하나가 실행 전체를 우회한다.
+실측으로 재현했다:
+
+    $ bun run gate:ci --check-only
+    $ node scripts/run-gates.mjs --ci --check-only
+    PASS run-gates: 5 gate(s) registered, 자리들이 일치한다 (checks only)
+
+게이트를 0개 돌고 종료 코드 0. 티켓 08이 아홉 티켓의 게이트 그래프를 **하나도 돌리지 않는
+영구 초록 CI**를 세울 수 있는 자리였다. `--help`도, `|| true`도 같은 문을 지난다.
+
+이름표를 묶고 그것이 가리키는 것도 묶었는데 **부르는 방식**을 안 묶으면 아무것도 묶이지
+않는다. 셋을 함께 묶었다: 워크플로 호출은 정확히 `bun run gate:ci`, 스크립트는 정확히
+`node scripts/run-gates.mjs --ci`, 셸 연산자는 거절. 수정 뒤 세 경로를 다시 재어 정확한
+호출만 통과하고 접미·연산자는 막히는 것을 확인했다.
+
+#### 세 라운드의 추이
+
+structure findings 3 → 3 → 1. 앞의 둘은 매번 **직전 라운드가 세운 기계장치 안에서** 새 틈이
+나왔지만, r3의 하나는 새 결함이 아니라 **r2 수정이 절반만 닿았던 것**이다. 성격이 바뀐 지점이고,
+이번 수정은 넓히는 것이 아니라 **좁히는 것**(정확한 문자열 일치 + 판정 불가한 모양의 거절)이라
+새로 생길 틈의 표면이 거의 없다.
