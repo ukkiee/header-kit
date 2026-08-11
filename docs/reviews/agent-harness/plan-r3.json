@@ -1,0 +1,62 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "plan",
+  "ack": "human-triage",
+  "triageMode": "human",
+  "verdict": "needs-attention",
+  "summary": "Do not slice yet. Round-2 re-verification: all four findings are resolved—runner isolation (lines 148-150, 301), browser-test sets (227-234, 315), formatting-stable accessibility fingerprints (250-254, 313), and formatter tree-equivalence proof (180-182, 309, 327). The fix scan found no critical issue but found two new high-severity defects in the introduced mechanisms.",
+  "planFile": "docs/reviews/agent-harness/spec.md",
+  "planInDiff": true,
+  "reviewedFileCount": 5,
+  "target": "working tree diff",
+  "reviewer": "codex",
+  "fallbackFrom": null,
+  "fallbackReason": null,
+  "effort": "xhigh",
+  "inputMode": "inline-diff",
+  "reviewedSha": "b12d1ea1290f8627f9372ab9b7c470a1b0406286",
+  "reviewedTree": "d0c41e10a1b689ef987c9f7e8a266f5e5b0991ec",
+  "reviewedPlanSha256": "37555c21ea05091b84e326ac4f69e3937dbb2bba2cbb64dd2be3b5c1eee1b3ae",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "backendExitCode": 0,
+  "parseError": null,
+  "promptDelivery": {
+    "mechanism": "token-echo",
+    "enforcing": false,
+    "verified": true,
+    "echoed": "99bf5bf2fabb189e"
+  },
+  "findingCount": 2,
+  "planFindingCount": 2,
+  "triage": "review-gate SKILL.md § Triage governs: render EVERY finding as a full table row, never inside a dialog; then ask the ROUND before the rows — take every Proposed decision as it stands, or decide row by row — and `as proposed` ends the round in that ONE action; only if row-by-row was chosen, ask per finding with that row's Proposed decision as the first option, a reject or defer taking a free-text reason; echo back ONLY the rows that carried free text, and none if the round was decided by selection alone; max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "Open question: When is a dead runner's lock actually stale?",
+      "body": "Lines 141-150 run the production build under a runner-owned lock and allow reclaim once the owner process is dead. That assumes owner death means all output writers stopped. If the runner dies while its WXT/build child survives, that child can keep writing `.output/chrome-mv3`; the next runner can reclaim the lock, delete the directory, and build or consume concurrently, recreating mixed-artifact or false-green results. The fixture at line 301 only requires recovery of a dead process's lock, not proof that surviving descendants have stopped.",
+      "file": "docs/reviews/agent-harness/spec.md",
+      "line_start": 141,
+      "line_end": 150,
+      "confidence": 0.96,
+      "recommendation": "Define lock ownership over the complete process group and reclaim only after all descendant writers are terminated and drained, or use run-unique output directories. Add a fixture that kills the runner mid-build while its child continues writing and proves another run cannot overlap or consume mixed output.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "high",
+      "title": "Browser parity cannot see browser use through the mandated child-process seam",
+      "body": "D12 classifies a test as browser-backed by whether it imports Playwright. However, lines 272-274 require gate tests to spawn the executable as a child process, so an overflow-gate test can import only Vitest and `child_process` while the spawned gate imports and launches Playwright. If that test is accidentally named `*.test.mjs`, the parity check sees no Playwright import, accepts it into `bun run test`, and browserless CI attempts to launch Chromium. The fixtures at line 315 cover direct imports and glob membership, not this required transitive execution path.",
+      "file": "docs/reviews/agent-harness/spec.md",
+      "line_start": 227,
+      "line_end": 234,
+      "confidence": 0.99,
+      "recommendation": "Derive runtime classification from explicit gate/test metadata or inspect the spawned target's dependency/execution path. Add a misnamed test that spawns a Playwright-using gate without importing Playwright itself and require parity to fail.",
+      "isPlanFinding": true
+    }
+  ],
+  "next_steps": [
+    "Close stale-lock recovery over surviving child processes or adopt run-unique build outputs.",
+    "Replace direct-import browser detection with classification that covers spawned gate executables, then add the transitive negative fixture."
+  ]
+}

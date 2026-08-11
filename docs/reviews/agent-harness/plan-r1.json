@@ -1,0 +1,129 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "plan",
+  "ack": "human-triage",
+  "triageMode": "human",
+  "verdict": "needs-attention",
+  "summary": "Do not slice this plan yet. Several proposed gates can report green without testing the current source, and the CI, lint, accessibility, and acceptance contracts contain unresolved contradictions.",
+  "planFile": "docs/reviews/agent-harness/spec.md",
+  "planInDiff": true,
+  "reviewedFileCount": 2,
+  "target": "working tree diff",
+  "reviewer": "codex",
+  "fallbackFrom": null,
+  "fallbackReason": null,
+  "effort": "xhigh",
+  "inputMode": "inline-diff",
+  "reviewedSha": "b12d1ea1290f8627f9372ab9b7c470a1b0406286",
+  "reviewedTree": "d0c41e10a1b689ef987c9f7e8a266f5e5b0991ec",
+  "reviewedPlanSha256": "10a222a22c13caf0d0c289cef1999a5f1e1cd135df038449c3a1efffe1b3303d",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "backendExitCode": 0,
+  "parseError": null,
+  "promptDelivery": {
+    "mechanism": "token-echo",
+    "enforcing": false,
+    "verified": true,
+    "echoed": "eaa85d18d19db3c6"
+  },
+  "findingCount": 8,
+  "planFindingCount": 8,
+  "triage": "review-gate SKILL.md § Triage governs: render EVERY finding as a full table row, never inside a dialog; then ask the ROUND before the rows — take every Proposed decision as it stands, or decide row by row — and `as proposed` ends the round in that ONE action; only if row-by-row was chosen, ask per finding with that row's Proposed decision as the first option, a reject or defer taking a free-text reason; echo back ONLY the rows that carried free text, and none if the round was decided by selection alone; max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "Open question: What makes a package script a gate?",
+      "body": "Lines 109-114 require four-way equality and say a script missing from the table must fail, but never define the participating script universe or a CI-membership field. `package.json` already contains ordinary scripts such as `dev`, `zip`, `test:watch`, `storybook`, and `postinstall`. A literal comparison remains permanently red; an invented naming heuristic can silently miss orphan gates or CI drift.",
+      "file": "docs/reviews/agent-harness/spec.md",
+      "line_start": 109,
+      "line_end": 114,
+      "confidence": 0.99,
+      "recommendation": "Define one canonical registry schema containing gate ID, package-script key, hard/advisory kind, CI eligibility, prerequisites, and N/A policy. Compare only explicitly registered gates, and test ordinary non-gate scripts plus orphaned gates and metadata drift.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "high",
+      "title": "Open question: How are build-artifact gates ordered?",
+      "body": "The runner is specified only as “전부 돌리고,” while D10 and existing bundle/writer-lane gates consume `.output/chrome-mv3`. Without a clean-build dependency, consumers can inspect a previous build or race the current build, allowing manifest or permission changes in current source to pass against stale output. The runner fixtures cover membership drift but not ordering or stale artifacts.",
+      "file": "docs/reviews/agent-harness/spec.md",
+      "line_start": 111,
+      "line_end": 114,
+      "confidence": 0.99,
+      "recommendation": "Specify an execution DAG: replace the target output, await one successful production build, then run artifact consumers against that exact output. Mark dependents blocked after build failure and test missing, stale, failed, and concurrently attempted builds.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "high",
+      "title": "Browser-backed gate tests contradict browserless CI",
+      "body": "Line 207 puts every `scripts/**/*.test.mjs` test into `bun run test`, while line 223 requires the overflow-gate test to launch a real browser. D12 simultaneously requires browserless CI and keeps browser gates outside it. An implementer must therefore omit the main `test` gate from CI, unexpectedly provision Chromium, or violate the single-test-command decision.",
+      "file": "docs/reviews/agent-harness/spec.md",
+      "line_start": 207,
+      "line_end": 223,
+      "confidence": 0.99,
+      "recommendation": "Split browser-backed gate tests into an explicitly classified command excluded from browserless CI, or revise D12 to install and run Playwright Chromium. Add parity tests proving the selected CI classification.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "high",
+      "title": "D13 promises floating-promise detection without the required type information",
+      "body": "Line 185 claims Oxlint can catch “타입 없이도 … 떠도는 프로미스” in `scripts/`, but Oxlint's official `typescript/no-floating-promises` rule [requires type information and type-aware linting](https://oxc.rs/docs/guide/usage/linter/rules/typescript/no-floating-promises). These `.mjs` scripts remain excluded from `tsconfig`, so a competent implementation using plain Oxlint can stay green while missing exactly the defect promised by story 15.",
+      "file": "docs/reviews/agent-harness/spec.md",
+      "line_start": 183,
+      "line_end": 185,
+      "confidence": 0.99,
+      "recommendation": "Require and configure type-aware linting where applicable, decide how gate scripts enter a type program—such as conversion to TypeScript—or narrow the promise-detection claim. Add a negative floating-promise fixture that must fail.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "high",
+      "title": "The accessibility scope permits known and replacement regressions",
+      "body": "The plan excludes fixing all existing accessibility violations and records only a non-increasing count. That cannot deliver stories 13-14's observable keyboard and accessible-name guarantees: known failures may remain, and a new violation can replace a fixed one without increasing the total. No accessibility rule set, negative lint fixture, keyboard flow, or accessible-name browser assertion closes this gap.",
+      "file": "docs/reviews/agent-harness/spec.md",
+      "line_start": 250,
+      "line_end": 250,
+      "confidence": 0.98,
+      "recommendation": "Either narrow the stories to “no new named diagnostics” and baseline exact per-diagnostic fingerprints, or remediate the relevant violations and add browser-level keyboard and accessible-name acceptance cases. Include a same-count replacement test.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "medium",
+      "title": "The manifest gate permits unsupported Chrome versions",
+      "body": "The invariant asks only whether a minimum Chrome version is declared, and the fixture tests only absence. A manifest containing `minimum_chrome_version: \"80\"` would pass even though `wxt.config.ts` documents Chrome 108 as the required DNR floor, allowing installation where required APIs are unsupported.",
+      "file": "docs/reviews/agent-harness/spec.md",
+      "line_start": 163,
+      "line_end": 163,
+      "confidence": 0.99,
+      "recommendation": "Specify exact equality to `108` or a documented numeric lower bound, then add below-boundary, boundary, malformed, and missing-value fixtures.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "medium",
+      "title": "The overflow gate can pass before the seeded UI renders",
+      "body": "Line 156 declares the overflow scan deterministic without defining readiness. The existing script waits a fixed 500 ms, while the app renders `null` until asynchronous state loading completes and lazily imports the sortable profile list. On a slow run, the gate can scan an empty or partial tree and report no overflow.",
+      "file": "docs/reviews/agent-harness/spec.md",
+      "line_start": 156,
+      "line_end": 156,
+      "confidence": 0.97,
+      "recommendation": "Require an observable readiness marker, the complete seeded profile count, loaded fonts and lazy content, and a failing readiness timeout. Add a seed/load-failure case proving an empty tree cannot pass.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "medium",
+      "title": "The format-only proof does not inspect the change",
+      "body": "The claim that `git show --stat` proves the second commit changed only formatting is false: stats show paths and line counts, not content or semantics. A logic edit hidden in the mass-format commit can satisfy this evidence and evade a reviewer instructed to skip it; passing tests cannot prove semantic equivalence outside their coverage.",
+      "file": "docs/reviews/agent-harness/spec.md",
+      "line_start": 235,
+      "line_end": 235,
+      "confidence": 1,
+      "recommendation": "Reproduce the pinned formatter from the format commit's parent in a clean tree and require the resulting tree to exactly equal the commit. Add an acceptance case where an extra semantic edit makes this proof fail.",
+      "isPlanFinding": true
+    }
+  ],
+  "next_steps": [
+    "Revise the registry and runner execution contract before ticket slicing.",
+    "Resolve the CI/browser-test split and replace aggregate lint baselines with explicit acceptance contracts.",
+    "Strengthen the manifest, overflow-readiness, and format-only negative cases."
+  ]
+}

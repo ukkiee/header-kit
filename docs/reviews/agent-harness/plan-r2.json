@@ -1,0 +1,86 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "plan",
+  "ack": "human-triage",
+  "triageMode": "human",
+  "verdict": "needs-attention",
+  "summary": "Do not slice yet. Round-1 re-verification: F1 resolved—D4 defines the canonical registry, fields, participating scripts, orphan convention, and negative fixtures (lines 110-129, 278-281). F2 still open—the serial DAG does not isolate simultaneous runners sharing `.output/chrome-mv3` (lines 141-146, 285). F3 still open—the commands are split, but no rule defines their disjoint test-file sets (lines 223-226, 264-266). F4 resolved—the promise guarantee is restricted to type-aware `src/` linting with a failing fixture (lines 232-234, 295). F5 resolved as originally raised—stories, fingerprint replacement behavior, and scope are aligned (lines 48-49, 236-242, 297); however, the fix introduced a new high-risk interaction with the format migration. F6 resolved—Chrome 108 exact matching and boundary fixtures are required (lines 199-201, 287). F7 resolved—complete rendering, lazy content, fonts, timeout failure, and empty/partial-render fixtures are required (lines 188-192, 289). F8 still open—D8 and its fixture use tree equivalence, but line 309 still prescribes the rejected `git show --stat` proof. The fix scan found one additional high issue and no critical issue.",
+  "planFile": "docs/reviews/agent-harness/spec.md",
+  "planInDiff": true,
+  "reviewedFileCount": 4,
+  "target": "working tree diff",
+  "reviewer": "codex",
+  "fallbackFrom": null,
+  "fallbackReason": null,
+  "effort": "xhigh",
+  "inputMode": "inline-diff",
+  "reviewedSha": "b12d1ea1290f8627f9372ab9b7c470a1b0406286",
+  "reviewedTree": "d0c41e10a1b689ef987c9f7e8a266f5e5b0991ec",
+  "reviewedPlanSha256": "354f51a6a087b127441ab28610ba121447e25240bfd67813f4e5a29d8470e23c",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "backendExitCode": 0,
+  "parseError": null,
+  "promptDelivery": {
+    "mechanism": "token-echo",
+    "enforcing": false,
+    "verified": true,
+    "echoed": "5514223c3b647e37"
+  },
+  "findingCount": 4,
+  "planFindingCount": 4,
+  "triage": "review-gate SKILL.md § Triage governs: render EVERY finding as a full table row, never inside a dialog; then ask the ROUND before the rows — take every Proposed decision as it stands, or decide row by row — and `as proposed` ends the round in that ONE action; only if row-by-row was chosen, ask per finding with that row's Proposed decision as the first option, a reject or defer taking a free-text reason; echo back ONLY the rows that carried free text, and none if the round was decided by selection alone; max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "Open question: How are concurrent runner outputs isolated?",
+      "body": "The fix says the runner will “산출물 디렉터리를 지우고” and build once in the shared `.output/chrome-mv3`, then assumes consumers see “이 회차의 빌드가 만든 산출물.” That only orders one invocation. Two agents can overlap: runner A builds, runner B deletes or replaces the directory, and A's consumers then inspect partial output or B's artifact. The accepted F2 recommendation included concurrent attempts, but line 285's fixture ledger omits them.",
+      "file": "docs/reviews/agent-harness/spec.md",
+      "line_start": 141,
+      "line_end": 146,
+      "confidence": 0.98,
+      "recommendation": "Lock the entire clean-build-consume phase or build into a run-unique directory passed explicitly to every consumer. Add an overlapping-run fixture proving the second invocation is rejected or both runs remain isolated.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "high",
+      "title": "Open question: What defines the browser-backed test set?",
+      "body": "D12 declares `bun run test` browserless and `bun run test:browser` browser-backed, but never defines a filename convention, registry, include/exclude globs, or metadata that selects those sets. The Testing Decisions then say the only Vitest configuration change is including all `scripts/**/*.test.mjs`. With the current `test: vitest run`, a literal implementation selects every script test; otherwise the implementer must invent the split. The proposed parity assertion is circular because “브라우저 없는 집합” itself has no defined source of truth.",
+      "file": "docs/reviews/agent-harness/spec.md",
+      "line_start": 223,
+      "line_end": 266,
+      "confidence": 0.99,
+      "recommendation": "Define one machine-readable classification, such as `.browser.test.mjs` plus explicit complementary Vitest globs. Make both commands and the parity check derive from it, and test that a browser fixture is excluded from `test` and required by `test:browser`.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "high",
+      "title": "Open question: How do accessibility fingerprints survive formatting?",
+      "body": "The new baseline is “규칙 이름 + 파일 + 식별 가능한 위치,” with every new fingerprint failing. D8 separately requires the lint/gate setup before a repository-wide format commit. If an implementer uses Oxlint's natural line/column location, formatting—or merely inserting a line before a known violation—turns the unchanged violation into a removed fingerprint plus a new one. The hard gate then falsely blocks the format-only commit, or forces a baseline refresh that can bless a genuine replacement regression. The tests cover replacement diagnostics but not position-only movement.",
+      "file": "docs/reviews/agent-harness/spec.md",
+      "line_start": 240,
+      "line_end": 240,
+      "confidence": 0.96,
+      "recommendation": "Define a position-stable fingerprint, such as rule, file, and normalized diagnostic subject or explicit suppression ID; order baseline capture after the format migration; and add a fixture where only preceding layout/lines change while the same violation must remain recognized.",
+      "isPlanFinding": true
+    },
+    {
+      "severity": "medium",
+      "title": "The format-only proof still accepts evidence that does not inspect the change",
+      "body": "D8 and line 293 correctly require reproducing the pinned formatter and comparing trees, but the normative regression section still says “`git show --stat`으로 그 커밋이 포맷 외 아무것도 건드리지 않았음을 보인다.” A competent engineer can follow this later instruction and satisfy the plan with the exact proof F8 established as invalid. Tests passing cannot prove semantic equivalence outside their coverage.",
+      "file": "docs/reviews/agent-harness/spec.md",
+      "line_start": 309,
+      "line_end": 309,
+      "confidence": 1,
+      "recommendation": "Replace line 309 with the pinned-formatter tree-equivalence procedure and recorded tree hash. Keep `git show --stat` only as optional descriptive output, never as proof.",
+      "isPlanFinding": true
+    }
+  ],
+  "next_steps": [
+    "Specify concurrency isolation for build artifacts and add the omitted overlapping-run fixture.",
+    "Define the authoritative browser-test classification used by both commands and parity checks.",
+    "Make accessibility fingerprints stable across the required format migration and test position-only movement.",
+    "Remove the stale `git show --stat` acceptance language from the regression section."
+  ]
+}
