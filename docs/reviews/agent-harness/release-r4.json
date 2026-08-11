@@ -1,0 +1,64 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "release",
+  "ack": "human-triage",
+  "triageMode": "human",
+  "verdict": "needs-attention",
+  "summary": "NO-SHIP. Step (1): R3-F1 is resolved for both reported shapes; the brace-depth scan now identifies `Input` through nested JSX and a preceding comparison expression. Step (2): the replacement creates a new literal-triggered false green, and one claimed regression test never exercises the defect it names.",
+  "planFile": "docs/reviews/agent-harness/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 144,
+  "target": "branch diff against main",
+  "reviewer": "codex",
+  "fallbackFrom": null,
+  "fallbackReason": null,
+  "effort": "xhigh",
+  "inputMode": "self-collect",
+  "reviewedSha": "eec2144d048d88dde1ea351058aedc25052b5977",
+  "reviewedTree": "1b6fd4540760894390a6e8b7f228c5439059fc8d",
+  "reviewedPlanSha256": "020faad8d7c7e809f8f13af8a07ef46a929a9e1c99f59aeec90a42ff65035f2e",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "backendExitCode": 0,
+  "parseError": null,
+  "promptDelivery": {
+    "mechanism": "token-echo",
+    "enforcing": false,
+    "verified": true,
+    "echoed": "00618608d2aab4b9"
+  },
+  "findingCount": 2,
+  "planFindingCount": 0,
+  "triage": "review-gate SKILL.md § Triage governs: render EVERY finding as a full table row, never inside a dialog; then ask the ROUND before the rows — take every Proposed decision as it stands, or decide row by row — and `as proposed` ends the round in that ONE action; only if row-by-row was chosen, ask per finding with that row's Proposed decision as the first option, a reject or defer taking a free-text reason; echo back ONLY the rows that carried free text, and none if the round was decided by selection alone; max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "The documented string-literal residual recreates the element-replacement false green",
+      "body": "Quoted contents are still interpreted as structure. With `<input placeholder=\"}\" autoFocus={true}/>` the quoted `}` leaves `depth` positive, so `openTagAt` misses `<input>` and emits the unqualified `autoFocus` key. Replacing `input` with `textarea` produces the same fingerprint and count, and the gate exits successfully. A quoted `>` similarly returns `null`. The claimed “stable” result is therefore a stable collision, not a harmless one-time baseline change; it directly violates the accepted owning-element discriminator contract. The `}` case is also introduced by 0990d67: the preceding raw scan would still identify `input`.",
+      "file": "scripts/a11y-gate.mjs",
+      "line_start": 111,
+      "line_end": 146,
+      "code": " * **남는 것**: 문자열 리터럴 안의 `<`·`>`·중괄호는 구분하지 않는다. 그런 값(`placeholder=\"a>b\"`)이\n * 진단 앞에 오면 접두가 달라질 수 있다 — 안정적으로 달라지므로 거짓 초록이 아니라 한 번의\n * 베이스라인 차이이고, 문자열까지 파싱하는 것은 이 게이트가 사려는 것보다 큰 기계장치다.\n */\nfunction openTagAt(source, offset) {\n  const before = source.subarray(0, offset).toString('utf8');\n  let depth = 0;\n  for (let i = before.length - 1; i >= 0; i -= 1) {\n    const c = before[i];\n    if (c === '}') depth += 1;\n    else if (c === '{') depth = Math.max(0, depth - 1);\n    else if (depth === 0 && c === '>') return null;\n    else if (depth === 0 && c === '<') {\n      const name = /^<\\s*([A-Za-z_$][\\w$.:-]*)/.exec(before.slice(i));\n      return name === null ? null : name[1];\n    }\n  }\n  return null;\n}\n\nfunction fingerprint(diagnostic) {\n  const span = diagnostic.labels?.[0]?.span;\n  const rule = diagnostic.code;\n  if (!span) return `${rule} | ${diagnostic.filename} | (스팬 없음)`;\n  const source = readSource(diagnostic.filename);\n  const text = source\n    .subarray(span.offset, span.offset + span.length)\n    .toString('utf8')\n    .replace(/\\s+/g, ' ')\n    .trim();\n  const name = identifierOf(text);\n  // 스팬이 여는 태그 전체(`<img …>`)를 가리키거나 태그 이름 자체(`div`)를 가리키면 그것이 이미\n  // 요소다 — 접두를 붙이면 무관한 바깥 요소가 지문에 섞인다. 속성 자리에 있는 스팬만\n  // `요소.속성`으로 좁힌다(실측: `autoFocus` → `Input.autoFocus`).\n  const element = text.startsWith('<') ? null : openTagAt(source, span.offset);\n  return `${rule} | ${diagnostic.filename} | ${element === null ? name : `${element}.${name}`}`;",
+      "confidence": 1,
+      "recommendation": "Use a JSX parser/tokenizer or a quote-aware scan that handles quoted attribute values and escapes. Add an `input`→`textarea` fixture with `placeholder=\"}\"` that must fail, plus literal-only edits that must pass.",
+      "isPlanFinding": false
+    },
+    {
+      "severity": "medium",
+      "title": "The comparison regression test cannot fail on the pre-fix bug",
+      "body": "`openTagAt` scans only source preceding the diagnosed `autoFocus` span, but this fixture places `disabled={count < name}` after `autoFocus`. The comparison is therefore never inspected; the pre-0990d67 implementation also identifies `Input` and passes this test. Although the current code resolves the correctly ordered reproduction, the committed test does not protect the second accepted R3-F1 case in this repeatedly defective function.",
+      "file": "scripts/a11y-gate.test.mjs",
+      "line_start": 195,
+      "line_end": 204,
+      "code": "  it('속성 표현식 안의 비교 연산자가 요소로 오인되지 않는다', () => {\n    // `disabled={count < limit}`의 `limit`이 요소로 잡히면, 무관한 변수 이름만 바꿔도 지문이\n    // 갈려 평범한 편집이 빨강이 된다 — r2 F1과 같은 모양이 다른 문으로 들어온다.\n    const cmp = (name) =>\n      `export const A = ({ count, ${name} }: { count: number; ${name}: number }) => (\\n  <Input autoFocus={true} disabled={count < ${name}} />\\n);\\n`;\n    const dir = seeded({ 'src/a.tsx': cmp('limit') });\n    writeFileSync(join(dir, 'src/a.tsx'), cmp('max'));\n    const r = run(dir);\n    expect(r.out).toMatch(/^PASS a11y-gate:/m);\n    expect(r.code).toBe(0);",
+      "confidence": 1,
+      "recommendation": "Place `disabled={count < name}` before `autoFocus`, retain the variable-rename PASS assertion, and verify that reverting to the pre-fix scanner makes this test fail.",
+      "isPlanFinding": false
+    }
+  ],
+  "next_steps": [
+    "Fix quoted-literal handling and add the false-green replacement fixture.",
+    "Correct the comparison fixture, rerun the focused suite and full hard gates, then refresh committed verification evidence."
+  ]
+}

@@ -821,3 +821,22 @@ R3-F1 accept — The R2-F1 fix mistakes JSX expressions for tag boundaries
 **남는 한계를 코드가 적는다**: 문자열 리터럴 안의 `<`·`>`·중괄호는 구분하지 않는다 — 지문이
 안정적으로 달라지므로 거짓 초록이 아니라 한 번의 베이스라인 차이이고, 문자열 파싱은 이 게이트가
 사려는 멈춤보다 큰 기계장치다. 세 번 반복된 자리라 이 판단을 명시적으로 남긴다.
+
+### release r4 (codex)
+
+r3 재검증: R3-F1 resolved(두 모양 다).
+
+R4-F1 accept — The documented string-literal residual recreates the element-replacement false green
+R4-F2 accept — The comparison regression test cannot fail on the pre-fix bug
+
+반영: **요소 접두를 통째로 되돌렸다.** 처음에는 TypeScript 파서로 정확히 하기로 했으나, 이 저장소의
+TypeScript 7에는 `createSourceFile`이 없고(실측: 기본 진입점 export가 `version` 넷, `unstable/ast`의
+409개에도 없음) 프로젝트 API는 tsconfig를 요구하는데 이 게이트의 테스트 seam은 tsconfig 없는 임시
+트리에서 돈다 — **내가 사용자에게 제시한 비용 추정이 틀렸고, 그 사실을 알린 뒤 다시 물어 되돌리기로
+했다.** 지문은 `규칙 | 파일 | 이름`으로 복귀. r1 F2의 구멍은 닫히지 않은 채 한계로 문서화되고,
+통과 케이스로 못 박힌다. R4-F2의 공허한 픽스처는 순서를 고쳤다(비교식을 진단 앞으로).
+
+추가로, 릴리스 게이트가 지적하지 않았지만 내가 찾아 고친 것: **증거의 결정론 주장이 근거보다
+넓었다.** `.output`만 두 번 지우는 것으로는 결과가 트리의 함수임을 보일 수 없다(`.wxt`도 입력이다).
+실측으로 같은 트리가 두 해시를 냈고, 핀에 적혀 있던 값은 재현되지 않는 수였다. 절차(`​.wxt` 재생성)를
+명시하고 재현되는 해시로 갱신했다.
