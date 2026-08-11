@@ -15,6 +15,7 @@
     "format:check": "oxfmt --check",
     "format-proof": "node scripts/format-proof.mjs",
     "a11y-gate": "node scripts/a11y-gate.mjs",
+    "core-line-budget": "node scripts/core-line-budget-gate.mjs",
     "overflow-gate": "node scripts/overflow-gate.mjs",
     "ui-perf": "node scripts/ui-perf.mjs",
     "test": "vitest run",

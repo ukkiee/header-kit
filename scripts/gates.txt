@@ -34,6 +34,7 @@
 gate: check            | check            | hard     | yes | -     | no  | exit  | never
 gate: lint             | lint             | hard     | yes | -     | no  | exit  | never
 gate: format           | format:check     | hard     | yes | -     | no  | exit  | never
+gate: core-line-budget | core-line-budget | hard     | yes | -     | no  | token | never
 gate: a11y-gate        | a11y-gate        | hard     | yes | -     | no  | token | never
 gate: test             | test             | hard     | yes | -     | no  | exit  | never
 gate: build            | build            | hard     | yes | -     | no  | exit  | never
