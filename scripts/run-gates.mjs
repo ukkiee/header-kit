@@ -208,13 +208,14 @@ function readTableRows(path) {
       .map((c) => c.trim());
     const m = /^`([^`]+)`$/.exec(cells[0] ?? '');
     if (!m) continue;
-    // 표 칸: 게이트 | 명령 | 임계값 | kind | CI | N/A 조건
+    // 표 칸: 게이트 | 명령 | 임계값 | kind | CI | needs | N/A 조건
     rows.push({
       id: m[1],
       command: cells[1] ?? '',
       kind: cells[3] ?? '',
       ci: cells[4] ?? '',
-      na: cells[5] ?? '',
+      needs: cells[5] ?? '',
+      na: cells[6] ?? '',
     });
   }
   return rows;
@@ -328,6 +329,12 @@ function checkPlaces(dir, registryPath) {
     }
     if (row.na !== g.na) {
       fail(`표와 레지스트리의 N/A 조건이 다르다: ${g.id} — 표 "${row.na}" vs "${g.na}"`);
+    }
+    // `needs`를 대조하지 않으면 레지스트리에서 `needs: build`를 `-`로 되돌려도 네 자리가 초록이고,
+    // 그 게이트는 회차 경로 대신 기본 경로의 **낡은 산출물**을 잰다 — D4a가 없애러 온 형태가
+    // 이 문으로 되돌아온다. 표에 칸이 없어서 열려 있던 구멍이다(릴리스 r1 F1).
+    if (row.needs !== g.needs) {
+      fail(`표와 레지스트리의 needs가 다르다: ${g.id} — 표 "${row.needs}" vs "${g.needs}"`);
     }
     const ci = CI_CELL.exec(row.ci);
     if (!ci) fail(`표의 CI 칸이 "yes" 또는 "no — <이유>" 모양이 아니다: ${g.id} — 표 "${row.ci}"`);

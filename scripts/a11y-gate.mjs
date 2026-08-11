@@ -94,16 +94,40 @@ function identifierOf(text) {
   return `#${createHash('sha1').update(text).digest('hex').slice(0, 12)}`;
 }
 
+/**
+ * 속성에 걸린 진단이 **붙어 있는 요소**의 이름. 스팬 앞에서 아직 닫히지 않은 여는 태그를
+ * 뒤로 훑어 찾는다.
+ *
+ * 이것이 없으면 지문이 `규칙 | 파일 | autoFocus` 한 버킷으로 접혀, 같은 파일 안에서 위반
+ * 하나를 지우고 하나를 만드는 교체가 개수까지 그대로라 통과한다 — 스펙이 잡으라고 한 바로
+ * 그 모양이다(릴리스 r1 F2. 실측: 커밋된 베이스라인의 `no-autofocus | rule-form.tsx |
+ * autoFocus` 7건이 한 버킷이었고, 요소를 넣자 `Input` 4 + `SuggestInput` 3으로 갈렸다).
+ *
+ * **줄·열이 아니라 이름이라는 점이 중요하다.** 위치를 넣으면 전면 포맷이 모든 지문을 한꺼번에
+ * 무효화하지만(D13a), 요소 이름은 재배치와 재포맷에 흔들리지 않는다.
+ */
+function enclosingElement(source, offset) {
+  const before = source.subarray(0, offset).toString('utf8');
+  const opens = [...before.matchAll(/<([A-Za-z_$][\w$.:-]*)(?![^<>]*\/>)/g)];
+  return opens.length > 0 ? opens[opens.length - 1][1] : null;
+}
+
 function fingerprint(diagnostic) {
   const span = diagnostic.labels?.[0]?.span;
   const rule = diagnostic.code;
   if (!span) return `${rule} | ${diagnostic.filename} | (스팬 없음)`;
-  const text = readSource(diagnostic.filename)
+  const source = readSource(diagnostic.filename);
+  const text = source
     .subarray(span.offset, span.offset + span.length)
     .toString('utf8')
     .replace(/\s+/g, ' ')
     .trim();
-  return `${rule} | ${diagnostic.filename} | ${identifierOf(text)}`;
+  const name = identifierOf(text);
+  // 스팬이 여는 태그 전체(`<img …>`)를 가리키면 그 자체가 요소이므로 더 붙일 것이 없다.
+  // 그렇지 않은 스팬(속성 이름, 또는 태그 이름만 가리키는 규칙)에는 **담고 있는 요소**를
+  // 앞에 붙인다 — 실측: `autoFocus` → `Input.autoFocus`, `div` → `span.div`.
+  const element = text.startsWith('<') ? null : enclosingElement(source, span.offset);
+  return `${rule} | ${diagnostic.filename} | ${element === null ? name : `${element}.${name}`}`;
 }
 
 // 훑은 파일이 0이면 진단도 0이고, 그것은 "위반이 없다"가 아니라 **재지 못했다**이다. 그대로

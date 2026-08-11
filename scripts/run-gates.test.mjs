@@ -73,13 +73,13 @@ function tree({
   // 표의 명령·kind·CI·N/A 칸도 레지스트리와 대조되므로 기본값은 레지스트리에서 파생시킨다.
   // 어긋남을 재는 테스트만 `table`로 직접 준다.
   const derived = gates.map((g) => {
-    const [id, script, kind, ci, , , , na] = g.split('|').map((s) => s.trim());
+    const [id, script, kind, ci, needs, , , na] = g.split('|').map((s) => s.trim());
     // `no`는 표에 이유를 요구한다 — 그 요구를 재는 테스트만 `table`로 이유를 빼고 준다.
-    return { id, command: `bun run ${script}`, kind, ci: ci === 'no' ? CI_NO_CELL : ci, na };
+    return { id, command: `bun run ${script}`, kind, ci: ci === 'no' ? CI_NO_CELL : ci, needs, na };
   });
   const tableRows = table ?? derived;
   const cell = (r) =>
-    `| \`${r.id}\` | \`${r.command}\` | 임계값 | ${r.kind} | ${r.ci ?? CI_NO_CELL} | ${r.na} |`;
+    `| \`${r.id}\` | \`${r.command}\` | 임계값 | ${r.kind} | ${r.ci ?? CI_NO_CELL} | ${r.needs ?? '-'} | ${r.na} |`;
   // 마커 밖에 백틱 첫 칸을 가진 표를 함께 둔다 — 실제 문서의 판정 설명 표가 그렇고,
   // 그것이 게이트 행으로 읽히던 결함을 이 픽스처가 계속 재현한다.
   const decoy = '| `PASS` | 돌았고 만족했다 |\n| `N/A` | 잴 대상이 없다 |';
@@ -503,6 +503,38 @@ describe('run-gates — 표와 레지스트리는 id만이 아니라 완료 의�
       gates: [ROW('alpha', 'alpha')],
       scripts: { alpha: OK },
       table: [{ id: 'alpha', command: 'bun run alpha', kind: 'hard', na: '산출물 없음' }],
+    });
+    const r = run(['--dir', dir, '--check-only']);
+    expect(r.out).toMatch(/^FAIL run-gates:/m);
+    expect(r.code).toBe(1);
+  });
+
+  it('needs가 표와 레지스트리에서 다르면 실패한다', () => {
+    // 이 칸을 대조하지 않으면 레지스트리에서 `needs: build`를 `-`로 되돌려도 네 자리가 초록이고,
+    // 그 게이트는 러너가 넘기는 회차 경로 대신 기본 경로의 **낡은 산출물**을 잰다 — D4a가
+    // 없애러 온 형태가 그 문으로 되돌아온다(릴리스 r1 F1).
+    const dir = tree({
+      gates: [ROW('base', 'base'), ROW('consumer', 'consumer', { needs: 'base' })],
+      scripts: { base: OK, consumer: OK },
+      table: [
+        { id: 'base', command: 'bun run base', kind: 'hard', needs: '-', na: 'never' },
+        { id: 'consumer', command: 'bun run consumer', kind: 'hard', needs: '-', na: 'never' },
+      ],
+    });
+    const r = run(['--dir', dir, '--check-only']);
+    expect(r.out).toMatch(/^FAIL run-gates:/m);
+    expect(r.out).toContain('needs');
+    expect(r.code).toBe(1);
+  });
+
+  it('표가 needs를 주장하는데 레지스트리는 아니어도 실패한다', () => {
+    const dir = tree({
+      gates: [ROW('base', 'base'), ROW('consumer', 'consumer')],
+      scripts: { base: OK, consumer: OK },
+      table: [
+        { id: 'base', command: 'bun run base', kind: 'hard', needs: '-', na: 'never' },
+        { id: 'consumer', command: 'bun run consumer', kind: 'hard', needs: 'base', na: 'never' },
+      ],
     });
     const r = run(['--dir', dir, '--check-only']);
     expect(r.out).toMatch(/^FAIL run-gates:/m);
@@ -1400,6 +1432,42 @@ describe('run-gates — 이 저장소 자신', () => {
     const inCi = rows.filter((g) => g.ci === 'yes').map((g) => g.id);
     const headless = rows.filter((g) => g.browser === 'no').map((g) => g.id);
     expect(inCi).toEqual(headless);
+  });
+
+  it('산출물을 소비하는 게이트는 전부 needs: build다 — 파생으로 잰다', () => {
+    // 릴리스 r1 F1: `needs`를 빠뜨린 소비자는 회차 경로 대신 기본 경로의 낡은 산출물을 잰다.
+    // 소비자 목록을 손으로 적으면 그 목록이 낡으므로 **파생한다**: 게이트의 명령이 부르는
+    // 스크립트에서 시작해 `scripts/` 안의 import를 전이적으로 따라가 `artifactsDirFrom`에
+    // 닿으면 그 게이트는 `--artifacts`를 받는다 — 즉 산출물 소비자다.
+    const read = (f) => {
+      try {
+        return readFileSync(join(dirname(RUNNER), f), 'utf8');
+      } catch {
+        return null;
+      }
+    };
+    const consumes = (entry, seen = new Set()) => {
+      if (seen.has(entry)) return false;
+      seen.add(entry);
+      const text = read(entry);
+      if (text === null) return false;
+      // 정의 파일 자신은 세지 않는다 — `tokenFail`만 쓰려고 같은 모듈을 import하는 게이트가
+      // 있어서, 그 파일까지 걸어 들어가 정의를 세면 전부 소비자로 읽힌다(실측).
+      if (entry !== 'artifacts-arg.mjs' && text.includes('artifactsDirFrom')) return true;
+      return [...text.matchAll(/from '\.\/([\w.-]+\.mjs)'/g)].some((m) => consumes(m[1], seen));
+    };
+    const pkg = JSON.parse(readFileSync(join(dirname(RUNNER), '..', 'package.json'), 'utf8'));
+    const derived = [];
+    for (const g of registry()) {
+      const cmd = pkg.scripts[g.script] ?? '';
+      const files = [...cmd.matchAll(/scripts\/([\w.-]+\.mjs)/g)].map((m) => m[1]);
+      if (files.some((f) => consumes(f))) derived.push(g.id);
+    }
+    const declared = registry()
+      .filter((g) => g.needs === 'build')
+      .map((g) => g.id);
+    expect(derived.length).toBeGreaterThan(0);
+    expect([...derived].sort()).toEqual([...declared].sort());
   });
 
   it('test는 CI에서 돌고 test:browser는 돌지 않는다', () => {

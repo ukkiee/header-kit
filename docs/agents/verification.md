@@ -51,24 +51,24 @@ bun run gate:ci           # CI가 도는 것과 정확히 같은 부분집합 �
 
 <!-- gates:begin -->
 
-| 게이트 | 명령 | 임계값 | kind | CI | N/A 조건 |
-| --- | --- | --- | --- | --- | --- |
-| `check` | `bun run check` | `tsc --noEmit` 오류 0 | hard | yes | never |
-| `lint` | `bun run lint` | `oxlint` 진단 0 — correctness 카테고리 · 레이어 방향(상향 import) · 순환/자기 import · type-aware 떠도는 프로미스. `scripts/`도 같은 강도로 재되 `.mjs`의 추론이 `any`로 떨어지는 규칙 하나만 끈다 (설정의 정본은 `.oxlintrc.json`) | hard | yes | never |
-| `format` | `bun run format:check` | `oxfmt --check` 어긋난 파일 0. 코드만 본다 — 마크다운·`docs/reviews/`·`.scratch/`는 제외 (설정의 정본은 `.oxfmtrc.json`) | hard | yes | never |
-| `core-line-budget` | `bun run core-line-budget` | `AGENTS.md`의 `core:begin`/`core:end` 마커 **사이** 줄 수가 코어가 스스로 선언한 `Target <N> lines` 안. 마커 쌍이 하나가 아니거나 선언이 하나가 아니면 FAIL (예산의 정본은 코어 자신) | hard | yes | never |
-| `a11y-gate` | `bun run a11y-gate` | jsx-a11y 진단의 **지문 집합**이 베이스라인 안 — 새 지문이나 개수 증가가 있으면 FAIL. **"새 진단이 없다"까지만 준다**: 키보드로 전체 흐름을 조작할 수 있다거나 모든 컨트롤에 접근명이 있다는 **관측된 보장은 주지 않는다** (베이스라인의 정본은 `scripts/a11y-baseline.txt`) | hard | yes | never |
-| `test` | `bun run test` | vitest 스위트 전부 통과 | hard | yes | never |
-| `build` | `bun run build` | `wxt build` 성공 | hard | yes | never |
-| `storybook` | `bun run storybook:build` | Storybook 빌드 성공 | hard | yes | never |
-| `smoke-barriers` | `bun run smoke-barriers` | 누락된 준비 배리어 0 | hard | yes | never |
-| `bundle-gate` | `bun run bundle-gate` | popup 즉시 로드 합계가 한도 안 · 지연 계약 청크가 즉시 집합에 없음 (수치의 정본은 스크립트) | hard | yes | never |
-| `writer-lane-gate` | `bun run writer-lane-gate` | 레인 생성 자리 각 1 · 서비스워커 밖 번들에 표지 0 | hard | yes | never |
-| `manifest-gate` | `bun run manifest-gate` | 빌드된 매니페스트가 **게이트의 선언과 정확히 일치**: 최상위 키 집합 · 권한/호스트/선택 권한 목록 · MV3 · 최소 크롬 버전 · 프로덕션 CSP(`extension_pages`)에 `unsafe-eval` 없음 (선언의 정본은 스크립트). **"선언과 같다"를 증명하지 "이 표면이 옳다"를 증명하지 않는다** (후자는 `smoke`) | hard | yes | never |
-| `overflow-gate` | `bun run overflow-gate` | 최대 길이 이름을 심은 팝업에 **가로 오버플로 0px · 내부 가로 스크롤러 0개**. 훑기 전에 준비 표지 셋(심은 프로필이 전부 렌더 · 지연 목록 도착 · 폰트 적용)을 관측하고, 서지 않으면 **훑지 않고 FAIL** | hard | no — 실제 크롬을 띄운다 | never |
-| `test-browser` | `bun run test:browser` | 브라우저를 띄우는 픽스처 전부 통과 — `overflow-gate`의 준비 표지 넷과 `smoke`의 인자 계약. 이름 규약(`*.browser.test.mjs`)이 이 집합을 정하고 그 분류는 레지스트리의 `browser` 칸에서 파생된다 | hard | no — 실제 크롬을 띄운다 | never |
-| `ui-perf` | `bun run ui-perf` | 팝업 시작 지표가 같은 기기 기준선 대비 상한 안. **자문 행 — 기준선 기기 밖에서는 완료를 가로막지 않는다** (수치는 기기 의존적이라 다른 기기의 빨강은 코드가 아니라 기기를 말한다) | advisory | no — 기기 기준선에 매여 러너 하드웨어가 바뀔 때마다 거짓 실패를 낸다 | never |
-| `smoke` | `bun run smoke` | 실브라우저 시나리오 전부 통과 | hard | no — 실제 크롬을 띄운다 | never |
+| 게이트 | 명령 | 임계값 | kind | CI | needs | N/A 조건 |
+| --- | --- | --- | --- | --- | --- | --- |
+| `check` | `bun run check` | `tsc --noEmit` 오류 0 | hard | yes | - | never |
+| `lint` | `bun run lint` | `oxlint` 진단 0 — correctness 카테고리 · 레이어 방향(상향 import) · 순환/자기 import · type-aware 떠도는 프로미스. `scripts/`도 같은 강도로 재되 `.mjs`의 추론이 `any`로 떨어지는 규칙 하나만 끈다 (설정의 정본은 `.oxlintrc.json`) | hard | yes | - | never |
+| `format` | `bun run format:check` | `oxfmt --check` 어긋난 파일 0. 코드만 본다 — 마크다운·`docs/reviews/`·`.scratch/`는 제외 (설정의 정본은 `.oxfmtrc.json`) | hard | yes | - | never |
+| `core-line-budget` | `bun run core-line-budget` | `AGENTS.md`의 `core:begin`/`core:end` 마커 **사이** 줄 수가 코어가 스스로 선언한 `Target <N> lines` 안. 마커 쌍이 하나가 아니거나 선언이 하나가 아니면 FAIL (예산의 정본은 코어 자신) | hard | yes | - | never |
+| `a11y-gate` | `bun run a11y-gate` | jsx-a11y 진단의 **지문 집합**이 베이스라인 안 — 새 지문이나 개수 증가가 있으면 FAIL. **"새 진단이 없다"까지만 준다**: 키보드로 전체 흐름을 조작할 수 있다거나 모든 컨트롤에 접근명이 있다는 **관측된 보장은 주지 않는다** (베이스라인의 정본은 `scripts/a11y-baseline.txt`) | hard | yes | - | never |
+| `test` | `bun run test` | vitest 스위트 전부 통과 | hard | yes | - | never |
+| `build` | `bun run build` | `wxt build` 성공 | hard | yes | - | never |
+| `storybook` | `bun run storybook:build` | Storybook 빌드 성공 | hard | yes | - | never |
+| `smoke-barriers` | `bun run smoke-barriers` | 누락된 준비 배리어 0 | hard | yes | - | never |
+| `bundle-gate` | `bun run bundle-gate` | popup 즉시 로드 합계가 한도 안 · 지연 계약 청크가 즉시 집합에 없음 (수치의 정본은 스크립트) | hard | yes | build | never |
+| `writer-lane-gate` | `bun run writer-lane-gate` | 레인 생성 자리 각 1 · 서비스워커 밖 번들에 표지 0 | hard | yes | build | never |
+| `manifest-gate` | `bun run manifest-gate` | 빌드된 매니페스트가 **게이트의 선언과 정확히 일치**: 최상위 키 집합 · 권한/호스트/선택 권한 목록 · MV3 · 최소 크롬 버전 · 프로덕션 CSP(`extension_pages`)에 `unsafe-eval` 없음 (선언의 정본은 스크립트). **"선언과 같다"를 증명하지 "이 표면이 옳다"를 증명하지 않는다** (후자는 `smoke`) | hard | yes | build | never |
+| `overflow-gate` | `bun run overflow-gate` | 최대 길이 이름을 심은 팝업에 **가로 오버플로 0px · 내부 가로 스크롤러 0개**. 훑기 전에 준비 표지 셋(심은 프로필이 전부 렌더 · 지연 목록 도착 · 폰트 적용)을 관측하고, 서지 않으면 **훑지 않고 FAIL** | hard | no — 실제 크롬을 띄운다 | build | never |
+| `test-browser` | `bun run test:browser` | 브라우저를 띄우는 픽스처 전부 통과 — `overflow-gate`의 준비 표지 넷과 `smoke`의 인자 계약. 이름 규약(`*.browser.test.mjs`)이 이 집합을 정하고 그 분류는 레지스트리의 `browser` 칸에서 파생된다 | hard | no — 실제 크롬을 띄운다 | build | never |
+| `ui-perf` | `bun run ui-perf` | 팝업 시작 지표가 같은 기기 기준선 대비 상한 안. **자문 행 — 기준선 기기 밖에서는 완료를 가로막지 않는다** (수치는 기기 의존적이라 다른 기기의 빨강은 코드가 아니라 기기를 말한다) | advisory | no — 기기 기준선에 매여 러너 하드웨어가 바뀔 때마다 거짓 실패를 낸다 | build | never |
+| `smoke` | `bun run smoke` | 실브라우저 시나리오 전부 통과 | hard | no — 실제 크롬을 띄운다 | build | never |
 
 <!-- gates:end -->
 
@@ -98,9 +98,13 @@ bun run gate:ci           # CI가 도는 것과 정확히 같은 부분집합 �
 방식이 깨지지 않는다. 다만 그 경로의 신선도는 부른 사람의 책임이다 — 러너를 통해 돌
 때만 "이 회차의 빌드"가 보장된다.
 
-**러너의 자리 일치 검사는 `needs` 칸을 대조하지 않는다** — 표에 그 칸이 없다. 되돌리면
-게이트가 낡은 산출물을 재면서 회차 전체가 초록으로 통과한다(실측). 지금 그 칸에 기대는 행이
-여럿이고, `manifest-gate`만 자기 행의 등록을 테스트로 못 박아 뒀다.
+**러너의 자리 일치 검사가 `needs` 칸을 대조한다.** 표에 그 칸이 생겼기 때문이다. 이전에는
+없어서, 레지스트리에서 `needs: build`를 `-`로 되돌리면 게이트가 낡은 산출물을 재면서 회차
+전체가 초록으로 통과했다(실측) — 릴리스 게이트 r1이 그것을 D4a의 underimplementation으로
+지목했고, 그 자리를 이 칸이 닫는다. 더해서 **어느 행이 `needs: build`여야 하는지도 파생된다**:
+게이트의 명령이 (전이적으로) `artifactsDirFrom`에 닿으면 그 행은 산출물 소비자이고,
+`scripts/run-gates.test.mjs`가 그 집합과 레지스트리의 `needs: build` 집합이 같은지 잰다 —
+소비자를 새로 만들고 `needs`를 빠뜨리는 것이 그 검사에 걸린다.
 
 ## `overflow-gate`와 `ui-perf` — 증명 강도가 다른 둘을 갈랐다
 
@@ -472,14 +476,12 @@ FAIL이다. 이것이 없으면 트리거를 `workflow_dispatch`로 바꾸는 �
 
 ## 이 검사가 덮지 못하는 것
 
-**자리 일치 검사는 `needs` 칸을 대조하지 않는다.** 표에 그 칸이 아예 없어서, 레지스트리에서
-`needs: build`를 `-`로 되돌려도 네 자리는 그대로 초록이다. 그러면 러너가 그 게이트에 회차
-경로를 넘기지 않고, 게이트는 기본 경로 `.output/chrome-mv3`의 **낡은 산출물**을 잰다 —
-회차가 방금 구운 매니페스트를 아무도 재지 않은 채 `PASS run-gates`와 exit 0이 난다(실측).
-D4a가 없애러 온 형태가 이 문으로 되돌아온다. 구멍은 `needs: build`인 행 **전부**에 함께 열려
-있고, `manifest-gate`만 자기 행의 등록을 테스트로 못 박아 뒀다
-(`scripts/manifest-gate.test.mjs`). 닫는 길은 표에 `needs` 칸을 더해 다른 세 칸과 같이
-대조하는 것이고, 그것은 러너의 설계에 속하므로 이 자리에 기록만 남긴다.
+**`needs` 칸은 이제 대조된다** (릴리스 r1 F1으로 닫았다). 표에 칸이 없던 동안에는
+레지스트리에서 `needs: build`를 `-`로 되돌려도 네 자리가 초록이었고, 그러면 러너가 회차
+경로를 넘기지 않아 게이트가 기본 경로 `.output/chrome-mv3`의 **낡은 산출물**을 쟀다 — 회차가
+방금 구운 매니페스트를 아무도 재지 않은 채 `PASS run-gates`와 exit 0이 났다(실측). 남은
+경계는 좁다: 대조는 표와 레지스트리가 **같은 값을 말하는지**를 보므로, 둘을 함께 `-`로
+되돌리는 편집은 이 검사가 아니라 파생 검사(위 "산출물을 읽는 게이트" 절)가 잡는다.
 
 **트리거 검사는 존재만 본다.** `pull_request`가 선언됐는지까지가 이 검사의 전부다 —
 `branches` 필터로 어느 브랜치의 PR에만 걸리게 하는 것은 잡지 못한다. 줄 단위로 읽는 파서로는

@@ -1,8 +1,11 @@
 # 접근성 지문 베이스라인 — `scripts/a11y-gate.mjs`가 읽고 `--update`가 쓴다.
 # 한 줄은 `<개수> <규칙> | <파일> | <식별자>`. 손으로 고치지 말고 `--update`를 쓰세요.
 # 이 파일이 무엇을 보장하고 무엇을 보장하지 않는지는 `docs/agents/verification.md`가 적는다.
-7 jsx-a11y(no-autofocus) | src/features/modifications/rule-form.tsx | autoFocus
-1 jsx-a11y(no-autofocus) | src/features/modifications/suggest-autocomplete.tsx | autoFocus
-3 jsx-a11y(no-autofocus) | src/features/modifications/suggest-input.tsx | autoFocus
-1 jsx-a11y(no-noninteractive-element-interactions) | src/features/transfer/transfer-panel.tsx | label
-1 jsx-a11y(no-static-element-interactions) | src/features/modifications/rule-form.tsx | div
+4 jsx-a11y(no-autofocus) | src/features/modifications/rule-form.tsx | Input.autoFocus
+3 jsx-a11y(no-autofocus) | src/features/modifications/rule-form.tsx | SuggestInput.autoFocus
+1 jsx-a11y(no-autofocus) | src/features/modifications/suggest-autocomplete.tsx | Input.autoFocus
+1 jsx-a11y(no-autofocus) | src/features/modifications/suggest-input.tsx | Autocomplete.autoFocus
+1 jsx-a11y(no-autofocus) | src/features/modifications/suggest-input.tsx | Input.autoFocus
+1 jsx-a11y(no-autofocus) | src/features/modifications/suggest-input.tsx | PlainSuggestInput.autoFocus
+1 jsx-a11y(no-noninteractive-element-interactions) | src/features/transfer/transfer-panel.tsx | div.label
+1 jsx-a11y(no-static-element-interactions) | src/features/modifications/rule-form.tsx | span.div

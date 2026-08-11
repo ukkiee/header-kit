@@ -127,6 +127,37 @@ describe('a11y 지문 베이스라인', () => {
     expect(r.code).toBe(1);
   });
 
+  it('같은 파일·같은 규칙이라도 붙은 요소가 다르면 교체가 FAIL이다', () => {
+    // 릴리스 r1 F2: 식별자가 속성 이름뿐이면 `규칙 | 파일 | autoFocus` 한 버킷으로 접혀,
+    // 같은 파일에서 하나를 지우고 하나를 만드는 교체가 개수까지 그대로라 통과했다.
+    const dir = seeded({ 'src/a.tsx': `export const A = () => <input autoFocus={true} />;\n` });
+    writeFileSync(join(dir, 'src/a.tsx'), `export const A = () => <textarea autoFocus={true} />;\n`);
+    const r = run(dir);
+    expect(r.out).toMatch(/^FAIL a11y-gate:/m);
+    expect(r.code).toBe(1);
+  });
+
+  it('지문이 붙은 요소를 담는다 — 속성 이름만으로 접히지 않는다', () => {
+    const dir = seeded({ 'src/a.tsx': `export const A = () => <input autoFocus={true} />;\n` });
+    expect(baselineOf(dir)).toContain('input.autoFocus');
+  });
+
+  it('요소까지 같으면 구분하지 못한다 — 덤지 못하는 자리를 못 박는다', () => {
+    // 위치를 빼기로 한 결정(D13a)의 대가다. 같은 파일·규칙·요소의 두 위반은 위치 없이는
+    // 구분할 수 없고, 그래서 개수까지가 지문이다. 덤지 못하는 것을 덤은 척하지 않기 위해
+    // 이 케이스를 **통과로** 못 박는다 — 조용히 바뀌면 그때 이 단언이 말해 준다.
+    const dir = seeded({
+      'src/a.tsx': `export const A = () => <input autoFocus={true} placeholder='a' />;\nexport const B = () => <input autoFocus={true} placeholder='b' />;\n`,
+    });
+    writeFileSync(
+      join(dir, 'src/a.tsx'),
+      `export const A = () => <input placeholder='a' />;\nexport const B = () => <input autoFocus={true} placeholder='b' />;\nexport const C = () => <input autoFocus={true} placeholder='c' />;\n`,
+    );
+    const r = run(dir);
+    expect(r.out).toMatch(/^PASS a11y-gate:/m);
+    expect(r.code).toBe(0);
+  });
+
   it('요소 단위 규칙의 지문도 이름이다 — 표현식 안의 변수만 바꿔도 통과한다', () => {
     // 스팬이 `<img src={src} />`로 시작하는 규칙군. 접두를 잘라 쓰던 판에서는 변수 이름만
     // 바꿔도 FAIL이었고, 앞 40자가 같은 서로 다른 위반은 한 지문으로 접혀 **새 위반이 숨었다**.

@@ -1,0 +1,89 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "release",
+  "ack": "human-triage",
+  "triageMode": "human",
+  "verdict": "needs-attention",
+  "summary": "NO-SHIP: four release blockers remain. Two gates can still produce the exact false-green results the feature promises to prevent, the new always-loaded Writer Lane rule contradicts the enforced architecture, and the CI slice lacks end-to-end evidence.",
+  "planFile": "docs/reviews/agent-harness/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 141,
+  "target": "branch diff against main",
+  "reviewer": "codex",
+  "fallbackFrom": null,
+  "fallbackReason": null,
+  "effort": "xhigh",
+  "inputMode": "self-collect",
+  "reviewedSha": "783c2dd2981588b01f535cc30ca242a908f24432",
+  "reviewedTree": "135fcd5e479b7c9b4a18bdb2fa9a960ae5358bd1",
+  "reviewedPlanSha256": "020faad8d7c7e809f8f13af8a07ef46a929a9e1c99f59aeec90a42ff65035f2e",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "backendExitCode": 0,
+  "parseError": null,
+  "promptDelivery": {
+    "mechanism": "token-echo",
+    "enforcing": false,
+    "verified": true,
+    "echoed": "7a1d7289727a5a69"
+  },
+  "findingCount": 4,
+  "planFindingCount": 0,
+  "triage": "review-gate SKILL.md § Triage governs: render EVERY finding as a full table row, never inside a dialog; then ask the ROUND before the rows — take every Proposed decision as it stands, or decide row by row — and `as proposed` ends the round in that ONE action; only if row-by-row was chosen, ask per finding with that row's Proposed decision as the first option, a reject or defer taking a free-text reason; echo back ONLY the rows that carried free text, and none if the round was decided by selection alone; max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "Removing `needs: build` silently re-enables stale-artifact checks",
+      "body": "The table parser omits `needs`, although artifact isolation and `--artifacts` injection depend on that field. Changing any consumer in `scripts/gates.txt:43-49` from `build` to `-` therefore leaves parity green and makes it inspect fallback `.output/chrome-mv3`. The branch's own evidence at `docs/agents/verification.md:475-482` reproduces this false pass; only `manifest-gate` is separately pinned. This directly underimplements D4a's current-run-only artifact contract.",
+      "file": "scripts/run-gates.mjs",
+      "line_start": 211,
+      "line_end": 218,
+      "code": "    // 표 칸: 게이트 | 명령 | 임계값 | kind | CI | N/A 조건\n    rows.push({\n      id: m[1],\n      command: cells[1] ?? '',\n      kind: cells[3] ?? '',\n      ci: cells[4] ?? '',\n      na: cells[5] ?? '',\n    });",
+      "confidence": 1,
+      "recommendation": "Add `needs` to the human table and compare it in `checkPlaces`; add data-driven mutation coverage for every `needs: build` consumer.",
+      "isPlanFinding": false
+    },
+    {
+      "severity": "high",
+      "title": "Same-file accessibility replacements collapse to one fingerprint",
+      "body": "The identifier is only the leading element or attribute name, while the remaining key is rule plus filename. Removing one `autoFocus` violation and adding another in the same file preserves the bucket and count, so the gate passes. This is immediately reachable because the committed baseline contains seven `no-autofocus | rule-form.tsx | autoFocus` violations. It violates the spec's requirement that equal-total replacement regressions fail; the existing test only replaces diagnostics across files.",
+      "file": "scripts/a11y-gate.mjs",
+      "line_start": 89,
+      "line_end": 106,
+      "code": "function identifierOf(text) {\n  const element = /^<\\s*([A-Za-z_$][\\w$.:-]*)/.exec(text);\n  if (element) return element[1];\n  const name = /^[A-Za-z_$][\\w$-]*/.exec(text);\n  if (name) return name[0];\n  return `#${createHash('sha1').update(text).digest('hex').slice(0, 12)}`;\n}\n\nfunction fingerprint(diagnostic) {\n  const span = diagnostic.labels?.[0]?.span;\n  const rule = diagnostic.code;\n  if (!span) return `${rule} | ${diagnostic.filename} | (스팬 없음)`;\n  const text = readSource(diagnostic.filename)\n    .subarray(span.offset, span.offset + span.length)\n    .toString('utf8')\n    .replace(/\\s+/g, ' ')\n    .trim();\n  return `${rule} | ${diagnostic.filename} | ${identifierOf(text)}`;\n}",
+      "confidence": 0.99,
+      "recommendation": "Use a stable discriminator such as an enclosing component/function or explicit suppression ID, and add a same-file, same-rule, same-count replacement fixture.",
+      "isPlanFinding": false
+    },
+    {
+      "severity": "high",
+      "title": "The new Writer Lane instruction states a boundary that the code violates",
+      "body": "The always-loaded core says `WritePermit` never crosses a module boundary and exists only inside `StateWriter`. In the reviewed tree, `scripts/writer-lane-gate.mjs:107-114` explicitly permits it in four modules, while exported functions such as `stateStore.persistState` and `backupStore.clearCloudBackups` accept it. Agents are therefore told a data-loss invariant is enforced more narrowly than it is, undermining the central purpose of ticket 09.",
+      "file": "AGENTS.md",
+      "line_start": 65,
+      "line_end": 68,
+      "code": "- **Writer Lane** (ADR 0016) — 영속 저장소를 고치는 단 하나의 줄. 저장소를 고치는 경로는 **전부** 이\n  줄을 지나며 한 번에 하나만 진행한다(어느 것들인지는 `CONTEXT.md`가 갖는다 — 여기 세어 두면 곧\n  갈라선다). 팝업·탭 화면은 이 줄에 들어올 수 없고 메시지로 요청만 보낸다. 쓰기 허가(`WritePermit`)는\n  쓰기 문(`StateWriter`) 구현 안에만 살고 **모듈 경계를 넘지 않는다**.",
+      "confidence": 0.99,
+      "recommendation": "Either encapsulate permit-bearing persistence operations inside `StateWriter`, or rewrite AGENTS/CONTEXT/ADR and the gate to state the actual multi-module boundary precisely.",
+      "isPlanFinding": false
+    },
+    {
+      "severity": "high",
+      "title": "The CI slice is closed without an actual GitHub Actions run",
+      "body": "The feature promises that fast gates run automatically in CI, but its committed evidence explicitly says the GitHub Actions path has never been observed. A Docker execution does not validate workflow triggering, action resolution, runner behavior, or the actual `ubuntu-latest` integration. The CI vertical slice is therefore proven only below its deployment seam.",
+      "file": "docs/reviews/agent-harness/verification.md",
+      "line_start": 70,
+      "line_end": 72,
+      "code": "**실제 GitHub Actions 실행은 아직 관측되지 않았다.** CI 경로는 **리눅스 컨테이너**(node:24 ·\nbun 1.3.11)에서 `bun install --frozen-lockfile && bun run gate:ci`로 12행 전부 PASS를 확인했다.\n그러나 그것은 `ubuntu-latest` 러너가 아니다. 첫 실제 실행이 이 브랜치의 첫 PR에서 난다.",
+      "confidence": 0.99,
+      "recommendation": "Require and record a successful `pull_request` workflow run on this branch before merge, then update the verification evidence.",
+      "isPlanFinding": false
+    }
+  ],
+  "next_steps": [
+    "Fix the three contract defects and add the specified mutation tests.",
+    "Run the real GitHub Actions workflow and rerun the full hard gate set against the final tree.",
+    "Commit verification evidence that identifies the actual final reviewed tree."
+  ]
+}

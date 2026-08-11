@@ -759,3 +759,29 @@ playwright를 import하지 않는다.** import를 세면 그 테스트가 브라
   재는 것은 아무것도 없다.
 - `ui-perf`는 여전히 스크린샷 다섯 장과 계측 두 관심사를 함께 갖는다. 스크린샷은 판정에
   들어가지 않지만 게이트가 돌 때마다 뜬다.
+
+### release r1 (codex)
+
+F1 accept — Removing `needs: build` silently re-enables stale-artifact checks
+F2 accept — Same-file accessibility replacements collapse to one fingerprint
+F3 accept — The new Writer Lane instruction states a boundary that the code violates
+F4 defer — The CI slice is closed without an actual GitHub Actions run; 고치려면 브랜치를 push하고 PR을 열어야 하는데 스펙이 그것을 명시적으로 범위 밖·사람이 정할 일로 두었다(Out of Scope: "`main`을 origin에 푸시하는 것 — 사람이 정한다"). 한계는 이미 `verification.md`가 적고 있다.
+
+반영:
+
+- F1 — 표에 `needs` 칸을 더하고 러너가 대조한다. 더해서 **어느 행이 `needs: build`여야 하는지를
+  파생으로 잰다**: 게이트의 명령이 전이적으로 `artifactsDirFrom`에 닿으면 산출물 소비자이고, 그
+  집합과 레지스트리의 `needs: build` 집합이 같아야 한다. 소비자를 새로 만들고 `needs`를 빠뜨리는
+  것이 그 검사에 걸린다(변조로 확인: `manifest-gate`의 `needs`를 지우면 빨강).
+- F2 — 지문의 식별자에 **담고 있는 요소**를 붙인다(`autoFocus` → `Input.autoFocus`). 실측으로
+  `no-autofocus | rule-form.tsx | autoFocus` 7건 한 버킷이 `Input` 4 + `SuggestInput` 3으로 갈렸다.
+  **리뷰의 권고안은 측정으로 기각했다** — 감싸는 컴포넌트/함수를 쓰자는 제안이었는데, 7건이 전부
+  같은 선언(`switchField`) 안에 있어 그 판별자로는 하나도 갈리지 않는다. 줄·열은 D13a가 측정으로
+  거절한 방향이라 쓰지 않았다.
+  **남는 것**: 같은 파일·같은 규칙·**같은 요소**의 두 위반은 위치 없이 구분할 수 없어 개수까지가
+  지문이고, 그 안에서의 교체는 여전히 통과한다. 덮지 못하는 것을 덮은 척하지 않기 위해 그 케이스를
+  **통과로 못 박는 픽스처**를 함께 뒀다.
+- F3 — 코어와 `CONTEXT.md`가 실제 경계를 말하게 고쳤다. 둘 다 허가가 쓰기 문 구현 안에만 산다고
+  적고 있었는데 실제로는 네 모듈에 걸쳐 있다(`writer-lane-gate` 실행이 "허가 노출 4파일(전부 허용)"로
+  확인). 목록은 게이트가 들고 문서는 그것을 가리킨다 — 코어의 "숫자와 목록은 게이트가 소유한다"와
+  같은 규칙이다. **아키텍처 변경(캡슐화)은 하지 않았다** — 이 기능의 범위 밖이다.
