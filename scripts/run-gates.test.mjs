@@ -66,13 +66,20 @@ function tree({
   ];
   writeFileSync(join(dir, 'scripts', 'gates.txt'), `${rows.join('\n')}\n`);
 
-  const ids = table ?? gates.map((g) => g.split('|')[0].trim());
+  // 표의 명령·kind·N/A 칸도 레지스트리와 대조되므로 기본값은 레지스트리에서 파생시킨다.
+  // 어긋남을 재는 테스트만 `table`로 직접 준다.
+  const derived = gates.map((g) => {
+    const [id, script, kind, , , , , na] = g.split('|').map((s) => s.trim());
+    return { id, command: `bun run ${script}`, kind, na };
+  });
+  const tableRows = table ?? derived;
+  const cell = (r) => `| \`${r.id}\` | \`${r.command}\` | 임계값 | ${r.kind} | ${r.na} |`;
   // 마커 밖에 백틱 첫 칸을 가진 표를 함께 둔다 — 실제 문서의 판정 설명 표가 그렇고,
   // 그것이 게이트 행으로 읽히던 결함을 이 픽스처가 계속 재현한다.
   const decoy = '| `PASS` | 돌았고 만족했다 |\n| `N/A` | 잴 대상이 없다 |';
   const body = markers
-    ? `${decoy}\n\n${TABLE_BEGIN}\n${ids.map((id) => `| \`${id}\` | cmd | thr | hard |`).join('\n')}\n${TABLE_END}`
-    : `${decoy}\n\n${ids.map((id) => `| \`${id}\` | cmd | thr | hard |`).join('\n')}`;
+    ? `${decoy}\n\n${TABLE_BEGIN}\n${tableRows.map(cell).join("\n")}\n${TABLE_END}`
+    : `${decoy}\n\n${tableRows.map(cell).join("\n")}`;
   writeFileSync(join(dir, 'docs', 'agents', 'verification.md'), `# 검증\n\n${body}\n`);
 
   if (workflow) {
@@ -90,11 +97,23 @@ function tree({
   return dir;
 }
 
-/** id | script | kind | ci | needs | browser | na */
+/** id | script | kind | ci | needs | browser | verdict | na */
 const ROW = (id, script, over = {}) => {
-  const f = { kind: 'hard', ci: 'no', needs: '-', browser: 'no', na: 'never', ...over };
-  return `${id} | ${script} | ${f.kind} | ${f.ci} | ${f.needs} | ${f.browser} | ${f.na}`;
+  const f = {
+    kind: 'hard',
+    ci: 'no',
+    needs: '-',
+    browser: 'no',
+    verdict: 'exit',
+    na: 'never',
+    ...over,
+  };
+  return `${id} | ${script} | ${f.kind} | ${f.ci} | ${f.needs} | ${f.browser} | ${f.verdict} | ${f.na}`;
 };
+
+/** 상태 줄을 찍는 게이트를 만든다 — verdict: token 계약을 재는 데 쓴다. */
+const says = (token, id, code) =>
+  `node -e "console.log('${token} ${id}: detail'); process.exit(${code})"`;
 
 const OK = 'node -e "process.exit(0)"';
 const BAD = 'node -e "console.log(\'boom: the decisive line\'); process.exit(1)"';
@@ -119,7 +138,10 @@ describe('run-gates — 네 자리 일치', () => {
     const dir = tree({
       gates: [ROW('alpha', 'alpha')],
       scripts: { alpha: OK },
-      table: ['alpha', 'ghost'],
+      table: [
+        { id: 'alpha', command: 'bun run alpha', kind: 'hard', na: 'never' },
+        { id: 'ghost', command: 'bun run ghost', kind: 'hard', na: 'never' },
+      ],
     });
     const r = run(['--dir', dir, '--check-only']);
     expect(r.out).toMatch(/^FAIL run-gates:/m);
@@ -141,27 +163,16 @@ describe('run-gates — 네 자리 일치', () => {
     expect(r.code).toBe(1);
   });
 
-  it('워크플로가 등록되지 않은 게이트를 돌리면 실패한다', () => {
+  it('게이트 워크플로가 알 수 없는 것을 부르면 실패한다', () => {
     const dir = tree({
       gates: [ROW('alpha', 'alpha', { ci: 'yes' })],
-      scripts: { alpha: OK, rogue: OK },
-      workflow: ['alpha', 'rogue'],
+      scripts: { alpha: OK, 'gate:ci': OK },
+      workflow: ['gate:ci', 'rogue'],
     });
     const r = run(['--dir', dir, '--check-only']);
     expect(r.out).toMatch(/^FAIL run-gates:/m);
     expect(r.out).toContain('rogue');
     expect(r.code).toBe(1);
-  });
-
-  it('ci: yes인 게이트가 워크플로에 있으면 통과한다', () => {
-    const dir = tree({
-      gates: [ROW('alpha', 'alpha', { ci: 'yes' })],
-      scripts: { alpha: OK },
-      workflow: ['alpha'],
-    });
-    const r = run(['--dir', dir, '--check-only']);
-    expect(r.out).toMatch(/^PASS run-gates:/m);
-    expect(r.code).toBe(0);
   });
 });
 
@@ -449,6 +460,213 @@ describe('run-gates — 큰 출력을 버리지 않는다', () => {
     expect(r.out).toContain('DECISIVE-LINE');
     expect(r.out.length).toBeGreaterThan(1024 * 1024);
     expect(r.code).toBe(1);
+  });
+});
+
+describe('run-gates — 표와 레지스트리는 id만이 아니라 완료 의미까지 맞는다', () => {
+  it('kind가 표와 레지스트리에서 다르면 실패한다', () => {
+    // 이것이 없으면 한쪽이 advisory, 다른 쪽이 hard인 채로 초록이 나고
+    // 그 모순을 코어와 README가 옮겨 적는다.
+    const dir = tree({
+      gates: [ROW('alpha', 'alpha', { kind: 'advisory' })],
+      scripts: { alpha: OK },
+      table: [{ id: 'alpha', command: 'bun run alpha', kind: 'hard', na: 'never' }],
+    });
+    const r = run(['--dir', dir, '--check-only']);
+    expect(r.out).toMatch(/^FAIL run-gates:/m);
+    expect(r.code).toBe(1);
+  });
+
+  it('명령이 표와 레지스트리에서 다르면 실패한다', () => {
+    const dir = tree({
+      gates: [ROW('alpha', 'alpha')],
+      scripts: { alpha: OK },
+      table: [{ id: 'alpha', command: 'bun run something-else', kind: 'hard', na: 'never' }],
+    });
+    const r = run(['--dir', dir, '--check-only']);
+    expect(r.out).toMatch(/^FAIL run-gates:/m);
+    expect(r.code).toBe(1);
+  });
+
+  it('N/A 조건이 표와 레지스트리에서 다르면 실패한다', () => {
+    const dir = tree({
+      gates: [ROW('alpha', 'alpha')],
+      scripts: { alpha: OK },
+      table: [{ id: 'alpha', command: 'bun run alpha', kind: 'hard', na: '산출물 없음' }],
+    });
+    const r = run(['--dir', dir, '--check-only']);
+    expect(r.out).toMatch(/^FAIL run-gates:/m);
+    expect(r.code).toBe(1);
+  });
+});
+
+describe('run-gates — 게이트가 판정을 어떻게 말하는가', () => {
+  it('token 게이트가 FAIL을 찍고 0으로 끝나면 FAIL이다', () => {
+    // 종료 코드만 보면 PASS다. 이 대조가 없으면 게이트가 자기 실패를 삼킬 수 있다.
+    const dir = tree({
+      gates: [ROW('alpha', 'alpha', { verdict: 'token' })],
+      scripts: { alpha: says('FAIL', 'alpha', 0) },
+    });
+    const r = run(['--dir', dir]);
+    expect(r.out).toMatch(/^FAIL run-gates:/m);
+    expect(r.code).toBe(1);
+  });
+
+  it('token 게이트가 아무 상태도 찍지 않으면 FAIL이다', () => {
+    const dir = tree({
+      gates: [ROW('alpha', 'alpha', { verdict: 'token' })],
+      scripts: { alpha: OK },
+    });
+    const r = run(['--dir', dir]);
+    expect(r.out).toMatch(/^FAIL run-gates:/m);
+    expect(r.code).toBe(1);
+  });
+
+  it('token 게이트가 PASS를 찍고 0으로 끝나면 통과한다', () => {
+    const dir = tree({
+      gates: [ROW('alpha', 'alpha', { verdict: 'token' })],
+      scripts: { alpha: says('PASS', 'alpha', 0) },
+    });
+    const r = run(['--dir', dir]);
+    expect(r.out).toMatch(/^PASS run-gates:/m);
+    expect(r.code).toBe(0);
+  });
+
+  it('token 게이트가 N/A를 찍으면 N/A이고 완료를 막지 않는다', () => {
+    const dir = tree({
+      gates: [ROW('alpha', 'alpha', { verdict: 'token' })],
+      scripts: { alpha: says('N/A', 'alpha', 0) },
+    });
+    const r = run(['--dir', dir]);
+    expect(r.out).toMatch(/^N\/A alpha/m);
+    expect(r.out).toMatch(/^PASS run-gates:/m);
+    expect(r.code).toBe(0);
+  });
+
+  it('exit 게이트에는 상태 줄을 요구하지 않는다', () => {
+    // tsc·vitest·wxt는 이 저장소가 만든 것이 아니다. 요구하면 게이트마다 래퍼가 생긴다.
+    const dir = tree({ gates: [ROW('alpha', 'alpha')], scripts: { alpha: OK } });
+    const r = run(['--dir', dir]);
+    expect(r.out).toMatch(/^PASS run-gates:/m);
+    expect(r.code).toBe(0);
+  });
+
+  it('verdict 값이 exit/token이 아니면 실패한다', () => {
+    const dir = tree({
+      gates: [ROW('alpha', 'alpha', { verdict: 'vibes' })],
+      scripts: { alpha: OK },
+    });
+    const r = run(['--dir', dir, '--check-only']);
+    expect(r.out).toMatch(/^FAIL run-gates:/m);
+    expect(r.code).toBe(1);
+  });
+});
+
+describe('run-gates — 선행이 무너지면 BLOCKED다', () => {
+  it('선행이 실패하면 뒤 게이트는 BLOCKED이고 돌지 않는다', () => {
+    const dir = tree({
+      gates: [ROW('first', 'first'), ROW('second', 'second', { needs: 'first' })],
+      scripts: { first: BAD, second: OK },
+    });
+    const r = run(['--dir', dir]);
+    expect(r.out).toMatch(/^BLOCKED second/m);
+    expect(r.out).not.toMatch(/^PASS second/m);
+    expect(r.code).toBe(1);
+  });
+
+  it('선행이 통과하면 뒤 게이트가 돈다', () => {
+    const dir = tree({
+      gates: [ROW('first', 'first'), ROW('second', 'second', { needs: 'first' })],
+      scripts: { first: OK, second: OK },
+    });
+    const r = run(['--dir', dir]);
+    expect(r.out).toMatch(/^PASS second/m);
+    expect(r.code).toBe(0);
+  });
+
+  it('needs가 뒤 게이트를 가리키면 실패한다', () => {
+    // 뒤를 가리키면 그 선행이 아직 돌지 않아 판정을 알 수 없다. 순환도 이 규칙 하나로 막힌다.
+    const dir = tree({
+      gates: [ROW('first', 'first', { needs: 'second' }), ROW('second', 'second')],
+      scripts: { first: OK, second: OK },
+    });
+    const r = run(['--dir', dir, '--check-only']);
+    expect(r.out).toMatch(/^FAIL run-gates:/m);
+    expect(r.code).toBe(1);
+  });
+
+  it('없는 게이트를 needs로 가리키면 실패한다', () => {
+    const dir = tree({
+      gates: [ROW('alpha', 'alpha', { needs: 'ghost' })],
+      scripts: { alpha: OK },
+    });
+    const r = run(['--dir', dir, '--check-only']);
+    expect(r.out).toMatch(/^FAIL run-gates:/m);
+    expect(r.code).toBe(1);
+  });
+});
+
+describe('run-gates — CI는 러너를 한 번 부른다', () => {
+  const CI_WF = (body) => ({ '.github/workflows/gate.yml': `jobs:\n  g:\n    steps:\n${body}` });
+
+  it('워크플로가 gate:ci 하나만 부르면 통과한다', () => {
+    const dir = tree({
+      gates: [ROW('alpha', 'alpha', { ci: 'yes' })],
+      scripts: { alpha: OK, 'gate:ci': OK },
+      files: CI_WF('      - run: bun run gate:ci\n'),
+    });
+    const r = run(['--dir', dir, '--check-only']);
+    expect(r.out).toMatch(/^PASS run-gates:/m);
+    expect(r.code).toBe(0);
+  });
+
+  it('워크플로가 게이트를 직접 부르면 실패한다', () => {
+    // 직접 부르면 선행 관계가 무너져 산출물을 읽는 게이트가 각자 빌드하거나 낡은 것을 쓴다 —
+    // 티켓 02가 없애러 온 결함이 CI 쪽 문으로 들어온다.
+    const dir = tree({
+      gates: [ROW('alpha', 'alpha', { ci: 'yes' })],
+      scripts: { alpha: OK, 'gate:ci': OK },
+      files: CI_WF('      - run: bun run gate:ci\n      - run: bun run alpha\n'),
+    });
+    const r = run(['--dir', dir, '--check-only']);
+    expect(r.out).toMatch(/^FAIL run-gates:/m);
+    expect(r.out).toContain('alpha');
+    expect(r.code).toBe(1);
+  });
+
+  it('주석 처리된 명령은 실행된 것으로 세지 않는다', () => {
+    // 세면 비활성화된 명령이 "실행됨"으로 읽혀 CI 일치가 거짓 초록이 된다.
+    const dir = tree({
+      gates: [ROW('alpha', 'alpha', { ci: 'yes' })],
+      scripts: { alpha: OK, 'gate:ci': OK },
+      files: CI_WF('      # - run: bun run gate:ci\n      - run: bun run gate:ci\n'),
+    });
+    const r = run(['--dir', dir, '--check-only']);
+    expect(r.out).toMatch(/^PASS run-gates:/m);
+    expect(r.code).toBe(0);
+  });
+
+  it('주석만 남고 실제 호출이 없으면 실패한다', () => {
+    const dir = tree({
+      gates: [ROW('alpha', 'alpha', { ci: 'yes' })],
+      scripts: { alpha: OK, 'gate:ci': OK },
+      files: CI_WF('      # - run: bun run gate:ci\n'),
+    });
+    const r = run(['--dir', dir, '--check-only']);
+    expect(r.out).toMatch(/^FAIL run-gates:/m);
+    expect(r.code).toBe(1);
+  });
+
+  it('--ci 는 ci: yes 인 행만 돌린다', () => {
+    const dir = tree({
+      gates: [ROW('inci', 'inci', { ci: 'yes' }), ROW('local', 'local')],
+      scripts: { inci: OK, local: BAD, 'gate:ci': OK },
+      files: CI_WF('      - run: bun run gate:ci\n'),
+    });
+    const r = run(['--dir', dir, '--ci']);
+    expect(r.out).toMatch(/^PASS inci/m);
+    expect(r.out).not.toContain('local');
+    expect(r.code).toBe(0);
   });
 });
 

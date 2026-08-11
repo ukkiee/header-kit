@@ -9,21 +9,29 @@
 # 검사에 참여하지 않는다 — "모든 스크립트가 표에 있어야 한다"는 규칙은 영구히 빨강이라
 # 검사가 아니라 소음이다.
 #
-# gate: <id> | <package script> | <kind> | <ci> | <needs> | <browser> | <na>
-#   id       사람이 읽는 표(`docs/agents/verification.md`)의 행과 이 값으로 맞춘다
+# gate: <id> | <package script> | <kind> | <ci> | <needs> | <browser> | <verdict> | <na>
+#   id       사람이 읽는 표(`docs/agents/verification.md`)의 행과 이 값으로 맞춘다.
+#            표의 명령·kind·N/A 칸도 함께 비교되므로 두 자리가 조용히 갈라설 수 없다
 #   kind     hard(완료를 막는다) | advisory(관측만 남긴다)
 #   ci       CI 워크플로가 이 게이트를 도는가 (티켓 08이 채운다)
-#   needs    선행 조건. `-`는 없음. `build`는 티켓 02가 채운다
+#   needs    선행 게이트의 id. `-`는 없음. **앞선 행만** 가리킬 수 있다.
+#            선행이 통과하지 못하면 이 게이트는 BLOCKED다 — FAIL도 N/A도 아니다
 #   browser  실제 브라우저를 띄우는가. 테스트 분류가 이 값에서 파생된다 (티켓 07)
+#   verdict  판정을 어떻게 말하는가.
+#              exit  — 종료 코드가 계약의 전부. tsc·vitest·wxt처럼 이 저장소가 만들지 않은
+#                      도구는 상태 줄을 주지 않으며, 주라고 요구하면 게이트마다 래퍼가 생기고
+#                      그 래퍼가 새 거짓말 자리가 된다
+#              token — 이 저장소가 소유한 게이트. `PASS|FAIL|N/A <id>: …` 한 줄을 찍고
+#                      종료 코드와 어긋나면 FAIL. FAIL을 찍고 0으로 끝나는 경우가 여기서 걸린다
 #   na       이 행이 N/A가 될 수 있는 **유일한** 조건. 없으면 `never`
 #
 # `#` 주석과 빈 줄은 무시된다.
 
-gate: check          | check           | hard | no | - | no | never
-gate: test           | test            | hard | no | - | no | never
-gate: build          | build           | hard | no | - | no | never
-gate: storybook      | storybook:build | hard | no | - | no | never
-gate: smoke-barriers | smoke-barriers  | hard | no | - | no | never
+gate: check          | check           | hard | no | - | no | exit  | never
+gate: test           | test            | hard | no | - | no | exit  | never
+gate: build          | build           | hard | no | - | no | exit  | never
+gate: storybook      | storybook:build | hard | no | - | no | exit  | never
+gate: smoke-barriers | smoke-barriers  | hard | no | - | no | token | never
 
 # deferred: <스크립트 파일> | <왜 아직 등록하지 않는가>
 #

@@ -82,10 +82,16 @@ for (const id of STABLE_GATED) {
   }
 }
 
+// 상태 줄은 `<PASS|FAIL|N/A> smoke-barriers: …` 꼴이다. 게이트 러너가 이것을 읽어 종료
+// 코드와 대조하므로, FAIL을 찍고 0으로 끝나는 종류의 어긋남이 잡힌다 (scripts/gates.txt의
+// `verdict: token`). 저장소가 소유한 게이트만 이 계약을 진다 — tsc·vitest처럼 남이 만든
+// 도구에까지 요구하면 게이트마다 래퍼가 생기고 그 래퍼가 새 거짓말 자리가 된다.
 if (problems.length > 0) {
-  console.error(`FAIL ${problems.length} barrier(s) missing in ${target}`);
+  console.error(`FAIL smoke-barriers: ${problems.length} barrier(s) missing in ${target}`);
   for (const problem of problems) console.error(`  - ${problem}`);
   process.exit(1);
 }
 
-console.log(`OK ${SEED_GATED.length + STABLE_GATED.length} barriers verified in ${target}`);
+console.log(
+  `PASS smoke-barriers: ${SEED_GATED.length + STABLE_GATED.length} barriers verified in ${target}`,
+);

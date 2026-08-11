@@ -19,6 +19,7 @@
     "bundle-gate": "node scripts/bundle-gate.mjs",
     "writer-lane-gate": "node scripts/writer-lane-gate.mjs",
     "gate": "node scripts/run-gates.mjs",
+    "gate:ci": "node scripts/run-gates.mjs --ci",
     "postinstall": "wxt prepare"
   },
   "dependencies": {

@@ -1,0 +1,74 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "structure",
+  "ack": "human-triage",
+  "triageMode": "human",
+  "verdict": "needs-attention",
+  "summary": "Do not ship this walking skeleton yet. Three load-bearing seams contradict the remaining increments and would institutionalize false-green results or force later redesign.",
+  "planFile": "docs/reviews/agent-harness/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 25,
+  "target": "branch diff against main",
+  "reviewer": "codex",
+  "fallbackFrom": null,
+  "fallbackReason": null,
+  "effort": "xhigh",
+  "inputMode": "inline-diff",
+  "reviewedSha": "334f72afe79e903dd6b5b77a32612193bb344455",
+  "reviewedTree": "5780a9a7da1e26d177c5fcf422e770dbc69c4b0a",
+  "reviewedPlanSha256": "03b62a46745c39ce370241fc99db92aa64ba9b6226dde4ae57bc59a533ab94d2",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "backendExitCode": 0,
+  "parseError": null,
+  "promptDelivery": {
+    "mechanism": "token-echo",
+    "enforcing": false,
+    "verified": true,
+    "echoed": "7fdd02d243719a4c"
+  },
+  "findingCount": 3,
+  "planFindingCount": 0,
+  "triage": "review-gate SKILL.md § Triage governs: render EVERY finding as a full table row, never inside a dialog; then ask the ROUND before the rows — take every Proposed decision as it stands, or decide row by row — and `as proposed` ends the round in that ONE action; only if row-by-row was chosen, ask per finding with that row's Proposed decision as the first option, a reject or defer taking a free-text reason; echo back ONLY the rows that carried free text, and none if the round was decided by selection alone; max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "high",
+      "title": "Runner invents verdicts instead of honoring the gate result seam",
+      "body": "`runOne` reduces every child to `{ok, out}`, and `runGates` ignores successful output and synthesizes PASS solely from exit code. A gate that prints FAIL but mistakenly exits 0—or emits no status at all—is reported as PASS. This contradicts ticket 01's output-derived verdict contract and leaves no coherent protocol for planned N/A and BLOCKED results. Adding those states after more gates adopt this boolean seam will require replacing the runner and its public-process tests together.",
+      "file": "scripts/run-gates.mjs",
+      "line_start": 248,
+      "line_end": 286,
+      "confidence": 0.99,
+      "recommendation": "Define a structured terminal gate-result contract now, validate its status token against the exit code, preserve raw diagnostics separately, and add child-process fixtures for missing, contradictory, N/A, and BLOCKED results.",
+      "isPlanFinding": false
+    },
+    {
+      "severity": "high",
+      "title": "Registry/table parity ignores completion semantics",
+      "body": "The claimed four-place consistency reads the human table as IDs only. Command, `kind`, and N/A policy are duplicated between the table and registry but never compared. Ticket 07 can therefore mark performance advisory in one source and hard in the other while `--check-only` remains green; tickets 09–10 would then copy contradictory completion policy into the harness core and README.",
+      "file": "scripts/run-gates.mjs",
+      "line_start": 194,
+      "line_end": 209,
+      "confidence": 0.99,
+      "recommendation": "Make one typed definition canonical and generate the duplicated table cells from it, or parse and compare command, kind, and N/A columns with negative drift fixtures. Keep only human threshold prose outside the canonical definition.",
+      "isPlanFinding": false
+    },
+    {
+      "severity": "high",
+      "title": "CI parity bypasses the runner-owned artifact DAG",
+      "body": "Workflow inspection requires literal `bun run <registered-script>` tokens. A single orchestrated `bun run gate --ci` would be rejected as unregistered, forcing CI to invoke gates directly. Once ticket 02 introduces run-unique build directories and artifact-path passing, direct calls bypass that orchestration and cannot satisfy ticket 08's one-build contract without duplicating the DAG in YAML. The raw-text scan also counts commented or disabled commands as executed, permitting false-green CI parity.",
+      "file": "scripts/run-gates.mjs",
+      "line_start": 162,
+      "line_end": 215,
+      "confidence": 0.99,
+      "recommendation": "Add an explicit runner CI mode that selects `ci: yes` rows and preserves dependency orchestration. Require the workflow to invoke that entrypoint once, and validate the active YAML step rather than counting raw command text; test commented and disabled steps.",
+      "isPlanFinding": false
+    }
+  ],
+  "next_steps": [
+    "Establish the gate-result protocol before implementing ticket 02.",
+    "Remove unchecked semantic duplication between the registry and human table.",
+    "Redesign CI integration around one registry-driven runner invocation before adding artifact-consuming gates."
+  ]
+}
