@@ -31,6 +31,7 @@
 
 gate: check            | check            | hard | no | -     | no  | exit  | never
 gate: lint             | lint             | hard | no | -     | no  | exit  | never
+gate: format           | format:check     | hard | no | -     | no  | exit  | never
 gate: test             | test             | hard | no | -     | no  | exit  | never
 gate: build            | build            | hard | no | -     | no  | exit  | never
 gate: storybook        | storybook:build  | hard | no | -     | no  | exit  | never

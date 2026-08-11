@@ -54,6 +54,7 @@ bun run gate --check-only # 네 자리 일치만 본다 (게이트를 돌리지 
 | --- | --- | --- | --- | --- |
 | `check` | `bun run check` | `tsc --noEmit` 오류 0 | hard | never |
 | `lint` | `bun run lint` | `oxlint` 진단 0 — correctness 카테고리 · 레이어 방향(상향 import) · 순환/자기 import · type-aware 떠도는 프로미스. `scripts/`도 같은 강도로 재되 `.mjs`의 추론이 `any`로 떨어지는 규칙 하나만 끈다 (설정의 정본은 `.oxlintrc.json`) | hard | never |
+| `format` | `bun run format:check` | `oxfmt --check` 어긋난 파일 0. 코드만 본다 — 마크다운·`docs/reviews/`·`.scratch/`는 제외 (설정의 정본은 `.oxfmtrc.json`) | hard | never |
 | `test` | `bun run test` | vitest 스위트 전부 통과 | hard | never |
 | `build` | `bun run build` | `wxt build` 성공 | hard | never |
 | `storybook` | `bun run storybook:build` | Storybook 빌드 성공 | hard | never |
@@ -93,6 +94,43 @@ bun run gate --check-only # 네 자리 일치만 본다 (게이트를 돌리지 
 
 빌드 산출물을 읽는 게이트가 하나 더 온다 — `overflow-gate`(티켓 07). 같은 `needs: build`
 자리에 선다.
+
+## `format`이 재는 것과, 포맷 커밋을 어떻게 증명했는가
+
+`oxfmt` 버전을 **정확히 고정**한다(캐럿·틸드 없음). 아직 1.0 이전이라 마이너 사이에 출력이
+달라질 수 있고, 그러면 이 게이트가 어제와 다른 것을 요구하면서도 그 사실이 아무 데도
+나타나지 않는다.
+
+**포매터는 코드만 갖는다.** 마크다운은 사람이 뜻을 담아 줄을 끊은 산문이고,
+`docs/reviews/`의 JSON은 리뷰어가 낸 **기록**이다 — 포매터가 왔다는 이유로 증거의 바이트가
+바뀌어서는 안 된다(실측으로 그 둘이 대상에 들어 있었다). `.scratch/`는 이슈 트래커다.
+
+**`sortTailwindcss`는 꺼져 있다.** 켜면 클래스 순서가 전부 바뀌어 도입 커밋의 diff가 더
+커지고, `cn()` 병합 순서에 기대는 스타일이 있으면 시각적 회귀가 난다. 켜는 것은 시각 게이트가
+초록임을 확인한 뒤 **별도 슬라이스**다.
+
+### 포맷 커밋이 포맷만 담았다는 증명
+
+`git show --stat`은 **증거가 아니다.** 경로와 줄 수만 보여 주므로 대량 포맷 커밋 안에 숨은
+로직 수정이 그것을 그대로 만족시키고, 하필 그 증거는 리뷰어에게 **건너뛰라고** 말하는 데
+쓰인다. 서술로 덧붙이는 것은 무방하나 증명으로 쓰지 않는다.
+
+대신 재현으로 증명한다 — `bun run format-proof --commit <ref>`:
+
+1. 대상 커밋의 **부모** 트리를 빈 디렉터리에 꺼낸다(작업 트리를 거치지 않는다).
+2. 그 커밋이 `package.json`에 고정한 **바로 그 버전**의 `oxfmt`를 그 위에 돌린다. 설치된
+   버전이 다르면 거절한다 — 다른 도구로 잰 결과는 통과해도 실패해도 아무것도 말하지 않는다.
+3. 결과 트리 해시가 대상 커밋의 트리 해시와 **정확히 같은지** 본다.
+
+증명 자체도 판정을 가르는지 시험한다(`scripts/oxfmt.test.mjs`): 포맷 커밋에 **의미 있는 한
+줄**을 섞은 픽스처 둘(새 파일 하나, 기존 파일 수정 하나)이 FAIL을 낸다. 그것이 실패하지
+않으면 이 증명은 `git show --stat`과 같은 값을 가진다.
+
+<!-- format-proof:begin -->
+
+**이 저장소의 포맷 커밋:** (아래는 포맷 커밋이 선 뒤 채운다)
+
+<!-- format-proof:end -->
 
 ## `lint`가 재는 것과 재지 않는 것
 
