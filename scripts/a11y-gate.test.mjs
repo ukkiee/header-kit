@@ -20,6 +20,12 @@ const STATIC_CLICK = `export const S = () => <div onClick={() => {}}>hi</div>;\n
 const IMG_NO_ALT = (name = 'src') =>
   `export const I = ({ ${name} }: { ${name}: string }) => <img src={${name}} />;\n`;
 
+/**
+ * 접근성과 **무관한** oxlint 위반 둘(`eslint(no-debugger)`·`eslint(no-dupe-keys)`, 실측).
+ * 규칙군 필터의 대조군이다 — 이것이 지문에 들어오면 이 베이스라인은 접근성 지문이 아니다.
+ */
+const NON_A11Y = `export const P = () => {\n  debugger;\n  const dup = { a: 1, a: 2 };\n  return <span>{String(dup.a)}</span>;\n};\n`;
+
 /** 게이트가 스스로 센 진단 수. 픽스처의 "총계가 같다"를 주석이 아니라 **측정**으로 만든다. */
 const totalOf = (out) => Number(/진단 (\d+)건/.exec(out)?.[1] ?? -1);
 
@@ -212,14 +218,31 @@ describe('a11y 지문 베이스라인', () => {
     expect(r.code).toBe(1);
   });
 
+  it('jsx-a11y가 아닌 진단은 세지 않는다 — 세면 다른 게이트의 빨강이 이리 옮겨 온다', () => {
+    // 규칙군 필터를 지우면 이 베이스라인이 접근성 지문이 아니라 **일반 lint 지문**이 된다.
+    // 그러면 접근성과 무관한 위반 하나가 이 게이트를 빨갛게 만들고(그것을 재는 게이트는
+    // `lint`다), 그 빨강을 푸는 유일한 길인 `--update`가 **진짜 접근성 회귀까지 함께 축복한다**.
+    const dir = seeded({ 'src/a.tsx': AUTOFOCUS(1) });
+    writeFileSync(join(dir, 'src', 'b.tsx'), NON_A11Y);
+    const r = run(dir);
+    expect(r.out).toMatch(/^PASS a11y-gate:/m);
+    expect(r.out).not.toMatch(/새 지문/);
+    expect(r.code).toBe(0);
+  });
+
   it('아무것도 재지 못하면 통과하지 않는다 — 위반이 없는 것과 재지 못한 것은 다르다', () => {
-    // 훑을 파일이 없으면 oxlint가 먼저 거절하고, 파일은 훑었는데 진단이 0이면 게이트가
-    // 거절한다. 어느 경로든 **초록이 아니어야** 한다 — 규칙군이 조용히 꺼지면 그 뒤로는
-    // 무엇을 넣어도 통과하기 때문이다.
+    // 규칙군이 조용히 꺼지면 그 뒤로는 무엇을 넣어도 통과하므로 **초록이 아니어야** 한다.
+    //
+    // **사유까지 단언한다.** 훑을 파일이 없을 때 oxlint는 JSON 앞에 비-JSON 한 줄
+    // ("No files found to lint.")을 **stdout에** 붙이고 1로 끝난다(실측) — 그래서 이 픽스처가
+    // 타는 것은 게이트의 `number_of_files === 0` 가드가 아니라 **파싱 실패 경로**다. 토큰만
+    // 단언하면 파싱 실패 처리를 지워도 뒤의 "전부 사라졌다"가 FAIL을 내 초록이 된다(스윕 실측).
+    // 그 가드가 왜 픽스처로 뒤집히지 않는지는 `docs/agents/verification.md`가 적는다.
     const dir = seeded({ 'src/a.tsx': AUTOFOCUS(1) });
     writeFileSync(join(dir, '.gitignore'), 'node_modules/\nsrc/\nscripts/\n');
     const r = run(dir);
     expect(r.out).toMatch(/^FAIL a11y-gate:/m);
+    expect(r.out).toContain('oxlint를 읽을 수 없다');
     expect(r.code).toBe(1);
   });
 
@@ -258,5 +281,41 @@ describe('a11y 지문 베이스라인', () => {
     const r = run(dir, ['--refresh']);
     expect(r.out).toMatch(/^FAIL a11y-gate:/m);
     expect(r.code).toBe(1);
+  });
+
+  it('--update가 두 번 오면 거절한다', () => {
+    // 이 픽스처가 없으면 중복 검사를 지워도 통과한다. 인자 하나뿐인 계약에서 중복을 받아
+    // 주면, 무엇을 했는지가 호출 문면에서 읽히지 않는 쪽으로 계약이 조용히 넓어진다.
+    const dir = seeded({ 'src/a.tsx': AUTOFOCUS(1) });
+    const r = run(dir, ['--update', '--update']);
+    expect(r.out).toMatch(/^FAIL a11y-gate:/m);
+    expect(r.out).toContain('두 번');
+    expect(r.code).toBe(1);
+  });
+
+  it('베이스라인에 형식이 깨진 줄이 있으면 거절한다 — 건너뛰면 그 지문이 조용히 사라진다', () => {
+    // 개수 없는 줄을 건너뛰면 그 지문이 베이스라인에서 빠진 것과 같아지고, 그러면 그 위반이
+    // 다시 들어와도 "새 지문"이 아니라 원래 없던 것으로 읽힌다.
+    const dir = seeded({ 'src/a.tsx': AUTOFOCUS(1) });
+    const path = join(dir, 'scripts', 'a11y-baseline.txt');
+    writeFileSync(path, `${readFileSync(path, 'utf8')}개수가 없는 줄\n`);
+    const r = run(dir);
+    expect(r.out).toMatch(/^FAIL a11y-gate:/m);
+    expect(r.out).toContain('베이스라인을 읽을 수 없다');
+    expect(r.code).toBe(1);
+  });
+
+  it('--update는 무엇이 넓어졌는지 말한다 — 말하지 않으면 게이트를 끄는 가장 쉬운 길이 된다', () => {
+    // `--update`는 좁히기만 하는 것이 아니라 **지금 있는 위반을 그대로 축복한다.** 새 위반이
+    // 함께 들어가는 것을 말하지 않으면 이 명령 하나가 게이트를 끄는 길이 된다. 이 픽스처가
+    // 없는 동안 그 보고는 아무도 확인하지 않는 출력이었다.
+    const dir = seeded({ 'src/a.tsx': AUTOFOCUS(1) });
+    writeFileSync(join(dir, 'src', 'b.tsx'), STATIC_CLICK);
+    const r = run(dir, ['--update']);
+    expect(r.out).toMatch(/^PASS a11y-gate:/m);
+    expect(r.out).toContain('넓힘');
+    expect(r.out).toMatch(/넓어진 지문 \d+종/);
+    expect(r.out).toContain('no-static-element-interactions');
+    expect(r.code).toBe(0);
   });
 });

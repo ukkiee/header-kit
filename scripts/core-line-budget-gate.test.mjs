@@ -64,6 +64,20 @@ describe('core-line-budget — 예산', () => {
     expect(r.code).toBe(1);
   });
 
+  it('빈 줄도 예산에 든다 — 세지 않았다면 통과했을 자리다', () => {
+    // "빈 줄도 센다"는 게이트가 스스로 선언한 규칙이다. 그것을 **뒤집는** 픽스처가 없으면
+    // 그 문장은 코드로 확인된 적 없는 주장으로 남고, 빈 줄을 계량에서 빼는 편집이 항상
+    // 로드되는 문서의 예산을 조용히 넓힌다. 마커 사이 = 선언 1 + 본문 3 + 빈 줄 2 = 6줄.
+    const doc = ['# fixture', '', BEGIN, 'Target 4 lines', '본문 1', '', '본문 2', '', '본문 3', END].join(
+      '\n',
+    );
+    const r = run(tree(doc));
+    expect(r.out).toMatch(/^FAIL core-line-budget:/m);
+    // 빈 줄을 뺀 4줄이면 경계와 같아 통과한다 — 관계를 형태로 단언해 그 상태를 가른다.
+    expect(r.out).toMatch(/6\/4줄/);
+    expect(r.code).toBe(1);
+  });
+
   it('마커 바깥 줄은 예산에 들지 않는다', () => {
     // 바깥까지 세면 파일의 설정 블록이 자라는 것만으로 코어가 빨갛게 된다 —
     // 재려던 것(항상 로드되는 지시의 크기)이 아닌 것에 빨강이 붙는다.
@@ -96,6 +110,16 @@ describe('core-line-budget — 마커', () => {
     expect(r.out).toMatch(/^FAIL core-line-budget:/m);
     expect(r.out).toContain('마커');
     expect(r.code).toBe(1);
+  });
+
+  it('마커를 본문에 인용한 줄은 마커가 아니다 — 줄 전체가 그 모양이어야 한다', () => {
+    // 코어의 "Amending this core"는 마커 이름을 적을 수 있다. 포함 비교로 재면 그런 줄 하나가
+    // 마커 쌍을 둘로 만들어 **멀쩡한 문서가 빨강이 된다** — 검사하지 않는 초록만큼 나쁜 것이
+    // 평범한 것을 막는 빨강이다.
+    const doc = ['# fixture', BEGIN, 'Target 6 lines', `여는 마커는 \`${BEGIN}\`이다.`, '본문', END];
+    const r = run(tree(doc.join('\n')));
+    expect(r.out).toMatch(/^PASS core-line-budget:/m);
+    expect(r.code).toBe(0);
   });
 
   it('마커 순서가 뒤집히면 실패한다', () => {
@@ -138,6 +162,22 @@ describe('core-line-budget — 선언', () => {
     expect(r.code).toBe(0);
   });
 
+  it('선언 형태를 인용한 줄은 선언이 아니다 — 줄 전체가 그 모양이어야 한다', () => {
+    // 코어가 자기 예산 선언의 **모양을** 설명하는 줄을 가질 수 있다. 앵커 없는 정규식으로 재면
+    // 그 줄이 두 번째 선언으로 세어져 "선언이 2개"로 빨강이 난다.
+    const doc = [
+      '# fixture',
+      BEGIN,
+      'Target 6 lines',
+      '예산은 `Target 100 lines` 한 줄로 적는다.',
+      '본문',
+      END,
+    ];
+    const r = run(tree(doc.join('\n')));
+    expect(r.out).toMatch(/^PASS core-line-budget:/m);
+    expect(r.code).toBe(0);
+  });
+
   it('선언의 수가 숫자가 아니면 실패한다', () => {
     const r = run(tree(core({ declarations: ['Target many lines'] })));
     expect(r.out).toMatch(/^FAIL core-line-budget:/m);
@@ -151,6 +191,24 @@ describe('core-line-budget — 인자와 대상', () => {
     const r = runChild('node', [GATE, '--nope']);
     expect(r.out).toMatch(/^FAIL core-line-budget:/m);
     expect(r.out).toContain('알 수 없는 인자');
+    expect(r.code).toBe(1);
+  });
+
+  it('--dir가 두 번 오면 거절한다', () => {
+    // 말없이 마지막 값을 고르면 어느 트리를 쟀는지가 호출 문면에서 읽히지 않는다. 이 픽스처가
+    // 없으면 중복 검사를 지워도 두 번째 트리를 재면서 통과한다.
+    const r = runChild('node', [GATE, '--dir', tree(core()), '--dir', tree(core())]);
+    expect(r.out).toMatch(/^FAIL core-line-budget:/m);
+    expect(r.out).toContain('두 번');
+    expect(r.code).toBe(1);
+  });
+
+  it('--dir에 트리가 없으면 거절한다 — 조용히 이 저장소를 재면 안 된다', () => {
+    // 값이 빠진 `--dir`를 통과시키면 `dir`가 undefined가 되어 fallback인 **이 저장소**를
+    // 재고 통과한다. 부르는 쪽이 가리킨 트리가 사라진 채 초록이 나오는 자리다.
+    const r = runChild('node', [GATE, '--dir']);
+    expect(r.out).toMatch(/^FAIL core-line-budget:/m);
+    expect(r.out).toContain('트리가 없다');
     expect(r.code).toBe(1);
   });
 

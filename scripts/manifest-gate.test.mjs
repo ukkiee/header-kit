@@ -110,6 +110,13 @@ describe('manifest-gate — 프로덕션 매니페스트의 불변식', () => {
     const dup = { permissions: ['declarativeNetRequest', 'storage', 'storage'] };
     fails(runGate(['--artifacts', artifacts(dup)]), /중복/);
   });
+
+  it('권한이 배열이 아니면 FAIL이다 — 가드가 없으면 판정 없이 죽는 자리다', () => {
+    // 문자열은 `.filter`가 없어 집합 비교가 TypeError로 죽는다. 그러면 상태 줄 없이 스택
+    // 트레이스만 나가고 러너는 "판정을 말하지 않았다"로 접는다 — 이 저장소가 매니페스트
+    // `null`에 대해 이미 한 번 겪은 모양이다.
+    fails(runGate(['--artifacts', artifacts({ permissions: 'declarativeNetRequest' })]), /배열이 아니다/);
+  });
 });
 
 // 권한 표면은 `permissions` 넷에만 있지 않다. WXT는 `src/entrypoints/`에서 매니페스트를
@@ -155,14 +162,21 @@ describe('manifest-gate — 최소 크롬 버전은 하한과 정확히 같아�
   });
 
   it('값이 숫자가 아니면 FAIL이다', () => {
-    fails(runGate(['--artifacts', artifacts({ minimum_chrome_version: 'latest' })]), /latest/);
+    // **사유까지 단언한다.** 형식 검사를 지워도 동등 비교가 "선언과 다르다"로 FAIL을 내므로,
+    // 토큰만 보는 단언은 엉뚱한 사유로 초록이 되고 형식 검사는 재지 않는 자리가 된다.
+    fails(
+      runGate(['--artifacts', artifacts({ minimum_chrome_version: 'latest' })]),
+      /버전 숫자가 아니다: latest/,
+    );
   });
 
   it('아예 없으면 FAIL이다', () => {
+    // 같은 이유로 사유를 단언한다 — 부재 검사를 지워도 형식 검사와 최상위 키 부재 검사가
+    // 둘 다 `minimum_chrome_version`을 사유에 실어 FAIL을 낸다.
     const { minimum_chrome_version: _, ...withoutFloor } = PROD;
     fails(
       runGate(['--artifacts', artifacts({}, { raw: JSON.stringify(withoutFloor) })]),
-      /minimum_chrome_version/,
+      /minimum_chrome_version이 선언되지 않았다/,
     );
   });
 
@@ -220,6 +234,14 @@ describe('manifest-gate — 프로덕션 CSP', () => {
     fails(runGate(['--artifacts', artifacts({ content_security_policy: csp })]), /extension_pages/);
   });
 
+  it('CSP가 객체가 아니면 FAIL이고 사유가 그것을 말한다', () => {
+    // 문자열 CSP는 `Object.keys`가 인덱스를 돌려주므로 키 검사가 "판정할 수 없는 CSP 키다: 0"을
+    // 줄줄이 내고, `csp.extension_pages`는 undefined라 **eval 검사는 아예 돌지 않는다** —
+    // unsafe-eval을 담은 문자열이 그 검사를 지나가는 모양이다. 사유까지 단언해 가른다.
+    const csp = "script-src 'self' 'unsafe-eval';";
+    fails(runGate(['--artifacts', artifacts({ content_security_policy: csp })]), /객체가 아니다/);
+  });
+
   it('sandbox의 unsafe-eval은 통과한다 — 재지 않기로 한 경계가 픽스처로 서 있다', () => {
     // 샌드박스 페이지는 고유 오리진에서 확장 API 없이 돌고 MV3가 거기서 eval을 허용한다.
     // 이 픽스처가 없으면 "재지 않는다"는 문장이 코드로 확인된 적 없는 주장으로 남는다.
@@ -231,9 +253,13 @@ describe('manifest-gate — 프로덕션 CSP', () => {
 // 러너가 이 회차의 산출물을 넘기는 통로. 산출물 소비 게이트가 공유하는 계약
 // (`artifacts-arg.mjs`)이지만, **이 게이트의 입에서도** 성립하는지는 여기서 재야 안다.
 describe('manifest-gate — 산출물 인자 계약', () => {
-  it('가리키는 곳에 매니페스트가 없으면 FAIL이고 사유가 경로를 말한다', () => {
+  it('가리키는 곳에 매니페스트가 없으면 FAIL이고 사유가 다음 걸음까지 말한다', () => {
+    // **사유와 경로를 한 관계로 단언한다.** 부재 검사를 지워도 `readFileSync`의 ENOENT가
+    // try/catch에 걸려 같은 경로를 실은 FAIL이 나온다 — 경로만 보는 단언은 그 상태와
+    // 구별되지 않아, 산출물 부재 검사가 재지 않는 자리로 남는다(변조 스윕 실측).
+    // `missingArtifacts()`가 있는 이유가 정확히 그 구별이다: 읽는 사람에게 다음 걸음을 준다.
     const r = runGate(['--artifacts', join(tmpdir(), 'hk-nonexistent-artifacts')]);
-    fails(r, /hk-nonexistent-artifacts/);
+    fails(r, /빌드 산출물이 없다: .*hk-nonexistent-artifacts/);
   });
 
   it('알 수 없는 인자를 거절한다', () => {

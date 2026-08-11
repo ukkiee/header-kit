@@ -1304,6 +1304,29 @@ describe('산출물 소비 게이트 스크립트 — 인자와 판정 (실제 �
     }
   }
 
+  /**
+   * 산출물 트리 하나 — `html`이 popup.html이고 `chunks`가 `chunks/` 아래 파일들이다.
+   * 아래 케이스들은 이 모양에서 **한 곳만** 비틀어 그 한 곳이 판정을 뒤집는지 본다.
+   */
+  function artTree(html, chunks) {
+    const art = mkdtempSync(join(tmpdir(), 'hk-art-'));
+    made.push(art);
+    mkdirSync(join(art, 'chunks'), { recursive: true });
+    writeFileSync(join(art, 'popup.html'), html);
+    for (const [name, body] of Object.entries(chunks)) writeFileSync(join(art, 'chunks', name), body);
+    return art;
+  }
+
+  /** 지연이 계약인 청크 넷. **존재하되** 즉시 집합에 없어야 통과한다 — 둘 다 게이트가 잰다. */
+  const DEFERRED_CHUNKS = Object.fromEntries(
+    ['sortable-profile-list', 'motion', 'suggest-autocomplete', 'rule-form'].map((p) => [
+      `${p}-x.js`,
+      '// deferred',
+    ]),
+  );
+
+  const ENTRY_HTML = '<script type="module" src="/chunks/entry.js"></script>';
+
   it('bundle-gate: --artifacts가 가리키는 곳에 산출물이 없으면 FAIL이고 사유가 경로를 말한다', () => {
     const empty = mkdtempSync(join(tmpdir(), 'hk-empty-'));
     made.push(empty);
@@ -1406,6 +1429,65 @@ describe('산출물 소비 게이트 스크립트 — 인자와 판정 (실제 �
     const r = runScript('bundle-gate.mjs', ['--artifacts', art], REPO);
     expect(r.out).toMatch(/^FAIL bundle-gate:/m);
     expect(r.out).toContain('지연 계약');
+    expect(r.code).toBe(1);
+  });
+
+  it('bundle-gate: modulepreload로 들어오는 청크도 즉시 집합이다', () => {
+    // 뿌리를 `src`만으로 잡으면 popup이 **함께** 즉시 내려받는 preload 청크가 계량 밖이 되고,
+    // 코드가 그쪽으로 옮겨가면 게이트가 통과한다 — 계량 기준을 즉시 집합 전체로 넓힌 이유가
+    // 그것이다(ui-polish structure r1 S-1). 이 픽스처가 없으면 뿌리에서 `href`를 지워도 초록이다.
+    const art = artTree(`<link rel="modulepreload" href="/chunks/preload.js">\n${ENTRY_HTML}`, {
+      'entry.js': 'console.log("hi")',
+      'preload.js': `// ${'x'.repeat(700 * 1024)}`,
+      ...DEFERRED_CHUNKS,
+    });
+    const r = runScript('bundle-gate.mjs', ['--artifacts', art], REPO);
+    expect(r.out).toMatch(/^FAIL bundle-gate:/m);
+    expect(r.out).toContain('한도');
+    expect(r.code).toBe(1);
+  });
+
+  it('bundle-gate: 동적 import는 즉시 집합에 들지 않는다 — 지연 여부를 파일명으로 판정하지 않는다', () => {
+    // 지연 계약이 성립하는 **유일한** 근거가 이것이다: 동적 import는 뿌리에서 도달하지 않는다.
+    // 정적 추적 정규식이 `import(`까지 받으면 평범한 지연 로드가 즉시 누출로 읽혀 빨강이 된다.
+    const art = artTree(ENTRY_HTML, {
+      'entry.js': 'const load = () => import("./motion-x.js");\nconsole.log(load);\n',
+      ...DEFERRED_CHUNKS,
+    });
+    const r = runScript('bundle-gate.mjs', ['--artifacts', art], REPO);
+    expect(r.out).toMatch(/^PASS bundle-gate:/m);
+    expect(r.code).toBe(0);
+  });
+
+  it('bundle-gate: popup.html에 즉시 로드 청크가 없으면 FAIL이다 — 산출물 형식이 바뀐 것이다', () => {
+    // 뿌리가 0개면 즉시 집합이 비고 합계가 0이 되어 **크기 검사를 가장 잘 통과한다.**
+    // 그 상태를 통과로 두면 popup.html의 형식이 바뀌는 순간 이 게이트가 아무것도 재지 않는다.
+    const art = artTree('<html><body>청크 참조가 없다</body></html>', { ...DEFERRED_CHUNKS });
+    const r = runScript('bundle-gate.mjs', ['--artifacts', art], REPO);
+    expect(r.out).toMatch(/^FAIL bundle-gate:/m);
+    expect(r.out).toContain('즉시 로드 청크를 찾지 못했다');
+    expect(r.code).toBe(1);
+  });
+
+  it('bundle-gate: 즉시 로드 청크 파일이 없으면 FAIL이고 판정 없이 죽지 않는다', () => {
+    // 가드가 없으면 `readFileSync`가 던져 **상태 줄 없이** 스택 트레이스만 나간다.
+    const art = artTree('<script type="module" src="/chunks/gone.js"></script>', {
+      ...DEFERRED_CHUNKS,
+    });
+    const r = runScript('bundle-gate.mjs', ['--artifacts', art], REPO);
+    expect(r.out).toMatch(/^FAIL bundle-gate:/m);
+    expect(r.out).toContain('빌드 산출물이 깨졌다');
+    expect(r.code).toBe(1);
+  });
+
+  it('bundle-gate: 지연 계약 청크가 사라지면 FAIL이다 — 이름만 바뀌어 단언이 무력해지는 길이다', () => {
+    // 스크립트 주석이 적어 둔 것: "청크가 사라지면 그것도 실패로 잡아, 이름만 바뀌어 단언이
+    // 조용히 무력해지는 일을 막는다." 이 픽스처가 없는 동안 그 문장은 검증된 적 없는 주장이었다.
+    const { 'motion-x.js': _renamed, ...rest } = DEFERRED_CHUNKS;
+    const art = artTree(ENTRY_HTML, { 'entry.js': 'console.log("hi")', ...rest });
+    const r = runScript('bundle-gate.mjs', ['--artifacts', art], REPO);
+    expect(r.out).toMatch(/^FAIL bundle-gate:/m);
+    expect(r.out).toContain('청크가 없습니다');
     expect(r.code).toBe(1);
   });
 
