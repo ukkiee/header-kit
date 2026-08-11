@@ -1,0 +1,51 @@
+{
+  "ok": true,
+  "status": "ok",
+  "kind": "release",
+  "ack": "human-triage",
+  "triageMode": "human",
+  "verdict": "needs-attention",
+  "summary": "R4-F1 and R4-F2 are resolved: the faulty owning-element scanner is gone, and the comparison fixture now places the expression before `autoFocus`; the focused suite passes 19/19. The revert intentionally broke cross-element discrimination, so same-file/same-rule replacements now pass. That limit is accurately represented in the code, fixture, README, and canonical gate documentation, and the build/.wxt attribution honestly scopes reproducibility to the tree plus cache-regeneration procedure. However, the final verification summary still materially understates the reverted a11y gap.",
+  "planFile": "docs/reviews/agent-harness/spec.md",
+  "planInDiff": null,
+  "reviewedFileCount": 145,
+  "target": "branch diff against main",
+  "reviewer": "codex",
+  "fallbackFrom": null,
+  "fallbackReason": null,
+  "effort": "xhigh",
+  "inputMode": "self-collect",
+  "reviewedSha": "c23c28a5ec43db1effd5f07be0e7e5e2e203f29f",
+  "reviewedTree": "994bd5b10e1f8b7c5cb0a260c35fd4f34371e4f8",
+  "reviewedPlanSha256": "020faad8d7c7e809f8f13af8a07ef46a929a9e1c99f59aeec90a42ff65035f2e",
+  "headMovedDuringReview": false,
+  "planDriftDuringReview": false,
+  "backendExitCode": 0,
+  "parseError": null,
+  "promptDelivery": {
+    "mechanism": "token-echo",
+    "enforcing": false,
+    "verified": true,
+    "echoed": "aef9bdc54700cabd"
+  },
+  "findingCount": 1,
+  "planFindingCount": 0,
+  "triage": "review-gate SKILL.md § Triage governs: render EVERY finding as a full table row, never inside a dialog; then ask the ROUND before the rows — take every Proposed decision as it stands, or decide row by row — and `as proposed` ends the round in that ONE action; only if row-by-row was chosen, ask per finding with that row's Proposed decision as the first option, a reject or defer taking a free-text reason; echo back ONLY the rows that carried free text, and none if the round was decided by selection alone; max 2 rounds, append decisions.md and COMMIT it with this artifact.",
+  "findings": [
+    {
+      "severity": "medium",
+      "title": "The final evidence still narrows the reverted gap to same-element replacements",
+      "body": "This summary says only replacements on the same element are missed. After the revert, `scripts/a11y-gate.mjs:122-131` contains no owning-element discriminator, and `scripts/a11y-gate.test.mjs:171-179` explicitly requires an `input` → `textarea` replacement in the same file to PASS. The committed evidence therefore contradicts its later R4 appendix and the canonical documentation, allowing readers to over-credit the hard gate's replacement coverage.",
+      "file": "docs/reviews/agent-harness/verification.md",
+      "line_start": 105,
+      "line_end": 110,
+      "code": "그 밖의 한계는 `docs/agents/verification.md`의 \"이 검사가 덮지 못하는 것\"과 `README.md`의\n\"각 게이트가 보장하지 않는 것\"·\"알려진 빈틈\"이 갖는다. 여기 옮겨 적지 않는다 — 두 자리에 적으면\n갈라선다. 요약하면: 게이트 스크립트의 테스트 커버리지가 고르지 않고(`smoke-barriers`·`ui-perf`·\n`smoke`의 로직에는 테스트가 없다), `core-line-budget`은 상한이지 하한이 아니며, README 파리티는\n산문의 **사실 여부**를 재지 않고, 접근성 지문은 같은 파일·같은 규칙·**같은 요소** 위의 교체를\n구분하지 못한다(위치를 빼기로 한 D13a의 대가).",
+      "confidence": 1,
+      "recommendation": "Change the summary to say that all same-file/same-rule replacements can collide regardless of element, and qualify the ticket-06 claim at line 84 as applying only when the fingerprint or count changes.",
+      "isPlanFinding": false
+    }
+  ],
+  "next_steps": [
+    "Correct the stale verification summary and ticket-06 evidence row; the R4 code fixes and build/.wxt attribution need no further change within this review scope."
+  ]
+}
