@@ -8,8 +8,8 @@
 | | |
 |---|---|
 | 브랜치 | `feat/agent-harness` |
-| 검증한 커밋 | `a2d8bd2dfba3dd574950350ec565903c9bc1e40d` |
-| 트리 객체 | `1b7b873e9e749fecb621c963c1c0e9695e97d0f0` |
+| 검증한 커밋 | `ed4156397fab0a01f62f584faddd36a2a18f84ac` |
+| 트리 객체 | `12928bbcfb4a86c507d91d042ea7a11afd0980f5` |
 | 워킹 트리 | clean (`git status --porcelain` 무출력) |
 | 빌드 산출물 | `.output/chrome-mv3` — `*.js` 15개의 집계 해시 `9744cfdbe317410c` |
 | 기기 | darwin/arm64 · Apple M5 Pro · 18코어 · 48GB |
@@ -43,7 +43,7 @@ README보다 앞서 있었다. 지금은 판정에 들어가는 것이 전부 �
 ## 릴리스 게이트가 보는 범위
 
 이 슬러그는 `feat/agent-harness`로 분기했고 게이트 베이스는 기본값(`main` = `fffb9d6`)이다.
-릴리스 렌즈가 보는 것은 `main`..HEAD의 **46 커밋 전체**다.
+릴리스 렌즈가 보는 것은 `main`..HEAD의 **49 커밋 전체**다.
 
 ## 돌린 명령과 결과
 
@@ -89,9 +89,25 @@ PASS run-gates: 16 gate(s): 16 pass, 0 fail, 0 n/a, 0 blocked
 
 ## 검증이 덮지 못하는 것 — 알고 남긴 한계
 
-**실제 GitHub Actions 실행은 아직 관측되지 않았다.** CI 경로는 **리눅스 컨테이너**(node:24 ·
-bun 1.3.11)에서 `bun install --frozen-lockfile && bun run gate:ci`로 12행 전부 PASS를 확인했다.
-그러나 그것은 `ubuntu-latest` 러너가 아니다. 첫 실제 실행이 이 브랜치의 첫 PR에서 난다.
+**실제 GitHub Actions 실행이 관측됐다** (이전 판에서는 "아직 관측되지 않았다"였고, 릴리스 게이트
+r1의 F4가 그것을 지적해 사람이 defer로 남겼던 자리다). 브랜치를 push하고 PR #1을 열자
+`pull_request` 트리거가 걸려 **`gate:ci` 12행이 전부 PASS**했다:
+
+| | |
+|---|---|
+| 실행 | `31497197194` · conclusion `success` |
+| 러너 | `ubuntu-latest` · bun 1.3.11 · node 24 |
+| 판정 | `PASS run-gates: 12 gate(s): 12 pass, 0 fail, 0 n/a, 0 blocked` |
+| 소요 | `gate:ci` 25초 (전체 잡 38초) |
+
+**빌드가 진짜였다는 증거는 러너 설계가 준다.** 러너는 통과한 게이트의 출력을 버리므로 CI 로그에
+빌드 요약이 남지 않는다. 대신 `bundle-gate`·`writer-lane-gate`·`manifest-gate`가 `needs: build`로
+**이 회차의 산출물 경로**를 받아 쟀고 전부 통과했다 — 산출물이 없으면 FAIL이 나도록 픽스처가
+못 박혀 있고(D4a), `manifest-gate`는 빌드된 매니페스트를 선언과 정확히 대조하므로 진짜 빌드 없이는
+통과할 수 없다. 그 셋의 초록이 빌드가 실재했다는 관측이다.
+
+이전에 **리눅스 컨테이너**(node:24 · bun 1.3.11)로 잰 것은 여전히 유효하고, 그 실측이 CI 빨강 둘을
+미리 잡았다(아래).
 
 그 컨테이너 실측이 **CI 빨강 둘을 미리 잡았다**(둘 다 이 슬러그 안에서 고쳤다):
 
@@ -219,3 +235,21 @@ r1 F2가 지목한 교체 구멍은 **닫히지 않은 채 문서화된 한계**
 산출물을 읽는 게이트가 재는 바이트는 **그 회차의 빌드**이되 캐시 상태의 영향을 받는다.
 
 되돌림 뒤 게이트 16행 전부 PASS · 스위트 839 · 접근성 베이스라인 지문 5종 · 진단 13건.
+
+## 갱신 — 릴리스 게이트 r1 F4 종결
+
+`/feature` Stage 5가 종결된 뒤, 사람이 브랜치를 push하고 PR을 열기로 결정하면서 이 기능에서
+**유일하게 관측되지 않았던 것**이 관측됐다. 위 "검증이 덮지 못하는 것" 절의 첫 항목이 그에 맞춰
+다시 쓰였고, `README.md`의 알려진 빈틈도 같이 고쳤다.
+
+이로써 릴리스 게이트 findings 10건이 전부 종결됐다 — accept 9, defer 1(이것), 그리고 defer는
+사람이 그 결정을 실행하면서 닫혔다.
+
+**푸시 직전에 잡은 사고 하나를 기록한다.** 브랜치를 push하기 전에 `git branch --show-current`가
+비어 있는 것을 보고 확인했더니 **detached HEAD**였다 — 빌드 해시를 조사하며 SHA로 checkout한 뒤
+브랜치로 돌아오지 않았고, 그 위에 커밋 둘(r4 증거 정정 · r5 반영)을 쌓았다. 그대로 push했으면
+브랜치가 `a2d8bd2`에 머문 채 **증거 정정이 빠진 상태로** 올라갔을 것이다. fast-forward로 복구했다.
+
+**새로 생긴 후속 하나**: CI가 `actions/checkout@v4`·`actions/setup-node@v4`가 Node.js 20을 겨냥한다는
+deprecation 주석을 냈다(러너가 24로 강제 실행 중). 지금은 통과하지만 액션 버전을 올리는 것이
+남은 일이다.

@@ -857,3 +857,11 @@ R5-F1 accept — The final evidence still narrows the reverted gap to same-eleme
 **Stage 5 종결: WAIVED by user** — R5-F1은 문서 정정뿐이고 코드 변경이 없으므로 라운드 6을 돌리지
 않는다. 릴리스 게이트는 r1~r5 다섯 라운드를 돌았고 findings 10건이 전부 triage됐다.
 남은 defer 하나(r1 F4, 실제 GitHub Actions 실행)는 push와 PR이 사람의 결정이라는 근거로 남는다.
+
+### release r1 F4 — defer가 닫혔다
+
+사람이 브랜치를 push하고 PR #1을 열기로 결정하면서, defer의 근거였던 "push와 PR은 사람의 결정"이
+실행됐다. `pull_request` 트리거가 걸려 실제 `ubuntu-latest`에서 `gate:ci` 12행이 전부 PASS
+(run `31497197194`, conclusion success). 증거와 README를 그에 맞춰 고쳤다.
+
+이로써 릴리스 게이트 findings 10건 전부 종결 — accept 9, defer 1(이것, 이후 닫힘).
