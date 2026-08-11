@@ -1372,11 +1372,67 @@ describe('산출물 소비 게이트 스크립트 — 인자와 판정 (실제 �
     return { dir, art };
   }
 
+  it('bundle-gate: 즉시 로드 합계가 한도를 넘으면 FAIL이고 사유가 초과분을 말한다', () => {
+    // **계측 임계값 자체의 회귀.** 지금까지는 통과 픽스처만 있어서, 한도 비교가 뒤집히거나
+    // 상수가 커져도 초록이었다 — 게이트가 통과하는 것만 확인하고 **실패해야 할 때 실패하는지**는
+    // 재지 않던 자리다(README '알려진 빈틈'이 명시적으로 적어 둔 것).
+    const art = mkdtempSync(join(tmpdir(), 'hk-art-'));
+    made.push(art);
+    mkdirSync(join(art, 'chunks'), { recursive: true });
+    writeFileSync(join(art, 'popup.html'), '<script type="module" src="/chunks/entry.js"></script>');
+    // 기준선 386KB + 한도 190KB = 576KB. 그 위로 넘긴다.
+    writeFileSync(join(art, 'chunks', 'entry.js'), `// ${'x'.repeat(700 * 1024)}`);
+    for (const p of ['sortable-profile-list', 'motion', 'suggest-autocomplete', 'rule-form']) {
+      writeFileSync(join(art, 'chunks', `${p}-x.js`), '// deferred');
+    }
+    const r = runScript('bundle-gate.mjs', ['--artifacts', art], REPO);
+    expect(r.out).toMatch(/^FAIL bundle-gate:/m);
+    expect(r.out).toContain('한도');
+    expect(r.code).toBe(1);
+  });
+
+  it('bundle-gate: 지연 계약 청크가 즉시 집합에 들어오면 FAIL이다 — 크기와 별개다', () => {
+    // 크기 한도 안에 들어와도 구조가 깨지면 잡아야 한다. 이 케이스가 없으면 누군가
+    // `rule-form`을 다시 정적 import해도 작기만 하면 통과한다 — 스크립트 주석이 그 이력을 적는다.
+    const art = mkdtempSync(join(tmpdir(), 'hk-art-'));
+    made.push(art);
+    mkdirSync(join(art, 'chunks'), { recursive: true });
+    writeFileSync(join(art, 'popup.html'), '<script type="module" src="/chunks/entry.js"></script>');
+    // 즉시 뿌리가 지연 계약 청크를 **정적으로** import한다.
+    writeFileSync(join(art, 'chunks', 'entry.js'), "import './rule-form-x.js';\n");
+    for (const p of ['sortable-profile-list', 'motion', 'suggest-autocomplete', 'rule-form']) {
+      writeFileSync(join(art, 'chunks', `${p}-x.js`), '// deferred');
+    }
+    const r = runScript('bundle-gate.mjs', ['--artifacts', art], REPO);
+    expect(r.out).toMatch(/^FAIL bundle-gate:/m);
+    expect(r.out).toContain('지연 계약');
+    expect(r.code).toBe(1);
+  });
+
   it('writer-lane-gate: 픽스처 트리로 실제 빌드 없이 통과가 성립한다', () => {
     const { dir, art } = laneTree();
     const r = runScript('writer-lane-gate.mjs', ['--artifacts', art], dir);
     expect(r.out).toMatch(/^PASS writer-lane-gate:/m);
     expect(r.code).toBe(0);
+  });
+
+  it('writer-lane-gate: 서비스워커 밖 번들에 표지가 있으면 FAIL이다', () => {
+    // **계측 회귀.** 통과 픽스처만 있으면 누출 검출이 꺼져도 초록이다. 이 게이트가 지키는 것은
+    // 레인이 워커 밖으로 새지 않는다는 것이고, 새는 순간을 재현해야 검사가 된다.
+    const art = mkdtempSync(join(tmpdir(), 'hk-art-'));
+    made.push(art);
+    mkdirSync(join(art, 'chunks'), { recursive: true });
+    writeFileSync(
+      join(art, 'manifest.json'),
+      JSON.stringify({ background: { service_worker: 'background.js' } }),
+    );
+    // 워커는 자체 완결(한 파일)이어야 이 게이트의 전제가 선다.
+    writeFileSync(join(art, 'background.js'), '// writer-lane:service-worker-only\n');
+    // 화면 번들에 표지가 샜다 — 잡아야 하는 바로 그 상태.
+    writeFileSync(join(art, 'chunks', 'popup-x.js'), '// writer-lane:service-worker-only\n');
+    const r = runScript('writer-lane-gate.mjs', ['--artifacts', art], REPO);
+    expect(r.out).toMatch(/^FAIL writer-lane-gate:/m);
+    expect(r.code).toBe(1);
   });
 
   it('writer-lane-gate: --artifacts가 가리키는 곳에 산출물이 없으면 FAIL이고 사유가 경로를 말한다', () => {
