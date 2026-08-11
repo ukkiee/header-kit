@@ -36,6 +36,7 @@ gate: storybook        | storybook:build  | hard | no | -     | no  | exit  | ne
 gate: smoke-barriers   | smoke-barriers   | hard | no | -     | no  | token | never
 gate: bundle-gate      | bundle-gate      | hard | no | build | no  | token | never
 gate: writer-lane-gate | writer-lane-gate | hard | no | build | no  | token | never
+gate: manifest-gate    | manifest-gate    | hard | no | build | no  | token | never
 gate: smoke            | smoke            | hard | no | build | yes | token | never
 
 # deferred: <스크립트 파일> | <왜 아직 등록하지 않는가>

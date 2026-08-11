@@ -18,6 +18,7 @@
     "smoke-barriers": "node scripts/audit-smoke-barriers.mjs",
     "bundle-gate": "node scripts/bundle-gate.mjs",
     "writer-lane-gate": "node scripts/writer-lane-gate.mjs",
+    "manifest-gate": "node scripts/manifest-gate.mjs",
     "gate": "node scripts/run-gates.mjs",
     "gate:ci": "node scripts/run-gates.mjs --ci",
     "postinstall": "wxt prepare"
