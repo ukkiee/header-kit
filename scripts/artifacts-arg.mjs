@@ -42,3 +42,16 @@ export const tokenFail = (id) => (message) => {
 export const missingArtifacts = (path) =>
   `빌드 산출물이 없다: ${path} — 러너가 이 회차의 빌드를 만들지 못했거나, ` +
   `직접 돌렸다면 먼저 \`bun run build\`를 실행하세요.`;
+
+/**
+ * 사유에 싣는 산출물 원문은 **한 줄로 접고** 길이를 자른다. 원문의 개행이 그대로 나가면
+ * 판정을 두 번 말하는 출력이 되고(러너는 첫 매치를 읽는다), 사유는 무엇이 틀렸는지 가리키는
+ * 자리이지 산출물을 옮겨 적는 자리가 아니다.
+ *
+ * 위 둘과 같은 이유로 여기 산다: 산출물을 읽는 게이트가 제각기 들고 있으면 곧 어긋난다.
+ */
+export const oneLine = (value) => {
+  const s = typeof value === 'string' ? value : JSON.stringify(value);
+  const flat = String(s).replace(/\s+/g, ' ').trim();
+  return flat.length > 120 ? `${flat.slice(0, 117)}...` : flat;
+};

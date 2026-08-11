@@ -109,10 +109,9 @@ ADR 0018이다.
   변조했는지는 `docs/agents/verification.md`가 갖는다. ~~소스 쪽 검사 둘은 픽스처로 뒤집을 수
   없다~~ **그 진단이 틀렸다**: 그 검사들을 조종하는 것은 `--artifacts`가 아니라 cwd이고 대상 인자
   없이 뒤집힌다. `smoke-barriers`·`ui-perf`·`smoke`의 로직에는 여전히 테스트가 없다.
-- **`writer-lane-gate`는 깨진 매니페스트에서 판정 토큰 없이 죽는다.** 산출물의 `manifest.json`이
-  존재하지만 파싱되지 않으면 스택 트레이스만 남는다. 러너가 "상태 줄 없음"으로 FAIL을 내므로
-  거짓 초록은 아니지만 사유가 운영자에게 가지 않는다 — 형제인 `manifest-gate`는 같은 입력을
-  판정으로 바꾼다.
+- ~~`writer-lane-gate`는 깨진 매니페스트에서 판정 토큰 없이 죽는다.~~ **닫았다** — 파싱 실패와
+  `null` 매니페스트를 판정으로 바꿨다. 같은 자리가 `manifest-gate`에도 열려 있어서 함께 닫았다
+  (그쪽은 깨진 JSON은 받았지만 `null`에서 죽었다).
 - **`scripts/`는 `tsconfig.json`의 타입 프로그램 밖이다.** 그곳의 타입 오류는 `check`에 잡히지
   않는다. `lint`의 type-aware 판정은 자기 타입 프로그램을 세워 `scripts/`도 재지만, `.mjs`에는 타입
   선언이 없어 추론이 `any`로 떨어지는 자리가 있다.

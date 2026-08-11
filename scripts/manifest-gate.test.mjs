@@ -256,6 +256,13 @@ describe('manifest-gate — 산출물 인자 계약', () => {
     fails(runGate(['--artifacts', artifacts({}, { raw: '{ not json' })]), /읽을 수 없다/);
   });
 
+  it('매니페스트가 객체가 아니면 FAIL이다 — `null`은 파싱을 통과하고 그 뒤에서 죽는다', () => {
+    // `null`은 유효한 JSON이라 위 픽스처에 걸리지 않는다. 가드가 없으면 `Object.keys(null)`이
+    // TypeError로 죽어 **상태 줄 없이** 스택 트레이스만 나간다 — 러너는 판정을 얻지 못한다.
+    fails(runGate(['--artifacts', artifacts({}, { raw: 'null' })]), /객체가 아니다/);
+    fails(runGate(['--artifacts', artifacts({}, { raw: '[]' })]), /객체가 아니다/);
+  });
+
   it('레지스트리가 이 게이트를 needs: build · verdict: token으로 들고 있다', () => {
     // 러너의 자리 일치 검사는 표와 레지스트리를 id·명령·kind·N/A **네 칸으로만** 대조한다 —
     // `needs` 칸은 표에 아예 없어서 아무것도 지켜 주지 않는다. 이 줄을 `-`로 되돌리면 러너가

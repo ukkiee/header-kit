@@ -1598,10 +1598,33 @@ describe('산출물 소비 게이트 스크립트 — 인자와 판정 (실제 �
     expect(r.code).toBe(1);
   });
 
+  it('writer-lane-gate: 매니페스트가 깨진 JSON이면 크래시가 아니라 FAIL이다', () => {
+    // 던지기만 하면 exit 1이지만 **상태 줄이 없다** — 러너는 "판정을 말하지 않았다"로 접고
+    // 운영자에게는 스택 트레이스만 간다. `manifest-gate`가 같은 입력에 세운 계약과 맞춘다.
+    const { dir, art } = laneTree();
+    writeFileSync(join(art, 'manifest.json'), '{"background":{"service_worker":"background.js"}');
+    const r = runScript('writer-lane-gate.mjs', ['--artifacts', art], dir);
+    expect(r.out).toMatch(/^FAIL writer-lane-gate:/m);
+    expect(r.out).toContain('읽을 수 없다');
+    expect(r.code).toBe(1);
+  });
+
   it('writer-lane-gate: 매니페스트에 service_worker가 없으면 전제가 깨졌다고 FAIL한다', () => {
     // 여기서 통과로 접으면 워커가 없는 산출물이 "워커 밖에 표지 0"으로 초록이 된다.
     const { dir, art } = laneTree();
     writeFileSync(join(art, 'manifest.json'), JSON.stringify({ manifest_version: 3 }));
+    const r = runScript('writer-lane-gate.mjs', ['--artifacts', art], dir);
+    expect(r.out).toMatch(/^FAIL writer-lane-gate:/m);
+    expect(r.out).toContain('service_worker');
+    expect(r.code).toBe(1);
+  });
+
+  it('writer-lane-gate: 매니페스트가 null로 파싱돼도 크래시가 아니라 FAIL이다', () => {
+    // `null`은 유효한 JSON이라 파싱 검사를 지난다. 옵셔널 체이닝이 빠지면 이 하나만
+    // TypeError로 죽어 상태 줄 없이 스택 트레이스가 나간다 — 깨진 JSON과 같은 종류의 구멍이
+    // 퇴화 입력 쪽에 하나 더 있던 자리다.
+    const { dir, art } = laneTree();
+    writeFileSync(join(art, 'manifest.json'), 'null');
     const r = runScript('writer-lane-gate.mjs', ['--artifacts', art], dir);
     expect(r.out).toMatch(/^FAIL writer-lane-gate:/m);
     expect(r.out).toContain('service_worker');

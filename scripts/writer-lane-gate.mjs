@@ -24,7 +24,7 @@
 // (ADR 0016의 '모듈 최상단 락'이 물린 바로 그 이유). 두 기제가 서로 다른 구멍을 맡는다.
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { artifactsDirFrom, missingArtifacts, tokenFail } from './artifacts-arg.mjs';
+import { artifactsDirFrom, missingArtifacts, oneLine, tokenFail } from './artifacts-arg.mjs';
 
 const fail = tokenFail('writer-lane-gate');
 
@@ -132,8 +132,19 @@ if (!existsSync(OUT_DIR)) fail(missingArtifacts(OUT_DIR));
 
 const manifestPath = join(OUT_DIR, 'manifest.json');
 if (!existsSync(manifestPath)) fail(`${manifestPath}가 없습니다 — 빌드 산출물 형식이 바뀐 것 같습니다.`);
-const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-const workerEntry = manifest.background?.service_worker;
+// 파싱 실패를 판정으로 바꾼다. 그냥 던지면 exit 1이지만 **상태 줄이 없어** 러너는 "판정을
+// 말하지 않았다"로 접고 운영자에게는 스택 트레이스만 간다 — 무엇이 틀렸는지가 사유에 없다.
+// `manifest-gate`가 같은 입력에 대해 세운 계약과 같은 모양으로 답한다.
+let manifest;
+try {
+  manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+} catch (e) {
+  fail(`매니페스트를 읽을 수 없다: ${manifestPath} — ${oneLine(e.message)}`);
+}
+// `manifest?.`인 이유: `null`은 유효한 JSON이고 파싱을 통과한다. 옵셔널 체이닝을 빼면
+// 그 하나만 TypeError로 죽어 판정 없이 스택 트레이스가 나간다(실측). 지금은 아래 전제
+// 검사가 받아 사유를 말한다 — 배열·숫자·문자열도 같은 자리로 떨어진다.
+const workerEntry = manifest?.background?.service_worker;
 if (typeof workerEntry !== 'string') {
   fail('manifest에 `background.service_worker`가 없습니다 — 이 게이트의 전제가 깨졌습니다.');
 }

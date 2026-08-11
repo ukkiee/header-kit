@@ -9,7 +9,7 @@
 // (스펙 D10의 버린 대안).
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { artifactsDirFrom, missingArtifacts, tokenFail } from './artifacts-arg.mjs';
+import { artifactsDirFrom, missingArtifacts, oneLine, tokenFail } from './artifacts-arg.mjs';
 
 const fail = tokenFail('manifest-gate');
 
@@ -76,17 +76,6 @@ const violations = [];
 const note = (v) => violations.push(v);
 
 /**
- * 사유에 싣는 매니페스트 원문은 **한 줄로 접고** 길이를 자른다. 원문의 개행이 그대로
- * 나가면 판정을 두 번 말하는 출력이 되고(러너는 첫 매치를 읽는다), 사유는 무엇이 틀렸는지
- * 가리키는 자리이지 산출물을 옮겨 적는 자리가 아니다.
- */
-const oneLine = (value) => {
-  const s = typeof value === 'string' ? value : JSON.stringify(value);
-  const flat = String(s).replace(/\s+/g, ' ').trim();
-  return flat.length > 120 ? `${flat.slice(0, 117)}...` : flat;
-};
-
-/**
  * 집합의 **정확한 일치**. 부분집합으로 재면 늘어난 것을 놓치고, 상위집합으로 재면 사라진
  * 것을 놓친다 — 둘 다 이 게이트가 막으려는 것이라 양방향으로 잰다. 중복도 어긋남이다:
  * 양방향 포함만 보면 `[a, a, b]`가 `[a, b]`와 같아 보이는데, 그것은 집합의 일치이지
@@ -119,6 +108,12 @@ try {
   manifest = JSON.parse(readFileSync(MANIFEST, 'utf8'));
 } catch (e) {
   fail(`매니페스트를 읽을 수 없다: ${MANIFEST} — ${oneLine(e.message)}`);
+}
+// 파싱을 통과했다고 객체인 것은 아니다. `null`·배열·숫자·문자열 전부 유효한 JSON이고, 그중
+// `null`은 바로 아래 `Object.keys`에서 TypeError로 죽는다 — 상태 줄 없이 스택 트레이스만
+// 나가므로 러너는 "판정을 말하지 않았다"로 접고 사유는 아무 데도 남지 않는다(실측).
+if (manifest === null || typeof manifest !== 'object' || Array.isArray(manifest)) {
+  fail(`매니페스트가 객체가 아니다: ${MANIFEST} — ${oneLine(manifest)}`);
 }
 
 const keys = Object.keys(manifest);
