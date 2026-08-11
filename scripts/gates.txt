@@ -30,6 +30,7 @@
 # `#` 주석과 빈 줄은 무시된다.
 
 gate: check            | check            | hard | no | -     | no  | exit  | never
+gate: lint             | lint             | hard | no | -     | no  | exit  | never
 gate: test             | test             | hard | no | -     | no  | exit  | never
 gate: build            | build            | hard | no | -     | no  | exit  | never
 gate: storybook        | storybook:build  | hard | no | -     | no  | exit  | never

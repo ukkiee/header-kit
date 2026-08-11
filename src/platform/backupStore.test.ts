@@ -253,6 +253,9 @@ describe('축출 중 읽기 펜스 — 구독 정리 (어댑터)', () => {
               // 값을 집어 준 **직후** 커밋이 착지한다 — 축출이 끝나 c1이 목록에서 빠진다.
               queueMicrotask(() => {
                 kv[BACKUP_MANIFEST_KEY] = { snapshots: [entry('c2', 'text-c2')] };
+                // 사본 순회는 브라우저의 디스패치를 흉내 낸 것이다(그 시점 목록의 사본에
+                // 보낸다). 이 시나리오의 리스너는 하나라 지금은 차이가 없다.
+                // oxlint-disable-next-line unicorn/no-useless-spread
                 for (const listener of [...listeners]) {
                   listener({ [BACKUP_MANIFEST_KEY]: {} }, 'sync');
                 }

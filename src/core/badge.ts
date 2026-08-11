@@ -39,6 +39,9 @@ export function readableTextColor(background: string): string {
 /** `#rgb`·`#rrggbb`만 읽는다 — 못 읽으면 `null`이고 호출부가 물러난다. */
 function relativeLuminance(hex: string): number | null {
   const body = hex.trim().replace(/^#/, '');
+  // 3자리를 6자리로 펴는 자리. 문자열을 코드포인트로 나누는 것이 맞고, 이모지·서로게이트가
+  // 들어와도 바로 다음 줄의 6자리 hex 검사가 전부 거절해 판정은 null이 된다.
+  // oxlint-disable-next-line typescript/no-misused-spread
   const full = body.length === 3 ? [...body].map((c) => c + c).join('') : body;
   if (!/^[0-9a-fA-F]{6}$/.test(full)) return null;
   const channels = [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16) / 255);

@@ -53,6 +53,7 @@ bun run gate --check-only # 네 자리 일치만 본다 (게이트를 돌리지 
 | 게이트 | 명령 | 임계값 | kind | N/A 조건 |
 | --- | --- | --- | --- | --- |
 | `check` | `bun run check` | `tsc --noEmit` 오류 0 | hard | never |
+| `lint` | `bun run lint` | `oxlint` 진단 0 — correctness 카테고리 · 레이어 방향(상향 import) · 순환/자기 import · type-aware 떠도는 프로미스. `scripts/`도 같은 강도로 재되 `.mjs`의 추론이 `any`로 떨어지는 규칙 하나만 끈다 (설정의 정본은 `.oxlintrc.json`) | hard | never |
 | `test` | `bun run test` | vitest 스위트 전부 통과 | hard | never |
 | `build` | `bun run build` | `wxt build` 성공 | hard | never |
 | `storybook` | `bun run storybook:build` | Storybook 빌드 성공 | hard | never |
@@ -92,6 +93,46 @@ bun run gate --check-only # 네 자리 일치만 본다 (게이트를 돌리지 
 
 빌드 산출물을 읽는 게이트가 하나 더 온다 — `overflow-gate`(티켓 07). 같은 `needs: build`
 자리에 선다.
+
+## `lint`가 재는 것과 재지 않는 것
+
+`tsc`를 대체하지 않는다. `check`는 그대로 남고 `lint`가 새 행이다 — 두 진단 집합이 같다는
+주장은 측정되지 않았고, 틀렸을 때 생기는 것이 정확히 검사하지 않는 초록 게이트다.
+
+**레이어 방향**(`core → runtime → platform → ui → features → app → entrypoints`)은 층별
+`overrides` + `no-restricted-imports`로 강제한다. 이 표현의 약점은 **21쌍 중 한 줄이 빠져도
+설정이 조용히 통과한다**는 것이고, 그것을 닫는 것은 설정이 아니라 픽스처다:
+`scripts/oxlint-config.test.mjs`가 일곱 층 × 여섯 import(42쌍) 트리에서 `oxlint`를 한 번
+돌려 **상향 21쌍이 전부 보고되고 하향은 하나도 보고되지 않는 것**을 잰다. 설정 파일을 읽어
+쌍을 세지 않는 이유는, 그것이 표가 완전한지만 보고 표가 실제로 거절하는지는 보지 못하기
+때문이다. 테스트 파일에도 예외를 두지 않는다 — 두면 테스트가 레이어를 영구히 뚫는다.
+
+**같은 파일이 세 가지 무음 실패를 막는다.** 셋 다 "설정에 적혀 있다"와 "설정이 돈다"가
+갈리는 자리이고, 전부 실측으로 확인됐다:
+
+| 무엇이 빠지면 | 무슨 일이 일어나는가 | 무엇이 잡는가 |
+| --- | --- | --- |
+| `plugins`의 `import` | `no-cycle`이 경고 한 줄 없이 아무것도 안 잡는다 | 순환 픽스처 넷 |
+| `import/no-cycle`의 `ignoreTypes: false` | 타입 전용 순환을 전부 놓친다 (이 저장소는 `verbatimModuleSyntax`라 층간 참조가 전부 `import type`이다) | 타입 전용 순환 픽스처 |
+| `oxlint-tsgolint` 또는 `options.typeAware` | type-aware 규칙이 조용히 무시된다(exit 0) | 떠도는 프로미스 픽스처 — **종료 코드가 아니라 규칙 이름이 출력에 있는지**를 본다(도구가 없을 때도 exit 1이 난다) |
+
+**`scripts/`도 type-aware 판정을 받는다.** 스펙 D13의 초안은 "`.mjs`는 타입 프로그램 밖이라
+떠도는 프로미스가 잡히지 않는다"고 적었는데 실측으로 틀렸다 — oxlint는 `tsconfig.json`의
+`exclude`와 무관하게 자기 타입 프로그램을 세우고, `scripts/`의 떠도는 프로미스도 잡는다.
+스펙은 그 문단을 정정했다.
+
+다만 `.mjs`에는 타입 선언이 없어 추론이 `any`로 떨어지는 자리가 있고, 거기서 나오는 판정은
+믿을 수 없다 — 실측으로 걸린 두 건은 `page.evaluate`가 돌려준 **실제 문자열**이었다. 그래서
+`scripts/`에서 끄는 것은 그 규칙(`restrict-template-expressions`) 하나뿐이고 나머지는 `src/`와
+같은 강도다. 규칙을 이름으로 끄는 이유는 oxlint가 override 단위로 type-aware를 끄는 수단을
+주지 않기 때문이다.
+
+**이 게이트가 재지 않는 것.** correctness 밖의 카테고리(style·pedantic·restriction)는 켜지
+않는다 — 실측으로 style만 4652건이고 그것은 검사가 아니라 소음이다. `jsx-a11y`도 아직
+켜지지 않았다(티켓 06). 그리고 `typescript/no-redundant-type-constituents`는 **세 파일에서만**
+껐다: 걸린 6곳이 전부 ADR이 가리키는 `'new' | string` 센티널이고, 고치는 길이 문서를 지우거나
+브랜드 타입을 들이는 도메인 결정이기 때문이다. 전역으로 끄지 않는 이유는 같은 모양이 다른
+곳에 새로 생기면 그때는 걸려야 하기 때문이다(실측으로 확인).
 
 ## `manifest-gate`가 재는 것과 재지 않는 것
 

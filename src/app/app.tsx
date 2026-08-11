@@ -194,13 +194,13 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
     const modification = index >= 0 ? profile!.modifications[index] : undefined;
     if (!modification) return;
     const materializedValue = state.materialized[modificationId];
-    dispatch({ type: 'remove-modification', profileId, modificationId });
+    void dispatch({ type: 'remove-modification', profileId, modificationId });
     const toastId = toast.add({
       title: t(locale, 'ruleDeleted'),
       data: { actionLabel: t(locale, 'undo') },
       actionProps: {
         onClick: () => {
-          dispatch({ type: 'restore-modification', profileId, index, modification, materializedValue });
+          void dispatch({ type: 'restore-modification', profileId, index, modification, materializedValue });
           toast.close(toastId); // 되돌렸으면 토스트도 닫는다
         },
       },

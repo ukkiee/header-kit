@@ -8,7 +8,6 @@ import {
 } from './placeholder';
 import {
   createDefaultState,
-  normalizeConditions,
   placeholderTemplate,
   type Modification,
   type Profile,

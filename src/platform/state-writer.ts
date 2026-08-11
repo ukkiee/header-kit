@@ -1,4 +1,4 @@
-import { backupPayload, backupTarget, type BackupTarget } from '@/core/backup';
+import { backupPayload, backupTarget } from '@/core/backup';
 import { applyCommand, type Command } from '@/core/commands';
 import { performFullReset, type ResetResult } from '@/core/reset';
 import type { StoredState } from '@/core/schema';

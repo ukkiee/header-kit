@@ -4,7 +4,6 @@ import {
   isFilter,
   isModification,
   isRecord,
-  migrateProfileFilters,
   upgradeProfile,
   type Profile,
   type StoredState,

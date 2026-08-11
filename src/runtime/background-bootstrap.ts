@@ -1,5 +1,4 @@
 import { computeBadge, drawsBadge, type BadgeSpec } from '@/core/badge';
-import type { BackupTarget } from '@/core/backup';
 import type { Command } from '@/core/commands';
 import type { MessageKey } from '@/core/i18n';
 import type { ResetStep } from '@/core/reset';

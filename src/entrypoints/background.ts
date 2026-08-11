@@ -1,7 +1,6 @@
 import type { BadgeSpec } from '@/core/badge';
 import type { Command } from '@/core/commands';
 import type { NetRule } from '@/core/rules';
-import type { StoredState } from '@/core/schema';
 import { createStateWriter } from '@/platform/state-writer';
 import {
   loadState,

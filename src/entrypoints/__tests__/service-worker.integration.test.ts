@@ -1,3 +1,8 @@
+// 이 파일이 `entrypoints/` **하위 디렉터리**에 있는 이유: WXT는 `src/entrypoints/`를
+// 엔트리포인트 탐색 루트로 읽고 `*.[jt]s?(x)` 글롭이 그 자리의 모든 .ts를 unlisted script로
+// 잡는다 — 최상위로 올리면 `wxt prepare`가 이 테스트를 엔트리포인트로 로드하다 죽는다(실측).
+// 층은 그대로 `entrypoints`다: 이 테스트가 재는 것이 배경 컴포지션 루트의 동작이고, 그 층만
+// runtime과 platform을 함께 부를 수 있다.
 import { describe, expect, it } from 'vitest';
 import {
   BACKUP_MANIFEST_KEY,
@@ -141,9 +146,11 @@ function installStorageFake(
     if (keys.length === 0) return;
     const changes: Kv = {};
     for (const key of keys) changes[key] = {};
-    // 사본 순회는 의도다: 아래 fake의 removeListener가 배열을 splice하고, 구독자는 자기
-    // 콜백 안에서 해제할 수 있다(backupStore.ts의 해제 함수가 그 모양이다). 살아 있는 배열을
-    // 돌면 splice가 인덱스를 당겨 남은 리스너 하나를 건너뛴다.
+    // 사본 순회는 브라우저를 흉내 낸 것이다 — 실제 `storage.onChanged`는 그 시점 목록의
+    // 사본에 보낸다. 지금은 디스패치 도중 해제하는 구독자가 없어 동작 차이가 없지만(확인함:
+    // backupStore의 해제는 await 뒤 finally라 루프 밖이다), 생기면 살아 있는 배열을 돌던
+    // 코드가 splice로 밀린 리스너 하나를 조용히 건너뛴다. 페이크가 브라우저와 다르게 구는
+    // 것보다 사본이 낫다.
     // oxlint-disable-next-line unicorn/no-useless-spread
     for (const listener of [...changeListeners]) listener(changes, name);
   };

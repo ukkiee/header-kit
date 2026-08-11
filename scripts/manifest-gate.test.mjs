@@ -5,34 +5,17 @@
 // 이 테스트가 덮는 것과 덮지 않는 것: "권한이 하나 더 있으면 FAIL"은 증명하지만,
 // **현재 권한 집합이 이 확장에 옳은 집합인지는 증명하지 않는다.** 후자는 실제 브라우저에서
 // 도는 smoke가 잰다.
-import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { afterEach, describe, expect, it } from 'vitest';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { REPO, runChild, tempDirs } from './test-support.mjs';
 
-const GATE = join(dirname(fileURLToPath(import.meta.url)), 'manifest-gate.mjs');
-const REPO = join(dirname(fileURLToPath(import.meta.url)), '..');
+const GATE = join(REPO, 'scripts', 'manifest-gate.mjs');
 
-const made = [];
-afterEach(() => {
-  for (const p of made.splice(0)) rmSync(p, { recursive: true, force: true });
-});
+const track = tempDirs();
 
-/**
- * **두 스트림을 언제나 함께 잡는다.** 게이트는 FAIL 줄을 stderr에 찍는데, 성공 종료일 때
- * stdout만 보는 방식이면 "FAIL을 찍고 종료 코드 0으로 끝났다"가 통과로 보인다 — 러너가
- * `verdict: token`으로 잡겠다고 선언한 바로 그 케이스가 이 테스트에는 보이지 않게 된다.
- */
-function runGate(args, cwd = REPO) {
-  const r = spawnSync('node', [GATE, ...args], {
-    cwd,
-    encoding: 'utf8',
-    maxBuffer: 8 * 1024 * 1024,
-  });
-  return { code: r.status ?? 1, out: `${r.stdout ?? ''}${r.stderr ?? ''}` };
-}
+const runGate = (args, cwd = REPO) => runChild('node', [GATE, ...args], { cwd });
 
 /**
  * 프로덕션 빌드가 실제로 내놓는 매니페스트(실측). 각 케이스는 이 모양에서 **한 곳만**
@@ -54,8 +37,7 @@ const PROD = {
 
 /** 매니페스트 하나만 담은 산출물 디렉터리. `patch`가 PROD를 덮어쓴다. */
 function artifacts(patch = {}, { raw } = {}) {
-  const dir = mkdtempSync(join(tmpdir(), 'hk-manifest-'));
-  made.push(dir);
+  const dir = track(mkdtempSync(join(tmpdir(), 'hk-manifest-')));
   const body = raw ?? JSON.stringify({ ...PROD, ...patch }, null, 2);
   writeFileSync(join(dir, 'manifest.json'), body);
   return dir;
@@ -252,8 +234,7 @@ describe('manifest-gate — 산출물 인자 계약', () => {
   });
 
   it('인자가 없으면 기본 경로를 본다 — 손으로 돌리던 방식이 깨지지 않는다', () => {
-    const empty = mkdtempSync(join(tmpdir(), 'hk-cwd-'));
-    made.push(empty);
+    const empty = track(mkdtempSync(join(tmpdir(), 'hk-cwd-')));
     // 빈 트리다. 그 사실을 **기본 경로에 대해** 말해야 한다 — 경로만 찍고 죽는 것으로는
     // 러너가 판정을 얻지 못하므로 상태 줄까지 함께 잰다.
     fails(runGate([], empty), /chrome-mv3/);

@@ -61,9 +61,6 @@ export interface RuleFormProps {
  */
 const UNSET = 'unset';
 
-/** 칩이 고를 수 있는 값 — 정책 셋과 "안 정함". 타입으로 닫아 두면 오타가 컴파일에서 걸린다. */
-type SameSiteChoice = SameSitePolicy | typeof UNSET;
-
 /** 허용 집합의 단일 출처(`SAME_SITE_LABEL`)에서 순서째 파생한다 — 표가 둘이 되지 않게. */
 const SAME_SITE_POLICIES = Object.keys(SAME_SITE_LABEL) as SameSitePolicy[];
 

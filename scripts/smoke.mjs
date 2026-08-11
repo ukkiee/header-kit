@@ -688,7 +688,7 @@ try {
   });
   await new Promise((r) => setTimeout(r, 400));
   const afterEdit = (await fetchEchoHeaders(pageB, '/headers'))['x-trace-id'];
-  record('G4: 활성 중 템플릿 편집 → 즉시 재실체화', editResult?.ok === true && /^edit-/.test(afterEdit ?? ''),
+  record('G4: 활성 중 템플릿 편집 → 즉시 재실체화', editResult?.ok === true && (afterEdit ?? '').startsWith('edit-'),
     `value=${afterEdit}`);
 
   // ---------- H. 이슈 08: Import/Export ----------
@@ -2754,6 +2754,8 @@ try {
   await popup.emulateMedia({ colorScheme: 'light' });
   // 브라우저는 커스텀 속성의 hex를 축약해 돌려준다(#ffffff→#fff, #0066cc→#06c) — 축약형을
   // 6자리로 펴서 비교한다. 이걸 안 하면 값이 맞는데도 표기 차이로 실패한다(실제로 겪음).
+  // 문자열을 글자 배열로 펴는 것이라 사본이 아니다 — 타입이 없어 규칙이 배열 spread로 읽는다.
+  // oxlint-disable-next-line unicorn/no-useless-spread
   const hex6 = (v) => (/^#[0-9a-f]{3}$/i.test(v) ? '#' + [...v.slice(1)].map((c) => c + c).join('') : v.toLowerCase());
   const sameHex = (probe, expected) =>
     Object.keys(expected).every((k) => hex6(probe[k]) === expected[k]);
@@ -4235,7 +4237,7 @@ try {
      */
     rows: [...document.querySelectorAll('[aria-label^="Select profile"]')].map((r) => {
       const el = [...r.querySelectorAll('span[aria-hidden]')].at(-1);
-      if (!el || !/· paused$/.test(el.textContent?.trim() ?? '')) return null;
+      if (!el || !(el.textContent?.trim() ?? '').endsWith('· paused')) return null;
       const box = el.getBoundingClientRect();
       return { w: Math.round(box.width), h: Math.round(box.height) };
     }),
@@ -4856,7 +4858,7 @@ try {
   const uaLabelShown = await uaOption.waitFor({ timeout: 5000 }).then(() => true, () => false);
   await uaOption.click();
   const uaValue = await uaInput.inputValue();
-  const uaInsertedFullString = /^Mozilla\/5\.0 \(Macintosh/.test(uaValue);
+  const uaInsertedFullString = uaValue.startsWith('Mozilla/5.0 (Macintosh');
 
   // 직접 친 UA로 바꿔 저장 — 이것도 다음에 제안돼야 한다.
   await uaInput.fill('SmokeBot/9.9');
