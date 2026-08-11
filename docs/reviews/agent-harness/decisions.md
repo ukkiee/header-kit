@@ -608,7 +608,13 @@ pnpm식 격리 저장소(`.pnpm/`, vite 8.2.1)와 최상위 호이스트 사본(
 ### `git show --stat`이 증거로 남아 있는 자리 하나
 
 이번 기능의 문서·스크립트에서 `--stat`은 전부 **증거가 아니라는 말**로만 나온다(확인함).
-남은 하나는 `.scratch/arch-restructure/issues/01-relocate-src-root.md`로, 지난 기능의 **닫힌
-티켓**이 순수 rename을 `--stat`으로 확인한 기록이다. 지금 기준으로는 약한 증거지만 그것은
-그때의 기록이고, 기록의 문면을 나중 기준으로 고쳐 쓰지 않는다 — `docs/reviews/`의 산출물을
-포매터에서 뺀 것과 같은 이유다.
+지난 기능의 기록에 남은 자리는 **둘**이다(앞선 판은 하나만 적었다 — 리뷰가 잡았다):
+
+- `.scratch/arch-restructure/issues/01-relocate-src-root.md` — 순수 rename을 `--stat`으로
+  확인한 닫힌 티켓. 지금 기준으로는 약한 증거다.
+- `docs/reviews/ui-polish/verification.md` — `git diff … --stat -- src/`의 **빈 출력**을 근거로
+  들었다. 이쪽은 논리가 성립한다: 빈 `--stat`은 "변경이 없다"를 뜻하고 그것은 결정적이다.
+  티켓이 금지한 것은 **비어 있지 않은** `--stat`을 "포맷만 바꿨다"의 증거로 쓰는 것이다.
+
+둘 다 그때의 기록이고, 기록의 문면을 나중 기준으로 고쳐 쓰지 않는다 — `docs/reviews/`의
+산출물을 포매터에서 뺀 것과 같은 이유다.
