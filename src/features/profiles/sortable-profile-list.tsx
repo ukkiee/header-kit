@@ -206,7 +206,8 @@ export default function SortableProfileList({
       onDragEnd={handleDragEnd}
     >
       <SortableContext items={items} strategy={verticalListSortingStrategy}>
-        <ul className={sidebarListClass}>
+        {/* 지연 청크가 실제로 도착했다는 표지 — `profile-sidebar`의 정적 목록과 짝이다. */}
+        <ul className={sidebarListClass} data-profile-list="sortable">
           {/* 프로필이 늘거나 줄 때 fade+height — 규칙 목록과 같은 모션이다. `initial={false}`라
               화면을 처음 열 때는 이미 있던 행들이 움직이지 않는다. */}
           <AnimatePresence initial={false}>

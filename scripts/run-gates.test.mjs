@@ -1190,12 +1190,9 @@ describe('산출물 소비 게이트 스크립트 — 인자와 판정 (실제 �
     expect(r.code).toBe(1);
   });
 
-  it('smoke: 산출물이 없으면 브라우저를 띄우기 전에 FAIL이고 사유가 경로를 말한다', () => {
-    const r = runScript('smoke.mjs', ['--artifacts', '/nonexistent-hk-artifacts'], REPO);
-    expect(r.out).toMatch(/^FAIL smoke:/m);
-    expect(r.out).toContain('nonexistent-hk-artifacts');
-    expect(r.code).toBe(1);
-  });
+  // `smoke`의 같은 계약은 `scripts/smoke.browser.test.mjs`가 잰다 — `browser: yes`인 게이트를
+  // 부르는 파일은 이름이 `*.browser.test.mjs`여야 한다는 분류 규칙 때문이다(그 규칙의 출처는
+  // 레지스트리의 `browser` 칸이고, `scripts/browser-parity.test.mjs`가 검사한다).
 });
 
 describe('run-gates — 이 저장소 자신', () => {

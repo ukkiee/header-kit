@@ -40,6 +40,9 @@ gate: smoke-barriers   | smoke-barriers   | hard | no | -     | no  | token | ne
 gate: bundle-gate      | bundle-gate      | hard | no | build | no  | token | never
 gate: writer-lane-gate | writer-lane-gate | hard | no | build | no  | token | never
 gate: manifest-gate    | manifest-gate    | hard | no | build | no  | token | never
+gate: overflow-gate    | overflow-gate    | hard | no | build | yes | token | never
+gate: test-browser     | test:browser     | hard | no | build | yes | exit  | never
+gate: ui-perf          | ui-perf          | advisory | no | build | yes | token | never
 gate: smoke            | smoke            | hard | no | build | yes | token | never
 
 # `scripts/format-proof.mjs`는 **게이트가 아니다.** 특정 커밋 하나를 인자로 받아 재현을

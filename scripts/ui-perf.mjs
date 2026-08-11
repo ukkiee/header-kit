@@ -1,22 +1,30 @@
-/**
- * UI 진단 — 실 확장을 로드해 팝업(760×580 단일 셸, ADR 0005) + 한국어 + 실데이터로
- * 팝업을 렌더하고 스크린샷을 떠서 레이아웃 문제를 전수 확인한다. 가로 오버플로와
- * 팝업 시작 성능은 진단 실패(exit 1)로 처리한다.
- * 실행: bun run build && node scripts/ui-diag.mjs
- * 기준선 재측정: bun run build && DIAG_WRITE_BASELINE=1 node scripts/ui-diag.mjs
- */
+#!/usr/bin/env node
+// 팝업 시작 성능 대조 — **자문 행이다.** 기준선 문서 스스로 측정 기기를 적으며 같은 기기에서만
+// 유효하다고 말한다. 하드 게이트로 걸면 다른 기기에서 거짓 실패를 내고, 그 거짓 실패를 고치는
+// 유일한 길이 **기준선을 느슨하게 하는 것** — 게이트를 고쳐 통과시키는 것, 정확히 금지된 일이다.
+// 그래서 관측을 남기되 완료를 가로막지 않는다.
+//
+// 가로 오버플로는 여기 있지 않다. 같은 입력이면 어느 기기에서든 같은 답이라 증명 강도가 달라
+// `overflow-gate`로 갈라섰다 — 강도가 다른 둘이 한 몸이면 어느 쪽 임계값도 정직하게 세울 수 없다.
+//
+// 스크린샷은 사람이 보는 진단이다. 판정에 들어가지 않는다.
+// 실행: bun run ui-perf   ·   기준선 재측정: DIAG_WRITE_BASELINE=1 bun run ui-perf
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { chromium } from 'playwright';
+import { tokenFail } from './artifacts-arg.mjs';
+import {
+  launchWithExtension,
+  POPUP_SIZE,
+  REPO_ROOT,
+  resolveExtensionPath,
+  seedState,
+} from './ui-harness.mjs';
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const EXT_PATH = path.join(REPO_ROOT, '.output/chrome-mv3');
+// 이름표는 레지스트리의 게이트 id와 같아야 한다 — 러너가 `^(PASS|FAIL|N/A) <id>:`로 읽는다.
+const LABEL = 'ui-perf';
+const fail = tokenFail(LABEL);
 const OUT = process.env.DIAG_OUT || '/tmp';
-
-/** 팝업 크기 — ADR 0005의 고정 셸(760×580). 계측은 실제 팝업과 같은 크기에서 재야 한다. */
-const POPUP_SIZE = { width: 760, height: 580 };
 
 /**
  * 팝업 시작 성능 (plan r1 R-4) — 번들 게이트는 바이트만 재므로 한도 안에 있으면서도
@@ -106,7 +114,7 @@ function readBaseline() {
 /** 기준선 문서 — 사람이 읽을 맥락 + 스크립트가 읽을 json 블록을 한 파일에 둔다. */
 const baselineDoc = (measured, device) => `# 팝업 시작 성능 기준선 — ui-polish
 
-<!-- 생성물 — scripts/ui-diag.mjs가 DIAG_WRITE_BASELINE=1로 덮어쓴다. 손으로 고치면
+<!-- 생성물 — scripts/ui-perf.mjs가 DIAG_WRITE_BASELINE=1로 덮어쓴다. 손으로 고치면
      다음 재측정에서 사라지므로, 문구를 바꾸려면 스크립트의 baselineDoc()을 고칠 것. -->
 
 이 피처의 UI 변경이 **들어가기 전** 빌드에서 측정한 값이다. 이후 진단 실행은 이 값을
@@ -132,7 +140,7 @@ const baselineDoc = (measured, device) => `# 팝업 시작 성능 기준선 — 
 ${JSON.stringify(measured, null, 2)}
 \`\`\`
 
-재측정: \`bun run build && DIAG_WRITE_BASELINE=1 node scripts/ui-diag.mjs\`
+재측정: \`bun run build && DIAG_WRITE_BASELINE=1 bun run ui-perf\`
 `;
 
 const richState = {
@@ -252,15 +260,12 @@ const richState = {
   ],
 };
 
-const context = await chromium.launchPersistentContext('', {
-  channel: 'chromium',
-  headless: true,
-  args: [`--disable-extensions-except=${EXT_PATH}`, `--load-extension=${EXT_PATH}`, '--lang=ko'],
-});
+const resolved = resolveExtensionPath(process.argv.slice(2));
+if (resolved.error) fail(resolved.error);
+
+const { context, sw, extensionId } = await launchWithExtension(resolved.dir);
 try {
-  const sw = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
-  const extensionId = new URL(sw.url()).host;
-  await sw.evaluate(async (state) => chrome.storage.local.set({ state }), richState);
+  await seedState(sw, richState);
 
   // 스크린샷 페이지는 세로 600 — ADR 0005의 580보다 조금 높게 잡아 하단이 잘리지 않은
   // 전체 샷을 얻는다(기존 동작 유지). 계측 페이지는 아래에서 실제 팝업 크기로 잰다.
@@ -309,8 +314,8 @@ try {
    * 2. **프로세스는 데워져 있어야 한다.** 반대로 스크린샷보다 앞서 재면 확장이 콜드라
    *    초기 표본이 두 배까지 튀고(실측), 워밍업 1회로는 걷히지 않아 중앙값이 불안정해진다.
    *
-   * 경계 프로필을 붙이기 전이기도 하다 — 지표는 위 richState라는 대표 데이터 기준이고,
-   * 프로필 18개로 불린 뒤 재면 다른 것을 재게 된다.
+   * 지표는 위 richState라는 대표 데이터 기준이다. 경계 시드(최대 길이 이름 다수)는 이 파일에
+   * 없다 — `overflow-gate`가 갖는다. 다른 데이터로 재면 다른 것을 재게 된다.
    */
   await popup.close();
   await tab.close();
@@ -367,17 +372,18 @@ try {
 
   let baseline = null;
   let baselineError = null;
+  /** 관측된 회귀. 자문 행이라 완료를 막지는 않지만, 판정 토큰은 그것을 그대로 말한다. */
+  const regressions = [];
   try {
     baseline = readBaseline();
   } catch (error) {
     baselineError = error;
   }
   if (baselineError) {
-    // 깨진 기준선을 "기준선 없음"으로 넘기면 게이트가 조용히 무력화된다 — 실패로 처리한다.
-    console.error(`FAIL: 기준선을 읽을 수 없습니다 — ${baselineError.message}`);
-    process.exitCode = 1;
+    // 깨진 기준선을 "기준선 없음"으로 넘기면 이 대조가 조용히 무력화된다.
+    console.error(`  기준선을 읽을 수 없습니다 — ${baselineError.message}`);
   } else if (!baseline) {
-    console.log(`  기준선 없음(${BASELINE_REL}) — 측정치만 출력하고 판정하지 않습니다.`);
+    console.log(`  기준선 없음(${BASELINE_REL}) — 아래 판정에서 그 사실을 말한다.`);
   } else {
     for (const { key, label } of METRICS) {
       const base = baseline[key].median;
@@ -388,66 +394,27 @@ try {
         `  ${pad(label)} ${ms(now)} vs 기준선 ${ms(base)} → 상한 ${ms(ceiling)} ` +
           `= max(×${PERF_TOLERANCE_RATIO}, +${PERF_TOLERANCE_ABS_MS}ms) — ${pass ? 'PASS' : 'FAIL'}`,
       );
-      if (!pass) process.exitCode = 1;
+      if (!pass) regressions.push(`${label} ${ms(now)} > 상한 ${ms(ceiling)}`);
     }
   }
 
-  // 경계: 다수 프로필 + 최대 길이 en/ko 이름 — 사이드바 목록이 길어져도 팝업 가로
-  // 오버플로가 없어야 한다. 오버플로는 진단 실패(exit 1)로 처리한다.
-  const boundaryProfiles = Array.from({ length: 12 }, (_, i) => ({
-    id: `bnd${i}`,
-    name:
-      i % 2
-        ? `아주 길고 긴 한국어 프로필 이름 경계 검증 ${i} — 칩과 사이드바에서 반드시 잘려야 한다`
-        : `An extremely long English profile name for boundary verification ${i} that must truncate`,
-    active: i % 3 === 0,
-    shortLabel: `B${i % 10}`,
-    color: '#2563eb',
-    modifications: [],
-  }));
-  await sw.evaluate(async (profiles) => {
-    const { state } = await chrome.storage.local.get('state');
-    state.profiles = [...state.profiles, ...profiles];
-    await chrome.storage.local.set({ state });
-  }, boundaryProfiles);
-  // 계측을 위해 위에서 스크린샷 페이지들을 닫았으므로 경계 검증용 팝업을 새로 연다.
-  // 새 페이지는 기본이 light 스킴이라 다크 에뮬레이션을 되돌릴 필요가 없다.
-  const boundaryPopup = await context.newPage();
-  await boundaryPopup.setViewportSize({ width: POPUP_SIZE.width, height: 600 });
-  await boundaryPopup.goto(`chrome-extension://${extensionId}/popup.html?locale=ko`);
-  await boundaryPopup.waitForTimeout(500);
-  await boundaryPopup.screenshot({ path: `${OUT}/diag-6-popup-boundary.png`, fullPage: true });
-  // 문서 수준 오버플로 + 요소 수준 가로 스크롤러 스캔 — 스펙은 내부 가로 스크롤
-  // 표면 자체를 금지하므로(칩 결정), 내부에서 스크롤로 흡수된 오버플로도 실패다.
-  //
-  // ui-polish 02 검토 결과 — ScrollArea viewport를 이 스캔에서 **제외하지 않는다.**
-  // 스펙은 viewport가 `overflow: scroll`이라 걸릴 것을 우려해 예외를 두라고 했지만,
-  // 이 스캔은 `scrollWidth > clientWidth`를 함께 요구한다. ScrollArea.Content
-  // (min-width: fit-content)를 쓰지 않기로 해 실제 가로 오버플로가 없고, 실측에서도
-  // inner-scrollers=0이라 예외가 필요 없었다. 오히려 예외를 두면 viewport가 가로
-  // 오버플로를 **보이지 않는 스크롤로 조용히 흡수**하는 경우를 놓친다 — 세로 스크롤바만
-  // 렌더하므로 사용자에겐 아무 단서가 없는 바로 그 상황이다. 예외 없이 두는 편이 세다.
-  const { overflowPx, innerScrollers } = await boundaryPopup.evaluate(() => {
-    const bad = [];
-    for (const el of document.querySelectorAll('*')) {
-      const st = getComputedStyle(el);
-      if ((st.overflowX === 'auto' || st.overflowX === 'scroll') && el.scrollWidth > el.clientWidth) {
-        bad.push(`${el.tagName.toLowerCase()}.${String(el.className).split(' ')[0]}`);
-      }
-    }
-    return {
-      overflowPx: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-      innerScrollers: bad,
-    };
-  });
-  console.log(
-    `shot 6: popup boundary (18 profiles, max-length names) — overflow=${overflowPx}px, inner-scrollers=${innerScrollers.length}`,
-  );
-  if (overflowPx > 0 || innerScrollers.length > 0) {
-    console.error(
-      `FAIL: horizontal overflow (${overflowPx}px) or inner scrollers [${innerScrollers.join(', ')}]`,
-    );
+  // **자문 행이다.** 회귀를 관측으로 남기되 종료 코드로 완료를 막지 않는다 — 이 수치는 기기
+  // 의존적이라 다른 기기에서의 빨강은 코드가 아니라 기기를 말한다. 판정 토큰은 그래도 FAIL이다:
+  // "완료를 막지 않는다"는 판정이 아니라 그 행의 kind이고, 러너가 그 사실을 덧붙인다.
+  if (regressions.length > 0) {
+    console.log(`FAIL ${LABEL}: 시작 성능 회귀 ${regressions.length}건 — ${regressions.join(' · ')}`);
     process.exitCode = 1;
+  } else if (baselineError) {
+    console.log(`FAIL ${LABEL}: 기준선을 읽을 수 없다(${BASELINE_REL}) — ${baselineError.message}`);
+    process.exitCode = 1;
+  } else if (baseline === null) {
+    console.log(`FAIL ${LABEL}: 기준선이 없다(${BASELINE_REL}) — 측정치만 얻었고 판정하지 못했다`);
+    process.exitCode = 1;
+  } else {
+    console.log(
+      `PASS ${LABEL}: 시작 지표 ${METRICS.length}개가 기준선 대비 상한 안 ` +
+        `(${METRICS.map(({ key, label }) => `${label} ${ms(measured[key].median)}`).join(' · ')})`,
+    );
   }
 } finally {
   await context.close();

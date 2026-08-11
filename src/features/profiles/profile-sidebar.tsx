@@ -58,7 +58,13 @@ function StaticList({
 }) {
   const t = useT();
   return (
-    <ul className={sidebarListClass}>
+    /*
+     * `data-profile-list` — 어느 목록이 그려졌는지를 **관측 가능**하게 남긴다. 두 목록은
+     * 같은 클래스로 같은 모양을 그리므로(no-jump 계약) 화면만 봐서는 지연 청크가 도착했는지
+     * 알 수 없고, 그러면 오버플로 게이트가 **아직 아무것도 안 그려진 화면**을 훑고 "넘침
+     * 없음"을 보고한다 — 빈 트리가 가장 잘 통과하는 검사가 된다.
+     */
+    <ul className={sidebarListClass} data-profile-list="static">
       {/* 드래그 목록과 **같은 등장·퇴장 모션**이다 — 한쪽만 움직이면 lazy 로드 순간
           시각이 갈린다(sidebarRowClass가 지키는 no-jump 계약의 모션 쪽). */}
       <AnimatePresence initial={false}>
