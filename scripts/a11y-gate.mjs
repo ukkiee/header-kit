@@ -97,22 +97,35 @@ function identifierOf(text) {
 /**
  * 스팬이 **자기가 들어 있는 여는 태그** 안에 있으면 그 태그 이름을 준다. 아니면 null이다.
  *
- * 규칙은 정확하다: 오프셋 앞의 마지막 `<` 뒤에 `>`가 하나도 없으면 그 `<`의 태그가 아직 열려
- * 있는 것이고, 스팬은 그 태그 **안**(속성 자리)에 있다. `>`가 끼어 있으면 태그 밖이므로 접두를
- * 붙이지 않는다.
+ * 오프셋에서 **뒤로** 걸으며 첫 번째 `<` 또는 `>`를 찾는다. `<`를 먼저 만나면 그 태그가 아직
+ * 열려 있는 것이고 스팬은 속성 자리에 있다. `>`를 먼저 만나면 태그 밖이므로 접두를 붙이지 않는다.
  *
- * **앞의 여는 태그를 뒤로 훑는 방식은 틀렸다**(릴리스 r2 F1, 실측): 그 방식은 이미 닫힌 형제를
- * 고른다 — `<span …>{caption}</span>` 다음 줄의 `div` 위반이 `span.div`로 키를 받았고, 그러면
- * 무관한 형제의 이름만 바꿔도 위반한 요소는 그대로인 채 지문이 갈려 **평범한 마크업 편집이
- * 빨강**이 된다. 그 빨강을 푸는 베이스라인 재취득이 진짜 새 위반을 함께 축복한다.
+ * **JSX 표현식 컨테이너(`{...}`)는 통째로 건너뛴다.** 그러지 않으면 두 방향으로 틀린다
+ * (릴리스 r3 F1, 자식 프로세스로 재현):
+ *   `<Input leading={<Icon />} autoFocus>` — 표현식 안의 `/>`가 태그를 닫은 것으로 읽혀 접두가
+ *   사라지고, 요소를 바꾼 교체가 통과한다(r1 F2가 닫으려던 구멍이 되살아난다).
+ *   `disabled={count < limit}` — `limit`이 요소로 잡혀, 무관한 변수 이름만 바꿔도 지문이 갈린다.
+ *
+ * 앞의 여는 태그를 뒤로 훑는 방식은 그보다 먼저 틀렸다(r2 F1): 이미 닫힌 형제를 골랐다.
+ *
+ * **남는 것**: 문자열 리터럴 안의 `<`·`>`·중괄호는 구분하지 않는다. 그런 값(`placeholder="a>b"`)이
+ * 진단 앞에 오면 접두가 달라질 수 있다 — 안정적으로 달라지므로 거짓 초록이 아니라 한 번의
+ * 베이스라인 차이이고, 문자열까지 파싱하는 것은 이 게이트가 사려는 것보다 큰 기계장치다.
  */
 function openTagAt(source, offset) {
   const before = source.subarray(0, offset).toString('utf8');
-  const lt = before.lastIndexOf('<');
-  if (lt === -1) return null;
-  if (before.indexOf('>', lt) !== -1) return null; // 태그가 이미 닫혔다 — 우리는 그 밖에 있다
-  const name = /^<\s*([A-Za-z_$][\w$.:-]*)/.exec(before.slice(lt));
-  return name === null ? null : name[1];
+  let depth = 0;
+  for (let i = before.length - 1; i >= 0; i -= 1) {
+    const c = before[i];
+    if (c === '}') depth += 1;
+    else if (c === '{') depth = Math.max(0, depth - 1);
+    else if (depth === 0 && c === '>') return null;
+    else if (depth === 0 && c === '<') {
+      const name = /^<\s*([A-Za-z_$][\w$.:-]*)/.exec(before.slice(i));
+      return name === null ? null : name[1];
+    }
+  }
+  return null;
 }
 
 function fingerprint(diagnostic) {

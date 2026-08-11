@@ -180,6 +180,30 @@ describe('a11y 지문 베이스라인', () => {
     expect(base).not.toContain('section.div');
   });
 
+  it('속성 안의 JSX 표현식이 태그 경계로 오인되지 않는다', () => {
+    // 릴리스 r3 F1: `<`·`>`를 날것으로 세면 `leading={<Icon />}` 안의 `/>`가 태그를 닫은 것으로
+    // 읽혀 접두가 사라지고, 그러면 요소를 바꾼 교체가 통과한다 — r1 F2가 닫으려던 그 구멍이다.
+    const withIcon = (tag) =>
+      `const Icon = () => <i />;\nexport const A = () => <${tag} leading={<Icon />} autoFocus={true} />;\n`;
+    const dir = seeded({ 'src/a.tsx': withIcon('Input') });
+    writeFileSync(join(dir, 'src/a.tsx'), withIcon('Textarea'));
+    const r = run(dir);
+    expect(r.out).toMatch(/^FAIL a11y-gate:/m);
+    expect(r.code).toBe(1);
+  });
+
+  it('속성 표현식 안의 비교 연산자가 요소로 오인되지 않는다', () => {
+    // `disabled={count < limit}`의 `limit`이 요소로 잡히면, 무관한 변수 이름만 바꿔도 지문이
+    // 갈려 평범한 편집이 빨강이 된다 — r2 F1과 같은 모양이 다른 문으로 들어온다.
+    const cmp = (name) =>
+      `export const A = ({ count, ${name} }: { count: number; ${name}: number }) => (\n  <Input autoFocus={true} disabled={count < ${name}} />\n);\n`;
+    const dir = seeded({ 'src/a.tsx': cmp('limit') });
+    writeFileSync(join(dir, 'src/a.tsx'), cmp('max'));
+    const r = run(dir);
+    expect(r.out).toMatch(/^PASS a11y-gate:/m);
+    expect(r.code).toBe(0);
+  });
+
   it('요소 단위 규칙의 지문도 이름이다 — 표현식 안의 변수만 바꿔도 통과한다', () => {
     // 스팬이 `<img src={src} />`로 시작하는 규칙군. 접두를 잘라 쓰던 판에서는 변수 이름만
     // 바꿔도 FAIL이었고, 앞 40자가 같은 서로 다른 위반은 한 지문으로 접혀 **새 위반이 숨었다**.
