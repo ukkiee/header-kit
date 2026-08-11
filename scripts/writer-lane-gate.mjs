@@ -24,13 +24,9 @@
 // (ADR 0016의 '모듈 최상단 락'이 물린 바로 그 이유). 두 기제가 서로 다른 구멍을 맡는다.
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { artifactsDirFrom } from './artifacts-arg.mjs';
+import { artifactsDirFrom, missingArtifacts, tokenFail } from './artifacts-arg.mjs';
 
-/** 판정은 `PASS|FAIL writer-lane-gate:` 한 줄로 말한다 — 러너의 verdict: token 계약. */
-const fail = (message) => {
-  console.error(`FAIL writer-lane-gate: ${message}`);
-  process.exit(1);
-};
+const fail = tokenFail('writer-lane-gate');
 
 // 러너가 `--artifacts`로 이 회차의 빌드 경로를 넘긴다 (D4a). 인자 없이 직접 부르면
 // 기존 기본 경로다 — 손으로 돌리던 방식이 깨지지 않는다.
@@ -132,12 +128,7 @@ if (strayPermits.length > 0) {
 
 // ── 3. 산출물: 서비스워커 밖에 표지가 있는가 ────────────────────────────────
 
-if (!existsSync(OUT_DIR)) {
-  fail(
-    `빌드 산출물이 없다: ${OUT_DIR} — 러너가 이 회차의 빌드를 만들지 못했거나, ` +
-      `직접 돌렸다면 먼저 \`bun run build\`를 실행하세요.`,
-  );
-}
+if (!existsSync(OUT_DIR)) fail(missingArtifacts(OUT_DIR));
 
 const manifestPath = join(OUT_DIR, 'manifest.json');
 if (!existsSync(manifestPath)) fail(`${manifestPath}가 없습니다 — 빌드 산출물 형식이 바뀐 것 같습니다.`);

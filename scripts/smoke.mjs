@@ -11,30 +11,22 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
-import { artifactsDirFrom } from './artifacts-arg.mjs';
+import { artifactsDirFrom, missingArtifacts, tokenFail } from './artifacts-arg.mjs';
 import { POPUP_FADE_S, ROW_TRANSITION } from '../src/ui/motion-tokens.ts';
 import { EXPORT_FORMAT_VERSION } from '../src/core/format-version.ts';
 
 // 러너가 `--artifacts`로 이 회차의 빌드 경로를 넘긴다 (D4a). 인자 없이 직접 부르면
 // 기존 기본 경로다. 판정은 `PASS|FAIL smoke:` 한 줄로 말한다 — verdict: token 계약.
+const failSmoke = tokenFail('smoke');
 const parsedArtifacts = artifactsDirFrom(
   process.argv.slice(2),
   path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.output/chrome-mv3'),
 );
-if (parsedArtifacts.error) {
-  console.error(`FAIL smoke: ${parsedArtifacts.error}`);
-  process.exit(1);
-}
+if (parsedArtifacts.error) failSmoke(parsedArtifacts.error);
 const EXT_PATH = path.resolve(parsedArtifacts.dir);
 // 브라우저를 띄우기 **전에** 거른다 — 없는 확장을 로드하려다 나오는 크로미움 오류는
 // "산출물이 없다"를 말해 주지 않는다.
-if (!existsSync(EXT_PATH)) {
-  console.error(
-    `FAIL smoke: 빌드 산출물이 없다: ${EXT_PATH} — 러너가 이 회차의 빌드를 만들지 못했거나, ` +
-      `직접 돌렸다면 먼저 \`bun run build\`를 실행하세요.`,
-  );
-  process.exit(1);
-}
+if (!existsSync(EXT_PATH)) failSmoke(missingArtifacts(EXT_PATH));
 
 const results = [];
 function record(name, ok, detail) {

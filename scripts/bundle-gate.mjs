@@ -29,13 +29,9 @@
 //     (main 대비 모듈 단위 증감표 · 항목별 지연 가능성 판정 · 상향 대신 줄인 경위)
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { artifactsDirFrom } from './artifacts-arg.mjs';
+import { artifactsDirFrom, missingArtifacts, tokenFail } from './artifacts-arg.mjs';
 
-/** 판정은 `PASS|FAIL bundle-gate:` 한 줄로 말한다 — 러너의 verdict: token 계약. */
-const fail = (message) => {
-  console.error(`FAIL bundle-gate: ${message}`);
-  process.exit(1);
-};
+const fail = tokenFail('bundle-gate');
 
 const BASELINE_KB = 386.0; // 기준선(ui-refine 이전 공용 청크, min·비압축)
 /**
@@ -79,12 +75,7 @@ const MUST_BE_DEFERRED = [
   'rule-form',
 ];
 
-if (!existsSync(ENTRY_HTML)) {
-  fail(
-    `빌드 산출물이 없다: ${ENTRY_HTML} — 러너가 이 회차의 빌드를 만들지 못했거나, ` +
-      `직접 돌렸다면 먼저 \`bun run build\`를 실행하세요.`,
-  );
-}
+if (!existsSync(ENTRY_HTML)) fail(missingArtifacts(ENTRY_HTML));
 
 /** popup.html의 엔트리 스크립트 + modulepreload = 즉시 로드의 뿌리. */
 const html = readFileSync(ENTRY_HTML, 'utf8');

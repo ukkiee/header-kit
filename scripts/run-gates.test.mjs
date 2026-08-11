@@ -1122,6 +1122,14 @@ describe('산출물 소비 게이트 스크립트 — 인자와 판정 (실제 �
     expect(r.code).toBe(1);
   });
 
+  it('bundle-gate: --artifacts가 두 번 오면 거절한다', () => {
+    // 말없이 마지막 값을 고르면 어느 쪽을 쟀는지가 호출 문면에서 읽히지 않는다.
+    const r = runScript('bundle-gate.mjs', ['--artifacts', '/tmp/a', '--artifacts', '/tmp/b'], REPO);
+    expect(r.out).toMatch(/^FAIL bundle-gate:/m);
+    expect(r.out).toContain('두 번');
+    expect(r.code).toBe(1);
+  });
+
   it('bundle-gate: 인자가 없으면 기본 경로를 본다 — 손으로 돌리던 방식이 깨지지 않는다', () => {
     const empty = mkdtempSync(join(tmpdir(), 'hk-cwd-'));
     made.push(empty);

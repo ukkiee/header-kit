@@ -459,8 +459,10 @@ function runGates(dir, gates) {
       process.stdout.write(`${out.trimEnd()}\n`);
     }
   } finally {
-    // 회차가 끝나면 산출물은 판정에 반영됐다 — 남겨 두면 tmp만 쌓인다. 도중에 죽은
-    // 러너가 남긴 디렉터리는 OS tmp 청소에 맡긴다: 다음 회차는 어차피 자기 것만 본다.
+    // 회차가 끝나면 산출물은 판정에 반영됐다 — 남겨 두면 tmp만 쌓인다. 실패 회차라도
+    // 지운다: 결정적 증거는 위에서 전문으로 남긴 게이트 출력이고, 트리 자체는 빌드
+    // 재실행으로 재현된다. 도중에 죽은 러너가 남긴 디렉터리는 OS tmp 청소에 맡긴다 —
+    // 다음 회차는 어차피 자기 것만 본다.
     if (runDir !== null) rmSync(runDir, { recursive: true, force: true });
   }
 

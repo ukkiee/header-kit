@@ -15,6 +15,9 @@ export function artifactsDirFrom(argv, fallback) {
     if (a !== '--artifacts') {
       return { error: `알 수 없는 인자: ${a} — 받는 것은 --artifacts <디렉터리> 뿐이다` };
     }
+    if (dir !== null) {
+      return { error: '--artifacts가 두 번 왔다 — 어느 쪽을 재라는 것인지 판정할 수 없다' };
+    }
     const v = argv[i + 1];
     if (v === undefined || v.trim() === '' || v.startsWith('-')) {
       return { error: `--artifacts에 디렉터리가 없다 (받은 값: ${v === undefined ? '없음' : `"${v}"`})` };
@@ -24,3 +27,17 @@ export function artifactsDirFrom(argv, fallback) {
   }
   return { dir: dir ?? fallback };
 }
+
+/** 판정 발화의 공통 모양: `FAIL <id>: <사유>` 한 줄 + 종료 코드 1 — 러너의 verdict: token 계약. */
+export const tokenFail = (id) => (message) => {
+  console.error(`FAIL ${id}: ${message}`);
+  process.exit(1);
+};
+
+/**
+ * 산출물 부재의 공통 사유. 러너 경유(회차 빌드가 안 만들어짐)와 손 실행(빌드를 안 돌림)
+ * 어느 쪽 독자에게도 다음 걸음을 준다 — 셋이 제각기 들고 있으면 곧 서로 어긋난다.
+ */
+export const missingArtifacts = (path) =>
+  `빌드 산출물이 없다: ${path} — 러너가 이 회차의 빌드를 만들지 못했거나, ` +
+  `직접 돌렸다면 먼저 \`bun run build\`를 실행하세요.`;
