@@ -1416,22 +1416,117 @@ describe('산출물 소비 게이트 스크립트 — 인자와 판정 (실제 �
     expect(r.code).toBe(0);
   });
 
+  /**
+   * 소스 쪽 검사 둘(레인 생성 자리 수·허가가 넘는 모듈)을 **뒤집는** 픽스처들.
+   *
+   * 이 자리는 한동안 통과 픽스처만 있었고, 문서는 그것을 "`src/`를 직접 읽어 픽스처로 뒤집을
+   * 수 없다"고 적었다 — 그 진단이 틀렸다. 게이트를 조종하는 것은 `--artifacts`가 아니라
+   * **cwd**이고(`SRC_DIR`은 상대 경로다), 러너 하네스는 이미 케이스마다 cwd를 넘긴다.
+   * 대상 인자를 더할 필요 없이 뒤집힌다는 것을 아래가 실행으로 말한다.
+   */
+  it('writer-lane-gate: 레인을 만드는 자리가 둘이면 FAIL이고 사유가 그 자리를 말한다', () => {
+    const { dir, art } = laneTree();
+    writeFileSync(join(dir, 'src', 'second.ts'), 'const other = createWriterLane();\n');
+    const r = runScript('writer-lane-gate.mjs', ['--artifacts', art], dir);
+    expect(r.out).toMatch(/^FAIL writer-lane-gate:/m);
+    expect(r.out).toContain('createWriterLane');
+    // 경로 구분자를 넣지 않는다 — 사유가 말해야 하는 것은 "그 파일에서 몇 번"이고,
+    // 게이트의 `perFile`은 `join`의 결과를 그대로 찍으므로 구분자는 플랫폼이 정한다.
+    expect(r.out).toContain('second.ts×1');
+    expect(r.code).toBe(1);
+  });
+
+  it('writer-lane-gate: 쓰기 문을 두 번 구성해도 FAIL이다 — 레인 팩토리만 세면 놓치는 자리', () => {
+    // 두 심볼을 **함께** 세는 이유(스크립트 주석의 structure r2 R-1)를 못박는다.
+    // `LANE_FACTORIES`에서 `createStateWriter`가 빠지면 이 케이스만 빨강이 된다 — 레인이
+    // 하나여도 문을 두 번 구성하면 레인이 둘 생겨 서로를 전혀 막지 않는다(ADR 0016).
+    const { dir, art } = laneTree();
+    writeFileSync(join(dir, 'src', 'second.ts'), 'const other = createStateWriter(lane);\n');
+    const r = runScript('writer-lane-gate.mjs', ['--artifacts', art], dir);
+    expect(r.out).toMatch(/^FAIL writer-lane-gate:/m);
+    expect(r.out).toContain('createStateWriter');
+    expect(r.code).toBe(1);
+  });
+
+  it('writer-lane-gate: 허용 목록 밖 모듈이 쓰기 허가를 이름 부르면 FAIL이다', () => {
+    const { dir, art } = laneTree();
+    mkdirSync(join(dir, 'src', 'ui'), { recursive: true });
+    writeFileSync(join(dir, 'src', 'ui', 'save.ts'), 'export const save = (p: WritePermit) => p;\n');
+    const r = runScript('writer-lane-gate.mjs', ['--artifacts', art], dir);
+    expect(r.out).toMatch(/^FAIL writer-lane-gate:/m);
+    expect(r.out).toContain('save.ts');
+    expect(r.code).toBe(1);
+  });
+
+  it('writer-lane-gate: 허용된 모듈의 허가는 통과하고 주석 속 언급은 세지 않는다', () => {
+    // 목록이 실제로 **허용**하는지도 픽스처가 말한다. 뒤집는 케이스만 있으면 목록을 비우는
+    // 편집이 테스트 안에서는 초록이다 — 그것은 저장소 실행에서만 빨강인 상태다.
+    const { dir, art } = laneTree();
+    mkdirSync(join(dir, 'src', 'core'), { recursive: true });
+    writeFileSync(join(dir, 'src', 'core', 'writer-lane.ts'), 'export type WritePermit = symbol;\n');
+    writeFileSync(join(dir, 'src', 'note.ts'), '// WritePermit을 설명만 하는 주석\n');
+    // 주석 제거는 검사 **둘 다**가 쓴다. 레인 계수 쪽에서 빠지면 문서 주석의 언급이 호출로
+    // 세어져 멀쩡한 트리가 빨강이 된다 — 그쪽도 이 통과 픽스처가 함께 문다.
+    writeFileSync(join(dir, 'src', 'doc-only.ts'), '/** `createWriterLane()`를 부르는 곳은 하나다. */\n');
+    const r = runScript('writer-lane-gate.mjs', ['--artifacts', art], dir);
+    expect(r.out).toMatch(/^PASS writer-lane-gate:/m);
+    expect(r.out).toContain('허가 노출 1파일');
+    expect(r.code).toBe(0);
+  });
+
+  it('writer-lane-gate: URL이 든 줄의 호출도 센다 — `://`를 주석으로 접으면 거짓 초록이다', () => {
+    // 주석 제거가 `://`를 주석 시작으로 보면 URL이 든 줄이 통째로 사라지고, **그 줄의 진짜
+    // 호출도 함께 사라진다.** 레인이 둘인 트리가 하나로 세어지는 것이 정확히 거짓 초록이다.
+    // 스크립트가 이 보호 장치를 주석으로 적고 있었는데 재는 것은 없었다.
+    const { dir, art } = laneTree();
+    writeFileSync(
+      join(dir, 'src', 'second.ts'),
+      'const doc = "https://example.test/x"; const other = createWriterLane();\n',
+    );
+    const r = runScript('writer-lane-gate.mjs', ['--artifacts', art], dir);
+    expect(r.out).toMatch(/^FAIL writer-lane-gate:/m);
+    expect(r.out).toContain('createWriterLane');
+    expect(r.code).toBe(1);
+  });
+
   it('writer-lane-gate: 서비스워커 밖 번들에 표지가 있으면 FAIL이다', () => {
     // **계측 회귀.** 통과 픽스처만 있으면 누출 검출이 꺼져도 초록이다. 이 게이트가 지키는 것은
     // 레인이 워커 밖으로 새지 않는다는 것이고, 새는 순간을 재현해야 검사가 된다.
-    const art = mkdtempSync(join(tmpdir(), 'hk-art-'));
-    made.push(art);
-    mkdirSync(join(art, 'chunks'), { recursive: true });
-    writeFileSync(
-      join(art, 'manifest.json'),
-      JSON.stringify({ background: { service_worker: 'background.js' } }),
-    );
-    // 워커는 자체 완결(한 파일)이어야 이 게이트의 전제가 선다.
-    writeFileSync(join(art, 'background.js'), '// writer-lane:service-worker-only\n');
-    // 화면 번들에 표지가 샜다 — 잡아야 하는 바로 그 상태.
-    writeFileSync(join(art, 'chunks', 'popup-x.js'), '// writer-lane:service-worker-only\n');
-    const r = runScript('writer-lane-gate.mjs', ['--artifacts', art], REPO);
+    //
+    // cwd가 픽스처 트리인 이유: 저장소의 `src/`를 읽게 두면 소스 쪽 검사가 먼저 깨지는 날
+    // 이 테스트가 **엉뚱한 사유로** 초록이 된다(FAIL 토큰만 보고 있었다). 사유도 함께 단언한다.
+    const { dir, art } = laneTree();
+    writeFileSync(join(art, 'popup.js'), '// writer-lane:service-worker-only\n');
+    const r = runScript('writer-lane-gate.mjs', ['--artifacts', art], dir);
     expect(r.out).toMatch(/^FAIL writer-lane-gate:/m);
+    expect(r.out).toContain('서비스워커 밖');
+    expect(r.out).toContain('popup.js');
+    expect(r.code).toBe(1);
+  });
+
+  it('writer-lane-gate: 서비스워커에 표지가 없으면 FAIL이다 — 표지 소실과 경계 준수는 다르다', () => {
+    // 표지가 사라진 트리에서 조용히 통과하면 이 게이트는 아무것도 지키지 않는 상태를 가장 잘
+    // 통과한다. 스크립트가 그 구분을 주석으로 적고 있었는데 재는 것은 없었다.
+    const { dir, art } = laneTree();
+    writeFileSync(join(art, 'background.js'), 'console.log("worker")\n');
+    const r = runScript('writer-lane-gate.mjs', ['--artifacts', art], dir);
+    expect(r.out).toMatch(/^FAIL writer-lane-gate:/m);
+    expect(r.out).toContain('서비스워커 번들(background.js)에 없습니다');
+    expect(r.code).toBe(1);
+  });
+
+  it('writer-lane-gate: 서비스워커가 청크로 나뉘면 판정을 내지 않고 FAIL이다', () => {
+    // 워커가 화면과 청크를 공유하면 "워커에서 도달 가능"과 "화면에서 도달 가능"이 겹쳐
+    // 판정이 무의미해진다. 전제가 깨진 것을 통과로 접지 않는다는 계약.
+    const { dir, art } = laneTree();
+    writeFileSync(
+      join(art, 'background.js'),
+      'import "./worker-chunk.js";\nthrow new Error("writer-lane:service-worker-only")\n',
+    );
+    writeFileSync(join(art, 'worker-chunk.js'), 'export const x = 1;\n');
+    const r = runScript('writer-lane-gate.mjs', ['--artifacts', art], dir);
+    expect(r.out).toMatch(/^FAIL writer-lane-gate:/m);
+    expect(r.out).toContain('2개 파일로 나뉩니다');
     expect(r.code).toBe(1);
   });
 
@@ -1440,6 +1535,76 @@ describe('산출물 소비 게이트 스크립트 — 인자와 판정 (실제 �
     const r = runScript('writer-lane-gate.mjs', ['--artifacts', join(dir, 'nope')], dir);
     expect(r.out).toMatch(/^FAIL writer-lane-gate:/m);
     expect(r.out).toContain('nope');
+    // 경로 조각만 단언하면 **이 검사가 사라져도 초록이다** — 대신 터지는 매니페스트 부재
+    // 메시지에도 그 조각이 들어 있기 때문이다(실측). 사유 문구까지 봐야 이 자리를 문다.
+    expect(r.out).toContain('빌드 산출물이 없다');
+    expect(r.code).toBe(1);
+  });
+
+  // 공통 인자 계약(`artifacts-arg.mjs`)이지만 **이 게이트의 입에서도** 성립하는지는 여기서
+  // 재야 안다 — `scripts/manifest-gate.test.mjs`가 자기 게이트에 대해 세운 것과 같은 규약이다.
+  it('writer-lane-gate: 알 수 없는 인자를 거절한다', () => {
+    const r = runScript('writer-lane-gate.mjs', ['--artifact', '/tmp/x'], REPO);
+    expect(r.out).toMatch(/^FAIL writer-lane-gate:/m);
+    expect(r.out).toContain('--artifacts');
+    expect(r.code).toBe(1);
+  });
+
+  it('writer-lane-gate: --artifacts가 두 번 오면 거절한다', () => {
+    const r = runScript('writer-lane-gate.mjs', ['--artifacts', '/tmp/a', '--artifacts', '/tmp/b'], REPO);
+    expect(r.out).toMatch(/^FAIL writer-lane-gate:/m);
+    expect(r.out).toContain('두 번');
+    expect(r.code).toBe(1);
+  });
+
+  it('writer-lane-gate: --artifacts에 값이 없으면 거절한다', () => {
+    // 값 없는 플래그를 기본 경로로 접으면 러너가 넘긴 회차 경로가 조용히 사라진다.
+    const r = runScript('writer-lane-gate.mjs', ['--artifacts'], REPO);
+    expect(r.out).toMatch(/^FAIL writer-lane-gate:/m);
+    expect(r.out).toContain('디렉터리가 없다');
+    expect(r.code).toBe(1);
+  });
+
+  it('writer-lane-gate: 인자가 없으면 기본 경로를 본다 — 손으로 돌리던 방식이 깨지지 않는다', () => {
+    // cwd는 소스 쪽 검사를 통과하는 픽스처 트리다. 빈 트리로 두면 `src/` 부재가 먼저 걸려
+    // **기본 산출물 경로를 봤는지**를 재지 못한다 — 다른 사유의 빨강은 이 계약의 증거가 아니다.
+    const { dir } = laneTree();
+    const r = runScript('writer-lane-gate.mjs', [], dir);
+    expect(r.out).toMatch(/^FAIL writer-lane-gate:/m);
+    expect(r.out).toContain('chrome-mv3');
+    expect(r.out).toContain('빌드 산출물이 없다');
+    expect(r.code).toBe(1);
+  });
+
+  it('writer-lane-gate: `src/`가 없으면 통과가 아니라 FAIL이다', () => {
+    // 소스가 사라진 트리에서 조용히 초록을 내면 이 게이트는 셀 것이 하나도 없는 상태를
+    // 가장 잘 통과한다 — 레인 자리 0은 1이 아니므로 원래도 빨강이지만, 사유가 달라진다.
+    const empty = mkdtempSync(join(tmpdir(), 'hk-nosrc-'));
+    made.push(empty);
+    const { art } = laneTree();
+    const r = runScript('writer-lane-gate.mjs', ['--artifacts', art], empty);
+    expect(r.out).toMatch(/^FAIL writer-lane-gate:/m);
+    expect(r.out).toContain('찾을 수 없습니다');
+    expect(r.code).toBe(1);
+  });
+
+  it('writer-lane-gate: 산출물에 매니페스트가 없으면 FAIL이고 형식 변화를 말한다', () => {
+    const { dir, art } = laneTree();
+    rmSync(join(art, 'manifest.json'));
+    const r = runScript('writer-lane-gate.mjs', ['--artifacts', art], dir);
+    expect(r.out).toMatch(/^FAIL writer-lane-gate:/m);
+    expect(r.out).toContain('manifest.json');
+    expect(r.out).toContain('형식이 바뀐');
+    expect(r.code).toBe(1);
+  });
+
+  it('writer-lane-gate: 매니페스트에 service_worker가 없으면 전제가 깨졌다고 FAIL한다', () => {
+    // 여기서 통과로 접으면 워커가 없는 산출물이 "워커 밖에 표지 0"으로 초록이 된다.
+    const { dir, art } = laneTree();
+    writeFileSync(join(art, 'manifest.json'), JSON.stringify({ manifest_version: 3 }));
+    const r = runScript('writer-lane-gate.mjs', ['--artifacts', art], dir);
+    expect(r.out).toMatch(/^FAIL writer-lane-gate:/m);
+    expect(r.out).toContain('service_worker');
     expect(r.code).toBe(1);
   });
 
