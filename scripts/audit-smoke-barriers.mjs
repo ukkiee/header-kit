@@ -35,7 +35,22 @@ const STABLE_WINDOW = 60;
 const target = process.argv[2] ?? new URL('./smoke.mjs', import.meta.url).pathname;
 const lines = readFileSync(target, 'utf8').split('\n');
 
-const findRecord = (id) => lines.findIndex((line) => line.includes(`record('${id}:`));
+/**
+ * `record('<id>: …` 는 한 줄이 아닐 수 있다. 포매터가 인자를 나누면 `record(` 와 id 리터럴이
+ * 다른 줄에 놓인다 — 실측으로 포맷 적용에서 8개가 그렇게 됐고, 한 줄 안에서만 찾던 이 감사는
+ * 그 8개를 "찾을 수 없다"로 보고했다. **없는 것과 모양이 바뀐 것은 다르다.**
+ *
+ * 그래서 id 리터럴이 있는 줄을 먼저 찾고 거기서 위로 `record(` 를 짚는다. 창(window) 계산이
+ * 호출 시작 줄을 기준으로 서야 "시드와 record 사이"라는 뜻이 그대로 유지된다.
+ */
+const findRecord = (id) => {
+  const at = lines.findIndex((line) => line.includes(`'${id}:`));
+  if (at < 0) return -1;
+  for (let i = at; i >= Math.max(0, at - 3); i -= 1) {
+    if (lines[i].includes('record(')) return i;
+  }
+  return at;
+};
 /** 정의(`const seedProfiles = …`)가 아니라 **호출**만 센다. */
 const isSeedCall = (line) => /(?:await\s+)?seedProfiles\(/.test(line) && !/const\s+seedProfiles/.test(line);
 
