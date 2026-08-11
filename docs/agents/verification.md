@@ -7,6 +7,7 @@
 ```sh
 bun run gate              # 등록된 게이트를 전부 돌린다
 bun run gate --check-only # 네 자리 일치만 본다 (게이트를 돌리지 않는다)
+bun run gate:ci           # CI가 도는 것과 정확히 같은 부분집합 — CI가 부르는 것도 이 명령이다
 ```
 
 ## 판정은 넷이다
@@ -50,23 +51,23 @@ bun run gate --check-only # 네 자리 일치만 본다 (게이트를 돌리지 
 
 <!-- gates:begin -->
 
-| 게이트 | 명령 | 임계값 | kind | N/A 조건 |
-| --- | --- | --- | --- | --- |
-| `check` | `bun run check` | `tsc --noEmit` 오류 0 | hard | never |
-| `lint` | `bun run lint` | `oxlint` 진단 0 — correctness 카테고리 · 레이어 방향(상향 import) · 순환/자기 import · type-aware 떠도는 프로미스. `scripts/`도 같은 강도로 재되 `.mjs`의 추론이 `any`로 떨어지는 규칙 하나만 끈다 (설정의 정본은 `.oxlintrc.json`) | hard | never |
-| `format` | `bun run format:check` | `oxfmt --check` 어긋난 파일 0. 코드만 본다 — 마크다운·`docs/reviews/`·`.scratch/`는 제외 (설정의 정본은 `.oxfmtrc.json`) | hard | never |
-| `a11y-gate` | `bun run a11y-gate` | jsx-a11y 진단의 **지문 집합**이 베이스라인 안 — 새 지문이나 개수 증가가 있으면 FAIL. **"새 진단이 없다"까지만 준다**: 키보드로 전체 흐름을 조작할 수 있다거나 모든 컨트롤에 접근명이 있다는 **관측된 보장은 주지 않는다** (베이스라인의 정본은 `scripts/a11y-baseline.txt`) | hard | never |
-| `test` | `bun run test` | vitest 스위트 전부 통과 | hard | never |
-| `build` | `bun run build` | `wxt build` 성공 | hard | never |
-| `storybook` | `bun run storybook:build` | Storybook 빌드 성공 | hard | never |
-| `smoke-barriers` | `bun run smoke-barriers` | 누락된 준비 배리어 0 | hard | never |
-| `bundle-gate` | `bun run bundle-gate` | popup 즉시 로드 합계가 한도 안 · 지연 계약 청크가 즉시 집합에 없음 (수치의 정본은 스크립트) | hard | never |
-| `writer-lane-gate` | `bun run writer-lane-gate` | 레인 생성 자리 각 1 · 서비스워커 밖 번들에 표지 0 | hard | never |
-| `manifest-gate` | `bun run manifest-gate` | 빌드된 매니페스트가 **게이트의 선언과 정확히 일치**: 최상위 키 집합 · 권한/호스트/선택 권한 목록 · MV3 · 최소 크롬 버전 · 프로덕션 CSP(`extension_pages`)에 `unsafe-eval` 없음 (선언의 정본은 스크립트). **"선언과 같다"를 증명하지 "이 표면이 옳다"를 증명하지 않는다** (후자는 `smoke`) | hard | never |
-| `overflow-gate` | `bun run overflow-gate` | 최대 길이 이름을 심은 팝업에 **가로 오버플로 0px · 내부 가로 스크롤러 0개**. 훑기 전에 준비 표지 셋(심은 프로필이 전부 렌더 · 지연 목록 도착 · 폰트 적용)을 관측하고, 서지 않으면 **훑지 않고 FAIL** | hard | never |
-| `test-browser` | `bun run test:browser` | 브라우저를 띄우는 픽스처 전부 통과 — `overflow-gate`의 준비 표지 넷과 `smoke`의 인자 계약. 이름 규약(`*.browser.test.mjs`)이 이 집합을 정하고 그 분류는 레지스트리의 `browser` 칸에서 파생된다 | hard | never |
-| `ui-perf` | `bun run ui-perf` | 팝업 시작 지표가 같은 기기 기준선 대비 상한 안. **자문 행 — 기준선 기기 밖에서는 완료를 가로막지 않는다** (수치는 기기 의존적이라 다른 기기의 빨강은 코드가 아니라 기기를 말한다) | advisory | never |
-| `smoke` | `bun run smoke` | 실브라우저 시나리오 전부 통과 | hard | never |
+| 게이트 | 명령 | 임계값 | kind | CI | N/A 조건 |
+| --- | --- | --- | --- | --- | --- |
+| `check` | `bun run check` | `tsc --noEmit` 오류 0 | hard | yes | never |
+| `lint` | `bun run lint` | `oxlint` 진단 0 — correctness 카테고리 · 레이어 방향(상향 import) · 순환/자기 import · type-aware 떠도는 프로미스. `scripts/`도 같은 강도로 재되 `.mjs`의 추론이 `any`로 떨어지는 규칙 하나만 끈다 (설정의 정본은 `.oxlintrc.json`) | hard | yes | never |
+| `format` | `bun run format:check` | `oxfmt --check` 어긋난 파일 0. 코드만 본다 — 마크다운·`docs/reviews/`·`.scratch/`는 제외 (설정의 정본은 `.oxfmtrc.json`) | hard | yes | never |
+| `a11y-gate` | `bun run a11y-gate` | jsx-a11y 진단의 **지문 집합**이 베이스라인 안 — 새 지문이나 개수 증가가 있으면 FAIL. **"새 진단이 없다"까지만 준다**: 키보드로 전체 흐름을 조작할 수 있다거나 모든 컨트롤에 접근명이 있다는 **관측된 보장은 주지 않는다** (베이스라인의 정본은 `scripts/a11y-baseline.txt`) | hard | yes | never |
+| `test` | `bun run test` | vitest 스위트 전부 통과 | hard | yes | never |
+| `build` | `bun run build` | `wxt build` 성공 | hard | yes | never |
+| `storybook` | `bun run storybook:build` | Storybook 빌드 성공 | hard | yes | never |
+| `smoke-barriers` | `bun run smoke-barriers` | 누락된 준비 배리어 0 | hard | yes | never |
+| `bundle-gate` | `bun run bundle-gate` | popup 즉시 로드 합계가 한도 안 · 지연 계약 청크가 즉시 집합에 없음 (수치의 정본은 스크립트) | hard | yes | never |
+| `writer-lane-gate` | `bun run writer-lane-gate` | 레인 생성 자리 각 1 · 서비스워커 밖 번들에 표지 0 | hard | yes | never |
+| `manifest-gate` | `bun run manifest-gate` | 빌드된 매니페스트가 **게이트의 선언과 정확히 일치**: 최상위 키 집합 · 권한/호스트/선택 권한 목록 · MV3 · 최소 크롬 버전 · 프로덕션 CSP(`extension_pages`)에 `unsafe-eval` 없음 (선언의 정본은 스크립트). **"선언과 같다"를 증명하지 "이 표면이 옳다"를 증명하지 않는다** (후자는 `smoke`) | hard | yes | never |
+| `overflow-gate` | `bun run overflow-gate` | 최대 길이 이름을 심은 팝업에 **가로 오버플로 0px · 내부 가로 스크롤러 0개**. 훑기 전에 준비 표지 셋(심은 프로필이 전부 렌더 · 지연 목록 도착 · 폰트 적용)을 관측하고, 서지 않으면 **훑지 않고 FAIL** | hard | no — 실제 크롬을 띄운다 | never |
+| `test-browser` | `bun run test:browser` | 브라우저를 띄우는 픽스처 전부 통과 — `overflow-gate`의 준비 표지 넷과 `smoke`의 인자 계약. 이름 규약(`*.browser.test.mjs`)이 이 집합을 정하고 그 분류는 레지스트리의 `browser` 칸에서 파생된다 | hard | no — 실제 크롬을 띄운다 | never |
+| `ui-perf` | `bun run ui-perf` | 팝업 시작 지표가 같은 기기 기준선 대비 상한 안. **자문 행 — 기준선 기기 밖에서는 완료를 가로막지 않는다** (수치는 기기 의존적이라 다른 기기의 빨강은 코드가 아니라 기기를 말한다) | advisory | no — 기기 기준선에 매여 러너 하드웨어가 바뀔 때마다 거짓 실패를 낸다 | never |
+| `smoke` | `bun run smoke` | 실브라우저 시나리오 전부 통과 | hard | no — 실제 크롬을 띄운다 | never |
 
 <!-- gates:end -->
 
@@ -333,13 +334,18 @@ bun run gate --check-only # 네 자리 일치만 본다 (게이트를 돌리지 
 돌리는 일에 더해, 러너는 아래 넷이 서로 어긋나지 않았는지 본다. 하나라도 갈라서면 FAIL이다.
 
 1. **레지스트리** — `scripts/gates.txt`
-2. **이 표** — 행의 첫 칸이 백틱 토큰 하나면 그것이 게이트 id다. **명령·kind·N/A 칸도
+2. **이 표** — 행의 첫 칸이 백틱 토큰 하나면 그것이 게이트 id다. **명령·kind·CI·N/A 칸도
    레지스트리와 대조한다** — id만 맞추면 가장 결과가 큰 칸들이 조용히 갈라서고, 한쪽이
    `advisory`이고 다른 쪽이 `hard`인 채로 초록이 나며, 그 모순을 코어와 README가 옮겨 적는다
 3. **`package.json`** — 레지스트리가 가리키는 스크립트 키가 실재하는가
 4. **게이트 워크플로** — `.github/workflows/gate.yml`
 
-지금은 모든 행이 `ci: no`이므로 워크플로가 없는 것이 정상 통과다. 티켓 08이 이 자리를 채운다.
+**CI 칸의 모양.** 표는 `yes` 또는 `no — <이유>`로 적는다. 토큰은 레지스트리와 정확히
+대조되고 뒤의 산문은 러너가 읽지 않는다. 이유를 표 아래 따로 적지 않는 이유는, 목록은 행이
+늘거나 바뀔 때 조용히 낡고 그것을 알려 줄 것이 없기 때문이다 — 이유는 그것이 설명하는 행과
+함께 산다. `no`에만 이유를 요구한다: CI가 도는 것이 기본이고 빼는 것이 예외이므로 근거가
+붙어야 하는 쪽은 예외다. 근거 없는 `no`가 통과하면 게이트를 CI 밖으로 옮기는 일이 아무 흔적도
+남기지 않는다.
 
 ### 선행과 N/A
 
@@ -371,15 +377,52 @@ CI 쪽 문으로 그대로 들어온다. 그래서 워크플로가 등록된 게
 설정 오류로 거절한다. 전이적으로 끌어오지 않는 이유는 무엇을 CI에서 돌릴지가 사람이 정해 적을
 일이기 때문이고, 조용히 끌어오면 CI가 무엇을 도는지가 레지스트리에서 읽히지 않게 된다.
 
+**0개를 고른 `--ci`는 통과가 아니다.** `--ci`를 부르는 것은 CI뿐이고, CI가 게이트를 하나도
+돌지 않는 상태는 결과가 아니라 설정 오류다. 여기가 초록이면 모든 행을 `ci: no`로 되돌리는
+커밋 하나로 CI가 영구 초록이 되면서 아무것도 재지 않는다. `--check-only`에서도 같다 — 이것은
+실행 결과가 아니라 자리들의 상태이므로 돌리지 않아도 이미 참이다.
+
 **판정할 수 없는 워크플로 모양은 거절한다.** 주석 처리된 `run:` 줄, `echo`로 흉내 낸 호출,
-`if:`로 조건이 걸린 단계, `continue-on-error:`로 실패가 가려진 단계 — 전부 "돌았다"를 뜻하지
-않는다. 이 러너는 YAML을 제대로 파싱하지 않으므로, 판정할 수 없는 모양을 통과시키는 대신
-**게이트 워크플로의 모양을 좁힌다.** 게이트 워크플로는 우리가 단순하게 유지할 수 있는 파일이다.
+`if:`로 조건이 걸린 단계, `continue-on-error:`로 실패가 가려진 단계, `paths`/`paths-ignore`로
+건 경로 필터 — 전부 "돌았다"를 뜻하지 않는다. 마지막 것은 한 줄로 게이트를 사실상 끄는데
+그때도 워크플로는 존재하고 이름도 맞는다. 이 러너는 YAML을 제대로 파싱하지 않으므로, 판정할
+수 없는 모양을 통과시키는 대신 **게이트 워크플로의 모양을 좁힌다.** 게이트 워크플로는 우리가
+단순하게 유지할 수 있는 파일이다.
+
+**무엇을 돌리는지만큼 언제 도는지도 묶는다.** 워크플로에 `pull_request` 트리거가 없으면
+FAIL이다. 이것이 없으면 트리거를 `workflow_dispatch`로 바꾸는 한 줄이 CI를 사실상 끄면서
+네 자리 일치를 그대로 초록으로 남긴다(실측) — 무엇을 돌리는지를 아무리 정확히 묶어도 언제
+도는지를 놓으면 아무것도 묶이지 않는다. `pull_request`를 고르는 이유는 변경이 들어오는 문이
+그것이기 때문이다: 푸시 트리거만 있으면 병합 전에는 아무것도 재지 않는다. 브랜치 필터까지는
+보지 않는다 — 그 경계는 아래 "덮지 못하는 것"이 적는다.
 
 넷째 자리는 **게이트 워크플로 하나만** 본다. 다른 워크플로는 보지 않는다 — 릴리스
 워크플로가 `bun run zip`을 부르는 것은 평범한데, 그것을 "등록되지 않은 게이트를 돌린다"로
 읽으면 게이트가 평범한 변경에 빨강을 내고 그 빨강을 고치는 유일한 길이 게이트를 고치는 것이
 된다. **검사하지 않는 초록만큼 나쁜 것이 평범한 것을 막는 빨강이다.**
+
+### CI가 무엇을 돌고 무엇을 돌지 않는가
+
+워크플로는 `.github/workflows/gate.yml` 하나다. 푸시(`main`)와 모든 PR에서 돌고, 같은
+브랜치에 커밋이 밀리면 앞선 회차를 취소한다.
+
+**무엇이 도는지는 위 표의 CI 칸이 갖는다.** 여기에 이름도 개수도 옮겨 적지 않는다 — 행이
+하나 늘 때마다 이 문장이 조용히 낡고, 그것을 알려 줄 것이 없다. 빠지는 행마다 이유가 그
+칸에 함께 적혀 있다.
+
+**CI는 브라우저를 프로비저닝하지 않는다.** 워크플로에 그런 단계가 없기 때문이 아니라 —
+그것은 약속이다 — CI가 고르는 집합에 `browser: yes`인 행이 하나도 없기 때문이다. 그 사실을
+`scripts/run-gates.test.mjs`가 이 저장소에 대해 못박는다. 브라우저를 띄우는 테스트가 이름을
+잘못 달아 브라우저 없는 집합으로 새어 들어오는 경우는 `browser-parity`가 먼저 잡고, 그 검사
+자신은 `bun run test`가 도므로 CI 안에 있다. playwright는 devDependency지만 이 버전의
+패키지에는 설치 훅이 없어(실측: `node_modules/playwright/package.json`에 `scripts` 없음)
+`bun install`이 브라우저를 받지 않는다.
+
+**두 런타임을 모두 고정한다.** bun이 의존성을 풀고 스크립트를 부르며, node가 게이트 스크립트를
+실행한다(게이트 명령이 전부 `node scripts/*.mjs`다). bun은 정확한 버전으로, node는 major로
+묶는다 — 게이트 스크립트가 쓰는 것은 안정된 표준 API뿐이라 패치까지 묶으면 워크플로가 매달
+낡는다. **로컬 쪽을 강제하는 것은 없다**: 이 저장소에는 `engines`도 버전 파일도 없으므로
+로컬과 CI의 런타임이 갈라설 수 있고, 그때 갈라섰다는 사실을 알려 주는 것은 CI의 빨강뿐이다.
 
 ### advisory는 다섯 번째 판정이 아니다
 
@@ -396,6 +439,20 @@ D4a가 없애러 온 형태가 이 문으로 되돌아온다. 구멍은 `needs: 
 있고, `manifest-gate`만 자기 행의 등록을 테스트로 못 박아 뒀다
 (`scripts/manifest-gate.test.mjs`). 닫는 길은 표에 `needs` 칸을 더해 다른 세 칸과 같이
 대조하는 것이고, 그것은 러너의 설계에 속하므로 이 자리에 기록만 남긴다.
+
+**트리거 검사는 존재만 본다.** `pull_request`가 선언됐는지까지가 이 검사의 전부다 —
+`branches` 필터로 어느 브랜치의 PR에만 걸리게 하는 것은 잡지 못한다. 줄 단위로 읽는 파서로는
+YAML의 중첩을 판정할 수 없고, 넓히면 판정할 수 없는 것을 판정하는 척하게 된다. 경로 필터를
+아예 거절하는 것과 같은 이유로 닫는 대신 여기 적는다.
+
+**CI를 통째로 없애는 것은 막지 못한다.** 레지스트리의 모든 행을 `ci: no`로 되돌리고 표의 CI
+칸을 함께 고치고 `.github/workflows/gate.yml`을 지우면 네 자리 일치는 초록이다(실측). 러너는
+이 저장소만 도는 것이 아니고, CI가 아예 없는 트리는 정당한 상태라 그 하나를 빨강으로 만들 수
+없다. 대신 두 가지가 남는다: 셋 중 **하나라도** 빠뜨리면 빨강이고(워크플로만 남기면 "ci: yes인
+게이트가 없는데 워크플로가 gate:ci를 부른다", 레지스트리만 되돌리면 표와의 CI 불일치), 워크플로
+삭제는 diff에 보이는 파일 삭제이며 그 뒤로 CI는 **초록을 내지 않고 아예 돌지 않는다** — 속을
+초록이 없다. 이 저장소에 한해서는 `scripts/run-gates.test.mjs`의 "CI가 도는 게이트가 실재한다"가
+그 되돌림을 빨강으로 잡는다.
 
 고아 게이트 검출은 `scripts/` 안에서 **`*-gate.mjs` 이름 규약을 따르는 파일에만** 미친다.
 그 규약 밖의 이름으로 게이트 스크립트를 만들고 레지스트리에 넣지 않으면 **이 검사는 그것을

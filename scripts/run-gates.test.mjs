@@ -42,6 +42,10 @@ function run(args) {
  */
 const TABLE_BEGIN = '<!-- gates:begin -->';
 const TABLE_END = '<!-- gates:end -->';
+/** `ci: no`인 행의 표 칸 기본값. 러너가 이유를 요구하므로 픽스처도 이유를 단다. */
+const CI_NO_CELL = 'no — 픽스처';
+/** 워크플로 픽스처의 트리거. 러너가 `pull_request`를 요구하므로 정상 모양에는 늘 있다. */
+const WF_ON = 'on:\n  pull_request:\n';
 
 function tree({
   gates = [],
@@ -66,14 +70,16 @@ function tree({
   ];
   writeFileSync(join(dir, 'scripts', 'gates.txt'), `${rows.join('\n')}\n`);
 
-  // 표의 명령·kind·N/A 칸도 레지스트리와 대조되므로 기본값은 레지스트리에서 파생시킨다.
+  // 표의 명령·kind·CI·N/A 칸도 레지스트리와 대조되므로 기본값은 레지스트리에서 파생시킨다.
   // 어긋남을 재는 테스트만 `table`로 직접 준다.
   const derived = gates.map((g) => {
-    const [id, script, kind, , , , , na] = g.split('|').map((s) => s.trim());
-    return { id, command: `bun run ${script}`, kind, na };
+    const [id, script, kind, ci, , , , na] = g.split('|').map((s) => s.trim());
+    // `no`는 표에 이유를 요구한다 — 그 요구를 재는 테스트만 `table`로 이유를 빼고 준다.
+    return { id, command: `bun run ${script}`, kind, ci: ci === 'no' ? CI_NO_CELL : ci, na };
   });
   const tableRows = table ?? derived;
-  const cell = (r) => `| \`${r.id}\` | \`${r.command}\` | 임계값 | ${r.kind} | ${r.na} |`;
+  const cell = (r) =>
+    `| \`${r.id}\` | \`${r.command}\` | 임계값 | ${r.kind} | ${r.ci ?? CI_NO_CELL} | ${r.na} |`;
   // 마커 밖에 백틱 첫 칸을 가진 표를 함께 둔다 — 실제 문서의 판정 설명 표가 그렇고,
   // 그것이 게이트 행으로 읽히던 결함을 이 픽스처가 계속 재현한다.
   const decoy = '| `PASS` | 돌았고 만족했다 |\n| `N/A` | 잴 대상이 없다 |';
@@ -86,7 +92,7 @@ function tree({
     mkdirSync(join(dir, '.github', 'workflows'), { recursive: true });
     writeFileSync(
       join(dir, '.github', 'workflows', 'gate.yml'),
-      `jobs:\n  gate:\n    steps:\n${workflow.map((s) => `      - run: bun run ${s}\n`).join('')}`,
+      `${WF_ON}jobs:\n  gate:\n    steps:\n${workflow.map((s) => `      - run: bun run ${s}\n`).join('')}`,
     );
   }
 
@@ -502,6 +508,70 @@ describe('run-gates — 표와 레지스트리는 id만이 아니라 완료 의�
     expect(r.out).toMatch(/^FAIL run-gates:/m);
     expect(r.code).toBe(1);
   });
+
+  it('CI가 표에서는 no인데 레지스트리에서는 yes면 실패한다', () => {
+    // 사람이 읽는 표가 "CI가 돌지 않는다"고 말하는 동안 CI는 그것을 돌고 있다.
+    const dir = tree({
+      gates: [ROW('alpha', 'alpha', { ci: 'yes' })],
+      scripts: { alpha: OK, 'gate:ci': CI_OK },
+      table: [{ id: 'alpha', command: 'bun run alpha', kind: 'hard', ci: 'no — 픽스처', na: 'never' }],
+      files: {
+        '.github/workflows/gate.yml': `${WF_ON}jobs:\n  g:\n    steps:\n      - run: bun run gate:ci\n`,
+      },
+    });
+    const r = run(['--dir', dir, '--check-only']);
+    expect(r.out).toMatch(/^FAIL run-gates:/m);
+    expect(r.code).toBe(1);
+  });
+
+  it('CI가 표에서는 yes인데 레지스트리에서는 no면 실패한다', () => {
+    // 이 방향이 더 위험하다: 표가 "CI가 잡아 준다"고 말하는데 실제로는 아무도 돌지 않는다.
+    const dir = tree({
+      gates: [ROW('alpha', 'alpha')],
+      scripts: { alpha: OK },
+      table: [{ id: 'alpha', command: 'bun run alpha', kind: 'hard', ci: 'yes', na: 'never' }],
+    });
+    const r = run(['--dir', dir, '--check-only']);
+    expect(r.out).toMatch(/^FAIL run-gates:/m);
+    expect(r.code).toBe(1);
+  });
+
+  it('ci: no인 행이 표에 이유를 적지 않으면 실패한다', () => {
+    // CI에서 빼는 것은 예외이고 예외에는 근거가 붙는다. 근거 없는 `no`가 통과하면
+    // 게이트를 CI 밖으로 옮기는 일이 아무 흔적도 남기지 않는다.
+    const dir = tree({
+      gates: [ROW('alpha', 'alpha')],
+      scripts: { alpha: OK },
+      table: [{ id: 'alpha', command: 'bun run alpha', kind: 'hard', ci: 'no', na: 'never' }],
+    });
+    const r = run(['--dir', dir, '--check-only']);
+    expect(r.out).toMatch(/^FAIL run-gates:/m);
+    expect(r.code).toBe(1);
+  });
+
+  it('ci: no인 행이 이유를 적으면 통과한다', () => {
+    const dir = tree({
+      gates: [ROW('alpha', 'alpha')],
+      scripts: { alpha: OK },
+      table: [
+        { id: 'alpha', command: 'bun run alpha', kind: 'hard', ci: 'no — 실제 크롬을 띄운다', na: 'never' },
+      ],
+    });
+    const r = run(['--dir', dir, '--check-only']);
+    expect(r.out).toMatch(/^PASS run-gates:/m);
+    expect(r.code).toBe(0);
+  });
+
+  it('표의 CI 칸이 yes/no가 아니면 실패한다', () => {
+    const dir = tree({
+      gates: [ROW('alpha', 'alpha')],
+      scripts: { alpha: OK },
+      table: [{ id: 'alpha', command: 'bun run alpha', kind: 'hard', ci: '아마도', na: 'never' }],
+    });
+    const r = run(['--dir', dir, '--check-only']);
+    expect(r.out).toMatch(/^FAIL run-gates:/m);
+    expect(r.code).toBe(1);
+  });
 });
 
 describe('run-gates — 게이트가 판정을 어떻게 말하는가', () => {
@@ -623,7 +693,7 @@ describe('run-gates — 선행이 무너지면 BLOCKED다', () => {
 });
 
 describe('run-gates — CI는 러너를 한 번 부른다', () => {
-  const CI_WF = (body) => ({ '.github/workflows/gate.yml': `jobs:\n  g:\n    steps:\n${body}` });
+  const CI_WF = (body) => ({ '.github/workflows/gate.yml': `${WF_ON}jobs:\n  g:\n    steps:\n${body}` });
 
   it('워크플로가 gate:ci 하나만 부르면 통과한다', () => {
     const dir = tree({
@@ -810,6 +880,101 @@ describe('run-gates — CI는 러너를 한 번 부른다', () => {
     expect(r.out).toMatch(/^PASS inci/m);
     expect(r.out).not.toContain('local');
     expect(r.code).toBe(0);
+  });
+
+  it('--ci 가 게이트를 0개 고르면 실패한다 — 아무것도 돌리지 않은 초록은 통과가 아니다', () => {
+    // `--ci`를 부르는 것은 CI뿐이고, CI가 게이트를 0개 도는 상태는 설정 오류이지 결과가
+    // 아니다. 여기가 초록이면 모든 행을 `ci: no`로 되돌리는 커밋 하나로 CI가 영구 초록이
+    // 되면서 아무것도 재지 않는다.
+    const dir = tree({
+      gates: [ROW('local', 'local')],
+      scripts: { local: OK, 'gate:ci': CI_OK },
+    });
+    const r = run(['--dir', dir, '--ci']);
+    expect(r.out).toMatch(/^FAIL run-gates:/m);
+    expect(r.code).toBe(1);
+  });
+
+  it('--ci --check-only 도 0개면 실패한다 — 설정 오류는 돌리지 않아도 이미 참이다', () => {
+    const dir = tree({
+      gates: [ROW('local', 'local')],
+      scripts: { local: OK, 'gate:ci': CI_OK },
+    });
+    const r = run(['--dir', dir, '--ci', '--check-only']);
+    expect(r.out).toMatch(/^FAIL run-gates:/m);
+    expect(r.code).toBe(1);
+  });
+
+  it('pull_request 트리거가 없으면 실패한다 — 존재하되 아무 변경에도 돌지 않는다', () => {
+    // 무엇을 돌리는지를 아무리 정확히 묶어도 트리거를 놓으면 아무것도 묶이지 않는다.
+    // 실측: `on:`을 `workflow_dispatch:`로 바꿔도 다른 검사는 전부 초록이었다.
+    const dir = tree({
+      gates: [ROW('alpha', 'alpha', { ci: 'yes' })],
+      scripts: { alpha: OK, 'gate:ci': CI_OK },
+      files: {
+        '.github/workflows/gate.yml':
+          'on:\n  workflow_dispatch:\njobs:\n  g:\n    steps:\n      - run: bun run gate:ci\n',
+      },
+    });
+    const r = run(['--dir', dir, '--check-only']);
+    expect(r.out).toMatch(/^FAIL run-gates:/m);
+    expect(r.code).toBe(1);
+  });
+
+  it('주석에 적힌 트리거는 트리거가 아니다', () => {
+    const dir = tree({
+      gates: [ROW('alpha', 'alpha', { ci: 'yes' })],
+      scripts: { alpha: OK, 'gate:ci': CI_OK },
+      files: {
+        '.github/workflows/gate.yml':
+          '# pull_request:\non:\n  workflow_dispatch:\njobs:\n  g:\n    steps:\n      - run: bun run gate:ci\n',
+      },
+    });
+    const r = run(['--dir', dir, '--check-only']);
+    expect(r.out).toMatch(/^FAIL run-gates:/m);
+    expect(r.code).toBe(1);
+  });
+
+  it('인라인 목록 트리거도 인정한다 — on: [push, pull_request]', () => {
+    const dir = tree({
+      gates: [ROW('alpha', 'alpha', { ci: 'yes' })],
+      scripts: { alpha: OK, 'gate:ci': CI_OK },
+      files: {
+        '.github/workflows/gate.yml':
+          'on: [push, pull_request]\njobs:\n  g:\n    steps:\n      - run: bun run gate:ci\n',
+      },
+    });
+    const r = run(['--dir', dir, '--check-only']);
+    expect(r.out).toMatch(/^PASS run-gates:/m);
+    expect(r.code).toBe(0);
+  });
+
+  it('경로 필터가 있으면 실패한다 — 무엇이 걸러지는지 판정할 수 없다', () => {
+    // `paths-ignore` 한 줄이면 게이트가 사실상 꺼지는데 워크플로는 존재하고 이름도 맞는다.
+    const dir = tree({
+      gates: [ROW('alpha', 'alpha', { ci: 'yes' })],
+      scripts: { alpha: OK, 'gate:ci': CI_OK },
+      files: {
+        '.github/workflows/gate.yml':
+          'on:\n  pull_request:\n    paths-ignore: ["**"]\njobs:\n  g:\n    steps:\n      - run: bun run gate:ci\n',
+      },
+    });
+    const r = run(['--dir', dir, '--check-only']);
+    expect(r.out).toMatch(/^FAIL run-gates:/m);
+    expect(r.code).toBe(1);
+  });
+
+  it('워크플로는 남았는데 ci: yes인 행이 없으면 실패한다', () => {
+    // CI를 되돌리는 커밋이 **레지스트리만** 손대고 워크플로를 그대로 두는 모양. 이 분기가
+    // 없으면 워크플로가 매 푸시마다 0개를 돌면서 초록을 낸다. 산문으로만 서 있던 자리다.
+    const dir = tree({
+      gates: [ROW('local', 'local')],
+      scripts: { local: OK, 'gate:ci': CI_OK },
+      files: CI_WF('      - run: bun run gate:ci\n'),
+    });
+    const r = run(['--dir', dir, '--check-only']);
+    expect(r.out).toMatch(/^FAIL run-gates:/m);
+    expect(r.code).toBe(1);
   });
 });
 
@@ -1196,9 +1361,53 @@ describe('산출물 소비 게이트 스크립트 — 인자와 판정 (실제 �
 });
 
 describe('run-gates — 이 저장소 자신', () => {
+  /** 이 저장소의 레지스트리 행들. 위 픽스처들과 달리 여기서는 **실제 결정**을 단언한다. */
+  const registry = () =>
+    readFileSync(join(dirname(RUNNER), 'gates.txt'), 'utf8')
+      .split('\n')
+      .filter((l) => l.startsWith('gate:'))
+      .map((l) => {
+        const [id, script, kind, ci, needs, browser] = l
+          .slice('gate:'.length)
+          .split('|')
+          .map((c) => c.trim());
+        return { id, script, kind, ci, needs, browser };
+      });
+
   it('이 저장소의 네 자리가 일치한다', () => {
     const r = run(['--check-only']);
     expect(r.out).toMatch(/^PASS run-gates:/m);
     expect(r.code).toBe(0);
+  });
+
+  it('CI가 도는 게이트가 실재한다 — 위 검사가 공허하지 않다', () => {
+    // 이것이 없으면 모든 행이 `ci: no`인 트리에서도 네 자리 일치가 초록이고(워크플로가
+    // 없는 것이 정상 통과이므로), 위 테스트는 CI 쪽 검사를 한 줄도 지나지 않는다.
+    // 여기가 참인 동안은 워크플로가 사라지는 순간 네 자리 일치가 빨강이다(실측: M5).
+    expect(registry().filter((g) => g.ci === 'yes').length).toBeGreaterThan(0);
+  });
+
+  it('CI가 도는 집합은 정확히 브라우저를 안 띄우는 집합이다 — 양방향으로', () => {
+    // 한 방향(`browser: yes ⇒ ci: no`)이 CI가 크롬을 프로비저닝하지 않아도 되는 근거다.
+    // 워크플로에 "브라우저를 받지 않는다"고 적는 것은 약속이지만 이 단언은 그 약속을
+    // 필요 없게 만든다 — 고르는 집합에 브라우저 행이 없으면 받을 것도 없다.
+    //
+    // 반대 방향(`browser: no ⇒ ci: yes`)이 없으면 D12의 "브라우저 없이 도는 게이트를
+    // **전부**"가 한쪽만 지켜진다: 새 비브라우저 게이트를 `ci: no — <아무 이유>`로 등록하면
+    // CI 밖으로 조용히 빠지고 네 자리도 표도 전부 초록이다. 등식으로 못박아, 빼려면
+    // 이 테스트를 함께 고치게 한다 — 그 자리가 사람이 한 번 멈추는 자리다.
+    const rows = registry();
+    const inCi = rows.filter((g) => g.ci === 'yes').map((g) => g.id);
+    const headless = rows.filter((g) => g.browser === 'no').map((g) => g.id);
+    expect(inCi).toEqual(headless);
+  });
+
+  it('test는 CI에서 돌고 test:browser는 돌지 않는다', () => {
+    // 티켓 07이 세운 분류가 여기서 실제 효과를 낸다. 브라우저 테스트가 이름을 잘못 달아
+    // 브라우저 없는 집합으로 새어 들어오는 경우는 `browser-parity` 쪽이 먼저 잡고,
+    // 그 검사 자신은 `bun run test`가 도므로 CI 안에 있다.
+    const by = new Map(registry().map((g) => [g.id, g]));
+    expect(by.get('test').ci).toBe('yes');
+    expect(by.get('test-browser').ci).toBe('no');
   });
 });

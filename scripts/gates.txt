@@ -13,7 +13,9 @@
 #   id       사람이 읽는 표(`docs/agents/verification.md`)의 행과 이 값으로 맞춘다.
 #            표의 명령·kind·N/A 칸도 함께 비교되므로 두 자리가 조용히 갈라설 수 없다
 #   kind     hard(완료를 막는다) | advisory(관측만 남긴다)
-#   ci       CI 워크플로가 이 게이트를 도는가 (티켓 08이 채운다)
+#   ci       CI 워크플로가 이 게이트를 도는가. 표의 CI 칸과 대조되고, `no`인 행은 표에
+#            **이유를 함께** 적어야 한다 — CI가 도는 것이 기본이고 빼는 것이 예외다.
+#            `--ci`가 이 칸으로 고르며, 고른 것이 0개면 그것은 통과가 아니라 설정 오류다
 #   needs    선행 게이트의 id. `-`는 없음. **앞선 행만** 가리킬 수 있다.
 #            선행이 통과하지 못하면 이 게이트는 BLOCKED다 — FAIL도 N/A도 아니다.
 #            `needs: build`인 행에는 러너가 이 회차만의 산출물 디렉터리를
@@ -29,21 +31,21 @@
 #
 # `#` 주석과 빈 줄은 무시된다.
 
-gate: check            | check            | hard | no | -     | no  | exit  | never
-gate: lint             | lint             | hard | no | -     | no  | exit  | never
-gate: format           | format:check     | hard | no | -     | no  | exit  | never
-gate: a11y-gate        | a11y-gate        | hard | no | -     | no  | token | never
-gate: test             | test             | hard | no | -     | no  | exit  | never
-gate: build            | build            | hard | no | -     | no  | exit  | never
-gate: storybook        | storybook:build  | hard | no | -     | no  | exit  | never
-gate: smoke-barriers   | smoke-barriers   | hard | no | -     | no  | token | never
-gate: bundle-gate      | bundle-gate      | hard | no | build | no  | token | never
-gate: writer-lane-gate | writer-lane-gate | hard | no | build | no  | token | never
-gate: manifest-gate    | manifest-gate    | hard | no | build | no  | token | never
-gate: overflow-gate    | overflow-gate    | hard | no | build | yes | token | never
-gate: test-browser     | test:browser     | hard | no | build | yes | exit  | never
-gate: ui-perf          | ui-perf          | advisory | no | build | yes | token | never
-gate: smoke            | smoke            | hard | no | build | yes | token | never
+gate: check            | check            | hard     | yes | -     | no  | exit  | never
+gate: lint             | lint             | hard     | yes | -     | no  | exit  | never
+gate: format           | format:check     | hard     | yes | -     | no  | exit  | never
+gate: a11y-gate        | a11y-gate        | hard     | yes | -     | no  | token | never
+gate: test             | test             | hard     | yes | -     | no  | exit  | never
+gate: build            | build            | hard     | yes | -     | no  | exit  | never
+gate: storybook        | storybook:build  | hard     | yes | -     | no  | exit  | never
+gate: smoke-barriers   | smoke-barriers   | hard     | yes | -     | no  | token | never
+gate: bundle-gate      | bundle-gate      | hard     | yes | build | no  | token | never
+gate: writer-lane-gate | writer-lane-gate | hard     | yes | build | no  | token | never
+gate: manifest-gate    | manifest-gate    | hard     | yes | build | no  | token | never
+gate: overflow-gate    | overflow-gate    | hard     | no  | build | yes | token | never
+gate: test-browser     | test:browser     | hard     | no  | build | yes | exit  | never
+gate: ui-perf          | ui-perf          | advisory | no  | build | yes | token | never
+gate: smoke            | smoke            | hard     | no  | build | yes | token | never
 
 # `scripts/format-proof.mjs`는 **게이트가 아니다.** 특정 커밋 하나를 인자로 받아 재현을
 # 검사하는 도구이고, 레지스트리에는 인자 칸이 없어 기본값(HEAD)으로 매 회차 돌면 평범한

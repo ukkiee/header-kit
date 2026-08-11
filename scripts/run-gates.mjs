@@ -59,6 +59,21 @@ const CANONICAL_CI_SCRIPT = 'node scripts/run-gates.mjs --ci';
 const SHELL_OPERATORS = /(\|\||&&|;|\||>|<)/;
 const GATE_WORKFLOWS = ['gate.yml', 'gate.yaml'];
 /**
+ * **언제 도는가도 묶는다.** 무엇을 돌리는지를 아무리 정확히 묶어도 트리거가 없으면 그
+ * 워크플로는 존재하되 아무 변경에도 돌지 않는다 — 게이트를 0개 도는 것과 같은 자리인데,
+ * 다른 검사는 전부 초록이다(실측: `on:`을 `workflow_dispatch:`로 바꿔도 네 자리가 통과했다).
+ *
+ * 요구하는 것은 `pull_request` 하나다. 변경이 들어오는 문이 그것이고, 푸시 트리거만 있으면
+ * 브랜치를 병합하기 전에는 아무것도 재지 않는다. 줄 단위로 본다 — 이 러너는 YAML을 제대로
+ * 파싱하지 않고, 게이트 워크플로는 우리가 단순하게 유지하는 파일이다.
+ */
+const PR_TRIGGER = /^\s*pull_request\s*:|^\s*on\s*:.*\bpull_request\b/m;
+/**
+ * 경로 필터는 **무엇이 걸러지는지 이 파서로 판정할 수 없다.** `paths-ignore` 한 줄이 게이트를
+ * 사실상 끄는 데 충분하고, 그때도 워크플로는 존재하며 이름도 맞는다. 좁히는 대신 거절한다.
+ */
+const PATH_FILTERS = /^\s*paths(-ignore)?\s*:/;
+/**
  * 산출물 배관 (D4a). `needs: build`인 게이트가 이 회차에 하나라도 있으면 러너가
  * **회차마다 고유한** 디렉터리를 만들어 build 게이트의 출력을 그리로 보내고
  * (`HK_BUILD_OUT_DIR` — `wxt.config.ts`가 읽는다. `wxt build` CLI에는 출력 경로
@@ -193,14 +208,33 @@ function readTableRows(path) {
       .map((c) => c.trim());
     const m = /^`([^`]+)`$/.exec(cells[0] ?? '');
     if (!m) continue;
-    // 표 칸: 게이트 | 명령 | 임계값 | kind | N/A 조건
-    rows.push({ id: m[1], command: cells[1] ?? '', kind: cells[3] ?? '', na: cells[4] ?? '' });
+    // 표 칸: 게이트 | 명령 | 임계값 | kind | CI | N/A 조건
+    rows.push({
+      id: m[1],
+      command: cells[1] ?? '',
+      kind: cells[3] ?? '',
+      ci: cells[4] ?? '',
+      na: cells[5] ?? '',
+    });
   }
   return rows;
 }
 
 /** 백틱을 벗긴다 — 표는 명령을 `bun run x` 꼴로 적는다. */
 const unticked = (s) => s.replace(/^`|`$/g, '').trim();
+
+/**
+ * 표의 CI 칸. `yes` 또는 `no — <이유>` 한 모양만 받는다.
+ *
+ * 토큰은 레지스트리와 정확히 대조되고, 뒤에 붙는 산문은 러너가 읽지 않는다 — 사람이 읽는
+ * 자리에 이유가 **그 행과 함께** 살아야 하기 때문이다. 표 아래 따로 적은 목록은 행이 늘거나
+ * 바뀔 때 조용히 낡고, 그것을 알려 줄 것이 없다.
+ *
+ * `no`에만 이유를 요구한다. CI가 도는 것이 기본이고 빼는 것이 예외이므로, 근거가 붙어야
+ * 하는 쪽은 예외다. 근거 없는 `no`가 통과하면 게이트를 CI 밖으로 옮기는 일이 아무 흔적도
+ * 남기지 않는다.
+ */
+const CI_CELL = /^(yes|no)(?:\s+—\s+(.+))?$/;
 
 /**
  * **게이트 워크플로 하나만** 읽어 활성 `run:` 줄이 부르는 것을 준다.
@@ -217,10 +251,19 @@ function readWorkflowInvocations(dir) {
   if (found.length === 0) return null;
   const keys = [];
   const guards = [];
+  let prTriggered = false;
   for (const p of found) {
-    for (const raw of readFileSync(p, 'utf8').split('\n')) {
+    const text = readFileSync(p, 'utf8');
+    // 주석 줄을 걷어낸 뒤에 본다 — 주석에 적힌 트리거는 트리거가 아니다.
+    const active = text
+      .split('\n')
+      .filter((l) => !l.trim().startsWith('#'))
+      .join('\n');
+    if (PR_TRIGGER.test(active)) prTriggered = true;
+    for (const raw of text.split('\n')) {
       const line = raw.trim();
       if (line.startsWith('#')) continue;
+      if (PATH_FILTERS.test(line)) guards.push(line);
       // 조건부·실패 무시 단계는 "돌았다"를 뜻하지 않는다. YAML을 제대로 파싱하지 않으므로
       // 판정할 수 없는 모양을 **거절한다** — 게이트 워크플로는 우리가 단순하게 유지할 수 있는
       // 파일이고, 판정할 수 없는 것을 통과시키는 것보다 모양을 좁히는 편이 정직하다.
@@ -245,7 +288,7 @@ function readWorkflowInvocations(dir) {
       }
     }
   }
-  return { keys, guards };
+  return { keys, guards, prTriggered };
 }
 
 /** 명령 문자열이 이 파일을 부르는가. 부분 문자열이 아니라 경로 토큰으로 맞춘다 — */
@@ -286,6 +329,14 @@ function checkPlaces(dir, registryPath) {
     if (row.na !== g.na) {
       fail(`표와 레지스트리의 N/A 조건이 다르다: ${g.id} — 표 "${row.na}" vs "${g.na}"`);
     }
+    const ci = CI_CELL.exec(row.ci);
+    if (!ci) fail(`표의 CI 칸이 "yes" 또는 "no — <이유>" 모양이 아니다: ${g.id} — 표 "${row.ci}"`);
+    if (ci[1] !== g.ci) {
+      fail(`표와 레지스트리의 CI가 다르다: ${g.id} — 표 "${ci[1]}" vs "${g.ci}"`);
+    }
+    if (ci[1] === 'no' && ci[2] === undefined) {
+      fail(`CI에서 빼는 이유가 표에 없다: ${g.id} — "no — <이유>" 꼴로 적는다`);
+    }
   }
 
   const registered = new Set(gates.map((g) => g.id));
@@ -314,7 +365,12 @@ function checkPlaces(dir, registryPath) {
     }
   } else {
     if (wf.guards.length > 0) {
-      fail(`게이트 워크플로에 조건부·실패 무시 단계가 있다(판정할 수 없다): ${wf.guards[0]}`);
+      // 조건·실패 무시·셸 연산자·경로 필터·부정확한 진입점 호출이 전부 여기로 온다.
+      fail(`게이트 워크플로에 판정할 수 없는 모양이 있다: ${wf.guards[0]}`);
+    }
+    // 무엇을 돌리는지 못박아도 **언제 도는지**를 놓으면 아무것도 묶이지 않는다.
+    if (ciRows.length > 0 && !wf.prTriggered) {
+      fail('게이트 워크플로에 pull_request 트리거가 없다 — 존재하되 변경에 돌지 않는다');
     }
     const direct = wf.keys.filter((k) => gates.some((g) => g.script === k));
     if (direct.length > 0) {
@@ -500,10 +556,16 @@ const all = checkPlaces(dir, join(dir, 'scripts', 'gates.txt'));
 // `--ci`는 고르되 순서를 지킨다. 선행이 골라지지 않았으면 그 관계는 이 회차에 없다.
 const selected = opts.ci ? all.filter((g) => g.ci === 'yes') : all;
 
+// 0개를 고른 `--ci`는 결과가 아니라 설정 오류다. `--ci`를 부르는 것은 CI뿐이고, CI가 게이트를
+// 하나도 돌지 않는 상태를 통과로 적으면 모든 행을 `ci: no`로 되돌리는 커밋 하나가 CI를 영구
+// 초록으로 만든다 — 아무것도 재지 않으면서. `--check-only`에서도 같다: 이것은 실행 결과가
+// 아니라 자리들의 상태이므로 돌리지 않아도 이미 참이다.
+if (opts.ci && selected.length === 0) {
+  fail('--ci가 게이트를 0개 골랐다 — ci: yes인 행이 없다');
+}
+// `--ci`가 없으면 selected는 all이고, 빈 레지스트리는 읽는 자리에서 이미 거절됐다.
 if (opts.checkOnly) {
   process.stdout.write(`PASS ${LABEL}: ${all.length} gate(s) registered, 자리들이 일치한다 (checks only)\n`);
-} else if (selected.length === 0) {
-  process.stdout.write(`PASS ${LABEL}: 0 gate(s) selected\n`);
 } else {
   runGates(dir, selected);
 }
