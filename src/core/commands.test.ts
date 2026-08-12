@@ -7,6 +7,7 @@ import {
   moveProfile,
   removeModification,
   removeProfile,
+  renameProfile,
   setPaused,
   toggleProfile,
   updateModification,
@@ -250,6 +251,48 @@ describe('state transition commands', () => {
 
     const removed = applyCommand(state(), { type: 'remove-profile', profileId: 'p1' });
     expect(removed.profiles.map((p) => p.id)).toEqual(['p2']);
+
+    const renamed = applyCommand(state(), { type: 'rename-profile', profileId: 'p1', name: 'Renamed' });
+    expect(renamed.profiles.map((p) => p.name)).toEqual(['Renamed', 'Two']);
+  });
+
+  /*
+   * 이름 변경 (ADR 0017 재개정) — 규칙은 셋뿐이다: 트림하고, 빈 이름은 거절하고,
+   * **중복은 허용한다.**
+   *
+   * 중복 허용을 재는 것이 이 묶음의 요점이다. 막는 편이 얼핏 안전해 보이지만, 이름을
+   * 만드는 쪽(`newProfileName` + 개수)과 가져오기가 이미 중복을 만들 수 있어서 막으면
+   * **화면에 이미 있는 충돌을 고칠 길이 사라진다.** 그 판단이 뒤집히면 여기가 먼저 빨강이 된다.
+   */
+  it('renameProfile은 트림한 이름을 저장한다', () => {
+    const next = renameProfile(state(), 'p1', '  Trimmed  ');
+    expect(next.profiles[0]?.name).toBe('Trimmed');
+    // 다른 프로필과 규칙은 건드리지 않는다.
+    expect(next.profiles[1]).toEqual(state().profiles[1]);
+    expect(next.profiles[0]?.modifications).toEqual(state().profiles[0]?.modifications);
+  });
+
+  it('renameProfile은 빈 이름과 공백뿐인 이름을 거절한다 — 상태 그대로', () => {
+    const before = state();
+    expect(renameProfile(before, 'p1', '')).toBe(before);
+    expect(renameProfile(before, 'p1', '   ')).toBe(before);
+    expect(renameProfile(before, 'p1', '\t\n ')).toBe(before);
+  });
+
+  it('renameProfile은 중복 이름을 허용한다 — 막으면 이미 있는 충돌을 고칠 수 없다', () => {
+    const next = renameProfile(state(), 'p1', 'Two');
+    expect(next.profiles.map((p) => p.name)).toEqual(['Two', 'Two']);
+    // 가리키는 것은 언제나 id다 — 이름이 같아도 둘은 서로 다른 프로필로 남는다.
+    expect(next.profiles.map((p) => p.id)).toEqual(['p1', 'p2']);
+  });
+
+  it('renameProfile은 같은 이름과 없는 id에서 상태를 그대로 돌려준다', () => {
+    const before = state();
+    // 트림 뒤 같은 이름인 것도 무변화다 — 쓰기 한 번을 아끼는 것이 아니라, 무의미한
+    // 전이가 백업 스냅샷과 dNR 재컴파일을 예약하지 않게 하려는 것이다.
+    expect(renameProfile(before, 'p1', 'One')).toBe(before);
+    expect(renameProfile(before, 'p1', '  One  ')).toBe(before);
+    expect(renameProfile(before, 'nope', 'Whatever')).toBe(before);
   });
 
   /*

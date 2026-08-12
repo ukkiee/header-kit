@@ -7,6 +7,7 @@ import {
   ProfileGrip,
   ProfileSelectRow,
   profileDeleteLabels,
+  profileRenameLabel,
   profileReorderLabel,
   profileSelectLabel,
   profileToggleLabel,
@@ -36,6 +37,8 @@ export interface ProfileSidebarProps {
   onToggleActive: (profileId: string, active: boolean) => void;
   /** 프로필 삭제 (ADR 0017 개정) — 행이 2단계 확인을 마친 뒤에만 불린다. */
   onDelete: (profileId: string) => void;
+  /** 이름 변경 (ADR 0017 재개정) — 행이 정규화를 마친 뒤 Enter·blur에서 한 번만 부른다. */
+  onRename: (profileId: string, name: string) => void;
 }
 
 /** 정적 목록 — dnd 로드 전 fallback(그립 정적) + 검색 중 목록(재정렬 비활성). */
@@ -46,6 +49,7 @@ function StaticList({
   onSelect,
   onToggleActive,
   onDelete,
+  onRename,
   withGrip,
 }: {
   profiles: readonly Profile[];
@@ -54,6 +58,7 @@ function StaticList({
   onSelect: (id: string) => void;
   onToggleActive: (profileId: string, active: boolean) => void;
   onDelete: (profileId: string) => void;
+  onRename: (profileId: string, name: string) => void;
   withGrip: boolean;
 }) {
   const t = useT();
@@ -84,8 +89,10 @@ function StaticList({
                     onSelect={() => onSelect(profile.id)}
                     onToggleActive={(active) => onToggleActive(profile.id, active)}
                     onDelete={() => onDelete(profile.id)}
+                    onRename={(name) => onRename(profile.id, name)}
                     label={profileSelectLabel(profile, t, status.state)}
                     toggleLabel={profileToggleLabel(profile, t)}
+                    renameLabel={profileRenameLabel(profile, t)}
                     {...profileDeleteLabels(profile, t)}
                   />
                 </div>
@@ -114,6 +121,7 @@ export function ProfileSidebar({
   onReorder,
   onToggleActive,
   onDelete,
+  onRename,
 }: ProfileSidebarProps) {
   const t = useT();
   const [query, setQuery] = useState('');
@@ -139,6 +147,7 @@ export function ProfileSidebar({
           onSelect={onSelect}
           onToggleActive={onToggleActive}
           onDelete={onDelete}
+          onRename={onRename}
           withGrip={false}
         />
       ) : (
@@ -151,6 +160,7 @@ export function ProfileSidebar({
               onSelect={onSelect}
               onToggleActive={onToggleActive}
               onDelete={onDelete}
+              onRename={onRename}
               withGrip
             />
           }
@@ -163,6 +173,7 @@ export function ProfileSidebar({
             onReorder={onReorder}
             onToggleActive={onToggleActive}
             onDelete={onDelete}
+            onRename={onRename}
           />
         </Suspense>
       )}

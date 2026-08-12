@@ -17,6 +17,8 @@ const en = {
   profiles: 'Profiles',
   searchProfiles: 'Search profiles…',
   menuDelete: 'Delete',
+  /** 프로필 이름 변경의 툴팁. 접근성 이름은 어느 행인지까지 말한다(`ariaRenameProfile`). */
+  rename: 'Rename',
   addRule: 'Add rule',
   edit: 'Edit',
   ruleDeleted: 'Rule deleted',
@@ -265,6 +267,16 @@ const en = {
   ariaDeleteProfile: 'Delete {name}',
   ariaConfirmDeleteProfile: 'Confirm delete {name}',
   confirmDeleteProfile: 'Delete this profile?',
+  /**
+   * 이름 변경 (ADR 0017 재개정) — 버튼과 그것이 여는 입력.
+   *
+   * 버튼 이름에 프로필 이름이 들어가는 이유는 삭제·재정렬과 같다: 목록에 같은 버튼이 여러 개
+   * 서므로 `이름 변경`만으로는 어느 행의 것인지 가릴 수 없다. 입력 쪽은 반대로 이름을 담지
+   * 않는다 — 한 번에 하나만 열리고, 그 이름이 곧 지금 고치는 중인 값이라 이름표에 실으면
+   * 타이핑할 때마다 접근성 이름이 바뀐다.
+   */
+  ariaRenameProfile: 'Rename {name}',
+  profileNameLabel: 'Profile name',
   ariaShowProfiles: 'Show profiles',
   ariaShowBackups: 'Show backups',
   ariaShowPreferences: 'Show settings',
@@ -328,6 +340,7 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     profiles: '프로필',
     searchProfiles: '프로필 검색…',
     menuDelete: '삭제',
+    rename: '이름 변경',
     addRule: '규칙 추가',
     edit: '편집',
     ruleDeleted: '규칙을 삭제했습니다',
@@ -519,6 +532,8 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     ariaDeleteProfile: '{name} 삭제',
     ariaConfirmDeleteProfile: '{name} 삭제 확인',
     confirmDeleteProfile: '이 프로필을 지울까요?',
+    ariaRenameProfile: '{name} 이름 변경',
+    profileNameLabel: '프로필 이름',
     ariaShowProfiles: '프로필 화면',
     ariaShowBackups: '백업 화면',
     ariaShowPreferences: '환경설정 화면',

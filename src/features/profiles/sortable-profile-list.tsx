@@ -25,6 +25,7 @@ import {
   ProfileGrip,
   ProfileSelectRow,
   profileDeleteLabels,
+  profileRenameLabel,
   profileReorderLabel,
   profileSelectLabel,
   profileToggleLabel,
@@ -52,6 +53,8 @@ export interface SortableProfileListProps {
   onToggleActive: (profileId: string, active: boolean) => void;
   /** 삭제 — 정적 목록과 같은 컨트롤·같은 2단계 확인 (ADR 0017 개정). */
   onDelete: (profileId: string) => void;
+  /** 이름 변경 — 정적 목록과 같은 컨트롤·같은 커밋 시점 (ADR 0017 재개정). */
+  onRename: (profileId: string, name: string) => void;
 }
 
 /**
@@ -101,6 +104,7 @@ function SortableItem({
   onSelect,
   onToggleActive,
   onDelete,
+  onRename,
   dragLabel,
 }: {
   profile: Profile;
@@ -109,6 +113,7 @@ function SortableItem({
   onSelect: () => void;
   onToggleActive: (active: boolean) => void;
   onDelete: () => void;
+  onRename: (name: string) => void;
   dragLabel: string;
 }) {
   const t = useT();
@@ -142,8 +147,10 @@ function SortableItem({
             onSelect={onSelect}
             onToggleActive={onToggleActive}
             onDelete={onDelete}
+            onRename={onRename}
             label={profileSelectLabel(profile, t, status.state)}
             toggleLabel={profileToggleLabel(profile, t)}
+            renameLabel={profileRenameLabel(profile, t)}
             {...profileDeleteLabels(profile, t)}
           />
         </div>
@@ -160,6 +167,7 @@ export default function SortableProfileList({
   onReorder,
   onToggleActive,
   onDelete,
+  onRename,
 }: SortableProfileListProps) {
   const t = useT();
   const sensors = useSensors(
@@ -225,6 +233,7 @@ export default function SortableProfileList({
                 onSelect={() => onSelect(profile.id)}
                 onToggleActive={(active) => onToggleActive(profile.id, active)}
                 onDelete={() => onDelete(profile.id)}
+                onRename={(name) => onRename(profile.id, name)}
                 dragLabel={profileReorderLabel(profile, t)}
               />
             ))}

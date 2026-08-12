@@ -421,6 +421,12 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
                 않으면 본문이 '아직 프로필이 없습니다'로 떨어진다.
               */
                     onDelete={(profileId) => void dispatch({ type: 'remove-profile', profileId })}
+                    /*
+                프로필 이름 변경 (ADR 0017 재개정) — 트림·빈 이름 거절은 행이 이미 마쳤고
+                (`normalizeProfileName`을 행과 명령이 함께 쓴다) 여기 닿는 것은 실제로 달라진
+                이름뿐이다. 선택도 손대지 않는다: 바뀐 것은 이름뿐이고 id는 그대로다.
+              */
+                    onRename={(profileId, name) => void dispatch({ type: 'rename-profile', profileId, name })}
                   />
                 </div>
               </ScrollArea>

@@ -8,6 +8,7 @@ import {
 } from './placeholder';
 import {
   createDefaultState,
+  normalizeProfileName,
   placeholderTemplate,
   type Modification,
   type Profile,
@@ -60,14 +61,20 @@ function withoutKey(record: Record<string, string>, key: string): Record<string,
 }
 
 /*
- * **프로필의 메타를 바꾸는 명령이 없다** (ADR 0017, 티켓 04). 이름·색은 만들 때 정해지고
- * 그 뒤로 바뀌지 않는다 — `duplicate-profile`·`update-profile-meta`와 그 순수 함수들이
- * 그때 사라진 이유다. 호출부가 없는 명령을 남겨 두면 화면에 없는 조작이 메시지로는 계속
- * 가능한 채로 남는다.
+ * **프로필의 메타를 바꾸는 명령은 좁게만 있다** (ADR 0017과 그 개정들).
  *
- * **`remove-profile`은 돌아왔다** (ADR 0017 개정). 함께 퇴역했었지만, 잘못 만든 프로필을
- * 되돌리는 길이 전체 초기화뿐이라는 대가가 컸다 — 그건 다른 프로필까지 날린다. 목록 행이
- * 2단계 확인을 거쳐 이 명령을 보낸다(`removeProfile` 주석).
+ * 티켓 04는 넷(이름·색·복제·삭제)을 한꺼번에 없앴다. 시안에 컨트롤이 없다는 것이 근거였고,
+ * `duplicate-profile`·`update-profile-meta`와 그 순수 함수들이 그때 사라졌다. 호출부가
+ * 없는 명령을 남겨 두면 화면에 없는 조작이 메시지로는 계속 가능한 채로 남기 때문이다.
+ *
+ * 그 뒤로 셋이 **하나씩** 돌아왔고, 셋 다 같은 종류의 대가를 치르고 있었다 — 잘못 만든
+ * 것을 되돌리는 유일한 길이 더 크게 되돌리는 것이었다:
+ *
+ *   - `remove-profile` — 되돌리는 길이 전체 초기화뿐이었다(다른 프로필까지 날린다).
+ *   - `rename-profile` — 오타 하나를 고치는 길이 프로필을 지우고 규칙을 다시 만드는
+ *     것뿐이었다. 목록 행의 인라인 입력이 Enter·blur에서 **한 번만** 보낸다.
+ *
+ * **복제는 여전히 없다.** 그것은 되돌림의 대가가 아니라 편의였고, 지금도 그렇다.
  */
 
 /**
@@ -373,6 +380,29 @@ export function removeProfile(state: StoredState, profileId: string): StoredStat
   };
 }
 
+/**
+ * 프로필 이름 변경 (ADR 0017 재개정) — 규칙은 `normalizeProfileName` 하나가 진다.
+ *
+ * ADR 0017은 이름 변경을 두지 않기로 했었다. 시안에 컨트롤이 없다는 것이 근거였는데, 그
+ * 대가는 "만들 때 오타를 내면 영원히 그 이름"이었고 되돌리는 유일한 길이 프로필을 지우고
+ * 규칙을 다시 만드는 것이었다 — 삭제를 되살린 개정과 정확히 같은 종류의 대가다.
+ *
+ * **거절과 무변화를 둘 다 상태 그대로로 접는다.** 빈 이름(정규화가 `null`)이든 같은
+ * 이름이든 저장소는 그대로다. 부르는 쪽이 이 둘을 구별해야 할 이유가 없다: 화면은 이미
+ * 자기가 보낸 값을 알고, 실패 배너를 띄울 일도 아니다(사용자가 지운 이름을 되돌려 주는
+ * 것이 맞는 응답이고, 그건 화면이 한다).
+ *
+ * 없는 id면 그대로 — `removeProfile`과 같은 이유다(두 화면이 겹쳐 조작할 때 뒤에 도착한
+ * 명령이 실패로 보이지 않게 한다).
+ */
+export function renameProfile(state: StoredState, profileId: string, name: string): StoredState {
+  const normalized = normalizeProfileName(name);
+  if (normalized === null) return state;
+  const profile = state.profiles.find((p) => p.id === profileId);
+  if (!profile || profile.name === normalized) return state;
+  return withProfile(state, profileId, (p) => ({ ...p, name: normalized }));
+}
+
 export function moveProfile(state: StoredState, profileId: string, toIndex: number): StoredState {
   const from = state.profiles.findIndex((p) => p.id === profileId);
   if (from === -1) return state;
@@ -475,6 +505,8 @@ export type Command =
   | { type: 'add-profile'; profile: Profile; afterProfileId?: string }
   | { type: 'move-profile'; profileId: string; toIndex: number }
   | { type: 'remove-profile'; profileId: string }
+  /** 이름 변경 — 정규화(트림·빈 이름 거절)는 `renameProfile`이 진다. 중복은 허용된다. */
+  | { type: 'rename-profile'; profileId: string; name: string }
   | { type: 'set-paused'; paused: boolean }
   | { type: 'toggle-pause' }
   | { type: 'set-theme'; theme: ThemePreference }
@@ -546,6 +578,8 @@ export function applyCommand(
       return moveProfile(state, command.profileId, command.toIndex);
     case 'remove-profile':
       return removeProfile(state, command.profileId);
+    case 'rename-profile':
+      return renameProfile(state, command.profileId, command.name);
     case 'set-paused':
       return setPaused(state, command.paused);
     case 'toggle-pause':

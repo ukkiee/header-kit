@@ -1,10 +1,11 @@
 import type { DraggableAttributes } from '@dnd-kit/core';
 import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities';
-import { Check, GripVertical, Pause, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { Check, GripVertical, Pause, Pencil, Trash2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { format, type Translator } from '@/core/i18n';
 import { IconButton } from '@/ui/icon-button';
-import type { Profile } from '@/core/schema';
+import { Input } from '@/ui/text-field';
+import { normalizeProfileName, type Profile } from '@/core/schema';
 import { PROFILE_STATE_KEY, type ProfileRowState, type ProfileRowStatus } from '@/core/summary';
 import { profileRowMetaText } from '@/features/status/status-text';
 import { useT } from '@/ui/i18n-context';
@@ -138,6 +139,11 @@ export function profileDeleteLabels(
   };
 }
 
+/** 이름 변경 버튼의 접근성 이름 — 삭제·재정렬과 같은 이유로 프로필 이름을 담는다. */
+export function profileRenameLabel(profile: Pick<Profile, 'name'>, t: Translator): string {
+  return format(t('ariaRenameProfile'), { name: profile.name });
+}
+
 /**
  * 선택 버튼(칩) + 인라인 토글 (티켓 04) — 시안의 행: 스와치 · 이름 · `N개 규칙 · 적용` · 스위치.
  *
@@ -172,10 +178,12 @@ export function ProfileSelectRow({
   onSelect,
   onToggleActive,
   onDelete,
+  onRename,
   label,
   toggleLabel,
   deleteLabel,
   confirmLabel,
+  renameLabel,
 }: {
   profile: Profile;
   status: ProfileRowStatus;
@@ -184,15 +192,82 @@ export function ProfileSelectRow({
   onToggleActive: (active: boolean) => void;
   /** 두 번째 클릭에서만 불린다 — 되물음은 이 행이 스스로 든다. */
   onDelete: () => void;
+  /**
+   * 이름 변경 — **정규화를 통과한 새 이름일 때만** 불린다. 빈 이름이거나 지금과 같으면
+   * 이 행이 조용히 접고 부르지 않는다(아래 `commitRename`).
+   */
+  onRename: (name: string) => void;
   label: string;
   toggleLabel: string;
   deleteLabel: string;
   confirmLabel: string;
+  renameLabel: string;
 }) {
   // 되물음은 행마다 따로다 — 목록이 들면 어느 행이 무장했는지를 위에서 배선해야 한다.
   const [confirming, setConfirming] = useState(false);
+  /**
+   * 이름 편집 (ADR 0017 재개정) — 열려 있으면 초안 문자열, 닫혀 있으면 `null`.
+   *
+   * 두 값(열림 여부 · 초안)을 하나로 두는 이유는 그 둘이 **함께만 뜻이 있기** 때문이다.
+   * 따로 두면 "닫혔는데 초안이 남아 있다"가 표현 가능해지고, 그 상태에서 다시 열면 지난번
+   * 타이핑이 되살아난다.
+   */
+  const [draft, setDraft] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const t = useT();
   const paused = status.state === 'paused';
+  const renaming = draft !== null;
+
+  // 열리는 순간 포커스를 넣고 전체를 고른다 — 고치러 온 사람이 대개 통째로 바꾼다.
+  // `autoFocus` 속성 대신 여기서 하는 이유는 그 속성이 jsx-a11y 진단을 하나 새로 만들고,
+  // `a11y-gate`의 베이스라인이 개수 증가를 FAIL로 잡기 때문이다.
+  useEffect(() => {
+    if (!renaming) return;
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, [renaming]);
+
+  const openRename = () => {
+    setConfirming(false); // 두 가지가 동시에 무장해 있지 않게 한다
+    setDraft(profile.name);
+  };
+
+  /**
+   * 커밋 — **명령은 여기서 한 번만** 나간다.
+   *
+   * 키를 칠 때마다 보내면 타이핑 한 번에 dNR 재컴파일과 백업 스냅샷이 연달아 예약된다
+   * (`onStateChanged`가 `converge(); scheduleBackup();`을 함께 부른다).
+   *
+   * 거절과 무변화는 **조용히 접는다.** 빈 이름을 실패 배너로 알릴 일이 아니다 — 맞는 응답은
+   * 지운 이름을 되돌려 주는 것이고, 초안을 버리면 칩이 권위 이름을 다시 그리므로 그 되돌림이
+   * 저절로 일어난다.
+   */
+  const commitRename = () => {
+    if (draft === null) return;
+    const next = normalizeProfileName(draft);
+    setDraft(null);
+    if (next === null || next === profile.name) return;
+    onRename(next);
+  };
+
+  /*
+   * 메타 줄 — 편집 중에도 **같은 자리에 그대로 선다.**
+   *
+   * 칩을 통째로 입력으로 갈아 끼우면 두 줄이 한 줄이 되어 행 높이가 줄고, 목록 전체가
+   * 위로 당겨진다. 바뀌는 것은 첫 줄의 이름뿐이므로 둘째 줄은 양쪽 분기가 공유한다.
+   */
+  const metaLine = (
+    <span
+      aria-hidden
+      className={`flex w-full min-w-0 items-center gap-1 truncate text-[10px] tabular-nums ${
+        paused ? 'text-foreground' : 'text-muted-foreground'
+      }`}
+    >
+      {paused && <Pause size={9} strokeWidth={2} fill="currentColor" className="shrink-0" />}
+      <span className="min-w-0 truncate">{profileRowMetaText(status, t)}</span>
+    </span>
+  );
+
   /*
    * **면은 행(`sidebarRowClass`)이 든다** — 칩은 `filled={false}`로 내려놓고 글자만 바꾼다.
    * 둘 다 칠하면 면 위에 면이 겹쳐 모서리가 두 겹으로 보인다.
@@ -200,42 +275,86 @@ export function ProfileSelectRow({
   return (
     <>
       <div className="min-w-0 flex-1">
-        <SwitcherChip filled={false} selected={selected} aria-label={label} onClick={onSelect}>
-          <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
-            <span className="flex w-full min-w-0 items-center gap-1.5">
-              <ProfileDot profile={profile} />
-              <span className="min-w-0 truncate">{profile.name}</span>
+        {renaming ? (
+          /*
+            편집 셸 — 칩과 **같은 padding·글자 크기**를 쓴다(`px-2 py-1.5 text-xs`). 칩의
+            클래스를 재사용하지 않고 베낀 이유는 칩이 `<button>`이기 때문이다: 버튼 안에
+            입력을 넣을 수 없다(중첩 상호작용 — 클릭과 포커스의 주인이 둘이 된다).
+
+            입력은 `ghost`다 — 값이 글자처럼 읽히다가 포커스에서만 경계가 드러난다. 높이와
+            좌우 여백을 지워(`h-auto px-0 py-0`) 이름이 서 있던 그 자리에 그대로 앉힌다.
+
+            **`border-0`까지 지운다.** `ghost`는 테두리 **색**만 투명하게 하고 1px 폭은 남기는데,
+            그 상하 2px이 그대로 행 높이가 된다 — 실측으로 편집을 열 때 행이 43 → 45px로 튀었고
+            목록 전체가 그만큼 밀렸다. 폭을 0으로 두어도 포커스 표시는 남는다: 그것을 그리는
+            것은 테두리가 아니라 3px 링이다.
+          */
+          <div className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-xs">
+            <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
+              <span className="flex w-full min-w-0 items-center gap-1.5">
+                <ProfileDot profile={profile} />
+                <Input
+                  ref={inputRef}
+                  variant="ghost"
+                  size="xs"
+                  aria-label={t('profileNameLabel')}
+                  className="h-auto min-w-0 flex-1 border-0 px-0 py-0 text-xs"
+                  value={draft}
+                  onChange={(event) => setDraft(event.target.value)}
+                  onBlur={commitRename}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      commitRename();
+                    }
+                    // Escape는 **버린다** — blur 커밋을 타고 나가지 않도록 먼저 닫는다.
+                    if (event.key === 'Escape') {
+                      event.preventDefault();
+                      setDraft(null);
+                    }
+                  }}
+                />
+              </span>
+              {metaLine}
             </span>
-            {/*
-              메타는 `aria-hidden`이다 — `aria-label`을 가진 버튼 **안**이라 어차피 낭독되지
-              않고, 상태는 그 이름이 문자열로 따로 나른다. 같은 사실을 두 번 말하면 낭독이 겹친다.
-            */}
-            <span
-              aria-hidden
-              className={`flex w-full min-w-0 items-center gap-1 truncate text-[10px] tabular-nums ${
-                paused ? 'text-foreground' : 'text-muted-foreground'
-              }`}
-            >
-              {paused && <Pause size={9} strokeWidth={2} fill="currentColor" className="shrink-0" />}
-              <span className="min-w-0 truncate">{profileRowMetaText(status, t)}</span>
+          </div>
+        ) : (
+          <SwitcherChip filled={false} selected={selected} aria-label={label} onClick={onSelect}>
+            <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
+              <span className="flex w-full min-w-0 items-center gap-1.5">
+                <ProfileDot profile={profile} />
+                <span className="min-w-0 truncate">{profile.name}</span>
+              </span>
+              {/*
+                메타는 `aria-hidden`이다 — `aria-label`을 가진 버튼 **안**이라 어차피 낭독되지
+                않고, 상태는 그 이름이 문자열로 따로 나른다. 같은 사실을 두 번 말하면 낭독이 겹친다.
+              */}
+              {metaLine}
             </span>
-          </span>
-        </SwitcherChip>
+          </SwitcherChip>
+        )}
       </div>
       {/*
-        삭제 — **평소에는 숨어 있다가 행에 닿으면 나타난다** (ADR 0017 개정).
+        이름 변경과 삭제 — **평소에는 숨어 있다가 행에 닿으면 나타난다** (ADR 0017 개정).
 
         규칙 행의 편집·삭제는 평소에도 60%로 보인다(ui-review UI-03). 여기서 다른 규약을
         쓰는 이유는 폭이다: 프로필 열은 264px에 못박혀 있고 그 안에 그립·이름·메타·스위치가
-        이미 서 있어, 아이콘 하나가 상시로 더 들어오면 이름이 먼저 잘린다. 그리고 프로필
-        삭제는 규칙 편집처럼 자주 하는 일이 아니다 — 이 앱의 핵심 동작은 규칙 쪽이다.
+        이미 서 있어, 아이콘이 상시로 더 들어오면 이름이 먼저 잘린다. 그리고 프로필을 고치는
+        일은 규칙 편집처럼 자주 하는 일이 아니다 — 이 앱의 핵심 동작은 규칙 쪽이다.
 
         **포커스에도 나타난다**(`group-focus-within`). 호버로만 드러내면 키보드·터치에서는
         도달할 수 없는 버튼이 된다 — 그건 숨김이 아니라 부재다.
+
+        **순서는 이름 변경 → 삭제다.** 스모크 N54가 켬/끔 스위치에서 Shift+Tab 한 번에 삭제
+        버튼에 닿는 것을 전제하므로, 새 버튼은 삭제 **앞**에 서야 그 전제가 유지된다.
       */}
       <div
-        className={`shrink-0 transition-opacity ${
-          confirming ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
+        className={`flex shrink-0 items-center gap-0.5 transition-opacity ${
+          // 편집 중에도 100%다 — 입력이 열려 있는데 그 옆의 버튼들이 흐려지면, 지금 무엇을
+          // 하는 중인지가 화면에서 반쯤 사라진다.
+          confirming || renaming
+            ? 'opacity-100'
+            : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
         }`}
         /*
          * 되물음은 **가리키는 동안만** 산다. 다른 행으로 옮기거나 포커스가 떠나면 풀린다 —
@@ -244,6 +363,22 @@ export function ProfileSelectRow({
         onPointerLeave={() => setConfirming(false)}
         onBlur={() => setConfirming(false)}
       >
+        {/*
+          편집 중에는 눌린 상태로 선다 — 어느 행을 고치는 중인지가 아이콘에도 남는다.
+          이미 열려 있을 때의 클릭은 **아무것도 하지 않는다**: 그 클릭의 mousedown이 입력을
+          blur시켜 이미 커밋했으므로, 여기서 다시 열면 방금 닫은 것이 곧바로 되열린다.
+        */}
+        <IconButton
+          label={renameLabel}
+          tooltip={t('rename')}
+          icon={Pencil}
+          aria-pressed={renaming}
+          className={renaming ? 'bg-secondary text-foreground' : ''}
+          onClick={() => {
+            if (renaming) return;
+            openRename();
+          }}
+        />
         <IconButton
           label={confirming ? confirmLabel : deleteLabel}
           tooltip={confirming ? t('confirmDeleteProfile') : t('menuDelete')}

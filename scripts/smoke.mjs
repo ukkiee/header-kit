@@ -1838,8 +1838,14 @@ try {
   /*
    * N2: `＋ 새 프로필` — 이름과 색이 **자동으로** 정해지고 바로 선택된다 (티켓 04 AC7).
    *
-   * 자동으로 정해지는 것이 요점이다: 이름을 바꿀 컨트롤이 없어졌으므로 여기서 붙는 이름이
-   * 끝까지 남는다. 이름은 카탈로그를 거치고(ko는 `새 프로필 N`), 색은 팔레트를 순서대로 돈다.
+   * 자동으로 정해지는 것이 요점이다 — **묻지 않는다.** 이름은 카탈로그를 거치고(ko는
+   * `새 프로필 N`), 색은 팔레트를 순서대로 돈다.
+   *
+   * 예전에는 여기에 "이름을 바꿀 컨트롤이 없으므로 이 이름이 끝까지 남는다"가 붙어 있었다.
+   * 이름 변경이 돌아오면서(ADR 0017 재개정) 그 문장은 사실이 아니다 — 바뀐 것은 **만드는
+   * 순간에 묻지 않는다**는 것뿐이고, 그 뒤로 고칠 수 있다. 그래서 `newProfileName`이 중복을
+   * 만들 수 있다는 사실도 결함이 아니라 이름 정책이 중복을 허용하는 근거가 됐다
+   * (`normalizeProfileName`).
    */
   await popup.getByRole('button', { name: '+ New profile' }).click();
   const createdName = await pollProfileName((v) => /^New profile \d+$/.test(v));
@@ -1861,19 +1867,45 @@ try {
   );
 
   /*
-   * N3: **프로필 편집 컨트롤이 없다** (티켓 04 AC1·AC2, ADR 0017).
+   * N3: **프로필 편집 컨트롤 — 이름 변경은 있고, 두 글자 라벨과 ⋯ 메뉴는 없다.**
    *
-   * 시안에 없으므로 이름·색·두 글자 라벨 입력과 ⋯ 메뉴(복제·삭제)를 넷 다 없앴다. 부재를
-   * 재는 이유는 이것이 **되돌릴 수 없는 결정**이기 때문이다 — 하나라도 다시 서면 사용자가
-   * 프로필을 지울 수 있게 되고, 그 프로필을 되살릴 길은 전체 초기화뿐이다.
+   * 이 시나리오는 원래 넷의 **부재**를 쟀다(티켓 04 AC1·AC2, ADR 0017). 시안에 이름·색·두
+   * 글자 라벨 입력과 ⋯ 메뉴가 없다는 것이 근거였다.
+   *
+   * **그 결정 하나가 뒤집혔다** (ADR 0017 재개정). 이름 변경이 없으면 만들 때 낸 오타를
+   * 고치는 유일한 길이 프로필을 지우고 규칙을 다시 만드는 것인데, 그건 삭제를 되살린 개정이
+   * 없앤 바로 그 종류의 대가다. 그래서 단언을 **우회하지 않고 여기서 명시적으로 개정한다** —
+   * `getByLabel('Profile name')`이 0이 아니게 됐다는 이유로 이 검사를 조용히 지나가게 두면,
+   * 다음 사람이 읽는 계약과 화면이 갈라진다.
+   *
+   * 지금 재는 것은 셋이다:
+   *   1. 이름 변경 **버튼**이 행마다 선다.
+   *   2. 그 입력은 **눌러야 나타난다** — 상시 입력이면 264px 열에서 이름이 먼저 잘린다.
+   *   3. 두 글자 라벨과 ⋯ 메뉴는 **여전히 없다.** 전자는 죽은 필드였고 후자는 앱의 마지막
+   *      메뉴였다(ADR 0012 개정). 색은 아직 없다 — 그 결정은 따로 뒤집힌다.
    *
    * 없는 것만 세면 "화면이 통째로 안 그려졌다"도 통과하므로, 남은 넷(그립·토글·검색·만들기)이
    * 실제로 서 있는 것을 같은 호흡에서 함께 잰다.
    */
   const gone = async (locator) => (await locator.count()) === 0;
-  const editorControlsGone =
-    (await gone(popup.getByLabel('Profile name'))) &&
-    (await gone(popup.getByLabel('Badge color'))) &&
+  const renameButtons = await popup.getByRole('button', { name: /^Rename / }).count();
+  // 누르기 전에는 입력이 없다 — 버튼이 여는 것이지 늘 서 있는 것이 아니다.
+  const nameInputHiddenUntilAsked = await gone(popup.getByLabel('Profile name'));
+  await popup
+    .getByRole('button', { name: /^Rename / })
+    .first()
+    .click();
+  const nameInputOpens = await popup
+    .getByLabel('Profile name')
+    .waitFor({ timeout: 5000 })
+    .then(
+      () => true,
+      () => false,
+    );
+  // 열어 둔 채로 다음 검사에 들어가지 않는다 — 버린다(Escape는 커밋하지 않는다).
+  await popup.getByLabel('Profile name').press('Escape');
+
+  const retiredControlsGone =
     (await gone(popup.getByLabel('Badge label'))) &&
     (await gone(popup.getByRole('button', { name: 'Profile menu', exact: true })));
   const survivors = {
@@ -1883,14 +1915,96 @@ try {
     create: await popup.getByRole('button', { name: '+ New profile' }).count(),
   };
   record(
-    'N3: 프로필 편집 컨트롤 부재 — 이름·색·두 글자 라벨·⋯ 메뉴가 없고 남은 넷은 선다',
-    editorControlsGone &&
+    'N3: 이름 변경은 버튼으로 서고(입력은 눌러야 열린다), 두 글자 라벨·⋯ 메뉴는 여전히 없다',
+    renameButtons > 0 &&
+      nameInputHiddenUntilAsked &&
+      nameInputOpens &&
+      retiredControlsGone &&
       survivors.grip > 0 &&
       survivors.toggle > 0 &&
       survivors.search === 1 &&
       survivors.create === 1,
-    `편집컨트롤제거=${editorControlsGone}, ${JSON.stringify(survivors)}`,
+    `이름변경버튼=${renameButtons}, 입력숨김=${nameInputHiddenUntilAsked}, 입력열림=${nameInputOpens}, ` +
+      `퇴역컨트롤제거=${retiredControlsGone}, ${JSON.stringify(survivors)}`,
   );
+
+  /*
+   * N3a: **이름 변경의 커밋 규칙** (ADR 0017 재개정).
+   *
+   * N3은 컨트롤이 서 있는지까지만 본다. 여기서 재는 것은 그 컨트롤이 저장소에 무엇을
+   * 남기는가다 — 네 갈래가 함께 걸려야 계약이 산다:
+   *
+   *   - **Enter가 커밋한다.** 이것만 재면 나머지 셋이 조용히 반대로 돌아도 초록이다.
+   *   - **빈 이름은 거절되고 원래 이름이 남는다.** 이름 없는 프로필은 목록에서 짚을 단서가
+   *     통째로 없어진다(색 스와치는 상태를 나르지 이름을 대신하지 않는다).
+   *   - **Escape는 버린다.** blur 커밋과 한 몸이라 따로 재지 않으면, Escape가 커밋으로
+   *     새는 회귀를 못 잡는다.
+   *   - **blur도 커밋한다.** 입력을 열어 두고 다른 곳을 누르는 것이 실제로 가장 흔하다.
+   *
+   * 중복 허용은 여기서 재지 않는다 — 그건 순수 함수의 계약이라 `commands.test.ts`가 든다.
+   */
+  {
+    await seedProfiles([baseProfile('rn-1', 'RenA', []), baseProfile('rn-2', 'RenB', [])]);
+    await popup.reload();
+    await popup.getByRole('button', { name: 'Show profiles', exact: true }).waitFor({ timeout: 5000 });
+    /*
+     * 드래그 목록이 붙는 순간 행이 리마운트되며 열려 있던 입력이 사라진다 — N54와 같은
+     * 이유다. 아래 `waitSortableReady`와 같은 기다림을 여기서 다시 쓰는 이유는 그 헬퍼가
+     * **이 지점보다 뒤에** 선언돼 있어 부르면 TDZ이기 때문이다(실측으로 그렇게 걸렸다).
+     * 헬퍼를 위로 올리는 대신 여기 두는 것은, 스모크 본문이 한 스코프라 선언을 옮기면
+     * 그 사이의 다른 이름들과 순서가 얽히기 때문이다.
+     */
+    await popup
+      .locator('button[aria-label^="Reorder"][aria-roledescription="sortable"]')
+      .first()
+      .waitFor({ timeout: 5000 });
+
+    const storedNames = () =>
+      sw.evaluate(async () => {
+        const { state } = await chrome.storage.local.get('state');
+        return state.profiles.map((p) => p.name).join('|');
+      });
+    const openRename = async (name) => {
+      await popup.getByRole('button', { name: `Rename ${name}`, exact: true }).click();
+      await popup.getByLabel('Profile name').waitFor({ timeout: 5000 });
+    };
+
+    // (a) Enter가 커밋한다.
+    await openRename('RenA');
+    await popup.getByLabel('Profile name').fill('Renamed');
+    await popup.getByLabel('Profile name').press('Enter');
+    const afterEnter = await pollUntil(storedNames, (v) => v === 'Renamed|RenB');
+
+    // (b) 빈 이름은 거절 — 원래 이름이 남는다.
+    await openRename('Renamed');
+    await popup.getByLabel('Profile name').fill('   ');
+    await popup.getByLabel('Profile name').press('Enter');
+    await popup.waitForTimeout(500);
+    const afterBlank = await storedNames();
+
+    // (c) Escape는 버린다.
+    await openRename('Renamed');
+    await popup.getByLabel('Profile name').fill('Discarded');
+    await popup.getByLabel('Profile name').press('Escape');
+    await popup.waitForTimeout(500);
+    const afterEscape = await storedNames();
+
+    // (d) blur도 커밋한다 — 다른 화면으로 옮겨 포커스를 뺀다.
+    await openRename('Renamed');
+    await popup.getByLabel('Profile name').fill('ByBlur');
+    await popup.getByRole('button', { name: 'Show settings', exact: true }).click();
+    const afterBlur = await pollUntil(storedNames, (v) => v === 'ByBlur|RenB');
+    await popup.getByRole('button', { name: 'Show profiles', exact: true }).click();
+
+    record(
+      'N3a: 이름 변경 — Enter·blur는 커밋, 빈 이름은 거절, Escape는 버린다',
+      afterEnter === 'Renamed|RenB' &&
+        afterBlank === 'Renamed|RenB' &&
+        afterEscape === 'Renamed|RenB' &&
+        afterBlur === 'ByBlur|RenB',
+      `enter=${afterEnter}, blank=${afterBlank}, escape=${afterEscape}, blur=${afterBlur}`,
+    );
+  }
 
   /*
    * N4: 프로필이 하나도 없으면 빈 상태 안내가 보인다.
