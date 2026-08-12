@@ -293,6 +293,42 @@ export function restoreModification(
   };
 }
 
+/**
+ * 규칙 순서를 바꾼다.
+ *
+ * **순서는 표시 정렬이 아니라 적용 우선순위다.** 컴파일이 프로필 대역 안에서 앞선
+ * Modification에 더 높은 dNR priority를 준다(`compile.ts`의 충돌 의미론). 그래서 이 전이는
+ * 같은 헤더를 건드리는 규칙들 사이의 **승자를 바꾼다** — 목록을 예쁘게 하는 일이 아니다.
+ *
+ * 그 대가가 한 자리 더 있다: 규칙은 방출 순서대로 dNR 총량·regex 한도를 소모하므로, 한도
+ * 근처의 프로필에서는 순서가 **어느 규칙이 살아남는가**까지 바꾼다.
+ *
+ * **배열만 재배치하고 `materialized`는 손대지 않는다.** remove+add로 조립하면 remove가
+ * 실체화 값을 지우고 add가 다시 실체화해, 순서만 바꿨는데 켜져 있는 동안 유지돼야 할
+ * Placeholder 값이 갈린다(`removeModification`·`addModification`이 각각 그 일을 한다).
+ *
+ * clamp은 `moveProfile`과 **같은 셈**이다 — 제거한 **뒤의** 길이로 자르므로 dnd-kit의
+ * `arrayMove`와 결과가 같다. `restoreModification`처럼 삽입 전 길이로 자르면 목록 끝으로
+ * 옮기는 드롭이 한 칸 어긋난다.
+ */
+export function moveModification(
+  state: StoredState,
+  profileId: string,
+  modificationId: string,
+  toIndex: number,
+): StoredState {
+  return withProfile(state, profileId, (profile) => {
+    const from = profile.modifications.findIndex((m) => m.id === modificationId);
+    // 없는 id는 예외가 아니라 무동작이다 — 두 화면이 같은 규칙을 동시에 옮기거나 지웠을 때
+    // 뒤에 도착한 명령이 실패로 보이지 않게 한다 (`moveProfile`·`removeProfile`과 같은 규약).
+    if (from === -1) return profile;
+    const modifications = [...profile.modifications];
+    const [moved] = modifications.splice(from, 1);
+    modifications.splice(Math.max(0, Math.min(toIndex, modifications.length)), 0, moved!);
+    return { ...profile, modifications };
+  });
+}
+
 export function addProfile(
   state: StoredState,
   profile: Profile,
@@ -452,6 +488,11 @@ export type Command =
   | { type: 'add-modification'; profileId: string; modification: Modification }
   | { type: 'update-modification'; profileId: string; modification: Modification }
   | { type: 'remove-modification'; profileId: string; modificationId: string }
+  /**
+   * 규칙 순서 변경 — `toIndex`는 **권위 배열 기준**이다. 화면의 표시 순서는 편집 중인 규칙을
+   * 맨 위로 올리므로 그 인덱스를 그대로 보내면 틀린 규칙이 우선순위를 얻는다.
+   */
+  | { type: 'move-modification'; profileId: string; modificationId: string; toIndex: number }
   | {
       type: 'restore-modification';
       profileId: string;
@@ -531,6 +572,8 @@ export function applyCommand(
       return updateModification(state, command.profileId, command.modification, deps);
     case 'remove-modification':
       return removeModification(state, command.profileId, command.modificationId);
+    case 'move-modification':
+      return moveModification(state, command.profileId, command.modificationId, command.toIndex);
     case 'restore-modification':
       return restoreModification(
         state,

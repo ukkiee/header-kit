@@ -3,6 +3,7 @@ import {
   addModification,
   addProfile,
   applyCommand,
+  moveModification,
   moveProfile,
   removeModification,
   removeProfile,
@@ -95,6 +96,73 @@ describe('state transition commands', () => {
     const next = moveProfile(state(), 'p2', 0);
 
     expect(next.profiles.map((p) => p.id)).toEqual(['p2', 'p1']);
+  });
+
+  /**
+   * 규칙 순서 = 적용 우선순위다(`compile.ts`의 충돌 의미론). 아래는 이 전이가 **순서만**
+   * 바꾸는지를 잰다 — 실체화 값도, 다른 프로필도 건드리지 않아야 한다.
+   */
+  describe('moveModification', () => {
+    /** 한 프로필에 규칙 셋. 순서는 id로만 단언한다. */
+    function three(): StoredState {
+      const base = state();
+      return {
+        ...base,
+        profiles: [
+          {
+            ...base.profiles[0]!,
+            modifications: [modification('m1'), modification('m2'), modification('m3')],
+          },
+          base.profiles[1]!,
+        ],
+      };
+    }
+    const ids = (s: StoredState) => s.profiles.find((p) => p.id === 'p1')!.modifications.map((m) => m.id);
+
+    it('순서를 바꾼다 — 위로 옮긴 규칙이 앞선다', () => {
+      expect(ids(moveModification(three(), 'p1', 'm3', 0))).toEqual(['m3', 'm1', 'm2']);
+    });
+
+    it('목록 끝으로 옮긴다 — dnd-kit의 arrayMove와 같은 결과다', () => {
+      expect(ids(moveModification(three(), 'p1', 'm1', 2))).toEqual(['m2', 'm3', 'm1']);
+    });
+
+    it('toIndex가 -1이면 맨 앞이다 — 음수를 끝에서 세면 제자리가 되어 조용히 무동작이 된다', () => {
+      // **이 케이스가 `Math.max(0, …)`을 재는 유일한 자리다.** 음수를 그대로 splice에 넘기면
+      // 끝에서부터 세어 `-1`이 "마지막 앞"이 되고, m2를 뽑은 [m1, m3]의 인덱스 1에 다시 꽂아
+      // 결과가 원래 순서와 같아진다 — 사용자가 맨 위로 끌었는데 아무 일도 안 난다.
+      expect(ids(moveModification(three(), 'p1', 'm2', -1))).toEqual(['m2', 'm1', 'm3']);
+    });
+
+    it('toIndex가 길이를 넘으면 맨 끝이다', () => {
+      expect(ids(moveModification(three(), 'p1', 'm2', 99))).toEqual(['m1', 'm3', 'm2']);
+    });
+
+    it('없는 규칙 id는 무동작이다 — 실패가 아니다', () => {
+      const before = three();
+      expect(moveModification(before, 'p1', 'nope', 0)).toEqual(before);
+    });
+
+    it('없는 프로필 id는 무동작이다', () => {
+      const before = three();
+      expect(moveModification(before, 'nope', 'm1', 0)).toEqual(before);
+    });
+
+    it('다른 프로필은 건드리지 않는다', () => {
+      const next = moveModification(three(), 'p1', 'm3', 0);
+      expect(next.profiles.find((p) => p.id === 'p2')).toEqual(three().profiles[1]);
+    });
+
+    it('실체화 값을 손대지 않는다 — remove+add로 조립했다면 갈렸을 자리다', () => {
+      // **이 케이스가 이 전이를 따로 만든 이유다.** 순서를 remove+add로 바꾸면 remove가 그
+      // 규칙의 실체화 값을 지우고 add가 다시 실체화한다 — 순서만 바꿨는데 켜져 있는 동안
+      // 유지돼야 할 Placeholder 값이 새 값으로 갈린다.
+      const seeded: StoredState = { ...three(), materialized: { m1: 'kept-1', m3: 'kept-3' } };
+      expect(moveModification(seeded, 'p1', 'm1', 2).materialized).toEqual({
+        m1: 'kept-1',
+        m3: 'kept-3',
+      });
+    });
   });
 
   it('removeProfile은 그 프로필만 지우고 순서는 그대로 둔다', () => {
