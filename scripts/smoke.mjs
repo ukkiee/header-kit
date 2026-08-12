@@ -6556,7 +6556,18 @@ try {
   await delRow.getByRole('button', { name: 'Confirm delete backup', exact: true }).click();
   const snapAfter = await pollUntil(
     () => bkView(snapArea),
-    (v) => !v.ids.includes('del-row'),
+    /*
+     * **매니페스트와 청크를 함께 기다린다.**
+     *
+     * 삭제는 쓰기 둘이다(매니페스트 항목 제거 · 청크 키 제거). 매니페스트만 기다리면 그 둘
+     * 사이의 창에 착지할 수 있고, 그러면 **같은 읽기**에서 청크가 아직 남아 있어 아래
+     * `deletedGone`이 거짓 빨강을 낸다 — 실측으로 다섯 번 중 한 번 그랬다.
+     *
+     * 이것이 임계값 완화가 아닌 이유: 폴은 시간이 다하면 **던지지 않고 마지막 값을**
+     * 돌려주므로, 청크가 끝내 안 지워지는 진짜 회귀는 여전히 `deletedGone`에서 FAIL이다.
+     * 바뀐 것은 "무엇을 재는가"가 아니라 "언제 재는가"뿐이다.
+     */
+    (v) => !v.ids.includes('del-row') && !v.keys.some((k) => k.startsWith('bk:del-row:')),
     8000,
     200,
   );
