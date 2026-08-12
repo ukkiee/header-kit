@@ -14,7 +14,7 @@ import {
   sidebarRowClass,
 } from './profile-dot';
 import { SwitcherChip } from '@/ui/switcher-chip';
-import { AnimatePresence, MotionRow } from '@/ui/motion-row';
+import { AnimatePresence, MotionRow } from '@/ui/row-motion';
 
 // dnd-kit은 이 lazy 청크에만 있다 — 팝업 초기 번들에서 제외된다 (ui-refine 08).
 const SortableProfileList = lazy(() => import('./sortable-profile-list'));

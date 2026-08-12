@@ -3,11 +3,15 @@ import type { SuggestionHistory } from '@/core/autocomplete';
 import type { Command } from '@/core/commands';
 import type { Modification, Profile } from '@/core/schema';
 import { Button } from '@/ui/press-button';
-import { useEffect, useState } from 'react';
-import { AnimatePresence, MotionRow, useReducedMotion } from '@/ui/motion-row';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { AnimatePresence, MotionRow, useReducedMotion } from '@/ui/row-motion';
 import { ruleFormIntentProps, RuleFormSlot, useRuleForm } from '@/features/modifications/lazy-rule-form';
-import { expandedCard, RuleCard } from '@/features/modifications/rule-card';
+import { expandedCard, StaticRuleList } from '@/features/modifications/rule-card';
 import { useT } from '@/ui/i18n-context';
+
+// dnd-kit은 이 lazy 청크에만 있다 — 팝업 초기 번들에서 제외된다(`sortable-profile-list`와
+// 같은 규약). 도착 전에는 `Suspense`의 fallback인 정적 목록이 **같은 모양으로** 서 있다.
+const SortableRuleList = lazy(() => import('@/features/modifications/sortable-rule-list'));
 
 export interface ProfileSectionProps {
   profile: Profile;
@@ -28,6 +32,11 @@ export interface ProfileSectionProps {
   onEditingRuleChange: (next: 'new' | string | null) => void;
   /** 폼으로 가는 문 — 여는 즉시 청크를 부른다. */
   onOpenRuleForm: (target: 'new' | string) => void;
+  /**
+   * 규칙 순서 변경 — 드롭이 `move-modification` 명령으로 귀결된다(상태 전이는 앱 레이어).
+   * 명령이 착지할 때까지의 약속을 돌려준다 — 드래그 목록의 낙관적 순서가 그것으로 수명을 정한다.
+   */
+  onReorderRule: (modificationId: string, toIndex: number) => Promise<void>;
 }
 
 export function ProfileSection({
@@ -40,6 +49,7 @@ export function ProfileSection({
   editingRule,
   onEditingRuleChange,
   onOpenRuleForm,
+  onReorderRule,
 }: ProfileSectionProps) {
   const t = useT();
   /*
@@ -134,6 +144,60 @@ export function ProfileSection({
   }, [editingRule]);
 
   /*
+   * 두 목록 구현이 **같은 것을 받는다** — 한쪽에만 prop을 더하면 도착 전후로 행이 달라진다.
+   * 폼 자리는 콜백으로 넘긴다: 폼을 받아 오는 것과 저장 결과를 다루는 것은 셸의 일이다.
+   */
+  const ruleListProps = {
+    modifications: orderedModifications,
+    paused,
+    openId: editingRule === 'new' ? null : editingRule,
+    onToggleEnabled: (modification: Modification, enabled: boolean) =>
+      onCommand({
+        type: 'update-modification',
+        profileId: profile.id,
+        modification: { ...modification, enabled } as Modification,
+      }),
+    // 같은 버튼으로 열고 닫는다 (story 5) — 열려 있으면 누르는 것이 접기다.
+    onEdit: (modification: Modification) =>
+      editingRule === modification.id ? setEditingRule(null) : openRuleForm(modification.id),
+    onRemove: (modification: Modification) => onDeleteRule(profile.id, modification.id),
+    renderFormSlot: (modification: Modification) => (
+      /* 폼이 행 **아래로** 펼쳐진다 — 열림에 height-in, 닫힘에 height-out (ui-refine 08).
+         AnimatePresence가 없으면 닫힘이 즉시 사라진다. */
+      <AnimatePresence initial={false}>
+        {editingRule === modification.id && (
+          <MotionRow key={`${modification.id}-form`}>
+            <div className="border-t border-border py-2">
+              {RuleForm ? (
+                <RuleForm
+                  initial={modification}
+                  history={history}
+                  onCancel={() => setEditingRule(null)}
+                  onSave={(next) => saveItem(next, 'update')}
+                />
+              ) : (
+                <RuleFormSlot />
+              )}
+            </div>
+          </MotionRow>
+        )}
+      </AnimatePresence>
+    ),
+    onExitComplete: () => {
+      if (listIsEmpty) setEmptyReady(true);
+      // 폼이 사라졌다 — 붙잡아 둔 새 행을 이제 세운다.
+      setHeldRowId(null);
+    },
+  };
+
+  /**
+   * 드래그를 받을 수 있는 조건 — 표시 순서가 권위 순서와 같을 때뿐이다. 편집 중이면 그 규칙이
+   * 맨 위로 hoist되고, 붙잡은 행이 있으면 목록에서 하나가 빠져 있다. 그래서 이때만 드롭의
+   * `toIndex`를 권위 배열의 인덱스로 그대로 쓸 수 있다.
+   */
+  const reorderable = editingRule === null && heldRowId === null;
+
+  /*
    * **카드에 헤더가 없다** (ADR 0017, 티켓 04). 예전에는 이 자리에 이름·색·두 글자 라벨 입력과
    * ⋯ 메뉴(복제·삭제)가 있었다. 시안에 그 컨트롤들이 없으므로 넷 다 없앴고, 지금 보는 프로필의
    * 이름은 본문 헤더 바가 제목으로 든다(티켓 03). 되돌리는 유일한 길은 전체 초기화다 —
@@ -187,53 +251,18 @@ export function ProfileSection({
             </div>
           </MotionRow>
         )}
-
-        {orderedModifications.map((modification) => {
-          const open = editingRule === modification.id;
-          return (
-            // 규칙 행 추가/삭제 시 fade+height enter/exit (ui-refine 08) — reduced-motion 존중.
-            <MotionRow key={modification.id}>
-              <RuleCard
-                modification={modification}
-                paused={paused}
-                open={open}
-                onToggleEnabled={(enabled) =>
-                  onCommand({
-                    type: 'update-modification',
-                    profileId: profile.id,
-                    modification: { ...modification, enabled } as Modification,
-                  })
-                }
-                // 같은 버튼으로 열고 닫는다 (story 5) — 열려 있으면 누르는 것이 접기다.
-                onEdit={() => (open ? setEditingRule(null) : openRuleForm(modification.id))}
-                onRemove={() => onDeleteRule(profile.id, modification.id)}
-                formSlot={
-                  /* 폼이 행 **아래로** 펼쳐진다 — 열림에 height-in, 닫힘에 height-out
-                     (ui-refine 08). AnimatePresence가 없으면 닫힘이 즉시 사라진다. */
-                  <AnimatePresence initial={false}>
-                    {open && (
-                      <MotionRow key={`${modification.id}-form`}>
-                        <div className="border-t border-border py-2">
-                          {RuleForm ? (
-                            <RuleForm
-                              initial={modification}
-                              history={history}
-                              onCancel={() => setEditingRule(null)}
-                              onSave={(next) => saveItem(next, 'update')}
-                            />
-                          ) : (
-                            <RuleFormSlot />
-                          )}
-                        </div>
-                      </MotionRow>
-                    )}
-                  </AnimatePresence>
-                }
-              />
-            </MotionRow>
-          );
-        })}
       </AnimatePresence>
+
+      {/*
+        규칙 목록 — 정적/드래그 두 구현이 `RuleCard` 하나를 공유하므로 도착 전후 모양이 같다.
+
+        **도착한 뒤에는 정적으로 되돌아가지 않는다.** 되돌리면 컴포넌트가 바뀌어 행이 remount되고
+        그 remount가 사용자가 입력 중인 폼을 파괴한다. 폼이 열려 있거나 방금 저장한 행을 붙잡고
+        있는 동안은 목록을 그대로 두고 **드래그만** 끈다(`reorderable`).
+      */}
+      <Suspense fallback={<StaticRuleList {...ruleListProps} />}>
+        <SortableRuleList {...ruleListProps} reorderable={reorderable} onReorder={onReorderRule} />
+      </Suspense>
 
       {/*
         **빈 상태는 목록 아래에 있다.** 화면에서는 둘이 동시에 서는 일이 없으니 순서가

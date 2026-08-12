@@ -1319,10 +1319,9 @@ describe('산출물 소비 게이트 스크립트 — 인자와 판정 (실제 �
 
   /** 지연이 계약인 청크 넷. **존재하되** 즉시 집합에 없어야 통과한다 — 둘 다 게이트가 잰다. */
   const DEFERRED_CHUNKS = Object.fromEntries(
-    ['sortable-profile-list', 'motion', 'suggest-autocomplete', 'rule-form'].map((p) => [
-      `${p}-x.js`,
-      '// deferred',
-    ]),
+    ['sortable-profile-list', 'motion', 'suggest-autocomplete', 'rule-form', 'sortable-rule-list'].map(
+      (p) => [`${p}-x.js`, '// deferred'],
+    ),
   );
 
   const ENTRY_HTML = '<script type="module" src="/chunks/entry.js"></script>';
@@ -1367,7 +1366,13 @@ describe('산출물 소비 게이트 스크립트 — 인자와 판정 (실제 �
     writeFileSync(join(art, 'popup.html'), '<script type="module" src="/chunks/entry.js"></script>');
     writeFileSync(join(art, 'chunks', 'entry.js'), 'console.log("hi")');
     // 지연 계약 청크 — 존재하되 즉시 집합에 없어야 통과한다.
-    for (const p of ['sortable-profile-list', 'motion', 'suggest-autocomplete', 'rule-form']) {
+    for (const p of [
+      'sortable-profile-list',
+      'motion',
+      'suggest-autocomplete',
+      'rule-form',
+      'sortable-rule-list',
+    ]) {
       writeFileSync(join(art, 'chunks', `${p}-x.js`), '// deferred');
     }
     const r = runScript('bundle-gate.mjs', ['--artifacts', art], REPO);
@@ -1405,7 +1410,13 @@ describe('산출물 소비 게이트 스크립트 — 인자와 판정 (실제 �
     writeFileSync(join(art, 'popup.html'), '<script type="module" src="/chunks/entry.js"></script>');
     // 기준선 386KB + 한도 190KB = 576KB. 그 위로 넘긴다.
     writeFileSync(join(art, 'chunks', 'entry.js'), `// ${'x'.repeat(700 * 1024)}`);
-    for (const p of ['sortable-profile-list', 'motion', 'suggest-autocomplete', 'rule-form']) {
+    for (const p of [
+      'sortable-profile-list',
+      'motion',
+      'suggest-autocomplete',
+      'rule-form',
+      'sortable-rule-list',
+    ]) {
       writeFileSync(join(art, 'chunks', `${p}-x.js`), '// deferred');
     }
     const r = runScript('bundle-gate.mjs', ['--artifacts', art], REPO);
@@ -1423,7 +1434,13 @@ describe('산출물 소비 게이트 스크립트 — 인자와 판정 (실제 �
     writeFileSync(join(art, 'popup.html'), '<script type="module" src="/chunks/entry.js"></script>');
     // 즉시 뿌리가 지연 계약 청크를 **정적으로** import한다.
     writeFileSync(join(art, 'chunks', 'entry.js'), "import './rule-form-x.js';\n");
-    for (const p of ['sortable-profile-list', 'motion', 'suggest-autocomplete', 'rule-form']) {
+    for (const p of [
+      'sortable-profile-list',
+      'motion',
+      'suggest-autocomplete',
+      'rule-form',
+      'sortable-rule-list',
+    ]) {
       writeFileSync(join(art, 'chunks', `${p}-x.js`), '// deferred');
     }
     const r = runScript('bundle-gate.mjs', ['--artifacts', art], REPO);

@@ -259,6 +259,8 @@ const en = {
   redirectPattern: 'Redirect pattern',
   ariaUrlMatchType: 'URL match type',
   ariaReorderProfile: 'Reorder {name}',
+  /** 규칙 재정렬 그립 — 순서가 적용 우선순위라 이름에 '순서'가 들어간다. */
+  ariaReorderRule: 'Reorder {name}',
   /** 프로필 삭제 — 2단계 확인이라 두 이름이 필요하다(누르기 전 / 되물음). */
   ariaDeleteProfile: 'Delete {name}',
   ariaConfirmDeleteProfile: 'Confirm delete {name}',
@@ -513,6 +515,7 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     redirectPattern: '리다이렉트 패턴',
     ariaUrlMatchType: 'URL 매치 방식',
     ariaReorderProfile: '{name} 순서 변경',
+    ariaReorderRule: '{name} 순서 변경',
     ariaDeleteProfile: '{name} 삭제',
     ariaConfirmDeleteProfile: '{name} 삭제 확인',
     confirmDeleteProfile: '이 프로필을 지울까요?',

@@ -7,7 +7,7 @@ import { importIssueText } from './import-text';
 import { AlertBanner } from '@/ui/alert-banner';
 import { Button } from '@/ui/press-button';
 import { Checkbox } from '@/ui/checkbox';
-import { AnimatePresence, MotionRow } from '@/ui/motion-row';
+import { AnimatePresence, MotionRow } from '@/ui/row-motion';
 import { SectionCard } from '@/ui/section-card';
 import { useT } from '@/ui/i18n-context';
 

@@ -64,6 +64,13 @@ function InteractiveProfileSection({ initial }: { initial: Profile }) {
   };
   const onDeleteRule = (profileId: string, modificationId: string) =>
     setState((s) => applyCommand(s, { type: 'remove-modification', profileId, modificationId }));
+  // 드래그 재정렬도 앱과 같은 명령으로 귀결된다 — 스토리에서 실제로 순서가 바뀌어야
+  // 드롭 후 되돌아가는 애니메이션 같은 것이 여기서 보인다.
+  const onReorderRule = async (modificationId: string, toIndex: number) => {
+    setState((s) =>
+      applyCommand(s, { type: 'move-modification', profileId: profile.id, modificationId, toIndex }),
+    );
+  };
   // 앱에서는 셸이 드는 상태 — 스토리에서는 이 래퍼가 그 자리를 대신한다.
   const [editingRule, setEditingRule] = useState<'new' | string | null>(null);
   return (
@@ -76,6 +83,7 @@ function InteractiveProfileSection({ initial }: { initial: Profile }) {
       editingRule={editingRule}
       onEditingRuleChange={setEditingRule}
       onOpenRuleForm={setEditingRule}
+      onReorderRule={onReorderRule}
     />
   );
 }
@@ -90,6 +98,7 @@ export const Active: Story = {
     editingRule: null,
     onEditingRuleChange: () => {},
     onOpenRuleForm: () => {},
+    onReorderRule: async () => {},
   },
   render: (args) => <InteractiveProfileSection initial={args.profile} />,
 };
@@ -104,6 +113,7 @@ export const Inactive: Story = {
     editingRule: null,
     onEditingRuleChange: () => {},
     onOpenRuleForm: () => {},
+    onReorderRule: async () => {},
   },
   render: (args) => <InteractiveProfileSection initial={args.profile} />,
 };

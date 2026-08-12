@@ -326,6 +326,9 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
       editingRule={editingRule}
       onEditingRuleChange={setEditingRule}
       onOpenRuleForm={openRuleForm}
+      onReorderRule={(modificationId, toIndex) =>
+        dispatch({ type: 'move-modification', profileId: selectedProfile.id, modificationId, toIndex })
+      }
     />
   ) : (
     <p className="text-xs text-muted-foreground">{t(locale, 'noProfilesYet')}</p>

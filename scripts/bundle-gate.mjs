@@ -66,6 +66,10 @@ const ENTRY_HTML = join(OUT_DIR, 'popup.html');
  */
 const MUST_BE_DEFERRED = [
   'sortable-profile-list',
+  // motion 패키지(ADR 0012). **접두이므로 이름공간을 가리는 1차 모듈을 두지 마라** —
+  // `src/ui/motion-row.tsx`가 지연 모듈에서도 import되며 공용 청크 `motion-row-*`가 되자 이
+  // 단언이 그것을 물어 거짓 빨강이 났다. 그래서 그 파일을 `row-motion.tsx`로 옮겼다(게이트를
+  // 느슨하게 하는 대신 코드를 고쳤다). 여기 이름을 좁히면 진짜 누출을 놓친다.
   'motion',
   'suggest-autocomplete',
   // 규칙 폼 (scope-race-hardening 07). 목록을 보는 동안에는 그려지지 않는 UI인데 첫 페인트
@@ -73,6 +77,10 @@ const MUST_BE_DEFERRED = [
   // 이 줄이 없으면 누군가 `rule-form`을 다시 정적 import해도 크기 한도 안에 들어오는 한
   // 조용히 통과한다.
   'rule-form',
+  // 규칙 목록 재정렬. dnd-kit이 이 청크와 `sortable-profile-list-*` 둘에만 있다 — 규칙 목록은
+  // 첫 페인트 UI라 정적으로 들이면 dnd-kit 45.2KB가 즉시 집합에 들어온다. 크기 한도 안에
+  // 들어오므로 **크기로는 막히지 않는다**: 그것이 이 구조 단언이 따로 있는 이유다.
+  'sortable-rule-list',
 ];
 
 if (!existsSync(ENTRY_HTML)) fail(missingArtifacts(ENTRY_HTML));

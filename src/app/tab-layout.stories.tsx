@@ -60,6 +60,7 @@ export const Wide: Story = {
         editingRule={null}
         onEditingRuleChange={() => {}}
         onOpenRuleForm={() => {}}
+        onReorderRule={async () => {}}
       />
     </main>
   ),

@@ -17,7 +17,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useMemo, useState } from 'react';
-import { AnimatePresence, MotionRow } from '@/ui/motion-row';
+import { AnimatePresence, MotionRow } from '@/ui/row-motion';
 import type { Profile } from '@/core/schema';
 import { profileRowStatus, type ProfileRowStatus } from '@/core/summary';
 import { useT } from '@/ui/i18n-context';
