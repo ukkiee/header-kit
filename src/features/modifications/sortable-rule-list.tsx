@@ -115,10 +115,20 @@ function SortableItem({
      * 자기 값으로 덮어 드래그가 멈춘다 — ADR 0011의 경계가 그것을 명시한다("드래그 애니메이션은
      * dnd-kit transform에 위임, motion과 이중 적용 금지"). 그래서 `li`는 dnd-kit의 것으로 남기고
      * 높이·투명도만 다루는 `MotionRow`를 그 안에 넣는다. 정적 목록도 같은 배치다.
+     *
+     * **`CSS.Translate`이지 `CSS.Transform`이 아니다.** 후자는 dnd-kit이 낸 `scaleX`·`scaleY`
+     * 까지 문자열에 싣는데, dnd-kit은 **높이가 다른 항목** 사이를 옮길 때 그 비율을 scale로
+     * 낸다. 규칙 카드는 칩 줄이 감기면 두 줄이 세 줄이 되므로 이 목록에는 높이가 여러 가지고,
+     * 세 줄 규칙을 두 줄 자리로 끌면 `scaleY(0.48)`이 붙어 카드가 눌린 채 끌렸다 —
+     * 실측 122px → 59px이고 그 값은 정확히 59/122다.
+     *
+     * 눌리는 것은 **그림뿐**이었다: 같은 순간 `clientHeight`·`scrollHeight`는 둘 다 122로
+     * 남아 있었다. 그래서 `MotionRow`의 `height: 'auto'`와 `overflow: hidden`은 이 일과
+     * 무관하다 — 처음 의심한 자리가 거기였고, 재현이 아니었다면 엉뚱한 데를 고쳤을 것이다.
      */
     <li
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
       className={isDragging ? 'z-10 opacity-70' : ''}
     >
       <MotionRow>

@@ -121,10 +121,15 @@ function SortableItem({
      * motion이 자기 값으로 덮어 드래그가 멈춘다 — 그래서 `li`는 dnd-kit의 것으로 남기고,
      * 높이·투명도만 다루는 `MotionRow`를 그 안에 넣어 행 자체는 dnd-kit이, 등장·퇴장은
      * motion이 맡는다. 규칙 목록이 쓰는 그 래퍼 그대로다(같은 감각).
+     *
+     * **`CSS.Translate`인 이유는 규칙 목록의 같은 자리가 적는다** — dnd-kit이 높이가 다른
+     * 항목 사이에서 내는 `scaleY`를 싣지 않는다. 프로필 행은 이름이 `truncate`라 지금은 전부
+     * 같은 높이여서 그 눌림이 드러나지 않지만, 규약을 갈라 두면 행이 두 줄이 되는 날
+     * **여기서만** 되살아나고 그때는 이 목록을 처음 보는 사람이 원인을 다시 찾아야 한다.
      */
     <li
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
       className={isDragging ? 'z-10 opacity-70' : ''}
     >
       <MotionRow>
