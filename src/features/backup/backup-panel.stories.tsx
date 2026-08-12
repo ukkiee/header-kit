@@ -1,10 +1,23 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { SnapshotStatus } from '@/core/backup';
+import { ToastProvider } from '@/ui/toaster';
 import { BackupPanel } from './backup-panel';
 
+/**
+ * 토스트 Provider로 감싼다 — 패널이 성공 알림을 토스트로 띄우므로(`useToastManager`) 감싸지
+ * 않으면 스토리를 여는 순간 던진다. 두 엔트리(`popup`·`app`)가 셸을 감싸는 것과 같은 배치라,
+ * 스토리가 실제 화면과 다른 조건에서 그려지지 않는다.
+ */
 const meta = {
   title: 'Popup/BackupPanel',
   component: BackupPanel,
+  decorators: [
+    (Story) => (
+      <ToastProvider>
+        <Story />
+      </ToastProvider>
+    ),
+  ],
 } satisfies Meta<typeof BackupPanel>;
 
 export default meta;

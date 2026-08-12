@@ -14,13 +14,14 @@ import { format, MESSAGES, type MessageKey, type Translator } from '@/core/i18n'
 import { hasCloudBackups, listBackupSnapshots, readBackupKV } from '@/platform/backupStore';
 import type { BackupMutationResult } from '@/core/state-writer';
 import { requestBackupMutation } from '@/platform/stateStore';
-import { RotateCcw, Trash2 } from 'lucide-react';
+import { Check, RotateCcw, Trash2 } from 'lucide-react';
 import { AlertBanner } from '@/ui/alert-banner';
 import { Button } from '@/ui/press-button';
 import { SectionCard } from '@/ui/section-card';
 import { IconButton } from '@/ui/icon-button';
 import { Pill } from '@/ui/pill';
 import { ToggleSwitch } from '@/ui/toggle-switch';
+import { useToastManager } from '@/ui/toast';
 import { useT } from '@/ui/i18n-context';
 
 export interface BackupPanelProps {
@@ -125,6 +126,16 @@ export function BackupPanel({
     requestBackupMutation({ op: 'delete-snapshot', snapshotId: entry.id, target }),
 }: BackupPanelProps) {
   const t = useT();
+  /**
+   * 끝난 일을 알리는 쪽지 — **성공만 여기로 간다.**
+   *
+   * 실패는 배너에 남는다. 이유가 셋이다. 토스트 셸(`ui/toaster.tsx`)은 면을 **조건 없이
+   * 초록으로** 칠하므로 실패를 올리면 실패가 성공처럼 보인다. 그 셸의 제목은 한 줄로
+   * 잘리므로(`truncate`) 실패 문구가 나르는 잔여 개수와 멈춘 단계가 거기서 사라진다.
+   * 그리고 실패는 **다시 눌러야 할 일**이라(`resetRetryNote`가 그렇게 말한다) 몇 초 뒤
+   * 스스로 사라지면 안 된다 — 성공은 반대로, 읽고 나면 남아 있을 이유가 없다.
+   */
+  const toast = useToastManager();
   const [snapshots, setSnapshots] = useState<SnapshotStatus[]>([]);
   const [confirming, setConfirming] = useState<Confirming | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -137,6 +148,10 @@ export function BackupPanel({
    * 스냅샷이 퇴역 조건이나 레거시 필터를 담고 있으면 복원이 그것을 조용히 걷어 가고 사용자는
    * 아무 설명도 받지 못했다. 가져오기 경로는 같은 배열을 이미 배너로 올리고 있었으므로,
    * 없던 것은 자리뿐이었다.
+   *
+   * **지금 여기 오는 것은 복원의 공지뿐이다** — 클라우드 삭제·초기화의 성공 문구는 토스트로
+   * 옮겼다(위 `toast` 주석). 복원의 공지는 "무엇이 걷혔는가"를 말하므로 읽고 나서도 화면에
+   * 남아 있어야 하고, 한 번의 복원이 여러 개를 낸다. 그래서 이것만 목록으로 남는다.
    */
   const [notices, setNotices] = useState<string[]>([]);
   /** 전체 초기화의 2단계 확인 (R-3) — 파괴적이므로 한 번 더 눌러야 실행된다. */
@@ -179,7 +194,7 @@ export function BackupPanel({
         ? null
         : `${t('cloudDeleteFailed')}: ${verifiedDeleteDetail(result, 'cloudDeleteRemaining', t)}`,
     );
-    setNotices(result.ok ? [t('cloudBackupsDeleted')] : []);
+    if (result.ok) toast.add({ title: t('cloudBackupsDeleted') });
     setCloudRevision((n) => n + 1);
     if (target === 'sync') void loadSnapshots(target).then(setSnapshots);
   };
@@ -199,7 +214,7 @@ export function BackupPanel({
 
     const result = await onCommand({ type: 'full-reset' });
     setError(result.ok ? null : `${t('resetFailed')}: ${resetFailureDetail(result.error, t)}`);
-    setNotices(result.ok ? [t('resetDone')] : []);
+    if (result.ok) toast.add({ title: t('resetDone') });
     setCloudRevision((n) => n + 1);
     void loadSnapshots(target).then(setSnapshots, (reason) => setError(reasonText(reason)));
   };
@@ -219,8 +234,8 @@ export function BackupPanel({
       return;
     }
     setConfirming(null);
-    // 앞선 일괄 삭제·초기화의 성공 문구를 먼저 지운다 — 남겨 두면 이번 실패 배너 옆에
-    // "삭제했습니다"가 그대로 서서, 지우지 못한 것이 지워진 것처럼 읽힌다.
+    // 앞선 복원의 공지를 먼저 지운다 — 남겨 두면 이번 실패 배너 옆에 지난 복원의 설명이
+    // 그대로 서서, 이번 동작이 낸 말처럼 읽힌다.
     setNotices([]);
 
     const result = await settledMutation(() => deleteSnapshot(entry, target));
@@ -365,25 +380,25 @@ export function BackupPanel({
                   />
                 )}
                 {/* 삭제는 복원과 **나란히** 선다 — 복원이 막히는 손상 스냅샷도 정리할 수
-                    있어야 하고(story 36), 지우는 범위는 이 행 하나뿐이다. */}
-                {isConfirming(snapshot, 'delete') ? (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    aria-label={t('ariaConfirmDeleteBackup')}
-                    onClick={() => void removeSnapshot(snapshot)}
-                  >
-                    {t('confirmDeleteBackup')}
-                  </Button>
-                ) : (
-                  <IconButton
-                    label={t('ariaDeleteBackup')}
-                    tooltip={t('menuDelete')}
-                    icon={Trash2}
-                    tone="danger"
-                    onClick={() => void removeSnapshot(snapshot)}
-                  />
-                )}
+                    있어야 하고(story 36), 지우는 범위는 이 행 하나뿐이다.
+
+                    **되물음도 아이콘이다** — 프로필 삭제와 같은 규약이다(`profile-dot.tsx`의
+                    같은 자리). 예전에는 무장하면 "이 백업을 지울까요?" 텍스트 버튼으로 바뀌었는데,
+                    그러면 아이콘 하나가 낱말 덩어리로 부풀어 옆의 복원 아이콘을 밀어낸다 — 같은
+                    되물음인데 프로필 행에서는 자리가 그대로이고 여기서는 행이 흔들렸다.
+
+                    아이콘이 **모양으로도** 바뀌므로(휴지통 → 체크) 무장 여부가 색각에 매이지
+                    않고, 되물음 문구(`confirmDeleteBackup`)는 툴팁이 그대로 나른다. 접근성
+                    이름 둘은 바뀌지 않는다 — 스모크가 그 이름으로 이 버튼을 찾는다. */}
+                <IconButton
+                  label={
+                    isConfirming(snapshot, 'delete') ? t('ariaConfirmDeleteBackup') : t('ariaDeleteBackup')
+                  }
+                  tooltip={isConfirming(snapshot, 'delete') ? t('confirmDeleteBackup') : t('menuDelete')}
+                  icon={isConfirming(snapshot, 'delete') ? Check : Trash2}
+                  tone="danger"
+                  onClick={() => void removeSnapshot(snapshot)}
+                />
               </li>
             ))}
           </ul>
