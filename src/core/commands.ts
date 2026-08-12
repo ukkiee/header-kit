@@ -8,6 +8,7 @@ import {
 } from './placeholder';
 import {
   createDefaultState,
+  normalizeProfileColor,
   normalizeProfileName,
   placeholderTemplate,
   type Modification,
@@ -73,6 +74,9 @@ function withoutKey(record: Record<string, string>, key: string): Record<string,
  *   - `remove-profile` — 되돌리는 길이 전체 초기화뿐이었다(다른 프로필까지 날린다).
  *   - `rename-profile` — 오타 하나를 고치는 길이 프로필을 지우고 규칙을 다시 만드는
  *     것뿐이었다. 목록 행의 인라인 입력이 Enter·blur에서 **한 번만** 보낸다.
+ *   - `set-profile-color` — 이름과 같은 개정으로 함께 돌아왔다. 색은 이 앱에서 프로필을
+ *     알아보는 첫 단서이고(사이드바 스와치·툴바 배지), 만들 때 팔레트가 순서대로 돌려주는
+ *     값이 마음에 안 들면 고칠 길이 없었다.
  *
  * **복제는 여전히 없다.** 그것은 되돌림의 대가가 아니라 편의였고, 지금도 그렇다.
  */
@@ -403,6 +407,26 @@ export function renameProfile(state: StoredState, profileId: string, name: strin
   return withProfile(state, profileId, (p) => ({ ...p, name: normalized }));
 }
 
+/**
+ * 프로필 색 변경 (ADR 0017 재개정) — 규칙은 `normalizeProfileColor` 하나가 진다.
+ *
+ * 이름 변경과 **같은 결이라 같은 모양**이다: 거절과 무변화를 둘 다 상태 그대로로 접고,
+ * 없는 id에도 그대로 돌려준다. 정규화를 화면과 함께 쓰는 이유도 같다 — 화면이 자기 규칙으로
+ * 먼저 거르고 명령이 다른 규칙을 쓰면 메시지로 직접 보낸 값만 다른 문을 지난다.
+ *
+ * 이름과 **한 명령으로 합치지 않는다.** 둘은 서로 다른 컨트롤에서 서로 다른 시점에 커밋된다
+ * (이름은 Enter·blur, 색은 스와치를 누르는 그 순간). 합치면 한쪽만 바꾸는 호출이 다른 쪽의
+ * 지금 값을 함께 실어 보내야 하고, 그러면 두 화면이 겹쳐 조작할 때 뒤에 도착한 명령이
+ * 자기가 만지지도 않은 필드를 되돌린다.
+ */
+export function setProfileColor(state: StoredState, profileId: string, color: string): StoredState {
+  const normalized = normalizeProfileColor(color);
+  if (normalized === null) return state;
+  const profile = state.profiles.find((p) => p.id === profileId);
+  if (!profile || profile.color === normalized) return state;
+  return withProfile(state, profileId, (p) => ({ ...p, color: normalized }));
+}
+
 export function moveProfile(state: StoredState, profileId: string, toIndex: number): StoredState {
   const from = state.profiles.findIndex((p) => p.id === profileId);
   if (from === -1) return state;
@@ -507,6 +531,8 @@ export type Command =
   | { type: 'remove-profile'; profileId: string }
   /** 이름 변경 — 정규화(트림·빈 이름 거절)는 `renameProfile`이 진다. 중복은 허용된다. */
   | { type: 'rename-profile'; profileId: string; name: string }
+  /** 색 변경 — 정규화(`#rrggbb`로 묶기)는 `setProfileColor`가 진다. */
+  | { type: 'set-profile-color'; profileId: string; color: string }
   | { type: 'set-paused'; paused: boolean }
   | { type: 'toggle-pause' }
   | { type: 'set-theme'; theme: ThemePreference }
@@ -580,6 +606,8 @@ export function applyCommand(
       return removeProfile(state, command.profileId);
     case 'rename-profile':
       return renameProfile(state, command.profileId, command.name);
+    case 'set-profile-color':
+      return setProfileColor(state, command.profileId, command.color);
     case 'set-paused':
       return setPaused(state, command.paused);
     case 'toggle-pause':

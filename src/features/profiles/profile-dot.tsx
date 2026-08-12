@@ -6,6 +6,7 @@ import { format, type Translator } from '@/core/i18n';
 import { IconButton } from '@/ui/icon-button';
 import { Input } from '@/ui/text-field';
 import { normalizeProfileName, type Profile } from '@/core/schema';
+import { ProfileColorField } from './profile-color-field';
 import { PROFILE_STATE_KEY, type ProfileRowState, type ProfileRowStatus } from '@/core/summary';
 import { profileRowMetaText } from '@/features/status/status-text';
 import { useT } from '@/ui/i18n-context';
@@ -139,9 +140,15 @@ export function profileDeleteLabels(
   };
 }
 
-/** 이름 변경 버튼의 접근성 이름 — 삭제·재정렬과 같은 이유로 프로필 이름을 담는다. */
-export function profileRenameLabel(profile: Pick<Profile, 'name'>, t: Translator): string {
-  return format(t('ariaRenameProfile'), { name: profile.name });
+/**
+ * 편집 버튼의 접근성 이름 — 삭제·재정렬과 같은 이유로 프로필 이름을 담는다.
+ *
+ * `이름 변경`이 아니라 `편집`인 이유: 이 버튼이 여는 것은 이름 입력 **하나가 아니다.**
+ * 열려 있는 동안 색 스와치도 함께 눌러진다(ADR 0017 재개정) — 라벨이 이름만 말하면 색을
+ * 고칠 수 있다는 사실이 화면 어디에도 없다. 포커스가 이름으로 먼저 가는 것은 그대로다.
+ */
+export function profileEditLabel(profile: Pick<Profile, 'name'>, t: Translator): string {
+  return format(t('ariaEditProfile'), { name: profile.name });
 }
 
 /**
@@ -179,11 +186,12 @@ export function ProfileSelectRow({
   onToggleActive,
   onDelete,
   onRename,
+  onRecolor,
   label,
   toggleLabel,
   deleteLabel,
   confirmLabel,
-  renameLabel,
+  editLabel,
 }: {
   profile: Profile;
   status: ProfileRowStatus;
@@ -197,11 +205,16 @@ export function ProfileSelectRow({
    * 이 행이 조용히 접고 부르지 않는다(아래 `commitRename`).
    */
   onRename: (name: string) => void;
+  /**
+   * 색 변경 — 팔레트를 누른 순간, 또는 자유 선택 팝오버가 닫히는 순간에 **한 번만** 불린다
+   * (`profile-color-field`의 커밋 주석). 값은 이미 `#rrggbb`로 접혀 있다.
+   */
+  onRecolor: (color: string) => void;
   label: string;
   toggleLabel: string;
   deleteLabel: string;
   confirmLabel: string;
-  renameLabel: string;
+  editLabel: string;
 }) {
   // 되물음은 행마다 따로다 — 목록이 들면 어느 행이 무장했는지를 위에서 배선해야 한다.
   const [confirming, setConfirming] = useState(false);
@@ -214,6 +227,21 @@ export function ProfileSelectRow({
    */
   const [draft, setDraft] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  /**
+   * 편집 셸의 경계 — **어디로 포커스가 갔는가**를 판정하려고 든다.
+   *
+   * 색 팝오버를 열려면 포커스가 이름 입력에서 스와치 버튼으로 옮겨 가는데, 그것을 blur
+   * 커밋으로 치면 편집이 닫히면서 **팝오버 트리거 자체가 사라진다** — 실측으로 팝오버가
+   * 아예 열리지 않았다. 셸 안에서의 이동은 "편집을 마쳤다"가 아니다.
+   */
+  const editorRef = useRef<HTMLDivElement>(null);
+  /**
+   * 색 팝오버가 열려 있는가 — 그동안은 blur 커밋을 멈춘다.
+   *
+   * 팝오버 내용은 **포털**이라 `editorRef` 밖이다. 경계 검사만으로는 팝업으로 들어가는
+   * 포커스를 "밖으로 나갔다"로 읽는다.
+   */
+  const [colorOpen, setColorOpen] = useState(false);
   const t = useT();
   const paused = status.state === 'paused';
   const renaming = draft !== null;
@@ -248,6 +276,20 @@ export function ProfileSelectRow({
     setDraft(null);
     if (next === null || next === profile.name) return;
     onRename(next);
+  };
+
+  /**
+   * 포커스가 편집 셸 **밖으로** 나갔을 때만 커밋한다.
+   *
+   * 핸들러가 입력이 아니라 셸에 붙어 있는 이유: 색 팝오버를 닫고 나면 포커스는 스와치
+   * 버튼에 있고 입력에는 없다. 입력에만 걸어 두면 그 상태에서 다른 곳을 눌러도 blur가
+   * 나지 않아 편집이 열린 채 남는다 — 셸에 걸면 셸을 떠나는 그 한 번이 언제나 잡힌다.
+   */
+  const handleEditorBlur = (event: React.FocusEvent<HTMLDivElement>) => {
+    if (colorOpen) return;
+    const next = event.relatedTarget;
+    if (next instanceof Node && editorRef.current?.contains(next)) return;
+    commitRename();
   };
 
   /*
@@ -289,10 +331,24 @@ export function ProfileSelectRow({
             목록 전체가 그만큼 밀렸다. 폭을 0으로 두어도 포커스 표시는 남는다: 그것을 그리는
             것은 테두리가 아니라 3px 링이다.
           */
-          <div className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-xs">
+          <div
+            ref={editorRef}
+            onBlur={handleEditorBlur}
+            className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-xs"
+          >
             <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
               <span className="flex w-full min-w-0 items-center gap-1.5">
-                <ProfileDot profile={profile} />
+                {/*
+                  **편집 중에만 스와치가 버튼이 된다** (ADR 0017 재개정). 평상시에는 지금처럼
+                  `aria-hidden` 사각형이다 — 264px 열에 색 컨트롤을 상시로 들이면 이름이 먼저
+                  잘리고(삭제 아이콘을 숨긴 그 근거), 목록을 훑는 중의 오클릭도 없어진다.
+                */}
+                <ProfileColorField
+                  profileName={profile.name}
+                  color={profile.color}
+                  onCommit={onRecolor}
+                  onOpenChange={setColorOpen}
+                />
                 <Input
                   ref={inputRef}
                   variant="ghost"
@@ -301,7 +357,8 @@ export function ProfileSelectRow({
                   className="h-auto min-w-0 flex-1 border-0 px-0 py-0 text-xs"
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
-                  onBlur={commitRename}
+                  // blur 커밋은 **셸이 든다**(`handleEditorBlur`) — 여기 걸면 색 팝오버로
+                  // 옮겨 가는 포커스가 편집을 닫아 팝오버 트리거까지 함께 사라진다.
                   onKeyDown={(event) => {
                     if (event.key === 'Enter') {
                       event.preventDefault();
@@ -369,8 +426,8 @@ export function ProfileSelectRow({
           blur시켜 이미 커밋했으므로, 여기서 다시 열면 방금 닫은 것이 곧바로 되열린다.
         */}
         <IconButton
-          label={renameLabel}
-          tooltip={t('rename')}
+          label={editLabel}
+          tooltip={t('edit')}
           icon={Pencil}
           aria-pressed={renaming}
           className={renaming ? 'bg-secondary text-foreground' : ''}

@@ -427,6 +427,9 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
                 이름뿐이다. 선택도 손대지 않는다: 바뀐 것은 이름뿐이고 id는 그대로다.
               */
                     onRename={(profileId, name) => void dispatch({ type: 'rename-profile', profileId, name })}
+                    onRecolor={(profileId, color) =>
+                      void dispatch({ type: 'set-profile-color', profileId, color })
+                    }
                   />
                 </div>
               </ScrollArea>

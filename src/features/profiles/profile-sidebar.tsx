@@ -7,7 +7,7 @@ import {
   ProfileGrip,
   ProfileSelectRow,
   profileDeleteLabels,
-  profileRenameLabel,
+  profileEditLabel,
   profileReorderLabel,
   profileSelectLabel,
   profileToggleLabel,
@@ -39,6 +39,8 @@ export interface ProfileSidebarProps {
   onDelete: (profileId: string) => void;
   /** 이름 변경 (ADR 0017 재개정) — 행이 정규화를 마친 뒤 Enter·blur에서 한 번만 부른다. */
   onRename: (profileId: string, name: string) => void;
+  /** 색 변경 (같은 개정) — 팔레트를 누른 순간이나 자유 선택 팝오버가 닫힐 때 한 번만. */
+  onRecolor: (profileId: string, color: string) => void;
 }
 
 /** 정적 목록 — dnd 로드 전 fallback(그립 정적) + 검색 중 목록(재정렬 비활성). */
@@ -50,6 +52,7 @@ function StaticList({
   onToggleActive,
   onDelete,
   onRename,
+  onRecolor,
   withGrip,
 }: {
   profiles: readonly Profile[];
@@ -59,6 +62,7 @@ function StaticList({
   onToggleActive: (profileId: string, active: boolean) => void;
   onDelete: (profileId: string) => void;
   onRename: (profileId: string, name: string) => void;
+  onRecolor: (profileId: string, color: string) => void;
   withGrip: boolean;
 }) {
   const t = useT();
@@ -90,9 +94,10 @@ function StaticList({
                     onToggleActive={(active) => onToggleActive(profile.id, active)}
                     onDelete={() => onDelete(profile.id)}
                     onRename={(name) => onRename(profile.id, name)}
+                    onRecolor={(color) => onRecolor(profile.id, color)}
                     label={profileSelectLabel(profile, t, status.state)}
                     toggleLabel={profileToggleLabel(profile, t)}
-                    renameLabel={profileRenameLabel(profile, t)}
+                    editLabel={profileEditLabel(profile, t)}
                     {...profileDeleteLabels(profile, t)}
                   />
                 </div>
@@ -122,6 +127,7 @@ export function ProfileSidebar({
   onToggleActive,
   onDelete,
   onRename,
+  onRecolor,
 }: ProfileSidebarProps) {
   const t = useT();
   const [query, setQuery] = useState('');
@@ -148,6 +154,7 @@ export function ProfileSidebar({
           onToggleActive={onToggleActive}
           onDelete={onDelete}
           onRename={onRename}
+          onRecolor={onRecolor}
           withGrip={false}
         />
       ) : (
@@ -161,6 +168,7 @@ export function ProfileSidebar({
               onToggleActive={onToggleActive}
               onDelete={onDelete}
               onRename={onRename}
+              onRecolor={onRecolor}
               withGrip
             />
           }
@@ -174,6 +182,7 @@ export function ProfileSidebar({
             onToggleActive={onToggleActive}
             onDelete={onDelete}
             onRename={onRename}
+            onRecolor={onRecolor}
           />
         </Suspense>
       )}

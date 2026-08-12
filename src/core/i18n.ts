@@ -17,8 +17,6 @@ const en = {
   profiles: 'Profiles',
   searchProfiles: 'Search profiles…',
   menuDelete: 'Delete',
-  /** 프로필 이름 변경의 툴팁. 접근성 이름은 어느 행인지까지 말한다(`ariaRenameProfile`). */
-  rename: 'Rename',
   addRule: 'Add rule',
   edit: 'Edit',
   ruleDeleted: 'Rule deleted',
@@ -275,8 +273,17 @@ const en = {
    * 않는다 — 한 번에 하나만 열리고, 그 이름이 곧 지금 고치는 중인 값이라 이름표에 실으면
    * 타이핑할 때마다 접근성 이름이 바뀐다.
    */
-  ariaRenameProfile: 'Rename {name}',
+  ariaEditProfile: 'Edit {name}',
   profileNameLabel: 'Profile name',
+  /**
+   * 색 고르기 — 편집 중에만 서는 스와치 버튼과 그 안의 팔레트 (ADR 0017 재개정).
+   *
+   * 스와치 한 칸의 이름이 hex 값 그대로인 이유: 팔레트 열 칸은 **보이는 것이 색뿐**이라
+   * 이름에 담을 다른 말이 없다. `파랑`처럼 부르면 열 개 중 넷이 같은 낱말을 나눠 갖는다.
+   */
+  ariaProfileColor: 'Color for {name}',
+  ariaProfileColorSwatch: 'Color {color}',
+  profileColorCustom: 'Custom color',
   ariaShowProfiles: 'Show profiles',
   ariaShowBackups: 'Show backups',
   ariaShowPreferences: 'Show settings',
@@ -340,7 +347,6 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     profiles: '프로필',
     searchProfiles: '프로필 검색…',
     menuDelete: '삭제',
-    rename: '이름 변경',
     addRule: '규칙 추가',
     edit: '편집',
     ruleDeleted: '규칙을 삭제했습니다',
@@ -532,8 +538,11 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     ariaDeleteProfile: '{name} 삭제',
     ariaConfirmDeleteProfile: '{name} 삭제 확인',
     confirmDeleteProfile: '이 프로필을 지울까요?',
-    ariaRenameProfile: '{name} 이름 변경',
+    ariaEditProfile: '{name} 편집',
     profileNameLabel: '프로필 이름',
+    ariaProfileColor: '{name} 색',
+    ariaProfileColorSwatch: '색 {color}',
+    profileColorCustom: '직접 고르기',
     ariaShowProfiles: '프로필 화면',
     ariaShowBackups: '백업 화면',
     ariaShowPreferences: '환경설정 화면',

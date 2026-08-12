@@ -25,7 +25,7 @@ import {
   ProfileGrip,
   ProfileSelectRow,
   profileDeleteLabels,
-  profileRenameLabel,
+  profileEditLabel,
   profileReorderLabel,
   profileSelectLabel,
   profileToggleLabel,
@@ -55,6 +55,8 @@ export interface SortableProfileListProps {
   onDelete: (profileId: string) => void;
   /** 이름 변경 — 정적 목록과 같은 컨트롤·같은 커밋 시점 (ADR 0017 재개정). */
   onRename: (profileId: string, name: string) => void;
+  /** 색 변경 — 같은 이유로 두 목록이 같은 컨트롤을 갖는다. */
+  onRecolor: (profileId: string, color: string) => void;
 }
 
 /**
@@ -105,6 +107,7 @@ function SortableItem({
   onToggleActive,
   onDelete,
   onRename,
+  onRecolor,
   dragLabel,
 }: {
   profile: Profile;
@@ -114,6 +117,7 @@ function SortableItem({
   onToggleActive: (active: boolean) => void;
   onDelete: () => void;
   onRename: (name: string) => void;
+  onRecolor: (color: string) => void;
   dragLabel: string;
 }) {
   const t = useT();
@@ -148,9 +152,10 @@ function SortableItem({
             onToggleActive={onToggleActive}
             onDelete={onDelete}
             onRename={onRename}
+            onRecolor={onRecolor}
             label={profileSelectLabel(profile, t, status.state)}
             toggleLabel={profileToggleLabel(profile, t)}
-            renameLabel={profileRenameLabel(profile, t)}
+            editLabel={profileEditLabel(profile, t)}
             {...profileDeleteLabels(profile, t)}
           />
         </div>
@@ -168,6 +173,7 @@ export default function SortableProfileList({
   onToggleActive,
   onDelete,
   onRename,
+  onRecolor,
 }: SortableProfileListProps) {
   const t = useT();
   const sensors = useSensors(
@@ -234,6 +240,7 @@ export default function SortableProfileList({
                 onToggleActive={(active) => onToggleActive(profile.id, active)}
                 onDelete={() => onDelete(profile.id)}
                 onRename={(name) => onRename(profile.id, name)}
+                onRecolor={(color) => onRecolor(profile.id, color)}
                 dragLabel={profileReorderLabel(profile, t)}
               />
             ))}

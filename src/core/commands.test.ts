@@ -9,6 +9,7 @@ import {
   removeProfile,
   renameProfile,
   setPaused,
+  setProfileColor,
   toggleProfile,
   updateModification,
 } from './commands';
@@ -254,6 +255,45 @@ describe('state transition commands', () => {
 
     const renamed = applyCommand(state(), { type: 'rename-profile', profileId: 'p1', name: 'Renamed' });
     expect(renamed.profiles.map((p) => p.name)).toEqual(['Renamed', 'Two']);
+
+    const colored = applyCommand(state(), { type: 'set-profile-color', profileId: 'p1', color: '#ABC' });
+    expect(colored.profiles.map((p) => p.color)).toEqual(['#aabbcc', '#16a34a']);
+  });
+
+  /*
+   * 색 정규화 (ADR 0017 재개정) — **저장되는 것은 언제나 `#rrggbb`다.**
+   *
+   * 이 묶음이 지키는 것은 화면이 아니라 **배지**다. `badge.ts`의 대비 계산은
+   * `#rgb`·`#rrggbb`만 읽고 나머지는 `null`로 떨어뜨리는데, 그 실패는 조용하다 — 사이드바
+   * 스와치에는 색이 들어갔는데 툴바 배지 글자만 안 읽히는 상태가 되고 색을 고른 사람에게는
+   * 보이지 않는다. 저장 문턱이 표기를 하나로 접으면 그 자리가 아예 생기지 않는다.
+   */
+  it('setProfileColor는 3자리·대문자·# 없는 표기를 모두 #rrggbb로 접는다', () => {
+    expect(setProfileColor(state(), 'p1', '#ABC').profiles[0]?.color).toBe('#aabbcc');
+    expect(setProfileColor(state(), 'p1', 'ABCDEF').profiles[0]?.color).toBe('#abcdef');
+    expect(setProfileColor(state(), 'p1', '  #FfEeDd  ').profiles[0]?.color).toBe('#ffeedd');
+  });
+
+  it('setProfileColor는 hex가 아닌 표기를 거절한다 — 상태 그대로', () => {
+    const before = state();
+    for (const bad of ['rgb(0,0,0)', 'red', '#12', '#12345', '#1234567', '#gggggg', '', '   ']) {
+      expect(setProfileColor(before, 'p1', bad)).toBe(before);
+    }
+  });
+
+  it('setProfileColor는 같은 색과 없는 id에서 상태를 그대로 돌려준다', () => {
+    const before = state();
+    // 표기만 다르고 값이 같은 것도 무변화다 — 접은 뒤에 비교하기 때문이다.
+    expect(setProfileColor(before, 'p1', '#2563eb')).toBe(before);
+    expect(setProfileColor(before, 'p1', '#2563EB')).toBe(before);
+    expect(setProfileColor(before, 'nope', '#000000')).toBe(before);
+  });
+
+  it('setProfileColor는 색 말고는 아무것도 건드리지 않는다', () => {
+    const next = setProfileColor(state(), 'p1', '#000000');
+    expect(next.profiles[0]?.name).toBe('One');
+    expect(next.profiles[0]?.modifications).toEqual(state().profiles[0]?.modifications);
+    expect(next.profiles[1]).toEqual(state().profiles[1]);
   });
 
   /*

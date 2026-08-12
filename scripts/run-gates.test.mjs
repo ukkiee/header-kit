@@ -1317,11 +1317,21 @@ describe('산출물 소비 게이트 스크립트 — 인자와 판정 (실제 �
     return art;
   }
 
-  /** 지연이 계약인 청크 넷. **존재하되** 즉시 집합에 없어야 통과한다 — 둘 다 게이트가 잰다. */
+  /**
+   * 지연이 계약인 청크들. **존재하되** 즉시 집합에 없어야 통과한다 — 둘 다 게이트가 잰다.
+   *
+   * 목록의 정본은 `bundle-gate.mjs`의 `MUST_BE_DEFERRED`이고 여기는 그 사본이다. 개수를
+   * 산문에 세어 두지 않는 이유가 이것이다 — 접두가 하나 늘 때마다 그 숫자가 조용히 낡는다.
+   */
   const DEFERRED_CHUNKS = Object.fromEntries(
-    ['sortable-profile-list', 'motion', 'suggest-autocomplete', 'rule-form', 'sortable-rule-list'].map(
-      (p) => [`${p}-x.js`, '// deferred'],
-    ),
+    [
+      'sortable-profile-list',
+      'motion',
+      'suggest-autocomplete',
+      'rule-form',
+      'sortable-rule-list',
+      'profile-color-picker',
+    ].map((p) => [`${p}-x.js`, '// deferred']),
   );
 
   const ENTRY_HTML = '<script type="module" src="/chunks/entry.js"></script>';
@@ -1372,6 +1382,7 @@ describe('산출물 소비 게이트 스크립트 — 인자와 판정 (실제 �
       'suggest-autocomplete',
       'rule-form',
       'sortable-rule-list',
+      'profile-color-picker',
     ]) {
       writeFileSync(join(art, 'chunks', `${p}-x.js`), '// deferred');
     }
@@ -1416,6 +1427,7 @@ describe('산출물 소비 게이트 스크립트 — 인자와 판정 (실제 �
       'suggest-autocomplete',
       'rule-form',
       'sortable-rule-list',
+      'profile-color-picker',
     ]) {
       writeFileSync(join(art, 'chunks', `${p}-x.js`), '// deferred');
     }
@@ -1440,6 +1452,7 @@ describe('산출물 소비 게이트 스크립트 — 인자와 판정 (실제 �
       'suggest-autocomplete',
       'rule-form',
       'sortable-rule-list',
+      'profile-color-picker',
     ]) {
       writeFileSync(join(art, 'chunks', `${p}-x.js`), '// deferred');
     }

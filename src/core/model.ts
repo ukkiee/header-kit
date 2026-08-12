@@ -415,6 +415,29 @@ export function normalizeProfileName(raw: string): string | null {
 }
 
 /**
+ * 프로필 색 정규화 (ADR 0017 재개정) — **`#rrggbb` 하나로 묶는다.**
+ *
+ * `#rgb`는 펴고, `#`은 없어도 되고, 대문자는 내린다. 그 밖의 표기는 전부 거절한다 —
+ * `rgb()`·`hsl()`·색 이름·알파 8자리 어느 것도 통과하지 못한다.
+ *
+ * 이렇게 좁게 무는 이유는 **배지**다. `badge.ts`의 `relativeLuminance`가 읽는 것은
+ * `#rgb`·`#rrggbb`뿐이고 나머지는 `null`로 떨어뜨리는데, 그러면 배지 글자색의 대비 계산이
+ * **조용히** 죽는다 — 사이드바에는 색이 제대로 들어갔는데 툴바 배지만 읽히지 않는 상태가
+ * 되고, 그 실패는 색을 고른 사람에게 보이지 않는다. 저장 문턱에서 표기를 하나로 접으면
+ * 그 자리가 아예 생기지 않는다.
+ *
+ * **대비는 재지 않는다.** 어떤 색이든 저장할 수 있고, 배지 글자색은 `badge.ts`가 흰/검
+ * 중에서 골라 맞춘다. `PROFILE_COLORS`가 지키던 "이웃 색상각 최소 79°" 보장은 자유 선택에서
+ * 사라진다 — 팔레트 밖으로 나가기로 한 결정이 치르는 대가이고, 색이 상태를 나르지 않는다는
+ * 계약(스펙 story 38) 덕에 그 대가가 정보 손실이 되지는 않는다.
+ */
+export function normalizeProfileColor(raw: string): string | null {
+  const body = raw.trim().replace(/^#/, '');
+  const full = body.length === 3 ? body.replace(/./g, (c) => c + c) : body;
+  return /^[0-9a-fA-F]{6}$/.test(full) ? `#${full.toLowerCase()}` : null;
+}
+
+/**
  * 업그레이드가 퇴역 조건을 벗기며 남긴 **일회성 공지** (ADR 0017, 티켓 02).
  *
  * 상태에 담는 이유는 컴파일 경고로는 못 하기 때문이다 — 컴파일은 이미 정제된 프로필을

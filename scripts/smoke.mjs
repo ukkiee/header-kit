@@ -1867,32 +1867,37 @@ try {
   );
 
   /*
-   * N3: **프로필 편집 컨트롤 — 이름 변경은 있고, 두 글자 라벨과 ⋯ 메뉴는 없다.**
+   * N3: **프로필 편집 컨트롤 — 이름·색은 있고, 두 글자 라벨과 ⋯ 메뉴는 없다.**
    *
    * 이 시나리오는 원래 넷의 **부재**를 쟀다(티켓 04 AC1·AC2, ADR 0017). 시안에 이름·색·두
    * 글자 라벨 입력과 ⋯ 메뉴가 없다는 것이 근거였다.
    *
-   * **그 결정 하나가 뒤집혔다** (ADR 0017 재개정). 이름 변경이 없으면 만들 때 낸 오타를
-   * 고치는 유일한 길이 프로필을 지우고 규칙을 다시 만드는 것인데, 그건 삭제를 되살린 개정이
-   * 없앤 바로 그 종류의 대가다. 그래서 단언을 **우회하지 않고 여기서 명시적으로 개정한다** —
-   * `getByLabel('Profile name')`이 0이 아니게 됐다는 이유로 이 검사를 조용히 지나가게 두면,
-   * 다음 사람이 읽는 계약과 화면이 갈라진다.
+   * **그 중 둘이 뒤집혔다** (ADR 0017 재개정). 이름·색을 고칠 수 없으면 만들 때 낸 오타나
+   * 팔레트가 자동으로 돌려준 색을 되돌리는 유일한 길이 프로필을 지우고 규칙을 다시 만드는
+   * 것인데, 그건 삭제를 되살린 개정이 없앤 바로 그 종류의 대가다. 그래서 단언을 **우회하지
+   * 않고 여기서 명시적으로 개정한다** — `getByLabel('Profile name')`이 0이 아니게 됐다는
+   * 이유로 이 검사를 조용히 지나가게 두면, 다음 사람이 읽는 계약과 화면이 갈라진다.
    *
-   * 지금 재는 것은 셋이다:
-   *   1. 이름 변경 **버튼**이 행마다 선다.
-   *   2. 그 입력은 **눌러야 나타난다** — 상시 입력이면 264px 열에서 이름이 먼저 잘린다.
-   *   3. 두 글자 라벨과 ⋯ 메뉴는 **여전히 없다.** 전자는 죽은 필드였고 후자는 앱의 마지막
-   *      메뉴였다(ADR 0012 개정). 색은 아직 없다 — 그 결정은 따로 뒤집힌다.
+   * 지금 재는 것은 넷이다:
+   *   1. **편집 버튼**이 행마다 선다. 이름이 `Rename`이 아니라 `Edit`인 것이 계약이다 —
+   *      그 버튼이 여는 것은 이름 입력 하나가 아니라 색까지다.
+   *   2. 이름 입력은 **눌러야 나타난다** — 상시 입력이면 264px 열에서 이름이 먼저 잘린다.
+   *   3. 색 스와치도 **편집 중에만** 버튼이다. 상시로 두면 아이콘이 하나 더 드는 셈이고,
+   *      목록을 훑다 잘못 눌러 색이 바뀐다.
+   *   4. 두 글자 라벨과 ⋯ 메뉴는 **여전히 없다.** 전자는 죽은 필드였고 후자는 앱의 마지막
+   *      메뉴였다(ADR 0012 개정).
    *
    * 없는 것만 세면 "화면이 통째로 안 그려졌다"도 통과하므로, 남은 넷(그립·토글·검색·만들기)이
    * 실제로 서 있는 것을 같은 호흡에서 함께 잰다.
    */
   const gone = async (locator) => (await locator.count()) === 0;
-  const renameButtons = await popup.getByRole('button', { name: /^Rename / }).count();
-  // 누르기 전에는 입력이 없다 — 버튼이 여는 것이지 늘 서 있는 것이 아니다.
-  const nameInputHiddenUntilAsked = await gone(popup.getByLabel('Profile name'));
+  const editButtons = await popup.getByRole('button', { name: /^Edit / }).count();
+  // 누르기 전에는 입력도 색 버튼도 없다 — 편집 버튼이 여는 것이지 늘 서 있는 것이 아니다.
+  const editorHiddenUntilAsked =
+    (await gone(popup.getByLabel('Profile name'))) &&
+    (await gone(popup.getByRole('button', { name: /^Color for / })));
   await popup
-    .getByRole('button', { name: /^Rename / })
+    .getByRole('button', { name: /^Edit / })
     .first()
     .click();
   const nameInputOpens = await popup
@@ -1902,6 +1907,7 @@ try {
       () => true,
       () => false,
     );
+  const colorButtonOpens = (await popup.getByRole('button', { name: /^Color for / }).count()) === 1;
   // 열어 둔 채로 다음 검사에 들어가지 않는다 — 버린다(Escape는 커밋하지 않는다).
   await popup.getByLabel('Profile name').press('Escape');
 
@@ -1915,17 +1921,18 @@ try {
     create: await popup.getByRole('button', { name: '+ New profile' }).count(),
   };
   record(
-    'N3: 이름 변경은 버튼으로 서고(입력은 눌러야 열린다), 두 글자 라벨·⋯ 메뉴는 여전히 없다',
-    renameButtons > 0 &&
-      nameInputHiddenUntilAsked &&
+    'N3: 편집 버튼이 이름 입력과 색 버튼을 함께 열고, 두 글자 라벨·⋯ 메뉴는 여전히 없다',
+    editButtons > 0 &&
+      editorHiddenUntilAsked &&
       nameInputOpens &&
+      colorButtonOpens &&
       retiredControlsGone &&
       survivors.grip > 0 &&
       survivors.toggle > 0 &&
       survivors.search === 1 &&
       survivors.create === 1,
-    `이름변경버튼=${renameButtons}, 입력숨김=${nameInputHiddenUntilAsked}, 입력열림=${nameInputOpens}, ` +
-      `퇴역컨트롤제거=${retiredControlsGone}, ${JSON.stringify(survivors)}`,
+    `편집버튼=${editButtons}, 편집기숨김=${editorHiddenUntilAsked}, 입력열림=${nameInputOpens}, ` +
+      `색버튼열림=${colorButtonOpens}, 퇴역컨트롤제거=${retiredControlsGone}, ${JSON.stringify(survivors)}`,
   );
 
   /*
@@ -1965,7 +1972,7 @@ try {
         return state.profiles.map((p) => p.name).join('|');
       });
     const openRename = async (name) => {
-      await popup.getByRole('button', { name: `Rename ${name}`, exact: true }).click();
+      await popup.getByRole('button', { name: `Edit ${name}`, exact: true }).click();
       await popup.getByLabel('Profile name').waitFor({ timeout: 5000 });
     };
 
@@ -2003,6 +2010,66 @@ try {
         afterEscape === 'Renamed|RenB' &&
         afterBlur === 'ByBlur|RenB',
       `enter=${afterEnter}, blank=${afterBlank}, escape=${afterEscape}, blur=${afterBlur}`,
+    );
+
+    /*
+     * N3b: **색 변경** (같은 개정) — 팔레트가 커밋하고, 자유 선택은 **지연 청크**다.
+     *
+     * 셋을 함께 잰다. 팔레트가 저장소를 실제로 바꾸는가 · 그 클릭이 팝오버를 닫는가(닫히지
+     * 않으면 "골랐다"의 답이 화면에 없다) · 그리고 **자유 선택이 실제로 도착하는가.**
+     *
+     * 마지막이 이 시나리오에 있는 이유: `bundle-gate`는 그 청크가 즉시 집합에 **없다**까지만
+     * 잰다. 지연 계약을 걸어 두고 정작 화면이 그것을 부르지 못하면 게이트는 초록인데 색은
+     * 못 고른다 — 재지 않으면서 초록인 자리가 정확히 거기다.
+     */
+    const storedColors = () =>
+      sw.evaluate(async () => {
+        const { state } = await chrome.storage.local.get('state');
+        return state.profiles.map((p) => p.color).join('|');
+      });
+
+    await popup.getByRole('button', { name: 'Edit ByBlur', exact: true }).click();
+    await popup.getByLabel('Profile name').waitFor({ timeout: 5000 });
+    await popup.getByRole('button', { name: 'Color for ByBlur', exact: true }).click();
+    // 팔레트는 정적이라 팝오버가 열리면 바로 선다.
+    await popup.getByRole('button', { name: 'Color #d97706', exact: true }).waitFor({ timeout: 5000 });
+    const paletteSlots = await popup.getByRole('button', { name: /^Color #/ }).count();
+    // 자유 선택은 지연 청크 — 도착 표지는 그것이 그리는 내용 셸이다.
+    const freePickerArrived = await popup
+      .locator('[data-slot="color-picker-content"]')
+      .first()
+      .waitFor({ timeout: 10_000 })
+      .then(
+        () => true,
+        () => false,
+      );
+
+    const colorsBefore = await storedColors();
+    await popup.getByRole('button', { name: 'Color #d97706', exact: true }).click();
+    const colorsAfter = await pollUntil(storedColors, (v) => v.startsWith('#d97706'));
+    /*
+     * 닫힘은 **기다려서** 센다. 팝오버에는 닫힘 애니메이션이 붙어 있어(`data-closed:animate-out`)
+     * 노드가 잠시 남는다 — 커밋이 저장소에 닿은 그 순간에 세면 아직 열려 있다고 읽힌다(실측).
+     * 끝내 안 닫히면 폴이 마지막 값(0이 아닌 수)을 돌려주므로 그 회귀는 여전히 FAIL이다.
+     */
+    const swatchesLeft = await pollUntil(
+      () => popup.getByRole('button', { name: /^Color #/ }).count(),
+      (n) => n === 0,
+      5000,
+      200,
+    );
+    await popup.getByLabel('Profile name').press('Escape');
+
+    record(
+      'N3b: 색 — 팔레트 10칸이 커밋하고 팝오버가 닫히며, 자유 선택 지연 청크가 실제로 도착한다',
+      // 둘째 프로필의 색은 건드리지 않았다는 것까지 본다 — 시드가 둘 다 같은 색이므로
+      // 접두만 재고 그 뒤는 `colorsBefore`와 대조한다.
+      paletteSlots === 10 &&
+        freePickerArrived &&
+        colorsAfter === `#d97706|${colorsBefore.split('|')[1]}` &&
+        swatchesLeft === 0,
+      `팔레트칸=${paletteSlots}, 자유선택도착=${freePickerArrived}, ` +
+        `${colorsBefore} → ${colorsAfter}, 남은 스와치=${swatchesLeft}`,
     );
   }
 
@@ -2598,8 +2665,11 @@ try {
     .getByRole('button', { name: 'KeyB 프로필 선택 (미적용)' })
     .isVisible()
     .catch(() => false);
+  // **`exact`가 필요하다** — 프로필 편집 버튼의 ko 이름이 `{이름} 편집`이라(ADR 0017
+  // 재개정) 부분일치로 찾으면 사이드바의 그것이 먼저 걸리고, 규칙 행의 '편집'을 잰다고
+  // 믿으면서 다른 버튼을 잰다. 실측으로 그렇게 걸렸다.
   const koRowToggle = await popupKo
-    .getByRole('button', { name: '편집' })
+    .getByRole('button', { name: '편집', exact: true })
     .first()
     .isVisible()
     .catch(() => false);
@@ -2622,7 +2692,9 @@ try {
    */
   const condKo = await context.newPage();
   await condKo.goto(`chrome-extension://${extensionId}/popup.html?locale=ko`);
-  const condKoEdit = condKo.getByRole('button', { name: '편집' }).first();
+  // 위와 같은 이유로 `exact`다 — 여기서 엉뚱한 버튼을 누르면 규칙 폼이 아예 열리지 않아
+  // 아래 `종류` 대기가 시간 초과로 죽는다(실측).
+  const condKoEdit = condKo.getByRole('button', { name: '편집', exact: true }).first();
   await condKoEdit.waitFor({ timeout: 5000 });
   await condKoEdit.click();
   await condKo.getByRole('combobox', { name: '종류', exact: true }).waitFor({ timeout: 5000 });

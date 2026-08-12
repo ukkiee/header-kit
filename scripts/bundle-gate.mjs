@@ -81,6 +81,11 @@ const MUST_BE_DEFERRED = [
   // 첫 페인트 UI라 정적으로 들이면 dnd-kit 45.2KB가 즉시 집합에 들어온다. 크기 한도 안에
   // 들어오므로 **크기로는 막히지 않는다**: 그것이 이 구조 단언이 따로 있는 이유다.
   'sortable-rule-list',
+  // 프로필 색의 **자유 선택** (ADR 0017 재개정). 벤더링한 컬러피커(`ui/color-picker.tsx`)가
+  // 이 청크에만 있다 — 실측 34.2KB이고, 그것을 보는 사람은 프로필을 고치는 중인 사람 하나뿐이다.
+  // 팔레트 10색은 이 청크 **밖**(`profile-color-field`)에 남아 팝오버를 연 순간 바로 보인다:
+  // 여기 들어오면 색을 고르려고 청크 하나를 기다려야 한다.
+  'profile-color-picker',
 ];
 
 if (!existsSync(ENTRY_HTML)) fail(missingArtifacts(ENTRY_HTML));
