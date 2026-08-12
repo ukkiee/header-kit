@@ -3388,64 +3388,147 @@ try {
     `hint=${emptyHintShown}, form-opened=${formOpened}`,
   );
 
-  // N20: 규칙 삭제 Undo 토스트 (ui-refine 07) — Placeholder 값 보존 원자 복원
-  await seedProfiles([
-    {
-      ...baseProfile('p-undo', 'Undo', [
-        {
-          kind: 'request-header',
-          id: 'm1',
-          name: 'X-Trace',
-          value: 'req-{{uuid}}',
-          enabled: true,
-          mode: 'override',
-          emptyMeans: 'remove',
-          comment: '',
-        },
-      ]),
-      active: false,
-    },
-  ]);
-  await popup.reload();
-  // 활성화 경계로 실체화(팝업 토글) 후, 삭제 전 실요청 값을 기록한다
-  await popup.getByRole('switch', { name: 'Toggle Undo' }).click();
-  await pollSessionRuleCount(sw, 1);
-  const beforeDelete = (await fetchEchoHeaders(pageB, '/headers'))['x-trace'];
-  // 삭제 → 규칙 0 + 토스트 노출(텍스트로 즉시 감지 — 토스트 기본 수명 내 Undo)
-  await popup.getByRole('button', { name: 'Delete', exact: true }).first().click();
-  await pollSessionRuleCount(sw, 0);
-  const toastShown = await popup
-    .getByText('Rule deleted', { exact: true })
-    .first()
-    .waitFor({ timeout: 5000 })
-    .then(
-      () => true,
-      () => false,
-    );
-  // Undo → 규칙 복원 + 실요청 값이 삭제 전과 동일(재실체화 없음)
-  await popup.getByRole('button', { name: 'Undo', exact: true }).first().click();
-  await pollSessionRuleCount(sw, 1);
-  const afterUndo = await pollUntil(
-    () => fetchEchoHeaders(pageB, '/headers').then((h) => h['x-trace']),
-    (v) => typeof v === 'string' && v.startsWith('req-'),
-  );
-  record(
-    'N20a: 삭제 Undo — 토스트 노출 + Placeholder 값 보존 원자 복원',
-    /^req-[0-9a-f-]{36}$/.test(beforeDelete ?? '') && toastShown && afterUndo === beforeDelete,
-    `before=${beforeDelete}, toast=${toastShown}, after=${afterUndo}, preserved=${afterUndo === beforeDelete}`,
-  );
+  // 이 시나리오의 지역 이름을 블록으로 닫는다 — 스모크 본문은 한 스코프라 이름이 겹친다.
+  {
+    /*
+     * N20: **규칙 삭제는 두 번 눌러야 지워진다** (ADR 0017 재개정, ui-refine 07을 뒤집는다).
+     *
+     * 이 자리는 원래 삭제 **Undo 토스트**를 쟀다: 한 번 누르면 지워지고, 토스트의 실행 취소가
+     * 실체화 값까지 그대로 되살리는 것. 그 규약이 뒤집혔으므로 단언도 **우회하지 않고 여기서
+     * 개정한다** — 앱 안의 다른 파괴적 동작(프로필 삭제·백업 한 행·클라우드·전체 초기화)이
+     * 전부 2단 확인인데 규칙 삭제만 한 번이었고, 규약이 갈리면 어느 클릭이 되돌릴 수 없는지를
+     * 표면마다 다시 배워야 한다.
+     *
+     * 넷을 함께 잰다. **첫 클릭이 아무것도 지우지 않는다**를 안 재면 2단이 이름뿐인 회귀를
+     * 놓치고, **둘째 클릭이 지운다**를 안 재면 무장만 하고 못 지우는 회귀를 놓친다.
+     * **실체화 값이 함께 걷힌다**는 삭제의 원자성이고(`removeModification`), **되돌리기가
+     * 없다**는 이 개정이 실제로 걷어 간 것이다 — 토스트가 남아 있으면 규약이 반쯤만 바뀐다.
+     */
+    await seedProfiles([
+      {
+        ...baseProfile('p-del2', 'Del2', [
+          {
+            kind: 'request-header',
+            id: 'm1',
+            name: 'X-Trace',
+            value: 'req-{{uuid}}',
+            enabled: true,
+            mode: 'override',
+            emptyMeans: 'remove',
+            comment: '',
+          },
+        ]),
+        active: false,
+      },
+    ]);
+    await popup.reload();
+    // 활성화 경계로 실체화(팝업 토글) 후, 삭제 전 실요청 값을 기록한다.
+    await popup.getByRole('switch', { name: 'Toggle Del2' }).click();
+    await pollSessionRuleCount(sw, 1);
+    const beforeDelete = (await fetchEchoHeaders(pageB, '/headers'))['x-trace'];
+    const materializedCount = () =>
+      sw.evaluate(async () => {
+        const { state } = await chrome.storage.local.get('state');
+        return Object.keys(state.materialized ?? {}).length;
+      });
+    const materializedBefore = await materializedCount();
+    /*
+     * **드래그 목록이 도착하기를 기다린다.** 규칙 목록의 dnd-kit은 지연 청크라, 도착하는
+     * 순간 정적 fallback이 통째로 교체되고 행이 리마운트된다 — 행이 들고 있던 되물음도
+     * 함께 풀린다. 기다리지 않으면 그 교체가 시나리오 한가운데로 떨어져, 무장해 둔 버튼이
+     * 이유 없이 사라진다(실측으로 그렇게 걸렸다. N54가 프로필 쪽에 같은 배리어를 둔다).
+     */
+    await popup.waitForSelector('[data-rule-list="sortable"]', { timeout: 10_000 });
 
-  // N20b: Undo를 누르지 않으면 삭제가 유지된다(자동 복원 없음)
-  await popup.getByRole('button', { name: 'Delete', exact: true }).first().click();
-  await pollSessionRuleCount(sw, 0);
-  await popup.getByText('Rule deleted', { exact: true }).first().waitFor({ timeout: 5000 });
-  // Undo 없이 잠시 기다린 뒤에도 규칙은 복원되지 않는다
-  await new Promise((r) => setTimeout(r, 1000));
-  const stillDeleted = await sw.evaluate(async () => {
-    const { state } = await chrome.storage.local.get('state');
-    return state.profiles[0].modifications.length;
-  });
-  record('N20b: Undo 미클릭 시 삭제 유지(자동 복원 없음)', stillDeleted === 0, `mods=${stillDeleted}`);
+    // (a) 첫 클릭은 되묻기만 한다 — 저장소도 세션 규칙도 그대로여야 한다.
+    const ruleDelete = () => popup.getByRole('button', { name: 'Delete', exact: true }).first();
+    await ruleDelete().click();
+    const armed = await popup
+      .getByRole('button', { name: 'Confirm delete', exact: true })
+      .first()
+      .waitFor({ timeout: 5000 })
+      .then(
+        () => true,
+        () => false,
+      );
+    // 무장한 채로 잠시 둔다 — 지연 삭제가 아니라 **되물음**임을 확인한다.
+    await new Promise((r) => setTimeout(r, 700));
+    const survivedFirstClick = await sw.evaluate(async () => {
+      const { state } = await chrome.storage.local.get('state');
+      return state.profiles[0].modifications.length;
+    });
+
+    // (b) 되돌리기 토스트는 **없다** — 이 개정이 걷어 간 것이 그것이다.
+    const undoGone = (await popup.getByRole('button', { name: 'Undo', exact: true }).count()) === 0;
+
+    // (c) 둘째 클릭이 지운다 — 그리고 실체화 값도 함께 걷힌다.
+    await popup.getByRole('button', { name: 'Confirm delete', exact: true }).first().click();
+    await pollSessionRuleCount(sw, 0);
+    const materializedAfter = await pollUntil(materializedCount, (n) => n === 0);
+
+    record(
+      'N20a: 규칙 삭제 2단 확인 — 첫 클릭은 되묻기만, 둘째가 지우고 실체화 값도 걷힌다',
+      /^req-[0-9a-f-]{36}$/.test(beforeDelete ?? '') &&
+        armed &&
+        survivedFirstClick === 1 &&
+        undoGone &&
+        materializedBefore === 1 &&
+        materializedAfter === 0,
+      `실체화전=${beforeDelete}, 무장=${armed}, 1클릭후 규칙=${survivedFirstClick}, ` +
+        `Undo부재=${undoGone}, 실체화 ${materializedBefore}→${materializedAfter}`,
+    );
+
+    /*
+     * N20b: **되물음은 행마다 따로다** — 한 행을 무장해도 옆 행은 무장되지 않는다.
+     *
+     * 이 자리에는 한때 "포인터가 떠나면 풀린다"를 두려 했다. 프로필 행이 그렇게 하기
+     * 때문인데, 그쪽의 근거는 **버튼이 평소에 숨는다**는 것이다: 무장한 채 보이지 않는 행이
+     * 남으면 다음에 우연히 닿은 한 번의 클릭이 지운다. 규칙 행의 삭제 아이콘은 늘 보이고
+     * 무장이 체크 아이콘으로 화면에 서 있으므로 그 덫이 생기지 않는다 — 백업 히스토리 행이
+     * 같은 이유로 같은 규약이다.
+     *
+     * 그러면 남는 위험은 **무장이 행을 건너뛰는 것**이다. 상태가 목록 수준으로 새면 A를
+     * 무장하고 B를 눌렀을 때 B가 한 번에 지워진다. 그것을 여기서 잰다.
+     */
+    await seedProfiles([
+      baseProfile('p-arm', 'Arm', [
+        hdr({ id: 'm1', name: 'X-Arm-1', value: '1' }),
+        hdr({ id: 'm2', name: 'X-Arm-2', value: '2' }),
+      ]),
+    ]);
+    await popup.reload();
+    /*
+     * **드래그 목록이 도착하기를 기다린다.** 규칙 목록의 dnd-kit은 지연 청크라, 도착하는
+     * 순간 정적 fallback이 통째로 교체되고 행이 리마운트된다 — 행이 들고 있던 되물음도
+     * 함께 풀린다. 기다리지 않으면 그 교체가 시나리오 한가운데로 떨어져, 무장해 둔 버튼이
+     * 이유 없이 사라진다(실측으로 그렇게 걸렸다. N54가 프로필 쪽에 같은 배리어를 둔다).
+     */
+    await popup.waitForSelector('[data-rule-list="sortable"]', { timeout: 10_000 });
+    const deleteButtons = () => popup.getByRole('button', { name: 'Delete', exact: true });
+    await deleteButtons().first().waitFor({ timeout: 5000 });
+    // 첫 행을 무장한다 — 그러면 삭제 버튼은 하나 줄고(체크로 바뀐다) 되물음은 하나가 된다.
+    await deleteButtons().first().click();
+    await popup
+      .getByRole('button', { name: 'Confirm delete', exact: true })
+      .first()
+      .waitFor({ timeout: 5000 });
+    const armedCount = await popup.getByRole('button', { name: 'Confirm delete', exact: true }).count();
+    const stillPlain = await deleteButtons().count();
+
+    // 둘째 행의 삭제를 **한 번** 누른다 — 무장이 새지 않았다면 아무것도 지워지지 않는다.
+    await deleteButtons().first().click();
+    await new Promise((r) => setTimeout(r, 700));
+    const rulesLeft = await sw.evaluate(async () => {
+      const { state } = await chrome.storage.local.get('state');
+      return state.profiles[0].modifications.length;
+    });
+
+    record(
+      'N20b: 되물음은 행마다 따로 — 한 행을 무장해도 옆 행의 한 번 클릭은 지우지 않는다',
+      armedCount === 1 && stillPlain === 1 && rulesLeft === 2,
+      `무장한 행=${armedCount}, 평상 행=${stillPlain}, 남은 규칙=${rulesLeft}`,
+    );
+  }
 
   // N21: motion 무결성 (ui-refine 08) — 애니메이션이 기능을 깨지 않고, reduced-motion을 존중
   await seedProfiles([
@@ -3486,8 +3569,10 @@ try {
     () => true,
     () => false,
   );
-  // 규칙 삭제(행 exit): 삭제 → 실요청 반영 + AnimatePresence exit가 상태를 막지 않음
+  // 규칙 삭제(행 exit): 삭제 → 실요청 반영 + AnimatePresence exit가 상태를 막지 않음.
+  // **두 번 누른다** — 삭제가 2단 확인이 됐다(ADR 0017 재개정, N20a가 그 계약을 잰다).
   await popup.getByRole('button', { name: 'Delete', exact: true }).first().click();
+  await popup.getByRole('button', { name: 'Confirm delete', exact: true }).first().click();
   const afterDelete = await pollSessionRuleCount(sw, 2).then(
     () => true,
     () => false,
@@ -7300,7 +7385,26 @@ try {
      */
     await seedProfiles([baseProfile('p-last', 'LastOne', [hdr({ id: 'only', name: 'X-Only', value: '1' })])]);
     await popup.reload();
+    /*
+     * **드래그 목록이 도착하기를 기다린다.** 규칙 목록의 dnd-kit은 지연 청크라, 도착하는
+     * 순간 정적 fallback이 통째로 교체되고 행이 리마운트된다 — 행이 들고 있던 되물음도
+     * 함께 풀린다. 기다리지 않으면 그 교체가 시나리오 한가운데로 떨어져, 무장해 둔 버튼이
+     * 이유 없이 사라진다(실측으로 그렇게 걸렸다. N54가 프로필 쪽에 같은 배리어를 둔다).
+     */
+    await popup.waitForSelector('[data-rule-list="sortable"]', { timeout: 10_000 });
     await popup.getByRole('button', { name: 'Delete', exact: true }).first().waitFor({ timeout: 5000 });
+    /*
+     * **먼저 무장하고, 그 다음에 시계를 건다** (ADR 0017 재개정).
+     *
+     * 삭제가 2단 확인이 되면서 첫 클릭은 아무것도 지우지 않는다. 리스너가 `once: true`라
+     * 순서를 그대로 두면 **되묻기만 한 클릭**에서 t0가 잡히고, 재는 값이 "빈 안내까지 걸린
+     * 시간"이 아니라 "사람이 한 번 더 누르기까지 걸린 시간"이 된다.
+     */
+    await popup.getByRole('button', { name: 'Delete', exact: true }).first().click();
+    await popup
+      .getByRole('button', { name: 'Confirm delete', exact: true })
+      .first()
+      .waitFor({ timeout: 5000 });
     await popup.evaluate(() => {
       window.__emptyMs = null;
       const seen = () =>
@@ -7319,7 +7423,7 @@ try {
         { once: true, capture: true },
       );
     });
-    await popup.getByRole('button', { name: 'Delete', exact: true }).first().click();
+    await popup.getByRole('button', { name: 'Confirm delete', exact: true }).first().click();
     const emptyAfterMs = await popup
       .waitForFunction(() => window.__emptyMs != null, null, { timeout: 5000 })
       .then(

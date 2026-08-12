@@ -272,37 +272,17 @@ export function removeModification(
   return { ...base, materialized: withoutKey(base.materialized, modificationId) };
 }
 
-/**
- * 삭제 실행 취소 (ui-refine 07) — 스냅샷 {원본 Modification, 삭제 시점 인덱스, 해당
- * materialized 값}을 원자적으로 되돌린다. 일반 추가 경로를 타지 않으므로 Placeholder
- * 규칙도 재실체화되지 않고 삭제 전과 동일한 실체화 값으로 돌아온다. materializedValue가
- * 있으면 그 값을 그대로 복원한다(삭제 당시 활성이었다는 뜻).
+/*
+ * **`restoreModification`이 여기 있었다** (ui-refine 07) — 삭제 시점의 {원본 규칙, 인덱스,
+ * 실체화 값}을 원자적으로 되돌리던 전이다.
  *
- * 인덱스는 삭제 시점 목록 기준이다. 되돌리기 전에 목록이 바뀌면(다른 규칙 추가, 또는
- * 여러 삭제를 원래 순서와 다르게 되돌림) 정확한 원위치가 아닐 수 있어 범위로 클램프한다 —
- * 토스트 수명이 짧아 실무상 단일 삭제→즉시 되돌리기가 압도적이며 그 경로는 정확하다.
+ * 유일한 호출부가 규칙 삭제의 실행 취소 토스트였고, 삭제가 2단 확인으로 옮겨 가면서
+ * (ADR 0017 재개정) 그 토스트가 사라졌다. 호출부 없는 명령을 남겨 두면 화면에 없는 조작이
+ * 메시지로는 계속 가능한 채로 남는다 — `duplicate-profile`이 같은 이유로 사라졌다.
+ *
+ * 이름을 여기 적어 두는 것은 **되살릴 자리를 표시하기 위해서가 아니라**, `moveModification`의
+ * clamp 주석이 이 함수를 대조군으로 들고 있었기 때문이다. 그 주석은 지금 이 문단을 가리킨다.
  */
-export function restoreModification(
-  state: StoredState,
-  profileId: string,
-  index: number,
-  modification: Modification,
-  materializedValue?: string,
-): StoredState {
-  // 대상 프로필이 사라졌으면(삭제 후 그 프로필까지 삭제됐다면) 아무것도 하지 않는다 —
-  // 규칙을 못 넣으면서 materialized만 쓰면 도달 불가능한 값이 영구히 남는다(원자성 위반).
-  if (!state.profiles.some((p) => p.id === profileId)) return state;
-  const base = withProfile(state, profileId, (profile) => {
-    const modifications = [...profile.modifications];
-    modifications.splice(Math.max(0, Math.min(index, modifications.length)), 0, modification);
-    return { ...profile, modifications };
-  });
-  if (materializedValue === undefined) return base;
-  return {
-    ...base,
-    materialized: { ...base.materialized, [modification.id]: materializedValue },
-  };
-}
 
 /**
  * 규칙 순서를 바꾼다.
@@ -319,8 +299,8 @@ export function restoreModification(
  * Placeholder 값이 갈린다(`removeModification`·`addModification`이 각각 그 일을 한다).
  *
  * clamp은 `moveProfile`과 **같은 셈**이다 — 제거한 **뒤의** 길이로 자르므로 dnd-kit의
- * `arrayMove`와 결과가 같다. `restoreModification`처럼 삽입 전 길이로 자르면 목록 끝으로
- * 옮기는 드롭이 한 칸 어긋난다.
+ * `arrayMove`와 결과가 같다. 삽입 **전** 길이로 자르면 목록 끝으로 옮기는 드롭이 한 칸
+ * 어긋난다 — 퇴역한 `restoreModification`이 그렇게 잘랐다(위 문단).
  */
 export function moveModification(
   state: StoredState,
@@ -551,13 +531,6 @@ export type Command =
    * 맨 위로 올리므로 그 인덱스를 그대로 보내면 틀린 규칙이 우선순위를 얻는다.
    */
   | { type: 'move-modification'; profileId: string; modificationId: string; toIndex: number }
-  | {
-      type: 'restore-modification';
-      profileId: string;
-      index: number;
-      modification: Modification;
-      materializedValue?: string;
-    }
   | { type: 'import-profiles'; profiles: Profile[] }
   | { type: 'restore-profiles'; profiles: Profile[] };
 
@@ -636,14 +609,6 @@ export function applyCommand(
       return removeModification(state, command.profileId, command.modificationId);
     case 'move-modification':
       return moveModification(state, command.profileId, command.modificationId, command.toIndex);
-    case 'restore-modification':
-      return restoreModification(
-        state,
-        command.profileId,
-        command.index,
-        command.modification,
-        command.materializedValue,
-      );
     default:
       return command satisfies never;
   }

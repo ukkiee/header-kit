@@ -151,15 +151,20 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
   };
 
   /**
-   * 백업 복원 — **바로 실행하고 되돌리기를 토스트로 준다** (규칙 삭제와 같은 결).
+   * 백업 복원 — **바로 실행하고 되돌리기를 토스트로 준다.**
+   *
+   * 이제 앱에서 실행 취소 토스트를 쓰는 곳은 여기뿐이다. 규칙 삭제가 같은 규약을 썼지만
+   * 2단 확인으로 옮겼는데(ADR 0017 재개정), 복원은 따라가지 않는다 — 되묻는 값은 **되돌릴 수
+   * 없는 동작**에 대해 지불하는 것이고 복원은 되돌릴 수 있다(직전 프로필 전체를 다시 심으면
+   * 된다). 삭제와 초기화만 되묻는다.
    *
    * 되돌릴 스냅샷은 복원 **직전의** 프로필 전체다. 그것을 쥔 것은 셸이라 이 함수가 여기 있다 —
    * 백업 패널은 스냅샷을 읽고 풀어 주기만 하고, 명령과 되돌리기는 이쪽이 든다.
    *
    * **되돌린 것이 원본과 완전히 같지는 않다.** `restore-profiles`는 권위 경로라 id를 다시
    * 매기고 Placeholder를 다시 실체화한다 — 이름·색·규칙은 그대로지만 `{{uuid}}` 값은 새로
-   * 뽑힌다. 규칙 삭제의 실행 취소가 실체화 값까지 그대로 되살리는 것과 다른 점이고
-   * (그쪽은 전용 명령이 있다), 프로필 전체를 그렇게 되살리는 명령은 두지 않았다.
+   * 뽑힌다. 실체화 값까지 그대로 되살리는 전용 명령은 이 앱에 없다(`restore-modification`이
+   * 그랬는데 규칙 삭제의 실행 취소와 함께 걷혔다).
    */
   const restoreWithUndo = async (profiles: Profile[]) => {
     const previous = state.profiles;
@@ -182,25 +187,20 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
     void browser.tabs.create({ url: browser.runtime.getURL('/app.html') });
   };
 
-  // 규칙 삭제 + 실행 취소 (ui-refine 07) — 삭제 시점에 {원본, 인덱스, materialized 값}을
-  // 스냅샷하고, Undo는 restore-modification 하나로 원자 복원한다(재실체화 없음).
-  const deleteRuleWithUndo = (profileId: string, modificationId: string) => {
-    const profile = state.profiles.find((p) => p.id === profileId);
-    const index = profile?.modifications.findIndex((m) => m.id === modificationId) ?? -1;
-    const modification = index >= 0 ? profile!.modifications[index] : undefined;
-    if (!modification) return;
-    const materializedValue = state.materialized[modificationId];
+  /**
+   * 규칙 삭제 — **되물음은 행이 이미 마쳤다** (ADR 0017 재개정, ui-refine 07을 뒤집는다).
+   *
+   * 예전에는 한 번에 지우고 되돌리기를 토스트가 들었다. 그 판단의 근거는 "삭제는 자주 하는
+   * 일이라 매번 되묻는 값이 비싸다"였는데, 대가는 **앱 안에서 규약이 갈리는 것**이었다:
+   * 프로필 삭제·백업 한 행 삭제·클라우드 삭제·전체 초기화가 전부 2단 확인인데 규칙 삭제만
+   * 한 번이었고, 그러면 어느 클릭이 되돌릴 수 없는지를 표면마다 다시 배워야 한다.
+   *
+   * **`restore-modification`이 함께 걷혔다.** 그 명령의 유일한 호출부가 이 토스트의 실행
+   * 취소였다 — 남겨 두면 화면에 없는 조작이 메시지로는 계속 가능한 채로 남는다(같은 이유로
+   * `duplicate-profile`이 사라졌다). 삭제 시점의 실체화 값 스냅샷도 그것과 함께 갈 곳을 잃었다.
+   */
+  const deleteRule = (profileId: string, modificationId: string) => {
     void dispatch({ type: 'remove-modification', profileId, modificationId });
-    const toastId = toast.add({
-      title: t(locale, 'ruleDeleted'),
-      data: { actionLabel: t(locale, 'undo') },
-      actionProps: {
-        onClick: () => {
-          void dispatch({ type: 'restore-modification', profileId, index, modification, materializedValue });
-          toast.close(toastId); // 되돌렸으면 토스트도 닫는다
-        },
-      },
-    });
   };
 
   /**
@@ -316,7 +316,7 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
       profile={selectedProfile}
       paused={state.paused}
       onCommand={dispatch}
-      onDeleteRule={deleteRuleWithUndo}
+      onDeleteRule={deleteRule}
       history={{
         headerNames: state.customHeaderNames,
         cookieNames: state.customCookieNames,

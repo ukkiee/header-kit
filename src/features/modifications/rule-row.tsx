@@ -1,4 +1,5 @@
-import { Pencil, Regex, Trash2 } from 'lucide-react';
+import { Check, Pencil, Regex, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 import type { Modification } from '@/core/schema';
 import { IconButton } from '@/ui/icon-button';
 import { ToggleSwitch } from '@/ui/toggle-switch';
@@ -56,6 +57,8 @@ export function RuleRow({
   onRemove,
 }: RuleRowProps) {
   const t = useT();
+  // 되물음은 행마다 따로다 — 목록이 들면 어느 행이 무장했는지를 위에서 배선해야 한다.
+  const [confirming, setConfirming] = useState(false);
   const view = ruleView(modification, t);
   // 꺼졌거나 전역 정지 중이면 제목·뱃지가 흐려진다 — 지금 걸리는 규칙과 구별하기 위해서다.
   const dim = !modification.enabled || paused;
@@ -109,7 +112,7 @@ export function RuleRow({
       */}
       <div
         className={`flex shrink-0 items-center gap-1 self-center transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 ${
-          editing ? 'opacity-100' : 'opacity-60'
+          editing || confirming ? 'opacity-100' : 'opacity-60'
         }`}
       >
         <IconButton
@@ -119,7 +122,35 @@ export function RuleRow({
           className={editing ? 'bg-secondary text-foreground' : ''}
           onClick={onEdit}
         />
-        <IconButton label={t('menuDelete')} icon={Trash2} tone="danger" onClick={onRemove} />
+        {/*
+          삭제는 **두 번 눌러야 지워진다** (ADR 0017 재개정, ui-refine 07을 뒤집는다).
+          예전에는 한 번에 지우고 되돌리기를 토스트가 들었다. 앱 안의 파괴적 동작이 전부
+          2단 확인인데 규칙 삭제만 달랐고, 규약이 갈리면 어느 클릭이 되돌릴 수 없는지를
+          매번 다시 배워야 한다. 아이콘이 **모양으로도** 바뀐다(휴지통 → 체크).
+
+          **여기에는 포인터가 떠나면 풀리는 장치가 없다** — 프로필 행과 갈리는 자리이고,
+          그 근거는 삭제 아이콘이 **늘 보인다**는 것이다(ui-review UI-03). 프로필 쪽이 그
+          장치를 두는 이유는 버튼이 평소에 숨기 때문이다: 무장한 채 **보이지 않는** 행이
+          남으면 다음에 우연히 닿은 한 번의 클릭이 지운다. 여기서는 무장이 체크 아이콘으로
+          화면에 서 있으므로 숨은 덫이 되지 않는다 — 백업 히스토리 행이 같은 이유로 같다.
+
+          되물음은 **행마다 따로**다. 둘을 무장해도 각자의 아이콘이 체크로 서 있어, 다음
+          클릭이 무엇을 지울지가 그 아이콘 위치로 읽힌다.
+        */}
+        <IconButton
+          label={confirming ? t('ariaConfirmDeleteRule') : t('menuDelete')}
+          tooltip={confirming ? t('confirmDeleteRule') : t('menuDelete')}
+          icon={confirming ? Check : Trash2}
+          tone="danger"
+          onClick={() => {
+            if (!confirming) {
+              setConfirming(true);
+              return;
+            }
+            setConfirming(false);
+            onRemove();
+          }}
+        />
       </div>
     </div>
   );

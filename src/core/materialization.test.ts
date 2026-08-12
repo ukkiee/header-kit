@@ -3,7 +3,6 @@ import {
   addModification,
   addProfile,
   removeModification,
-  restoreModification,
   toggleProfile,
   updateModification,
 } from './commands';
@@ -165,49 +164,17 @@ describe('실체화 수명주기 (활성화 경계)', () => {
     expect(off.materialized).toEqual({ 'm-ph': 'trace-uuid-1' });
   });
 
-  it('삭제-Undo(restoreModification): 원위치·원상태 복원, Placeholder는 재실체화 없이 값 보존 (ui-refine 07)', () => {
-    const deps = stubDeps();
-    // 활성 프로필: m-ph(placeholder)=uuid-1, m-plain=static. m-ph를 삭제했다 되돌린다.
-    const on = toggleProfile(state([profile()]), 'p1', true, deps);
-    expect(on.materialized).toEqual({ 'm-ph': 'trace-uuid-1' });
-    const original = on.profiles[0]!.modifications[0]!; // m-ph, 인덱스 0
-    const snapshotValue = on.materialized['m-ph'];
-
-    const removed = removeModification(on, 'p1', 'm-ph');
-    expect(removed.materialized).toEqual({}); // 삭제가 값도 제거
-
-    // 스냅샷으로 원자 복원 — 재실체화 금지(deps 없이도 값이 돌아온다)
-    const restored = restoreModification(removed, 'p1', 0, original, snapshotValue);
-    expect(restored.profiles[0]?.modifications.map((m) => m.id)).toEqual(['m-ph', 'm-plain']);
-    expect(restored.materialized).toEqual({ 'm-ph': 'trace-uuid-1' }); // 새 uuid 아님
-    expect(deps.uuidCalls).toBe(1); // toggle에서 1회, 복원에선 0회
-  });
-
-  it('삭제-Undo: 원래 인덱스(중간)에 다시 끼운다', () => {
-    const three = profile({
-      modifications: [mod('a', 'x'), mod('b', 'y'), mod('c', 'z')],
-    });
-    const removed = removeModification(state([three]), 'p1', 'b');
-    expect(removed.profiles[0]?.modifications.map((m) => m.id)).toEqual(['a', 'c']);
-
-    const restored = restoreModification(removed, 'p1', 1, mod('b', 'y'));
-    expect(restored.profiles[0]?.modifications.map((m) => m.id)).toEqual(['a', 'b', 'c']);
-  });
-
-  it('삭제-Undo: 인덱스가 현재 목록을 벗어나면 끝에 클램프한다 (삭제 시점 인덱스 계약)', () => {
-    // 삭제 시점 인덱스 5지만 되돌릴 때 목록이 1개 → 범위 밖이라 끝에 붙는다.
-    const one = profile({ modifications: [mod('a', 'x')] });
-    const restored = restoreModification(state([one]), 'p1', 5, mod('b', 'y'));
-    expect(restored.profiles[0]?.modifications.map((m) => m.id)).toEqual(['a', 'b']);
-  });
-
-  it('삭제-Undo: 대상 프로필이 사라졌으면 no-op — 고아 materialized를 남기지 않는다 (release r1 R-1)', () => {
-    // 규칙 삭제 → 그 프로필까지 삭제 → Undo. 규칙을 넣을 곳이 없으므로 아무것도 안 한다.
-    const empty = state([]);
-    const restored = restoreModification(empty, 'gone', 0, mod('m-ph', 'trace-{{uuid}}'), 'trace-old');
-    expect(restored).toBe(empty); // 참조 동일 — 상태 무변경
-    expect(restored.materialized).toEqual({}); // materialized 오염 없음
-  });
+  /*
+   * **삭제-Undo 넷이 여기 있었다** (ui-refine 07) — `restoreModification`이 원위치·원상태를
+   * 되돌리고 Placeholder를 재실체화하지 않는 것을 재던 케이스들이다.
+   *
+   * 규칙 삭제가 2단 확인으로 옮겨 가면서(ADR 0017 재개정) 그 전이의 유일한 호출부인 실행
+   * 취소 토스트가 사라졌고, 전이도 함께 걷혔다. 없는 함수를 재는 케이스를 남길 수는 없다.
+   *
+   * **이 파일이 잃은 보장은 없다.** 넷이 지키던 것은 "되돌린 규칙이 새 uuid를 받지 않는다"
+   * 였는데, 지금은 되돌릴 길 자체가 없다. 삭제가 실체화 값을 함께 걷는다는 것(그쪽이 진짜
+   * 불변식이다)은 바로 위 `removeModification` 케이스가 계속 잰다.
+   */
 });
 
 describe('재시작 유지 (persist → parse → compile)', () => {

@@ -19,7 +19,6 @@ const en = {
   menuDelete: 'Delete',
   addRule: 'Add rule',
   edit: 'Edit',
-  ruleDeleted: 'Rule deleted',
   profilesRestored: 'Profiles restored',
   undo: 'Undo',
   ruleKind: 'Type',
@@ -281,6 +280,16 @@ const en = {
    * 스와치 한 칸의 이름이 hex 값 그대로인 이유: 팔레트 열 칸은 **보이는 것이 색뿐**이라
    * 이름에 담을 다른 말이 없다. `파랑`처럼 부르면 열 개 중 넷이 같은 낱말을 나눠 갖는다.
    */
+  /**
+   * 규칙 삭제의 되물음 (ADR 0017 재개정) — 누르기 전 이름은 `menuDelete`를 그대로 쓴다.
+   *
+   * 무장한 쪽만 이름을 갈라 두는 이유: 목록에는 삭제 버튼이 여럿 서지만 되물음은 한 번에
+   * 하나뿐이라(포인터가 떠나면 풀린다) `삭제 확인` 하나로 가리킬 대상이 정해진다. 누르기
+   * 전 이름까지 규칙 제목을 담게 하면 스모크 여덟 자리가 함께 흔들리는데, 그 값은 이
+   * 변경이 사는 자리가 아니다.
+   */
+  ariaConfirmDeleteRule: 'Confirm delete',
+  confirmDeleteRule: 'Delete this rule?',
   ariaProfileColor: 'Color for {name}',
   ariaProfileColorSwatch: 'Color {color}',
   profileColorCustom: 'Custom color',
@@ -349,7 +358,6 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     menuDelete: '삭제',
     addRule: '규칙 추가',
     edit: '편집',
-    ruleDeleted: '규칙을 삭제했습니다',
     profilesRestored: '프로필을 복원했습니다',
     undo: '실행 취소',
     ruleKind: '종류',
@@ -540,6 +548,8 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     confirmDeleteProfile: '이 프로필을 지울까요?',
     ariaEditProfile: '{name} 편집',
     profileNameLabel: '프로필 이름',
+    ariaConfirmDeleteRule: '삭제 확인',
+    confirmDeleteRule: '이 규칙을 지울까요?',
     ariaProfileColor: '{name} 색',
     ariaProfileColorSwatch: '색 {color}',
     profileColorCustom: '직접 고르기',
