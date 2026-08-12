@@ -400,7 +400,9 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
             </nav>
 
             {showProfileColumn && (
-              <ScrollArea render={<aside />} className="min-h-0 border-r border-border">
+              // `overflow-hidden`의 근거는 본문 ScrollArea의 같은 자리가 적는다 — 두 스크롤
+              // 영역이 규약을 갈라 두면 프로필 열에서만 되살아난다.
+              <ScrollArea render={<aside />} className="min-h-0 overflow-hidden border-r border-border">
                 <div className="flex flex-col gap-2 p-3">
                   <ProfileSidebar
                     profiles={state.profiles}
@@ -475,7 +477,22 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
                 </div>
               </header>
 
-              <ScrollArea className="min-h-0 flex-1">
+              {/*
+                `overflow-hidden`은 스크롤을 위한 것이 아니라 **스크롤바 자신을 가두기 위한**
+                것이다 (ADR 0014의 "호출부가 더 안다").
+
+                내용 높이가 한 번에 크게 바뀌는 순간(전체 초기화가 그렇다) Base UI가 thumb의
+                높이와 오프셋을 **같은 프레임에 맞추지 못한다** — 실측: 높이는 옛 내용의 값
+                (488px)인데 오프셋은 새 값(139px)이라 둘의 합이 트랙(515px)을 112px 넘어섰고,
+                thumb는 `position: relative`라 아무도 자르지 않아 **문서 자체가 580 → 693으로
+                늘었다.** 다음 프레임에 580으로 돌아온다. 팝업 셸은 760×580 고정이므로 그 한
+                프레임이 실제 팝업에서 스크롤바가 번쩍 섰다 사라지는 것으로 보인다.
+
+                고칠 수 있는 것은 Base UI의 타이밍이 아니라 **경계**다: 스크롤 영역의 크롬은
+                그 영역 밖을 칠하지 않는다. 평상시에는 아무것도 자르지 않는다 — 스크롤바도
+                코너도 Root 안에 절대 위치로 서 있다.
+              */}
+              <ScrollArea className="min-h-0 flex-1 overflow-hidden">
                 <div className="flex flex-col gap-3 p-4">
                   {/* 오류·일시정지 배너는 레일 화면과 무관하게 항상 보인다 — 조용한 실패 금지. */}
                   {alerts}
