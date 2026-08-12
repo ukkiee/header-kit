@@ -6,17 +6,8 @@ import { Button } from '@/ui/press-button';
 import { useEffect, useState } from 'react';
 import { AnimatePresence, MotionRow, useReducedMotion } from '@/ui/motion-row';
 import { ruleFormIntentProps, RuleFormSlot, useRuleForm } from '@/features/modifications/lazy-rule-form';
-import { RuleRow } from '@/features/modifications/rule-row';
+import { expandedCard, RuleCard } from '@/features/modifications/rule-card';
 import { useT } from '@/ui/i18n-context';
-
-/**
- * 접힌 카드와 펼쳐진 카드가 **테두리와 배경 둘 다** 다르다 (story 6).
- *
- * 하나만 다르면 열린 것을 알아보는 단서가 하나뿐이고, 그 하나가 색이면 색을 못 보는 사람에게
- * 아무 단서도 남지 않는다. 눌린 수정 아이콘까지 세면 세 겹이라 어느 하나가 죽어도 남는다.
- */
-const collapsedCard = 'rounded-lg border border-border';
-const expandedCard = 'rounded-lg border border-primary bg-secondary/40';
 
 export interface ProfileSectionProps {
   profile: Profile;
@@ -202,46 +193,43 @@ export function ProfileSection({
           return (
             // 규칙 행 추가/삭제 시 fade+height enter/exit (ui-refine 08) — reduced-motion 존중.
             <MotionRow key={modification.id}>
-              {/* 폼으로 가는 길목 셋째 — 행 어디에 포인터가 닿거나 포커스가 들어오면 청크를
-                  받기 시작한다. 연필 아이콘까지 뚫고 내려보내는 대신 여기에 두면 배선이 한
-                  곳이고, 행에 닿는 것 자체가 이미 편집 의도에 가깝다. */}
-              <div className={`px-2.5 ${open ? expandedCard : collapsedCard}`} {...ruleFormIntentProps}>
-                <RuleRow
-                  modification={modification}
-                  paused={paused}
-                  editing={open}
-                  onToggleEnabled={(enabled) =>
-                    onCommand({
-                      type: 'update-modification',
-                      profileId: profile.id,
-                      modification: { ...modification, enabled } as Modification,
-                    })
-                  }
-                  // 같은 버튼으로 열고 닫는다 (story 5) — 열려 있으면 누르는 것이 접기다.
-                  onEdit={() => (open ? setEditingRule(null) : openRuleForm(modification.id))}
-                  onRemove={() => onDeleteRule(profile.id, modification.id)}
-                />
-                {/* 폼이 행 **아래로** 펼쳐진다 — 열림에 height-in, 닫힘에 height-out
-                    (ui-refine 08). AnimatePresence가 없으면 닫힘이 즉시 사라진다. */}
-                <AnimatePresence initial={false}>
-                  {open && (
-                    <MotionRow key={`${modification.id}-form`}>
-                      <div className="border-t border-border py-2">
-                        {RuleForm ? (
-                          <RuleForm
-                            initial={modification}
-                            history={history}
-                            onCancel={() => setEditingRule(null)}
-                            onSave={(next) => saveItem(next, 'update')}
-                          />
-                        ) : (
-                          <RuleFormSlot />
-                        )}
-                      </div>
-                    </MotionRow>
-                  )}
-                </AnimatePresence>
-              </div>
+              <RuleCard
+                modification={modification}
+                paused={paused}
+                open={open}
+                onToggleEnabled={(enabled) =>
+                  onCommand({
+                    type: 'update-modification',
+                    profileId: profile.id,
+                    modification: { ...modification, enabled } as Modification,
+                  })
+                }
+                // 같은 버튼으로 열고 닫는다 (story 5) — 열려 있으면 누르는 것이 접기다.
+                onEdit={() => (open ? setEditingRule(null) : openRuleForm(modification.id))}
+                onRemove={() => onDeleteRule(profile.id, modification.id)}
+                formSlot={
+                  /* 폼이 행 **아래로** 펼쳐진다 — 열림에 height-in, 닫힘에 height-out
+                     (ui-refine 08). AnimatePresence가 없으면 닫힘이 즉시 사라진다. */
+                  <AnimatePresence initial={false}>
+                    {open && (
+                      <MotionRow key={`${modification.id}-form`}>
+                        <div className="border-t border-border py-2">
+                          {RuleForm ? (
+                            <RuleForm
+                              initial={modification}
+                              history={history}
+                              onCancel={() => setEditingRule(null)}
+                              onSave={(next) => saveItem(next, 'update')}
+                            />
+                          ) : (
+                            <RuleFormSlot />
+                          )}
+                        </div>
+                      </MotionRow>
+                    )}
+                  </AnimatePresence>
+                }
+              />
             </MotionRow>
           );
         })}
