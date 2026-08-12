@@ -42,7 +42,7 @@ export function ruleReorderLabel(modification: Modification, t: Translator): str
 
 // 평상 색은 `--input`이다 — `--border`는 장식 구분선용이라 대비를 지지 않는데(profile-dot의
 // 같은 주석) 그립은 눌러 끄는 상호작용 요소다. 프로필 그립과 **같은 클래스**를 쓴다.
-const gripClass = `flex shrink-0 cursor-grab touch-none items-center self-start pt-3 text-input hover:text-muted-foreground focus-visible:text-muted-foreground active:cursor-grabbing ${focusRing}`;
+const gripClass = `flex shrink-0 cursor-grab touch-none items-center text-input hover:text-muted-foreground focus-visible:text-muted-foreground active:cursor-grabbing ${focusRing}`;
 
 /**
  * 재정렬 그립 — dnd-kit attributes/listeners를 받으면 드래그 핸들이 되고, 없으면 정적(로드 전
@@ -51,8 +51,8 @@ const gripClass = `flex shrink-0 cursor-grab touch-none items-center self-start 
  * **진짜 `<button>`이다.** div/span에 리스너를 붙이면 `a11y-gate`에 새 지문이 생기고(그 게이트의
  * 베이스라인은 지금 features 넷뿐이다), 무엇보다 키보드로 닿지 않는다.
  *
- * `self-start pt-3`인 이유: 카드가 두 줄(제목+칩)이라 세로 중앙에 두면 그립이 칩 줄에 걸린다.
- * 제목 줄 높이에 맞춰 위로 붙인다.
+ * 그립은 **행 높이의 세로 중앙**에 선다 — 프로필 행의 그립과 같은 규약이다. 위에 붙이면
+ * 규칙이 두 줄이든 세 줄이든 그립만 홀로 위쪽에 떠 있어 어느 행의 것인지가 형태로 읽히지 않는다.
  */
 export function RuleGrip({
   label,
@@ -112,7 +112,7 @@ export function RuleCard({
         카드의 좌측 padding을 2.5에서 1로 줄여 그립이 차지하는 폭을 되돌린다 — 그러지 않으면
         규칙 제목이 그립 폭만큼 잘려 `overflow-gate`가 재는 가로 폭에 영향을 준다.
       */}
-      <div className="flex items-start">
+      <div className="flex items-center gap-0.5">
         {grip}
         <div className="min-w-0 flex-1">
           <RuleRow
