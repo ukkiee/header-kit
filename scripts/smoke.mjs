@@ -1916,11 +1916,12 @@ try {
    * 이유로 이 검사를 조용히 지나가게 두면, 다음 사람이 읽는 계약과 화면이 갈라진다.
    *
    * 지금 재는 것은 넷이다:
-   *   1. **편집 버튼**이 행마다 선다. 이름이 `Rename`이 아니라 `Edit`인 것이 계약이다 —
-   *      그 버튼이 여는 것은 이름 입력 하나가 아니라 색까지다.
+   *   1. **편집 버튼**이 행마다 선다.
    *   2. 이름 입력은 **눌러야 나타난다** — 상시 입력이면 264px 열에서 이름이 먼저 잘린다.
-   *   3. 색 스와치도 **편집 중에만** 버튼이다. 상시로 두면 아이콘이 하나 더 드는 셈이고,
-   *      목록을 훑다 잘못 눌러 색이 바뀐다.
+   *   3. 색 스와치는 **항상 버튼이다** (사용자 결정 — 이 항목이 또 뒤집혔다). 한때 "편집
+   *      중에만 버튼"이었고 그 근거는 "아이콘이 하나 더 든다"였는데, 이것은 더해지는
+   *      아이콘이 아니라 **이미 거기 있던 사각형**이라 자리가 늘지 않는다. 그래서 행마다
+   *      하나씩, 프로필 수만큼 선다.
    *   4. 두 글자 라벨과 ⋯ 메뉴는 **여전히 없다.** 전자는 죽은 필드였고 후자는 앱의 마지막
    *      메뉴였다(ADR 0012 개정).
    *
@@ -1929,10 +1930,9 @@ try {
    */
   const gone = async (locator) => (await locator.count()) === 0;
   const editButtons = await popup.getByRole('button', { name: /^Edit / }).count();
-  // 누르기 전에는 입력도 색 버튼도 없다 — 편집 버튼이 여는 것이지 늘 서 있는 것이 아니다.
-  const editorHiddenUntilAsked =
-    (await gone(popup.getByLabel('Profile name'))) &&
-    (await gone(popup.getByRole('button', { name: /^Color for / })));
+  // 색 버튼은 **행마다 하나씩 늘 서 있다.** 이름 입력만 눌러야 열린다.
+  const colorButtonsAlways = await popup.getByRole('button', { name: /^Color for / }).count();
+  const nameInputHiddenUntilAsked = await gone(popup.getByLabel('Profile name'));
   await popup
     .getByRole('button', { name: /^Edit / })
     .first()
@@ -1944,7 +1944,6 @@ try {
       () => true,
       () => false,
     );
-  const colorButtonOpens = (await popup.getByRole('button', { name: /^Color for / }).count()) === 1;
   // 열어 둔 채로 다음 검사에 들어가지 않는다 — 버린다(Escape는 커밋하지 않는다).
   await popup.getByLabel('Profile name').press('Escape');
 
@@ -1958,18 +1957,19 @@ try {
     create: await popup.getByRole('button', { name: '+ New profile' }).count(),
   };
   record(
-    'N3: 편집 버튼이 이름 입력과 색 버튼을 함께 열고, 두 글자 라벨·⋯ 메뉴는 여전히 없다',
+    'N3: 색 버튼은 상시, 이름 입력은 눌러야 열림, 두 글자 라벨·⋯ 메뉴는 여전히 없다',
     editButtons > 0 &&
-      editorHiddenUntilAsked &&
+      // 행마다 하나 — 편집 버튼 수와 같아야 한다.
+      colorButtonsAlways === editButtons &&
+      nameInputHiddenUntilAsked &&
       nameInputOpens &&
-      colorButtonOpens &&
       retiredControlsGone &&
       survivors.grip > 0 &&
       survivors.toggle > 0 &&
       survivors.search === 1 &&
       survivors.create === 1,
-    `편집버튼=${editButtons}, 편집기숨김=${editorHiddenUntilAsked}, 입력열림=${nameInputOpens}, ` +
-      `색버튼열림=${colorButtonOpens}, 퇴역컨트롤제거=${retiredControlsGone}, ${JSON.stringify(survivors)}`,
+    `편집버튼=${editButtons}, 상시 색버튼=${colorButtonsAlways}, 입력숨김=${nameInputHiddenUntilAsked}, ` +
+      `입력열림=${nameInputOpens}, 퇴역컨트롤제거=${retiredControlsGone}, ${JSON.stringify(survivors)}`,
   );
 
   /*
@@ -2065,8 +2065,8 @@ try {
         return state.profiles.map((p) => p.color).join('|');
       });
 
-    await popup.getByRole('button', { name: 'Edit ByBlur', exact: true }).click();
-    await popup.getByLabel('Profile name').waitFor({ timeout: 5000 });
+    // **편집 모드를 거치지 않는다** — 색 버튼은 상시다(사용자 결정). 예전에는 연필을 먼저
+    // 눌러야 했고, 지금 그렇게 하면 색을 누르는 순간 blur가 이름을 커밋하며 편집이 닫힌다.
     await popup.getByRole('button', { name: 'Color for ByBlur', exact: true }).click();
     // 팔레트는 정적이라 팝오버가 열리면 바로 선다.
     await popup.getByRole('button', { name: 'Color #d97706', exact: true }).waitFor({ timeout: 5000 });
@@ -2095,7 +2095,6 @@ try {
       5000,
       200,
     );
-    await popup.getByLabel('Profile name').press('Escape');
 
     record(
       'N3b: 색 — 팔레트 10칸이 커밋하고 팝오버가 닫히며, 자유 선택 지연 청크가 실제로 도착한다',
@@ -2107,6 +2106,77 @@ try {
         swatchesLeft === 0,
       `팔레트칸=${paletteSlots}, 자유선택도착=${freePickerArrived}, ` +
         `${colorsBefore} → ${colorsAfter}, 남은 스와치=${swatchesLeft}`,
+    );
+  }
+
+  // 이 시나리오의 지역 이름을 블록으로 닫는다 — 스모크 본문은 한 스코프라 이름이 겹친다.
+  {
+    /*
+     * N3c: **프로필 행의 커서가 실제 동작과 일치한다** + 이름 더블클릭이 편집을 연다.
+     *
+     * 사용자가 짚은 것은 "아무 기능도 없는데 포인터가 나온다"였고, 조사가 그 자리를 찾았다:
+     * 이름 칩이 행 폭 239px 중 125px(52%)를 포인터로 덮는데 **이미 선택된 행에서는 그 클릭이
+     * 무효**다(DOM도 저장소도 그대로 — 실측). 그래서 커서를 동작에 맞춘다.
+     *
+     * 커서는 게이트가 재는 것이 아니라 **여기서만** 잰다 — 저장소에 커서를 재는 검사가
+     * 하나도 없었고, 이 셋은 화면을 실제로 그려야만 알 수 있다.
+     *
+     *   - 컬러 스와치: **pointer**. 이제 항상 버튼이고 누르면 색 팝오버가 열린다. 예전에는
+     *     칩에서 빌린 포인터라 누르면 색이 아니라 프로필 선택이 돌았다.
+     *   - 이름 글자: **text**. 더블클릭이 편집을 연다.
+     *   - 선택된 행의 칩 여백: **default**. 눌러도 아무 일이 없다.
+     *   - 선택되지 않은 행의 칩 여백: **pointer**. 누르면 그 프로필로 옮겨 간다.
+     */
+    await seedProfiles([baseProfile('cur-1', 'CurA', []), baseProfile('cur-2', 'CurB', [])]);
+    await popup.reload();
+    await popup.waitForSelector('[data-profile-list="sortable"]', { timeout: 10_000 });
+
+    const cursors = await popup.evaluate(() => {
+      const rows = [...document.querySelectorAll('[data-profile-list] li')];
+      // 좌표로 hit-test 한다 — 커서는 상속되므로 "그 지점에서 실제로 무엇이 그려지는가"를
+      // 봐야 한다. 요소의 computed 값만 읽으면 부모에서 빌린 값을 자기 것으로 읽는다.
+      const at = (el, dx) => {
+        if (!el) return 'MISSING';
+        const b = el.getBoundingClientRect();
+        const hit = document.elementFromPoint(b.left + dx, b.top + b.height / 2);
+        return hit ? getComputedStyle(hit).cursor : 'NONE';
+      };
+      const chipPad = (row) => {
+        const chip = row.querySelector('[aria-label^="Select profile"]');
+        const b = chip.getBoundingClientRect();
+        const hit = document.elementFromPoint(b.right - 6, b.top + 6);
+        return hit ? getComputedStyle(hit).cursor : 'NONE';
+      };
+      const selected = rows.find((r) => r.querySelector('[aria-current="true"]')) ?? rows[0];
+      const other = rows.find((r) => r !== selected);
+      return {
+        swatch: at(selected.querySelector('[data-profile-swatch]'), 5),
+        name: at(selected.querySelector('[data-profile-name]'), 3),
+        selectedChipPad: chipPad(selected),
+        otherChipPad: chipPad(other),
+      };
+    });
+
+    // 더블클릭이 편집을 연다 — 연필과 **같은 것**을 연다(같은 입력이 뜬다).
+    await popup.locator('[data-profile-list] li [data-profile-name]').first().dblclick();
+    const dblOpensEditor = await popup
+      .getByLabel('Profile name')
+      .waitFor({ timeout: 5000 })
+      .then(
+        () => true,
+        () => false,
+      );
+    await popup.getByLabel('Profile name').press('Escape');
+
+    record(
+      'N3c: 커서가 동작과 일치한다(스와치 pointer · 이름 text · 선택된 칩 default) + 이름 더블클릭이 편집을 연다',
+      cursors.swatch === 'pointer' &&
+        cursors.name === 'text' &&
+        cursors.selectedChipPad === 'default' &&
+        cursors.otherChipPad === 'pointer' &&
+        dblOpensEditor,
+      `스와치=${cursors.swatch}, 이름=${cursors.name}, 선택된칩=${cursors.selectedChipPad}, ` +
+        `비선택칩=${cursors.otherChipPad}, 더블클릭 편집=${dblOpensEditor}`,
     );
   }
 
@@ -5260,11 +5330,16 @@ try {
   // '테두리만 남은 사각'이라 안이 뚫려 보였고, 그 테두리가 사용자 색이라 흰색을 고르면
   // 도형이 사라져 윤곽선을 한 겹 더 얹어야 했다(N41c가 그 겹을 지키던 단언이다).
   const column = await popup.evaluate(() => {
-    const rows = [...document.querySelectorAll('[aria-label^="Select profile"]')];
+    /*
+     * 스와치는 **표지로** 집는다(`data-profile-swatch`). 예전에는 "선택 버튼 안 첫
+     * `aria-hidden` span"으로 집었는데, 그 사각형이 칩 밖으로 옮겨 가자 같은 선택자가
+     * 메타 줄을 집어 세 시나리오가 한꺼번에 엉뚱한 것을 쟀다(실측). 구조는 표지가 아니다.
+     */
+    const rows = [...document.querySelectorAll('[data-profile-list] li')];
     return {
       rows: rows.length,
       swatches: rows.map((r) => {
-        const s = r.querySelector('span[aria-hidden]');
+        const s = r.querySelector('[data-profile-swatch]');
         const cs = s ? getComputedStyle(s) : null;
         return cs ? { bg: cs.backgroundColor, border: cs.borderTopColor } : null;
       }),
@@ -5375,7 +5450,8 @@ try {
   await popup.reload();
   await popup.getByRole('button', { name: 'Show profiles', exact: true }).waitFor({ timeout: 5000 });
   const whiteSwatch = await popup.evaluate(() => {
-    const s = document.querySelector('[aria-label^="Select profile"] span[aria-hidden]');
+    // 표지로 집는다 — 근거는 N41의 같은 자리가 적는다.
+    const s = document.querySelector('[data-profile-swatch]');
     if (!s) return null;
     const parse = (c) => (c.match(/[\d.]+/g) ?? []).map(Number);
     // 투명 배경은 뒤를 그대로 비추므로 계속 올라간다 — 처음 만나는 불투명 면이 실제 뒤 면이다.
@@ -5492,20 +5568,19 @@ try {
    */
   const profileRows = () =>
     popup.evaluate(() =>
-      [...document.querySelectorAll('[aria-label^="Select profile"]')].map((r) => {
-        const spans = [...r.querySelectorAll('span[aria-hidden]')];
-        const swatch = spans[0];
-        const meta = spans.at(-1);
+      [...document.querySelectorAll('[data-profile-list] li')].map((r) => {
+        // 표지로 집는다 — 근거는 위 N41의 같은 자리가 적는다.
+        const meta = r.querySelector('[data-profile-meta]');
         /*
          * **메타가 이름 아래 줄에 선다** — 이름의 아래변보다 메타의 윗변이 아래다. 한 줄로
          * 되돌리면 가장 긴 문구(`12 rules · not applied`)가 264px 열에서 이름을 예닐곱 자로
          * 눌러 버리고, 목록에서 프로필을 짚는 단서가 바로 그 이름이다 (티켓 04).
          */
-        const name = swatch?.nextElementSibling;
+        const name = r.querySelector('[data-profile-name]');
         const belowName =
           name && meta ? meta.getBoundingClientRect().top >= name.getBoundingClientRect().bottom : null;
         return {
-          aria: r.getAttribute('aria-label'),
+          aria: r.querySelector('[aria-label^="Select profile"]')?.getAttribute('aria-label') ?? null,
           mark: meta?.textContent?.trim() ?? '',
           glyph: !!meta?.querySelector('svg'),
           nameShown: name ? Math.round(name.getBoundingClientRect().width) : 0,

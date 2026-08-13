@@ -143,7 +143,18 @@ export function RuleCard({
       */}
       <div className="flex items-center gap-0.5">
         {grip}
-        <div className="min-w-0 flex-1">
+        {/*
+          `pl-2`가 그립과 내용 사이를 **프로필 행과 같은 10px**로 맞춘다 (사용자 요청).
+
+          실측: 규칙은 그립 오른쪽 2px에서 제목이 시작했고 프로필은 컬러칩까지 10px이었다.
+          차이 8px은 전부 프로필 이름 칩(`SwitcherChip`)의 `px-2`에서 온다 — 그쪽에는 그립
+          옆에 padding을 가진 버튼이 서지만 여기에는 그런 버튼이 없다. 두 행이 공유하는
+          `gap-0.5`를 건드리는 대신 같은 값(8px)을 이 자리에 준 이유가 그것이다.
+
+          대가는 제목·칩 열이 256 → 248px로 좁아지는 것뿐이고, 전부 `min-w-0`+`truncate`라
+          잘림으로 흡수된다 — 최대 길이 규칙을 심어 재도 가로 넘침은 0px이다.
+        */}
+        <div className="min-w-0 flex-1 pl-2">
           <RuleRow
             modification={modification}
             paused={paused}

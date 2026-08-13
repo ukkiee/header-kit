@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react';
 import { format } from '@/core/i18n';
-import { normalizeProfileColor, PROFILE_COLORS } from '@/core/schema';
+import { normalizeProfileColor, PROFILE_COLORS, type Profile } from '@/core/schema';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ui/popover';
 import { useT } from '@/ui/i18n-context';
 import { focusRing } from '@/ui/tokens';
@@ -13,31 +13,58 @@ import { focusRing } from '@/ui/tokens';
 const ProfileColorPicker = lazy(() => import('./profile-color-picker'));
 
 /**
- * 프로필 색 고르기 (ADR 0017 재개정) — **팔레트 10색이 기본, 그 아래가 자유 선택.**
+ * 프로필 색 스와치 — 사이드바(양 표면)의 시각 언어 (티켓 10: 디자인의 색 스와치).
  *
- * 자리가 **이름 편집 중**인 이유는 폭이다. 프로필 열은 264px에 못박혀 있고 그 안에 그립·이름·
- * 메타·이름변경·삭제·스위치가 이미 서 있다 — 아이콘을 하나 더 상시로 들이면 이름이 먼저
- * 잘린다(ADR 0017이 삭제 아이콘을 숨긴 그 근거). 대신 **이미 거기 있는 색 스와치**가 편집
- * 중에만 버튼이 된다: 새로 드는 자리가 0이고, 색을 바꾸는 것이 곧 그 사각형이라 매핑도 직접적이다.
+ * **활성은 프로필 색으로 채운 사각, 비활성은 회색으로 채운 사각이다.** 둘 다 채움이고
+ * 다른 것은 색뿐이다.
+ *
+ * 예전에는 비활성이 **테두리만 남은 사각**이었다 — "색은 정체성, 형태는 상태"를 지켜
+ * 꺼진 프로필의 색도 목록에서 보이게 하려던 것이다. 그 대가가 두 가지였다. 화면에서는
+ * 2.5px 도형 안이 뚫려 보여 색 얼룩처럼 읽혔고, 코드에서는 그 테두리가 **사용자 색**이라
+ * (색은 `<input type="color">`에서 오므로 아무 값이나 될 수 있다) 흰색에 가까운 색을
+ * 고르면 라이트 캔버스에서 도형이 통째로 사라졌다 — 그래서 `--input` 윤곽선을 한 겹 더
+ * 겹쳐야 했다. 회색 채움 하나가 그 겹을 없앤다: 색이 사용자 값과 무관해지므로 대비가
+ * 색 선택에 매이지 않는다.
+ *
+ * 채움 색이 `--input`인 이유는 그 토큰이 bg·surface·fill 어느 면 위에서도 3:1을 넘기도록
+ * (라이트 최저 3.18:1, 다크 3.20:1) 고른 값이기 때문이다 — 상태를 나르는 비텍스트 요소의
+ * 하한이 이걸로 선다.
+ *
+ * **트레이드오프**: 꺼진 프로필의 색이 목록에서 보이지 않는다. 색 채널 하나를 상태에
+ * 내준 셈인데, 상태는 여기 말고도 세 곳에서 말한다 — `profileSelectLabel`의
+ * aria-label(문자열), 같은 행의 인라인 토글(손잡이 **위치**), 이름 아래 메타의 낱말.
+ * 색 하나에 상태를 싣지 않는다는 계약(스펙 story 38)은 그대로다.
+ */
+function ProfileDot({ profile }: { profile: Pick<Profile, 'active' | 'color'> }) {
+  return (
+    <span
+      aria-hidden
+      // 관측 표지 — 이 사각형이 칩 안에서 밖으로 옮겨 가자 "칩 안 첫 `aria-hidden` span"으로
+      // 집던 스모크 셋이 한꺼번에 메타 줄을 집었다(실측). 구조는 표지가 아니다.
+      data-profile-swatch=""
+      className={`size-2.5 shrink-0 rounded-[3px] ${profile.active ? '' : 'bg-input'}`}
+      style={profile.active ? { backgroundColor: profile.color } : undefined}
+    />
+  );
+}
+
+/**
+ * 프로필 색 고르기 (ADR 0017 재개정) — **자유 선택이 위, 팔레트 10색이 아래.**
+ *
+ * 스와치는 **항상 버튼이다**(사용자 결정). 편집 중에만 버튼이던 시절의 근거는 "264px 열에
+ * 아이콘을 상시로 더할 수 없다"였는데, 이것은 더해지는 아이콘이 아니라 **이미 거기 있던
+ * 사각형**이라 자리가 늘지 않는다. 근거 전체는 `profile-dot.tsx`의 호출부가 적는다.
  *
  * 트리거의 겉보기 크기는 스와치 그대로(10px)이고 `-m-1 p-1`로 **누를 수 있는 넓이만** 18px로
  * 넓힌다 — 음수 여백이 그만큼을 레이아웃에서 도로 걷어가므로 행 폭은 변하지 않는다.
  */
 export function ProfileColorField({
-  profileName,
-  color,
+  profile,
   onCommit,
-  onOpenChange,
 }: {
-  profileName: string;
-  color: string;
+  profile: Pick<Profile, 'name' | 'color' | 'active'>;
   /** 정규화를 통과하고 **실제로 달라진** 값일 때만 불린다. */
   onCommit: (color: string) => void;
-  /**
-   * 열림을 **위로도 알린다** — 팝오버 내용이 포털이라 편집 셸의 경계 밖이고, 그 셸은 열려
-   * 있는 동안 blur 커밋을 멈춰야 하기 때문이다(`profile-dot`의 `handleEditorBlur`).
-   */
-  onOpenChange: (open: boolean) => void;
 }) {
   const t = useT();
   /**
@@ -56,7 +83,7 @@ export function ProfileColorField({
   const [draft, setDraft] = useState<string | null>(null);
 
   // 지금 색도 접어서 비교한다 — 저장된 값이 `#ABC`든 `#aabbcc`든 같은 색이면 같아야 한다.
-  const current = normalizeProfileColor(color);
+  const current = normalizeProfileColor(profile.color);
 
   /** 정규화와 무변화 판정의 단 하나의 자리 — 팔레트와 자유 선택이 같은 문을 지난다. */
   const commit = (next: string) => {
@@ -70,7 +97,6 @@ export function ProfileColorField({
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        onOpenChange(next);
         if (next) return;
         // 닫히는 순간이 자유 선택의 커밋 지점이다. 팔레트는 누른 그 자리에서 이미 커밋했다.
         if (draft !== null) commit(draft);
@@ -81,24 +107,56 @@ export function ProfileColorField({
         render={
           <button
             type="button"
-            aria-label={format(t('ariaProfileColor'), { name: profileName })}
-            className={`-m-1 flex shrink-0 items-center justify-center rounded-[5px] p-1 ${focusRing}`}
+            aria-label={format(t('ariaProfileColor'), { name: profile.name })}
+            // `cursor-pointer` — Tailwind v4 preflight에 버튼 커서 규칙이 없어(실측) 명시하지
+            // 않으면 화살표로 그려진다. 이 저장소의 누름 표면들이 전부 같은 이유로 명시한다.
+            /*
+              `ml-1`이 `-m-1`의 왼쪽을 되돌린다. 스와치가 칩 **안**에 있던 시절에는 칩의
+              `px-2`가 그립과의 사이에 8px을 두었는데, 밖으로 나오면서 그 8px이 사라져
+              사각형이 그립에 붙었다(실측 10px → 2px). 나머지 세 방향의 음수 여백은
+              그대로다 — 그것이 18px 클릭 넓이를 레이아웃에서 도로 걷어가는 장치다.
+            */
+            className={`-m-1 ml-1 flex shrink-0 cursor-pointer items-center justify-center rounded-[5px] p-1 ${focusRing}`}
           >
             {/*
-              스와치의 생김새는 `ProfileDot`과 같아야 한다 — 편집을 열고 닫을 때 같은 자리의
-              같은 사각형이 모양을 바꾸면 그것이 색이라는 사실이 흔들린다. 다만 여기서는
-              **언제나 색으로 칠한다**: 이 사각형이 지금 말하는 것은 프로필의 켬/끔이 아니라
-              "이 색을 고치는 중"이다.
+              **평상시 생김새는 `ProfileDot`이 정한다** — 활성은 프로필 색, 비활성은 중립
+              회색(`--input`). 그 규칙은 상태를 나르는 채널 하나이므로(ADR 0017) 스와치가
+              버튼이 됐다고 잃을 수 없다. 같은 컴포넌트를 그대로 쓰는 것이 두 자리가 갈라서지
+              않는 유일한 방법이다.
+              
+              **고르는 중에만 예외**다: 팝오버가 열려 있으면 지금 고르는 색을 그대로 칠한다.
+              비활성 프로필의 색을 고르는데 사각형이 회색으로 남아 있으면 무엇을 고르는지가
+              화면에 없다.
             */}
-            <span
-              aria-hidden
-              className="size-2.5 rounded-[3px]"
-              style={{ backgroundColor: draft ?? color }}
-            />
+            {open ? (
+              <span
+                aria-hidden
+                data-profile-swatch=""
+                className="size-2.5 shrink-0 rounded-[3px]"
+                style={{ backgroundColor: draft ?? profile.color }}
+              />
+            ) : (
+              <ProfileDot profile={profile} />
+            )}
           </button>
         }
       />
       <PopoverContent align="start" className="w-56 gap-2">
+        {/*
+          **자유 선택이 위, 팔레트가 아래다** (사용자 결정 — 순서를 뒤집었다).
+
+          팔레트는 열 칸이 한 줄 반이라 눈이 훑는 데 시간이 안 걸리고, 색면은 크고 정밀해
+          다루는 데 시간이 걸린다. 큰 것을 위에 두면 팝오버를 연 목적(색을 고르는 것)이
+          맨 위에 서고, 팔레트는 "정해진 것 중에서"라는 지름길로 아래에 남는다.
+
+          청크가 도착하기 전 자리를 **같은 높이로** 잡아 둔다 — 비워 두면 팝오버가 열린 뒤
+          한 번 자라면서 그림자와 화살표가 함께 튄다.
+        */}
+        <p className="text-xs text-muted-foreground">{t('profileColorCustom')}</p>
+        <Suspense fallback={<div className="h-40" aria-hidden />}>
+          <ProfileColorPicker value={draft ?? profile.color} onValueChange={setDraft} />
+        </Suspense>
+        <p className="text-xs text-muted-foreground">{t('profileColorPalette')}</p>
         {/*
           팔레트 — 누르는 즉시 커밋하고 닫는다. 열 개는 고른 값이 **이산적**이라 초안을 둘
           이유가 없고, 닫힘이 곧 "골랐다"의 답이 된다.
@@ -111,7 +169,7 @@ export function ProfileColorField({
               aria-label={format(t('ariaProfileColorSwatch'), { color: swatch })}
               // 지금 색에는 표시가 선다 — 링 **두께**가 바뀌므로 색만으로 알리지 않는다.
               aria-pressed={current === swatch}
-              className={`h-6 rounded-md ring-offset-1 ring-offset-popover ${focusRing} ${
+              className={`h-6 cursor-pointer rounded-md ring-offset-1 ring-offset-popover ${focusRing} ${
                 current === swatch ? 'ring-2 ring-foreground' : 'ring-1 ring-foreground/15'
               }`}
               style={{ backgroundColor: swatch }}
@@ -123,14 +181,6 @@ export function ProfileColorField({
             />
           ))}
         </div>
-        <p className="text-xs text-muted-foreground">{t('profileColorCustom')}</p>
-        {/*
-          청크가 도착하기 전 자리를 **같은 높이로** 잡아 둔다 — 비워 두면 팝오버가 열린 뒤
-          한 번 자라면서 그림자와 화살표가 함께 튄다.
-        */}
-        <Suspense fallback={<div className="h-40" aria-hidden />}>
-          <ProfileColorPicker value={draft ?? color} onValueChange={setDraft} />
-        </Suspense>
       </PopoverContent>
     </Popover>
   );
