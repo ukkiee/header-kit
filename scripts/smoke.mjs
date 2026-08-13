@@ -7383,9 +7383,14 @@ try {
 
     // 닫는 버튼이 있고, 그것이 실제로 닫는다.
     /*
-     * **`getByRole`이 아니라 `getByLabel`이다.** Base UI가 이 닫기 버튼에 `aria-hidden`을
-     * 달아(실측) 접근성 트리에서 빼기 때문에 역할로는 잡히지 않는다 — `tabindex="0"`은
-     * 남으므로 키보드로는 닿는다. 그 결정은 벤더 프리미티브의 것이고 여기서 뒤집지 않는다.
+     * **`getByRole`이 아니라 `getByLabel`이다.** Base UI가 이 버튼에 다는 `aria-hidden`은
+     * 상수가 아니라 **조건부**이고(`!expanded && !hasFocus`), 이 줄에 닿은 시점은 아직
+     * 아무것도 건드리지 않은 접힌 상태라 `true`다 — 그래서 역할로는 잡히지 않는다.
+     *
+     * **접근성이 막힌 것이 아니다.** 포커스가 들어오거나(Tab·F6) 목록이 펼쳐지면 그 속성이
+     * 벗겨져 역할 쿼리에도 잡히고 Enter가 실제로 닫는다 — 실측 3/3. 한때 여기 "스크린리더로
+     * 닫는 길이 없다"고 적혀 있었고 그 진단이 틀렸다. 근거는 `README.md`의 `알려진 빈틈`이
+     * 갖는다.
      */
     const closeButton = popup.getByLabel('Dismiss', { exact: true }).last();
     const closeCount = await popup.getByLabel('Dismiss', { exact: true }).count();
