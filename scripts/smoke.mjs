@@ -2134,10 +2134,13 @@ try {
     );
 
     /*
-     * N3d: **Escape는 버린다** — 이름 편집이 쓰는 그 규약이다.
+     * N3d: **Escape도 커밋한다** — 닫는 길마다 결과가 다르지 않다 (사용자 결정).
      *
-     * 팔레트가 초안만 옮기게 되면서 되돌릴 길이 필요해졌다. 그 길이 없으면 미리보기가
-     * 곧 커밋이라 "눌러 보는 것"이 불가능하다 — 이 시나리오가 지키는 것이 그 가능성이다.
+     * 이 자리는 한 번 반대("Escape는 버린다")를 쟀다. 이름 편집의 Escape가 버리기 때문에
+     * 맞춘 것이었는데, 색은 눌러 보면서 고르는 것이라 **마지막으로 본 색이 곧 고른 색**이고
+     * 되돌리고 싶으면 원래 칸을 다시 누르면 된다. 그래서 바깥 누름과 같은 뜻으로 모았다.
+     *
+     * N3b가 바깥 누름을 재므로 여기가 재는 것은 **Escape가 그것과 같은 결과를 내는가**다.
      */
     const colorsBeforeEscape = await storedColors();
     await popup
@@ -2148,20 +2151,11 @@ try {
     await popup.getByRole('button', { name: 'Color #db2777', exact: true }).click();
     await popup.waitForTimeout(400);
     await popup.keyboard.press('Escape');
-    await pollUntil(
-      () => popup.getByRole('button', { name: /^Color #/ }).count(),
-      (n) => n === 0,
-      5000,
-      200,
-    );
-    // 버렸다면 저장소는 Escape 전과 같아야 한다. 커밋이 늦게 도착하는 경우를 배제하려고
-    // 잠시 더 기다린 뒤에 읽는다 — 곧바로 읽으면 아직 안 온 커밋을 "없다"로 읽는다.
-    await popup.waitForTimeout(800);
-    const colorsAfterEscape = await storedColors();
+    const colorsAfterEscape = await pollUntil(storedColors, (v) => v.startsWith('#db2777'));
 
     record(
-      'N3d: 색 — Escape로 닫으면 고른 색을 버린다(이름 편집과 같은 규약)',
-      colorsAfterEscape === colorsBeforeEscape,
+      'N3d: 색 — Escape로 닫아도 고른 색이 저장된다(바깥 누름과 같은 결과)',
+      colorsAfterEscape === `#db2777|${colorsBeforeEscape.split('|')[1]}`,
       `Escape 전=${colorsBeforeEscape}, 뒤=${colorsAfterEscape}`,
     );
   }
@@ -7269,6 +7263,133 @@ try {
       `경합 후 목록 재조회: 유지 행=${keptRowVisible}·지운 둘 부재=${deletedRowsUnlisted}, ` +
       `복원=${restored}, ${Date.now() - raceT0}ms`,
   );
+
+  // 이 시나리오의 지역 이름을 블록으로 닫는다 — 스모크 본문은 한 스코프라 이름이 겹친다.
+  {
+    /*
+     * N38b: **파괴적 동작의 실패는 빨간 쪽지로 말한다** (사용자 결정).
+     *
+     * 성공은 초록 쪽지로 알리고 스스로 사라진다. 실패는 다른 규칙으로 산다 — 색만 갈라서는
+     * 부족하기 때문이다:
+     *
+     *   - **빨강**이다. 한때 셸이 면을 조건 없이 초록으로 칠했고, 그 주석이 "오류 토스트가
+     *     생기면 갈라야 한다 — 전부 초록이면 실패가 성공처럼 보인다"고 경고해 뒀었다.
+     *   - **잘리지 않는다.** 실패 문구는 잔여 개수나 멈춘 단계를 담는데, 잘리면 남는 것이
+     *     "실패했다"뿐이고 그건 이미 색이 말한 것이다.
+     *   - **스스로 사라지지 않는다.** 다시 눌러야 할 일이라 읽기 전에 사라지면 안 된다.
+     *     그래서 **닫는 버튼**이 함께 선다(성공 쪽에는 없다 — 자동 소멸이 그 일을 한다).
+     *
+     * **실패를 만드는 방법**: 클라우드 지우기를 무력화한다(`remove`를 no-op으로). 던지게
+     * 하지 않는 이유는 그러면 예외 경로를 재게 되기 때문이다 — 여기서 보고 싶은 것은
+     * 삭제가 "성공"한 뒤 검증이 잔재를 찾는 **검증된 실패**이고, 그것이 잔여 개수를 담은
+     * 그 문구를 만든다.
+     */
+    const seedCloudResidue = () =>
+      sw.evaluate(async () => {
+        await chrome.storage.sync.set({
+          'bk:manifest': {
+            snapshots: [
+              { id: 'fail1', createdAt: 1789500000000, chunkCount: 1, checksum: 'deadbeef', profileCount: 1 },
+            ],
+          },
+          'bk:fail1:0': JSON.stringify({ headerkit: 1, profiles: [] }),
+        });
+        globalThis.__origSyncRemove = chrome.storage.sync.remove.bind(chrome.storage.sync);
+        chrome.storage.sync.remove = async () => {};
+      });
+    const restoreSyncRemove = () =>
+      sw.evaluate(async () => {
+        if (globalThis.__origSyncRemove) chrome.storage.sync.remove = globalThis.__origSyncRemove;
+      });
+
+    await seedProfiles([baseProfile('fail-p', 'FailP', [])]);
+    await sw.evaluate(async () => {
+      const { state } = await chrome.storage.local.get('state');
+      await chrome.storage.local.set({ state: { ...state, syncBackup: true } });
+    });
+    await seedCloudResidue();
+    await popup.reload();
+    await popup.getByRole('button', { name: 'Show backups' }).click();
+    await settleScreen(popup, 'Backup history');
+
+    // 클라우드 삭제는 잔재가 있어야 눌린다 — 위 시드가 그것을 만든다.
+    const cloudDelete = popup.getByRole('button', { name: 'Delete cloud backups' });
+    await pollUntil(
+      () => cloudDelete.isEnabled(),
+      (v) => v === true,
+      8000,
+      200,
+    );
+    await cloudDelete.click();
+    await popup.getByRole('button', { name: 'Delete from cloud?' }).click();
+
+    // 실패 쪽지가 뜬다 — 문구가 **잔여 개수**를 담는다(그것이 잘리면 안 되는 이유다).
+    const failureText = popup.getByText(/Could not delete cloud backups/).first();
+    const failureShown = await failureText.waitFor({ timeout: 8000 }).then(
+      () => true,
+      () => false,
+    );
+    const details = failureShown ? ((await failureText.textContent()) ?? '') : '';
+
+    /*
+     * 색은 **토큰과 대조**한다 — 팔레트 값을 못박으면 토큰이 바뀌는 것만으로 이 단언이
+     * 조용히 무너진다. `bg-destructive`를 입은 탐침을 만들어 계산된 값을 비교한다.
+     */
+    const paint = failureShown
+      ? await popup.evaluate(() => {
+          const toast = document.querySelector('[data-slot="toast"]');
+          const probe = document.createElement('div');
+          probe.className = 'bg-destructive';
+          document.body.appendChild(probe);
+          const expected = getComputedStyle(probe).backgroundColor;
+          const actual = toast ? getComputedStyle(toast).backgroundColor : 'NONE';
+          probe.remove();
+          const title = toast?.querySelector('[data-slot="toast-title"]');
+          return {
+            actual,
+            expected,
+            // 잘리지 않는다 — `truncate`는 이 셋을 함께 건다.
+            truncated: title ? getComputedStyle(title).textOverflow === 'ellipsis' : null,
+          };
+        })
+      : null;
+
+    // 스스로 사라지지 않는다. 성공 쪽지의 기본 수명(5초)보다 넉넉히 넘겨 확인한다.
+    await popup.waitForTimeout(7000);
+    const stillThere = (await popup.getByText(/Could not delete cloud backups/).count()) > 0;
+
+    // 닫는 버튼이 있고, 그것이 실제로 닫는다.
+    /*
+     * **`getByRole`이 아니라 `getByLabel`이다.** Base UI가 이 닫기 버튼에 `aria-hidden`을
+     * 달아(실측) 접근성 트리에서 빼기 때문에 역할로는 잡히지 않는다 — `tabindex="0"`은
+     * 남으므로 키보드로는 닿는다. 그 결정은 벤더 프리미티브의 것이고 여기서 뒤집지 않는다.
+     */
+    const closeButton = popup.getByLabel('Dismiss', { exact: true }).last();
+    const closeCount = await popup.getByLabel('Dismiss', { exact: true }).count();
+    const hasClose = closeCount >= 1;
+    if (hasClose) await closeButton.click();
+    const closed = await pollUntil(
+      () => popup.getByText(/Could not delete cloud backups/).count(),
+      (n) => n === 0,
+      5000,
+      200,
+    );
+
+    await restoreSyncRemove();
+
+    record(
+      'N38b: 파괴적 실패는 빨간 쪽지로 — 잔여 개수를 담고, 잘리지 않고, 스스로 사라지지 않으며, 닫을 수 있다',
+      failureShown &&
+        /\d+ backup key/.test(details) &&
+        paint?.actual === paint?.expected &&
+        paint?.truncated === false &&
+        stillThere &&
+        hasClose &&
+        closed === 0,
+      `표시=${failureShown}, 문구=${JSON.stringify(details)}, 면 ${paint?.actual} vs 토큰 ${paint?.expected}, ` +
+        `잘림=${paint?.truncated}, 7초 뒤 남음=${stillThere}, 닫기버튼=${closeCount}, 닫힘=${closed === 0}`,
+    );
+  }
 
   /*
    * N39: 2단계 전체 초기화 (티켓 08, R-3).

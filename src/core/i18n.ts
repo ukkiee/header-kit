@@ -17,6 +17,8 @@ const en = {
   profiles: 'Profiles',
   searchProfiles: 'Search profiles…',
   menuDelete: 'Delete',
+  /** 사라지지 않는 실패 토스트를 닫는 버튼 — 성공 토스트에는 없다(자동 소멸이 그 일을 한다). */
+  dismiss: 'Dismiss',
   addRule: 'Add rule',
   edit: 'Edit',
   profilesRestored: 'Profiles restored',
@@ -357,6 +359,7 @@ export const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     profiles: '프로필',
     searchProfiles: '프로필 검색…',
     menuDelete: '삭제',
+    dismiss: '닫기',
     addRule: '규칙 추가',
     edit: '편집',
     profilesRestored: '프로필을 복원했습니다',

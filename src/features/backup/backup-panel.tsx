@@ -129,15 +129,21 @@ export function BackupPanel({
 }: BackupPanelProps) {
   const t = useT();
   /**
-   * 끝난 일을 알리는 쪽지 — **성공만 여기로 간다.**
+   * 끝난 일을 알리는 쪽지 — **성공과 실패가 둘 다 여기로 간다** (사용자 결정).
    *
-   * 실패는 배너에 남는다. 이유가 셋이다. 토스트 셸(`ui/toaster.tsx`)은 면을 **조건 없이
-   * 초록으로** 칠하므로 실패를 올리면 실패가 성공처럼 보인다. 그 셸의 제목은 한 줄로
-   * 잘리므로(`truncate`) 실패 문구가 나르는 잔여 개수와 멈춘 단계가 거기서 사라진다.
-   * 그리고 실패는 **다시 눌러야 할 일**이라(`resetRetryNote`가 그렇게 말한다) 몇 초 뒤
-   * 스스로 사라지면 안 된다 — 성공은 반대로, 읽고 나면 남아 있을 이유가 없다.
+   * 한때 실패는 배너에 남겼다. 근거 셋 중 첫째("셸이 조건 없이 초록이라 실패가 성공처럼
+   * 보인다")가 셸을 고치며 사라졌고, 나머지 둘은 **실패 토스트의 규칙**이 됐다:
+   * 잘리지 않고, 스스로 사라지지 않으며, 그래서 닫는 버튼을 든다(`ui/toaster.tsx`).
+   *
+   * **여기 오는 것은 파괴적 동작의 결과뿐이다.** 읽기 실패(목록 로드·클라우드 잔존 조회)는
+   * 누른 것에 대한 답이 아니라 **화면이 지금 어떤 상태인가**를 말하므로 배너에 남는다 —
+   * 쪽지로 띄우면 읽고 닫는 순간 그 사실이 화면에서 사라진다.
    */
   const toast = useToastManager();
+
+  /** 실패 쪽지 — 사라지지 않고(`timeout: 0`) 닫는 이름을 함께 싣는다(셸은 카탈로그 밖이다). */
+  const failureToast = (title: string) =>
+    toast.add({ title, type: 'error', timeout: 0, data: { closeLabel: t('dismiss') } });
   const [snapshots, setSnapshots] = useState<SnapshotStatus[]>([]);
   /**
    * 되물음 하나 — 셋이 나눠 갖는다. 시간이 지나면 스스로 풀리고 Escape로도 풀린다
@@ -145,6 +151,14 @@ export function BackupPanel({
    * 무기한 남았고, 특히 탭 화면은 팝업과 달리 닫히지 않아 며칠을 살 수 있었다.
    */
   const confirm = useArmedConfirmSlot<ConfirmTarget>();
+  /**
+   * 배너에 서는 오류 — **읽기 실패와 복원**만 남는다.
+   *
+   * 파괴적 동작의 실패는 빨간 쪽지로 갔다(위 `failureToast`). 여기 남는 둘의 공통점은
+   * **누른 것에 대한 답이 아니라 화면이 지금 어떤 상태인가**를 말한다는 것이다 —
+   * 목록을 못 읽었다면 그 목록이 비어 보이는 이유가 이 문장이고, 복원이 거부됐다면 화면에
+   * 남아 있는 것이 옛 프로필이라는 뜻이다. 쪽지로 띄우면 닫는 순간 그 사실이 사라진다.
+   */
   const [error, setError] = useState<string | null>(null);
   const [cloudPresence, setCloudPresence] = useState<CloudPresence>('unknown');
   /**
@@ -187,13 +201,10 @@ export function BackupPanel({
     setNotices([]);
 
     const result = await settledMutation(clearCloud);
-    // 삭제는 성공을 **검증한** 결과만 성공으로 표시한다 — 실패는 배너로 드러난다.
-    setError(
-      result.ok
-        ? null
-        : `${t('cloudDeleteFailed')}: ${verifiedDeleteDetail(result, 'cloudDeleteRemaining', t)}`,
-    );
+    // 삭제는 성공을 **검증한** 결과만 성공으로 표시한다 — 실패는 빨간 쪽지로 드러난다.
     if (result.ok) toast.add({ title: t('cloudBackupsDeleted') });
+    else
+      failureToast(`${t('cloudDeleteFailed')}: ${verifiedDeleteDetail(result, 'cloudDeleteRemaining', t)}`);
     setCloudRevision((n) => n + 1);
     if (target === 'sync') void loadSnapshots(target).then(setSnapshots);
   };
@@ -207,8 +218,8 @@ export function BackupPanel({
     setNotices([]);
 
     const result = await onCommand({ type: 'full-reset' });
-    setError(result.ok ? null : `${t('resetFailed')}: ${resetFailureDetail(result.error, t)}`);
     if (result.ok) toast.add({ title: t('resetDone') });
+    else failureToast(`${t('resetFailed')}: ${resetFailureDetail(result.error, t)}`);
     setCloudRevision((n) => n + 1);
     void loadSnapshots(target).then(setSnapshots, (reason) => setError(reasonText(reason)));
   };
@@ -227,11 +238,12 @@ export function BackupPanel({
     setNotices([]);
 
     const result = await settledMutation(() => deleteSnapshot(entry, target));
-    setError(
-      result.ok
-        ? null
-        : `${t('snapshotDeleteFailed')}: ${verifiedDeleteDetail(result, 'snapshotDeleteRemaining', t)}`,
-    );
+    // 성공에는 쪽지를 두지 않는다 — 그 행이 사라지는 것이 곧 답이다. 실패만 말한다.
+    if (!result.ok) {
+      failureToast(
+        `${t('snapshotDeleteFailed')}: ${verifiedDeleteDetail(result, 'snapshotDeleteRemaining', t)}`,
+      );
+    }
     await loadSnapshots(target).then(setSnapshots, (reason) => setError(reasonText(reason)));
   };
 

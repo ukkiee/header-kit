@@ -51,9 +51,9 @@ function ProfileDot({ profile }: { profile: Pick<Profile, 'active' | 'color'> })
 /**
  * 프로필 색 고르기 (ADR 0017 재개정) — **자유 선택이 위, 팔레트 10색이 아래.**
  *
- * **커밋 지점은 닫힘 하나다.** 팔레트도 색면도 초안만 옮기고, 팝오버가 닫힐 때 한 번 보낸다
- * (Escape는 버린다 — 이름 편집과 같은 규약). 그래서 팔레트는 별도 경로가 아니라 자유 선택으로
- * 들어가는 지름길이다.
+ * **커밋 지점은 닫힘 하나다.** 팔레트도 색면도 초안만 옮기고, 팝오버가 **어떻게 닫히든**
+ * 그때 한 번 보낸다 — 바깥 누름이든 Escape든 같다. 그래서 팔레트는 별도 경로가 아니라
+ * 자유 선택으로 들어가는 지름길이다.
  *
  * 스와치는 **항상 버튼이다**(사용자 결정). 편집 중에만 버튼이던 시절의 근거는 "264px 열에
  * 아이콘을 상시로 더할 수 없다"였는데, 이것은 더해지는 아이콘이 아니라 **이미 거기 있던
@@ -114,7 +114,7 @@ export function ProfileColorField({
   return (
     <Popover
       open={open}
-      onOpenChange={(next, details) => {
+      onOpenChange={(next) => {
         setOpen(next);
         if (next) return;
         /*
@@ -124,11 +124,12 @@ export function ProfileColorField({
          * 무엇보다 고른 색을 **되돌릴 길이 없었다**. 지금은 팔레트가 초안만 옮기므로
          * 색면·hex 입력이 그 색으로 따라가고, 마음에 안 들면 다른 칸을 눌러 보면 된다.
          *
-         * **Escape는 버린다** — 이름 편집이 쓰는 그 규약이다(`profile-dot`의 입력).
-         * 나머지 닫힘(바깥 누름·트리거 재클릭·포커스 이탈)은 커밋한다: blur가 커밋이라는
-         * 규칙에 예외를 만들지 않는 편이 예측 가능하다.
+         * **Escape도 커밋한다** (사용자 결정 — 한 번 "버린다"로 두었다가 뒤집었다).
+         * 이름 편집의 Escape는 버리지만 여기서는 닫는 모든 길이 같은 뜻이다: 색은 눌러
+         * 보면서 고르는 것이라 마지막으로 본 색이 곧 고른 색이고, 되돌리고 싶으면 원래
+         * 칸을 다시 누르면 된다. **닫는 길마다 결과가 다르지 않은 편이 예측 가능하다.**
          */
-        if (details.reason !== 'escape-key' && draft !== null) commit(draft);
+        if (draft !== null) commit(draft);
         setDraft(null);
       }}
     >

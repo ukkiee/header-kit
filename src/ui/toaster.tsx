@@ -6,6 +6,7 @@ import {
   ToastContent,
   ToastPortal,
   ToastProvider as ShadcnToastProvider,
+  ToastClose,
   ToastTitle,
   ToastViewport,
   useToastManager,
@@ -34,39 +35,84 @@ import {
  * 화면의 절반을 덮으면서도 배경과 같은 색이라 눈에 걸리지 않았다. 규칙 삭제처럼 **이미
  * 일어난 일**을 알리는 쪽지는 작아야 하고, 대신 색으로 존재를 말해야 한다.
  *
- * 종류가 하나뿐이라(규칙 삭제 + 실행 취소) 면을 조건 없이 칠한다. 오류·경고 토스트가
- * 생기면 여기서 `item.type`으로 갈라야 한다 — 그때 전부 초록이면 실패가 성공처럼 보인다.
+ * **면은 `item.type`이 정한다.** 한때 조건 없이 초록이었고 그 주석이 "오류 토스트가 생기면
+ * 여기서 갈라야 한다 — 전부 초록이면 실패가 성공처럼 보인다"고 경고해 뒀는데, 실제로 그
+ * 시점이 왔다.
  *
  * 실행 취소 버튼은 초록 면 위에 서므로 shadcn `outline`의 배경·보더를 흰색 계열로 덮는다.
  * 그대로 두면 밝은 면이 초록 위에 얹혀 버튼만 다른 카드처럼 보인다.
  */
 function AppToastList() {
   const { toasts } = useToastManager();
-  return toasts.map((item) => (
-    <Toast
-      key={item.id}
-      toast={item}
-      className="rounded-lg border-transparent bg-success text-success-foreground shadow-md"
-    >
-      <ToastContent className="gap-2 px-3 py-2">
-        <ToastTitle className="min-w-0 flex-1 truncate text-xs" />
-        {item.actionProps && (
-          <ToastAction
-            render={<Button variant="outline" size="xs" />}
-            className="border-white/40 bg-transparent text-inherit hover:border-white/60 hover:bg-white/15 hover:text-inherit dark:border-white/40 dark:bg-transparent dark:hover:bg-white/15"
-          >
-            {actionLabel(item.data)}
-          </ToastAction>
-        )}
-      </ToastContent>
-    </Toast>
-  ));
+  return toasts.map((item) => {
+    /*
+     * **실패는 빨강이고, 성공과 다른 규칙으로 산다** (사용자 결정).
+     *
+     * 색만 갈라서는 부족하다 — 실패 문구는 성공 문구와 나르는 것이 다르기 때문이다.
+     *
+     *   - **잘리지 않는다.** 성공은 "됐다" 한 마디라 한 줄이면 되지만, 실패는 잔여 개수나
+     *     멈춘 단계를 담는다(`cloudDeleteRemaining`·`resetStoppedAt*`). 그것이 잘리면
+     *     남는 것은 "실패했다"뿐이고, 그건 이미 색이 말한 것이다.
+     *   - **스스로 사라지지 않는다**(`timeout: 0`을 부르는 쪽이 준다). 실패는 다시 눌러야
+     *     할 일이라(`resetRetryNote`) 읽기 전에 사라지면 안 된다.
+     *   - 그래서 **닫는 길이 있어야 한다.** 성공 토스트에는 닫기가 없다 — 자동 소멸이
+     *     그 일을 하기 때문이고, 사라지지 않는 것에만 문이 필요하다.
+     */
+    const failed = item.type === 'error';
+    return (
+      <Toast
+        key={item.id}
+        toast={item}
+        className={`rounded-lg border-transparent shadow-md ${
+          failed ? 'bg-destructive text-destructive-foreground' : 'bg-success text-success-foreground'
+        }`}
+      >
+        <ToastContent className="gap-2 px-3 py-2">
+          <ToastTitle className={`min-w-0 flex-1 text-xs ${failed ? '' : 'truncate'}`} />
+          {item.actionProps && (
+            <ToastAction
+              render={<Button variant="outline" size="xs" />}
+              className="border-white/40 bg-transparent text-inherit hover:border-white/60 hover:bg-white/15 hover:text-inherit dark:border-white/40 dark:bg-transparent dark:hover:bg-white/15"
+            >
+              {actionLabel(item.data)}
+            </ToastAction>
+          )}
+          {failed && (
+            /*
+              이름은 **부르는 쪽이 실어 보낸다**(`data.closeLabel`) — 실행 취소 라벨과 같은 길이다.
+              이 셸은 `LocaleProvider` **밖**에 산다(엔트리가 `<ToastProvider><App/></ToastProvider>`로
+              감싼다) 그래서 여기서는 카탈로그를 부를 수 없다. shadcn이 박아 둔 영어 기본값을
+              덮는 것이 이 prop의 일이다.
+
+              **지금 이 이름은 낭독되지 않는다** — Base UI가 이 버튼에 `aria-hidden`을 달아
+              접근성 트리에서 빼기 때문이다(실측). 닿는 길은 키보드다(`tabindex="0"`은 남는다).
+              그래도 카탈로그로 덮는 이유는 그 결정이 바뀌는 날 영어가 남지 않게 하기 위해서다.
+            */
+            <ToastClose
+              aria-label={closeLabel(item.data)}
+              render={<Button variant="ghost" size="xs" />}
+              className="text-inherit hover:bg-white/15 hover:text-inherit"
+            />
+          )}
+        </ToastContent>
+      </Toast>
+    );
+  });
 }
 
 /** add({ data: { actionLabel } })로 실린 라벨을 꺼낸다 — 없으면 버튼에 글자를 두지 않는다. */
 function actionLabel(data: unknown): string | undefined {
-  if (data && typeof data === 'object' && 'actionLabel' in data) {
-    return String((data as { actionLabel: unknown }).actionLabel);
+  return dataString(data, 'actionLabel');
+}
+
+/** 실패 토스트의 닫기 이름 — 없으면 shadcn의 영어 기본값이 남으므로 부르는 쪽이 늘 싣는다. */
+function closeLabel(data: unknown): string | undefined {
+  return dataString(data, 'closeLabel');
+}
+
+function dataString(data: unknown, key: string): string | undefined {
+  if (data && typeof data === 'object' && key in data) {
+    return String((data as Record<string, unknown>)[key]);
   }
   return undefined;
 }
