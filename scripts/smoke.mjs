@@ -200,6 +200,14 @@ const headerOpLive =
  * **기댓값을 향해 폴링하지 않는다** — "연속 2회 같은 값"만 기다린다. 그래야 단언 강도가
  * 그대로 유지된다. 안정되지 않으면 마지막 값을 담아 실패한다.
  */
+/**
+ * 값이 **바뀌기를 멈출 때까지** 기다린다 — 전이 중간 프레임을 표본으로 삼지 않기 위해서다.
+ *
+ * **먼저 전이가 착지한 것을 관측하고 부르라.** 이 함수는 "안정"만 볼 뿐 "달라졌다"는 보지
+ * 않으므로, 아직 시작하지 않은 전이 앞에서는 **옛 값이 안정적**이라 그것을 그대로 돌려준다.
+ * N46이 그렇게 거짓 빨강을 냈다: 정지 클릭이 서비스워커를 왕복하는 동안 두 표본이 나란히
+ * 옛 색이었다(실측 — 색이 바뀌기 시작한 시각 35·36·73ms 대 첫 비교 창 0~50ms).
+ */
 async function pollStable(probe, label, timeoutMs = 2000, intervalMs = 50) {
   const start = Date.now();
   let previous = await probe();
@@ -5977,9 +5985,24 @@ try {
     );
   const onColor = await pollStable(titleColor(chipRows.nth(0)), 'N46 켜진 행 제목색');
   const offColor = await pollStable(titleColor(chipRows.nth(1)), 'N46 꺼진 행 제목색');
+  /*
+   * **전이가 착지한 것을 먼저 관측한다.** 이것이 없어서 이 시나리오가 거짓 빨강을 냈다.
+   *
+   * `pollStable`은 연속 두 표본이 같으면 곧바로 돌려준다. 그런데 정지는 서비스워커를
+   * 왕복하므로 착지 전의 색은 **옛 색이면서 안정적**이다 — 두 표본이 나란히 옛 값이면
+   * 그것이 "안정"으로 반환된다. 실측: 클릭 뒤 색이 실제로 바뀌기 시작하는 시각이 35·36·73ms
+   * 였고, `pollStable`의 첫 비교 창은 0~50ms다. 73ms짜리 회차에서는 옛 색이 그대로 나온다 —
+   * 부하와 무관한 동전 던지기였고, 그래서 게이트에서는 안 나고 독립 실행에서 났다.
+   *
+   * 헤더 버튼의 이름이 뒤집히는 것이 그 착지의 표지다: 버튼 라벨과 행의 흐림이 **같은
+   * `state.paused`에서 같은 렌더로** 나오므로, 버튼이 바뀌었다면 색도 이미 새 값을 향한다.
+   * N34b가 테마 전이에 같은 배리어를 두고 있다 — 그 규율을 이 자리가 빠뜨렸을 뿐이다.
+   */
   await popup.getByRole('button', { name: 'Pause' }).click();
+  await popup.getByRole('button', { name: 'Resume' }).waitFor({ timeout: 5000 });
   const pausedColor = await pollStable(titleColor(chipRows.nth(0)), 'N46 정지 중 제목색');
   await popup.getByRole('button', { name: 'Resume' }).click();
+  await popup.getByRole('button', { name: 'Pause' }).waitFor({ timeout: 5000 });
   const resumedColor = await pollStable(titleColor(chipRows.nth(0)), 'N46 재개 후 제목색');
   const dimOk = offColor !== onColor && pausedColor === offColor && resumedColor === onColor;
 
