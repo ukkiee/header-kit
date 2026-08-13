@@ -20,7 +20,14 @@ import { useMemo, useState } from 'react';
 import type { Modification } from '@/core/schema';
 import { AnimatePresence, MotionRow } from '@/ui/row-motion';
 import { useT } from '@/ui/i18n-context';
-import { RuleCard, RuleGrip, ruleListClass, ruleReorderLabel, type RuleListRowProps } from './rule-card';
+import {
+  RuleCard,
+  RuleGrip,
+  ruleListClass,
+  ruleReorderLabel,
+  ruleRowSpacing,
+  type RuleListRowProps,
+} from './rule-card';
 
 /**
  * 드래그 재정렬 규칙 목록 — dnd-kit을 여기 몰아넣어 동적 import 대상으로 삼는다.
@@ -94,11 +101,14 @@ function SortableItem({
   onEdit,
   onRemove,
   formSlot,
+  index,
 }: {
   modification: Modification;
   paused: boolean;
   open: boolean;
   reorderable: boolean;
+  /** 목록에서 이 행이 선 자리 — 바뀌면 삭제 무장이 풀린다 (`useArmedConfirm`). */
+  index: number;
   onToggleEnabled: (enabled: boolean) => void;
   onEdit: () => void;
   onRemove: () => void;
@@ -132,24 +142,28 @@ function SortableItem({
       className={isDragging ? 'z-10 opacity-70' : ''}
     >
       <MotionRow>
-        <RuleCard
-          modification={modification}
-          paused={paused}
-          open={open}
-          onToggleEnabled={onToggleEnabled}
-          onEdit={onEdit}
-          onRemove={onRemove}
-          formSlot={formSlot}
-          grip={
-            <RuleGrip
-              label={ruleReorderLabel(modification, t)}
-              // 드래그를 받지 않는 동안에는 바인딩을 주지 않는다 — 정적 목록의 그립과 같은
-              // 상태가 되어, 잡히지 않는 핸들이 잡히는 척하지 않는다.
-              attributes={reorderable ? attributes : undefined}
-              listeners={reorderable ? listeners : undefined}
-            />
-          }
-        />
+        {/* 여백이 `MotionRow` **안**에 있어야 높이와 함께 접힌다 — `ruleListClass` 주석. */}
+        <div className={ruleRowSpacing}>
+          <RuleCard
+            modification={modification}
+            paused={paused}
+            open={open}
+            onToggleEnabled={onToggleEnabled}
+            onEdit={onEdit}
+            onRemove={onRemove}
+            formSlot={formSlot}
+            grip={
+              <RuleGrip
+                label={ruleReorderLabel(modification, t)}
+                // 드래그를 받지 않는 동안에는 바인딩을 주지 않는다 — 정적 목록의 그립과 같은
+                // 상태가 되어, 잡히지 않는 핸들이 잡히는 척하지 않는다.
+                attributes={reorderable ? attributes : undefined}
+                listeners={reorderable ? listeners : undefined}
+              />
+            }
+            index={index}
+          />
+        </div>
       </MotionRow>
     </li>
   );
@@ -207,7 +221,7 @@ export default function SortableRuleList({
         {/* 지연 청크가 실제로 도착했다는 표지 — `StaticRuleList`의 `static`과 짝이다. */}
         <ul className={ruleListClass} data-rule-list="sortable">
           <AnimatePresence initial={false} onExitComplete={onExitComplete}>
-            {shown.map((modification) => (
+            {shown.map((modification, index) => (
               <SortableItem
                 key={modification.id}
                 modification={modification}
@@ -218,6 +232,7 @@ export default function SortableRuleList({
                 onEdit={() => onEdit(modification)}
                 onRemove={() => onRemove(modification)}
                 formSlot={renderFormSlot(modification)}
+                index={index}
               />
             ))}
           </AnimatePresence>

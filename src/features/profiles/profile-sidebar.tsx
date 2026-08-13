@@ -13,6 +13,7 @@ import {
   profileToggleLabel,
   sidebarListClass,
   sidebarRowClass,
+  sidebarRowSpacing,
 } from './profile-dot';
 import { SwitcherChip } from '@/ui/switcher-chip';
 import { AnimatePresence, MotionRow } from '@/ui/row-motion';
@@ -77,29 +78,32 @@ function StaticList({
       {/* 드래그 목록과 **같은 등장·퇴장 모션**이다 — 한쪽만 움직이면 lazy 로드 순간
           시각이 갈린다(sidebarRowClass가 지키는 no-jump 계약의 모션 쪽). */}
       <AnimatePresence initial={false}>
-        {profiles.map((profile) => {
+        {profiles.map((profile, index) => {
           // 드래그 목록과 **같은 파생**을 쓴다 — 한쪽만 다르면 lazy 로드 순간 수·정지 표식이
           // 튄다(sidebarRowClass가 지키는 no-jump 계약의 값 쪽).
           const status = profileRowStatus(profile, paused);
           return (
             <li key={profile.id}>
               <MotionRow>
-                <div className={sidebarRowClass(profile.id === selectedId)}>
-                  {withGrip && <ProfileGrip label={profileReorderLabel(profile, t)} />}
-                  <ProfileSelectRow
-                    profile={profile}
-                    status={status}
-                    selected={profile.id === selectedId}
-                    onSelect={() => onSelect(profile.id)}
-                    onToggleActive={(active) => onToggleActive(profile.id, active)}
-                    onDelete={() => onDelete(profile.id)}
-                    onRename={(name) => onRename(profile.id, name)}
-                    onRecolor={(color) => onRecolor(profile.id, color)}
-                    label={profileSelectLabel(profile, t, status.state)}
-                    toggleLabel={profileToggleLabel(profile, t)}
-                    editLabel={profileEditLabel(profile, t)}
-                    {...profileDeleteLabels(profile, t)}
-                  />
+                <div className={sidebarRowSpacing}>
+                  <div className={sidebarRowClass(profile.id === selectedId)}>
+                    {withGrip && <ProfileGrip label={profileReorderLabel(profile, t)} />}
+                    <ProfileSelectRow
+                      profile={profile}
+                      status={status}
+                      selected={profile.id === selectedId}
+                      onSelect={() => onSelect(profile.id)}
+                      onToggleActive={(active) => onToggleActive(profile.id, active)}
+                      onDelete={() => onDelete(profile.id)}
+                      onRename={(name) => onRename(profile.id, name)}
+                      onRecolor={(color) => onRecolor(profile.id, color)}
+                      index={index}
+                      label={profileSelectLabel(profile, t, status.state)}
+                      toggleLabel={profileToggleLabel(profile, t)}
+                      editLabel={profileEditLabel(profile, t)}
+                      {...profileDeleteLabels(profile, t)}
+                    />
+                  </div>
                 </div>
               </MotionRow>
             </li>

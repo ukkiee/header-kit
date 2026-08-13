@@ -19,8 +19,22 @@ import { ruleView } from './rule-summary';
  * 이유로 두 목록에 같은 클래스 상수를 쓴다(`profile-dot.tsx`의 `sidebarListClass`).
  */
 
-/** 목록 레이아웃 — 정적·드래그 두 목록이 반드시 같아야 한다(로드 후 시각 점프 금지). */
-export const ruleListClass = 'flex flex-col gap-1.5';
+/**
+ * 목록 레이아웃 — 정적·드래그 두 목록이 반드시 같아야 한다(로드 후 시각 점프 금지).
+ *
+ * **행 사이 간격이 `gap`이 아니다.** flex의 `gap`은 애니메이트되지 않으므로, 퇴장하는 행의
+ * 높이가 0까지 접혀도 그 행 몫의 간격은 그대로 남아 있다가 **언마운트되는 프레임에 통째로
+ * 사라진다** — 실측으로 부드럽게 접히던 목록이 마지막에 6px을 툭 뛰었다(프로필 목록은
+ * `gap-0.5`라 2px이었고, 그래서 규칙 쪽만 눈에 띄었다).
+ *
+ * 그래서 간격을 **접히는 것 안**으로 옮긴다: 각 행이 자기 아래 여백을 `ruleRowSpacing`으로
+ * 들고, 높이가 접힐 때 그 여백도 함께 접힌다. 목록 끝에 남는 마지막 행의 여백은 `-mb-1.5`가
+ * 되돌린다 — 그 값은 상수라 튀지 않는다.
+ */
+export const ruleListClass = 'flex flex-col -mb-1.5';
+
+/** 행이 **스스로 드는** 아래 여백. `MotionRow` 안에 있어야 높이와 함께 접힌다. */
+export const ruleRowSpacing = 'pb-1.5';
 
 /**
  * 접힌 카드와 펼쳐진 카드가 **테두리와 배경 둘 다** 다르다 (ADR 0017 story 6).
@@ -86,6 +100,8 @@ export interface RuleCardProps {
   formSlot: ReactNode;
   /** 재정렬 그립. 정적 목록은 기능 없는 것을, 드래그 목록은 바인딩을 받은 것을 넘긴다. */
   grip: ReactNode;
+  /** 목록에서 이 행이 선 자리 — 바뀌면 삭제 무장이 풀린다 (`useArmedConfirm`). */
+  index?: number;
 }
 
 export function RuleCard({
@@ -97,6 +113,7 @@ export function RuleCard({
   onRemove,
   formSlot,
   grip,
+  index,
 }: RuleCardProps) {
   return (
     /*
@@ -104,7 +121,19 @@ export function RuleCard({
      * 시작한다. 연필 아이콘까지 뚫고 내려보내는 대신 여기에 두면 배선이 한 곳이고, 행에
      * 닿는 것 자체가 이미 편집 의도에 가깝다.
      */
-    <div className={`pr-2.5 pl-1 ${open ? expandedCard : collapsedCard}`} {...ruleFormIntentProps}>
+    /*
+     * `group`이 카드 전체를 덮는다 — 그립에 닿아도 편집·삭제가 서야 한다(프로필 행과 같다).
+     *
+     * `data-rule-card`는 **관측 표지**다(`data-rule-list`와 같은 결). 예전에는 스모크가
+     * "`.group`을 품은 `rounded-lg border` 요소"로 카드를 집었는데, 그 `group`이 행에서
+     * 카드로 옮겨 오자 그 선택자가 아무것도 못 찾아 **조용히 빈 배열을 쟀다** — 스타일
+     * 클래스를 구조 표지로 쓰면 스타일을 옮기는 것만으로 검사가 무음이 된다.
+     */
+    <div
+      data-rule-card={open ? 'expanded' : 'collapsed'}
+      className={`group pr-2.5 pl-1 ${open ? expandedCard : collapsedCard}`}
+      {...ruleFormIntentProps}
+    >
       {/*
         그립이 행 **왼쪽 밖**에 서고 그 오른쪽을 행이 채운다. 행 안에 넣으면 규칙 요약이 그만큼
         줄어드는데, 요약은 이 목록에서 사용자가 실제로 읽는 유일한 것이다.
@@ -122,6 +151,7 @@ export function RuleCard({
             onToggleEnabled={onToggleEnabled}
             onEdit={onEdit}
             onRemove={onRemove}
+            index={index}
           />
         </div>
       </div>
@@ -171,22 +201,26 @@ export function StaticRuleList({
     // 클래스로 같은 모양을 그리므로 화면만 봐서는 지연 청크가 도착했는지 알 수 없다.
     <ul className={ruleListClass} data-rule-list="static">
       <AnimatePresence initial={false} onExitComplete={onExitComplete}>
-        {modifications.map((modification) => (
+        {modifications.map((modification, index) => (
           // `MotionRow`가 `<li>` **안에** 있다 — 드래그 목록도 같은 배치라(그쪽은 `<li>`가
           // dnd-kit의 transform을 든다) 두 목록의 DOM 깊이가 같다. `AnimatePresence`의 직접
           // 자식은 키를 든 `<li>`이고, 그 안의 모션은 presence 컨텍스트로 참여한다.
           <li key={modification.id}>
             <MotionRow>
-              <RuleCard
-                modification={modification}
-                paused={paused}
-                open={openId === modification.id}
-                onToggleEnabled={(enabled) => onToggleEnabled(modification, enabled)}
-                onEdit={() => onEdit(modification)}
-                onRemove={() => onRemove(modification)}
-                formSlot={renderFormSlot(modification)}
-                grip={<RuleGrip label={ruleReorderLabel(modification, t)} />}
-              />
+              {/* 여백이 `MotionRow` **안**에 있어야 높이와 함께 접힌다 — `ruleListClass` 주석. */}
+              <div className={ruleRowSpacing}>
+                <RuleCard
+                  modification={modification}
+                  paused={paused}
+                  open={openId === modification.id}
+                  onToggleEnabled={(enabled) => onToggleEnabled(modification, enabled)}
+                  onEdit={() => onEdit(modification)}
+                  onRemove={() => onRemove(modification)}
+                  formSlot={renderFormSlot(modification)}
+                  grip={<RuleGrip label={ruleReorderLabel(modification, t)} />}
+                  index={index}
+                />
+              </div>
             </MotionRow>
           </li>
         ))}

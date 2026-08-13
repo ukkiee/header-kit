@@ -6,6 +6,7 @@ import { format, type Translator } from '@/core/i18n';
 import { IconButton } from '@/ui/icon-button';
 import { Input } from '@/ui/text-field';
 import { normalizeProfileName, type Profile } from '@/core/schema';
+import { useArmedConfirm } from '@/ui/use-armed-confirm';
 import { ProfileColorField } from './profile-color-field';
 import { PROFILE_STATE_KEY, type ProfileRowState, type ProfileRowStatus } from '@/core/summary';
 import { profileRowMetaText } from '@/features/status/status-text';
@@ -75,7 +76,16 @@ export function profileReorderLabel(profile: Pick<Profile, 'name'>, t: Translato
  * 목록(sortable-profile-list)이 반드시 같은 모양이어야(로드 후 시각 점프 방지) 하므로
  * 두 파일이 이 상수를 공유한다. 한쪽만 바뀌면 no-jump 계약이 깨지는 것을 막는다.
  */
-export const sidebarListClass = 'flex flex-col gap-0.5';
+export const sidebarListClass = 'flex flex-col -mb-0.5';
+
+/**
+ * 행이 **스스로 드는** 아래 여백 — `MotionRow` 안에 있어야 높이와 함께 접힌다.
+ *
+ * flex의 `gap`이 아닌 이유는 규칙 목록의 같은 자리(`ruleListClass`)가 적는다: gap은
+ * 애니메이트되지 않아 퇴장하는 행의 간격이 언마운트 프레임에 통째로 사라진다(실측 2px).
+ * 규칙 쪽이 6px이라 먼저 눈에 띄었을 뿐, 규약은 하나여야 한다.
+ */
+export const sidebarRowSpacing = 'pb-0.5';
 
 /**
  * 행 셸 — **선택 면이 그립부터 스위치까지 한 덩어리로 덮는다.**
@@ -187,6 +197,7 @@ export function ProfileSelectRow({
   onDelete,
   onRename,
   onRecolor,
+  index,
   label,
   toggleLabel,
   deleteLabel,
@@ -210,6 +221,8 @@ export function ProfileSelectRow({
    * (`profile-color-field`의 커밋 주석). 값은 이미 `#rrggbb`로 접혀 있다.
    */
   onRecolor: (color: string) => void;
+  /** 목록에서 이 행이 선 자리 — 바뀌면 삭제 무장이 풀린다 (`useArmedConfirm`). */
+  index?: number;
   label: string;
   toggleLabel: string;
   deleteLabel: string;
@@ -217,7 +230,11 @@ export function ProfileSelectRow({
   editLabel: string;
 }) {
   // 되물음은 행마다 따로다 — 목록이 들면 어느 행이 무장했는지를 위에서 배선해야 한다.
-  const [confirming, setConfirming] = useState(false);
+  /*
+   * 되물음의 무장은 이 행의 **자리**에 매인다 — 규칙 행과 같은 규약이고 근거도 같다
+   * (`useArmedConfirm`). 프로필 목록도 재정렬·다른 표면의 삭제로 행이 이사한다.
+   */
+  const confirm = useArmedConfirm(index);
   /**
    * 이름 편집 (ADR 0017 재개정) — 열려 있으면 초안 문자열, 닫혀 있으면 `null`.
    *
@@ -256,7 +273,7 @@ export function ProfileSelectRow({
   }, [renaming]);
 
   const openRename = () => {
-    setConfirming(false); // 두 가지가 동시에 무장해 있지 않게 한다
+    confirm.disarm(); // 두 가지가 동시에 무장해 있지 않게 한다
     setDraft(profile.name);
   };
 
@@ -409,7 +426,7 @@ export function ProfileSelectRow({
         className={`flex shrink-0 items-center gap-0.5 transition-opacity ${
           // 편집 중에도 100%다 — 입력이 열려 있는데 그 옆의 버튼들이 흐려지면, 지금 무엇을
           // 하는 중인지가 화면에서 반쯤 사라진다.
-          confirming || renaming
+          confirm.armed || renaming
             ? 'opacity-100'
             : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
         }`}
@@ -417,8 +434,21 @@ export function ProfileSelectRow({
          * 되물음은 **가리키는 동안만** 산다. 다른 행으로 옮기거나 포커스가 떠나면 풀린다 —
          * 안 그러면 무장한 채 숨은 행이 남아, 다음에 우연히 닿은 한 번의 클릭이 지운다.
          */
-        onPointerLeave={() => setConfirming(false)}
-        onBlur={() => setConfirming(false)}
+        /*
+         * **마우스일 때만 푼다.** 펜은 버튼을 떠나도 `pointerleave`가 오지 않고(실측), 터치는
+         * `pointerup` 직후에 와서 무장과 실행 **사이**에 떨어진다 — 지금 터치에서 2단 확인이
+         * 성립하는 것은 React가 그 해제를 click 전에 커밋하지 않는 스케줄링 우연 덕이다.
+         * 우연 위에 계약을 세우지 않는다. 그 둘의 바닥은 훅의 시간 초과가 깐다.
+         */
+        onPointerLeave={(event) => {
+          if (event.pointerType === 'mouse') confirm.disarm();
+        }}
+        onBlur={(event) => {
+          // 편집과 삭제 **사이**의 포커스 이동은 떠난 것이 아니다.
+          const next = event.relatedTarget;
+          if (next instanceof Node && event.currentTarget.contains(next)) return;
+          confirm.disarm();
+        }}
       >
         {/*
           편집 중에는 눌린 상태로 선다 — 어느 행을 고치는 중인지가 아이콘에도 남는다.
@@ -437,19 +467,12 @@ export function ProfileSelectRow({
           }}
         />
         <IconButton
-          label={confirming ? confirmLabel : deleteLabel}
-          tooltip={confirming ? t('confirmDeleteProfile') : t('menuDelete')}
+          label={confirm.armed ? confirmLabel : deleteLabel}
+          tooltip={confirm.armed ? t('confirmDeleteProfile') : t('menuDelete')}
           // 아이콘이 **모양으로도** 바뀐다 — 색만 바뀌면 무장 여부가 색각에 매인다.
-          icon={confirming ? Check : Trash2}
+          icon={confirm.armed ? Check : Trash2}
           tone="danger"
-          onClick={() => {
-            if (!confirming) {
-              setConfirming(true);
-              return;
-            }
-            setConfirming(false);
-            onDelete();
-          }}
+          onClick={() => confirm.press(onDelete)}
         />
       </div>
       {/* 정지 중에도 토글은 살아 있다 — 정지는 표시만 덮으므로 저장된 on/off는 지금도 고른다. */}

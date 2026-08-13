@@ -31,6 +31,7 @@ import {
   profileToggleLabel,
   sidebarListClass,
   sidebarRowClass,
+  sidebarRowSpacing,
 } from './profile-dot';
 
 /**
@@ -108,6 +109,7 @@ function SortableItem({
   onDelete,
   onRename,
   onRecolor,
+  index,
   dragLabel,
 }: {
   profile: Profile;
@@ -118,6 +120,8 @@ function SortableItem({
   onDelete: () => void;
   onRename: (name: string) => void;
   onRecolor: (color: string) => void;
+  /** 목록에서 이 행이 선 자리 — 바뀌면 삭제 무장이 풀린다 (`useArmedConfirm`). */
+  index: number;
   dragLabel: string;
 }) {
   const t = useT();
@@ -142,22 +146,25 @@ function SortableItem({
       className={isDragging ? 'z-10 opacity-70' : ''}
     >
       <MotionRow>
-        <div className={sidebarRowClass(selected)}>
-          <ProfileGrip label={dragLabel} attributes={attributes} listeners={listeners} />
-          <ProfileSelectRow
-            profile={profile}
-            status={status}
-            selected={selected}
-            onSelect={onSelect}
-            onToggleActive={onToggleActive}
-            onDelete={onDelete}
-            onRename={onRename}
-            onRecolor={onRecolor}
-            label={profileSelectLabel(profile, t, status.state)}
-            toggleLabel={profileToggleLabel(profile, t)}
-            editLabel={profileEditLabel(profile, t)}
-            {...profileDeleteLabels(profile, t)}
-          />
+        <div className={sidebarRowSpacing}>
+          <div className={sidebarRowClass(selected)}>
+            <ProfileGrip label={dragLabel} attributes={attributes} listeners={listeners} />
+            <ProfileSelectRow
+              profile={profile}
+              status={status}
+              selected={selected}
+              onSelect={onSelect}
+              onToggleActive={onToggleActive}
+              onDelete={onDelete}
+              onRename={onRename}
+              onRecolor={onRecolor}
+              index={index}
+              label={profileSelectLabel(profile, t, status.state)}
+              toggleLabel={profileToggleLabel(profile, t)}
+              editLabel={profileEditLabel(profile, t)}
+              {...profileDeleteLabels(profile, t)}
+            />
+          </div>
         </div>
       </MotionRow>
     </li>
@@ -230,7 +237,7 @@ export default function SortableProfileList({
           {/* 프로필이 늘거나 줄 때 fade+height — 규칙 목록과 같은 모션이다. `initial={false}`라
               화면을 처음 열 때는 이미 있던 행들이 움직이지 않는다. */}
           <AnimatePresence initial={false}>
-            {shown.map((profile) => (
+            {shown.map((profile, index) => (
               <SortableItem
                 key={profile.id}
                 profile={profile}
@@ -241,6 +248,7 @@ export default function SortableProfileList({
                 onDelete={() => onDelete(profile.id)}
                 onRename={(name) => onRename(profile.id, name)}
                 onRecolor={(color) => onRecolor(profile.id, color)}
+                index={index}
                 dragLabel={profileReorderLabel(profile, t)}
               />
             ))}
