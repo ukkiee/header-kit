@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type PointerEvent } from 'react';
 import {
   backupTarget,
   decodeSnapshotText,
@@ -228,6 +228,26 @@ export function BackupPanel({
   const snapshotTarget = (entry: SnapshotStatus): ConfirmTarget => `snapshot:${entry.id}`;
 
   /**
+   * 마우스가 그 자리를 떠나면 되물음을 거둔다 — 규칙 행·프로필 행이 이미 쓰는 장치를 이
+   * 패널의 셋(클라우드 삭제·히스토리 한 행 삭제·전체 초기화)에도 건다.
+   *
+   * **버튼이 아니라 감싸는 요소에 건다.** 버튼에 직접 걸면 무장이 스스로를 푼다: 무장하면서
+   * 문구가 되물음으로 바뀌어 폭이 변하는데 그 줄이 `justify-end`라 오른쪽이 고정이고, 폭이
+   * 줄면 왼쪽 가장자리가 오른쪽으로 밀린다. en의 클라우드 삭제가 실제로 그렇다(152→139px,
+   * 실측) — 버튼 왼쪽을 누른 포인터는 무장 직후 버튼 밖에 서고, 그 자리에서 `pointerleave`가
+   * 나면 2단 확인이 성립할 수 없다. 감싸는 줄은 폭이 부모를 따르므로 무장해도 변하지 않는다.
+   *
+   * **자기 자리가 무장 중일 때만 푼다.** 셋이 슬롯 하나를 나눠 가지므로, 조건 없이 풀면
+   * 무장하지 않은 자리를 스쳐 지나간 포인터가 남의 되물음을 거둔다.
+   *
+   * **마우스로 한정하는 이유는 훅의 주석이 갖는다** — 펜은 버튼을 떠나도 `pointerleave`가
+   * 오지 않고, 터치는 그것이 무장과 실행 **사이**에 떨어진다.
+   */
+  const disarmOnMouseLeave = (id: ConfirmTarget) => (event: PointerEvent) => {
+    if (event.pointerType === 'mouse' && confirm.isArmed(id)) confirm.disarm();
+  };
+
+  /**
    * 한 스냅샷만 지운다 (티켓 12) — 복원과 같은 2단계 확인을 거친다. 첫 클릭은 확인만 켜고,
    * 두 번째 클릭에서만 실행된다. 성공·실패 모두 히스토리를 다시 읽어, 지우지 못한 행이
    * 지워진 것처럼 사라지지 않는다.
@@ -341,7 +361,7 @@ export function BackupPanel({
         <p className="text-muted-foreground">{t('cloudSyncKeepsHistory')}</p>
 
         {/* 클라우드 삭제는 스위치와 분리된 명시적 동작이다 — 자체 확인을 거친다. */}
-        <div className="flex justify-end">
+        <div className="flex justify-end" onPointerLeave={disarmOnMouseLeave('cloud')}>
           <Button
             variant={confirm.isArmed('cloud') ? 'destructive' : 'ghost'}
             size="sm"
@@ -361,7 +381,11 @@ export function BackupPanel({
         ) : (
           <ul className="flex flex-col gap-1">
             {snapshots.map((snapshot) => (
-              <li key={snapshot.id} className="flex items-center gap-2">
+              <li
+                key={snapshot.id}
+                className="flex items-center gap-2"
+                onPointerLeave={disarmOnMouseLeave(snapshotTarget(snapshot))}
+              >
                 <span className="flex-1">
                   {new Date(snapshot.createdAt).toLocaleString()} · {snapshot.profileCount}{' '}
                   {snapshot.profileCount === 1 ? t('activeProfile') : t('activeProfiles')}
@@ -414,7 +438,7 @@ export function BackupPanel({
       <SectionCard title={t('resetEverything')}>
         <p className="text-muted-foreground">{t('resetEverythingNote')}</p>
         <p className="text-muted-foreground">{t('resetRetryNote')}</p>
-        <div className="flex justify-end">
+        <div className="flex justify-end" onPointerLeave={disarmOnMouseLeave('reset')}>
           <Button
             variant={confirm.isArmed('reset') ? 'destructive' : 'ghost'}
             size="sm"
