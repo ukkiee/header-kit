@@ -2050,14 +2050,23 @@ try {
     );
 
     /*
-     * N3b: **색 변경** (같은 개정) — 팔레트가 커밋하고, 자유 선택은 **지연 청크**다.
+     * N3b: **색 변경** — 팔레트는 **초안만 옮기고**, 커밋 지점은 닫힘 하나다 (사용자 요청).
      *
-     * 셋을 함께 잰다. 팔레트가 저장소를 실제로 바꾸는가 · 그 클릭이 팝오버를 닫는가(닫히지
-     * 않으면 "골랐다"의 답이 화면에 없다) · 그리고 **자유 선택이 실제로 도착하는가.**
+     * 이 자리는 반대를 쟀었다: 팔레트가 누른 즉시 커밋하고 팝오버를 닫는 것. 그 규약에서는
+     * 고른 색을 **되돌릴 길이 없었고**, 팔레트와 자유 선택이 서로 다른 커밋 경로를 가졌다.
+     * 지금은 팔레트가 지름길이다 — 누르면 색면·hex 입력이 그 색으로 따라가고, 마음에 안 들면
+     * 옆 칸을 눌러 보면 된다.
+     *
+     * 넷을 함께 잰다. **누른 뒤에도 열려 있는가**(사용자가 요청한 그것) · **저장소는 아직
+     * 그대로인가**(초안이라는 말의 실질) · **바깥을 눌러 닫으면 커밋되는가** · 그리고
+     * **자유 선택이 실제로 도착하는가.**
      *
      * 마지막이 이 시나리오에 있는 이유: `bundle-gate`는 그 청크가 즉시 집합에 **없다**까지만
      * 잰다. 지연 계약을 걸어 두고 정작 화면이 그것을 부르지 못하면 게이트는 초록인데 색은
      * 못 고른다 — 재지 않으면서 초록인 자리가 정확히 거기다.
+     *
+     * Escape가 버리는 것은 아래 N3d가 잰다 — 커밋 경로와 버림 경로를 한 시나리오에 섞으면
+     * 어느 쪽이 깨졌는지 사유가 말하지 못한다.
      */
     const storedColors = () =>
       sw.evaluate(async () => {
@@ -2083,13 +2092,25 @@ try {
 
     const colorsBefore = await storedColors();
     await popup.getByRole('button', { name: 'Color #d97706', exact: true }).click();
-    const colorsAfter = await pollUntil(storedColors, (v) => v.startsWith('#d97706'));
+
     /*
-     * 닫힘은 **기다려서** 센다. 팝오버에는 닫힘 애니메이션이 붙어 있어(`data-closed:animate-out`)
-     * 노드가 잠시 남는다 — 커밋이 저장소에 닿은 그 순간에 세면 아직 열려 있다고 읽힌다(실측).
-     * 끝내 안 닫히면 폴이 마지막 값(0이 아닌 수)을 돌려주므로 그 회귀는 여전히 FAIL이다.
+     * 눌러도 **닫히지 않는다.** 닫힘 애니메이션에 속지 않으려고 잠시 기다린 뒤에 센다 —
+     * 곧바로 세면 아직 안 사라진 노드를 "열려 있다"로 읽어 반대 회귀도 통과한다.
      */
-    const swatchesLeft = await pollUntil(
+    await popup.waitForTimeout(600);
+    const stillOpen = (await popup.getByRole('button', { name: /^Color #/ }).count()) === 10;
+    // 트리거의 사각형이 **고른 색으로 옮겨 간다** — 초안이 화면에 있다는 관측.
+    const previewColor = await popup
+      .locator('button[aria-label^="Color for"] [data-profile-swatch]')
+      .first()
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    // 그런데 저장소는 아직 그대로다 — 그것이 "초안"이라는 말의 실질이다.
+    const colorsWhileOpen = await storedColors();
+
+    // 바깥을 눌러 닫으면 그때 커밋된다. 헤더 제목은 아무 동작도 없는 자리다.
+    await popup.locator('main h1').first().click();
+    const colorsAfter = await pollUntil(storedColors, (v) => v.startsWith('#d97706'));
+    const closedAfterOutside = await pollUntil(
       () => popup.getByRole('button', { name: /^Color #/ }).count(),
       (n) => n === 0,
       5000,
@@ -2097,15 +2118,51 @@ try {
     );
 
     record(
-      'N3b: 색 — 팔레트 10칸이 커밋하고 팝오버가 닫히며, 자유 선택 지연 청크가 실제로 도착한다',
+      'N3b: 색 — 팔레트는 초안만 옮기고(팝오버 유지·저장소 불변), 바깥을 눌러 닫을 때 커밋된다',
       // 둘째 프로필의 색은 건드리지 않았다는 것까지 본다 — 시드가 둘 다 같은 색이므로
       // 접두만 재고 그 뒤는 `colorsBefore`와 대조한다.
       paletteSlots === 10 &&
         freePickerArrived &&
+        stillOpen &&
+        previewColor === 'rgb(217, 119, 6)' &&
+        colorsWhileOpen === colorsBefore &&
         colorsAfter === `#d97706|${colorsBefore.split('|')[1]}` &&
-        swatchesLeft === 0,
-      `팔레트칸=${paletteSlots}, 자유선택도착=${freePickerArrived}, ` +
-        `${colorsBefore} → ${colorsAfter}, 남은 스와치=${swatchesLeft}`,
+        closedAfterOutside === 0,
+      `팔레트칸=${paletteSlots}, 자유선택도착=${freePickerArrived}, 누른 뒤 열림=${stillOpen}, ` +
+        `미리보기=${previewColor}, 누른 뒤 저장소=${colorsWhileOpen}(불변=${colorsWhileOpen === colorsBefore}), ` +
+        `닫은 뒤 ${colorsBefore} → ${colorsAfter}, 남은 스와치=${closedAfterOutside}`,
+    );
+
+    /*
+     * N3d: **Escape는 버린다** — 이름 편집이 쓰는 그 규약이다.
+     *
+     * 팔레트가 초안만 옮기게 되면서 되돌릴 길이 필요해졌다. 그 길이 없으면 미리보기가
+     * 곧 커밋이라 "눌러 보는 것"이 불가능하다 — 이 시나리오가 지키는 것이 그 가능성이다.
+     */
+    const colorsBeforeEscape = await storedColors();
+    await popup
+      .getByRole('button', { name: /^Color for /, exact: false })
+      .first()
+      .click();
+    await popup.getByRole('button', { name: 'Color #db2777', exact: true }).waitFor({ timeout: 5000 });
+    await popup.getByRole('button', { name: 'Color #db2777', exact: true }).click();
+    await popup.waitForTimeout(400);
+    await popup.keyboard.press('Escape');
+    await pollUntil(
+      () => popup.getByRole('button', { name: /^Color #/ }).count(),
+      (n) => n === 0,
+      5000,
+      200,
+    );
+    // 버렸다면 저장소는 Escape 전과 같아야 한다. 커밋이 늦게 도착하는 경우를 배제하려고
+    // 잠시 더 기다린 뒤에 읽는다 — 곧바로 읽으면 아직 안 온 커밋을 "없다"로 읽는다.
+    await popup.waitForTimeout(800);
+    const colorsAfterEscape = await storedColors();
+
+    record(
+      'N3d: 색 — Escape로 닫으면 고른 색을 버린다(이름 편집과 같은 규약)',
+      colorsAfterEscape === colorsBeforeEscape,
+      `Escape 전=${colorsBeforeEscape}, 뒤=${colorsAfterEscape}`,
     );
   }
 

@@ -51,6 +51,10 @@ function ProfileDot({ profile }: { profile: Pick<Profile, 'active' | 'color'> })
 /**
  * 프로필 색 고르기 (ADR 0017 재개정) — **자유 선택이 위, 팔레트 10색이 아래.**
  *
+ * **커밋 지점은 닫힘 하나다.** 팔레트도 색면도 초안만 옮기고, 팝오버가 닫힐 때 한 번 보낸다
+ * (Escape는 버린다 — 이름 편집과 같은 규약). 그래서 팔레트는 별도 경로가 아니라 자유 선택으로
+ * 들어가는 지름길이다.
+ *
  * 스와치는 **항상 버튼이다**(사용자 결정). 편집 중에만 버튼이던 시절의 근거는 "264px 열에
  * 아이콘을 상시로 더할 수 없다"였는데, 이것은 더해지는 아이콘이 아니라 **이미 거기 있던
  * 사각형**이라 자리가 늘지 않는다. 근거 전체는 `profile-dot.tsx`의 호출부가 적는다.
@@ -81,9 +85,24 @@ export function ProfileColorField({
    * 키입력마다 보내지 않는 것과 같은 이유다. 팝오버가 닫힐 때 **한 번만** 커밋한다.
    */
   const [draft, setDraft] = useState<string | null>(null);
+  /**
+   * 팔레트가 색을 옮긴 횟수 — 자유 선택을 **다시 마운트**시키는 열쇠다.
+   *
+   * 피커를 제어하지 않는 이유는 그 파일이 적는다(제어하면 손실 왕복 echo가 돌아온다).
+   * 그래서 "위에서 색을 밀어 넣는" 유일한 경로인 팔레트만 이 값을 올리고, 드래그로 들어오는
+   * 변경은 올리지 않는다 — 매 프레임 remount하면 색면을 잡고 있을 수 없다.
+   */
+  const [paletteTick, setPaletteTick] = useState(0);
 
   // 지금 색도 접어서 비교한다 — 저장된 값이 `#ABC`든 `#aabbcc`든 같은 색이면 같아야 한다.
   const current = normalizeProfileColor(profile.color);
+  /**
+   * **화면이 지금 보여 주는 색** — 초안이 있으면 그것, 없으면 저장된 색.
+   *
+   * 팔레트의 표시가 이 값을 따라야 한다: 팔레트를 누르면 커밋 없이 초안만 옮기므로,
+   * 저장된 색을 기준으로 표시하면 방금 고른 칸이 표시되지 않는다.
+   */
+  const shown = normalizeProfileColor(draft ?? profile.color);
 
   /** 정규화와 무변화 판정의 단 하나의 자리 — 팔레트와 자유 선택이 같은 문을 지난다. */
   const commit = (next: string) => {
@@ -95,11 +114,21 @@ export function ProfileColorField({
   return (
     <Popover
       open={open}
-      onOpenChange={(next) => {
+      onOpenChange={(next, details) => {
         setOpen(next);
         if (next) return;
-        // 닫히는 순간이 자유 선택의 커밋 지점이다. 팔레트는 누른 그 자리에서 이미 커밋했다.
-        if (draft !== null) commit(draft);
+        /*
+         * **닫히는 순간이 커밋 지점이다 — 팔레트도 자유 선택도 마찬가지다.**
+         *
+         * 팔레트가 누른 자리에서 바로 커밋하고 닫던 시절에는 두 경로의 규약이 갈렸고,
+         * 무엇보다 고른 색을 **되돌릴 길이 없었다**. 지금은 팔레트가 초안만 옮기므로
+         * 색면·hex 입력이 그 색으로 따라가고, 마음에 안 들면 다른 칸을 눌러 보면 된다.
+         *
+         * **Escape는 버린다** — 이름 편집이 쓰는 그 규약이다(`profile-dot`의 입력).
+         * 나머지 닫힘(바깥 누름·트리거 재클릭·포커스 이탈)은 커밋한다: blur가 커밋이라는
+         * 규칙에 예외를 만들지 않는 편이 예측 가능하다.
+         */
+        if (details.reason !== 'escape-key' && draft !== null) commit(draft);
         setDraft(null);
       }}
     >
@@ -154,12 +183,18 @@ export function ProfileColorField({
         */}
         <p className="text-xs text-muted-foreground">{t('profileColorCustom')}</p>
         <Suspense fallback={<div className="h-40" aria-hidden />}>
-          <ProfileColorPicker value={draft ?? profile.color} onValueChange={setDraft} />
+          <ProfileColorPicker
+            key={paletteTick}
+            defaultValue={draft ?? profile.color}
+            onValueChange={setDraft}
+          />
         </Suspense>
         <p className="text-xs text-muted-foreground">{t('profileColorPalette')}</p>
         {/*
-          팔레트 — 누르는 즉시 커밋하고 닫는다. 열 개는 고른 값이 **이산적**이라 초안을 둘
-          이유가 없고, 닫힘이 곧 "골랐다"의 답이 된다.
+          팔레트 — 누르면 **초안만 옮긴다**(사용자 요청). 팝오버는 열린 채로 남고 위 색면·hex
+          입력이 그 색으로 따라간다. 그래서 팔레트는 별도의 커밋 경로가 아니라 **자유 선택으로
+          들어가는 지름길**이 된다: 정해진 열 개 중에서 고르고, 마음에 들면 닫고, 아니면 옆으로
+          한 칸 옮기거나 색면에서 다듬는다.
         */}
         <div className="grid grid-cols-5 gap-1.5">
           {PROFILE_COLORS.map((swatch) => (
@@ -167,16 +202,16 @@ export function ProfileColorField({
               key={swatch}
               type="button"
               aria-label={format(t('ariaProfileColorSwatch'), { color: swatch })}
-              // 지금 색에는 표시가 선다 — 링 **두께**가 바뀌므로 색만으로 알리지 않는다.
-              aria-pressed={current === swatch}
+              // 표시는 **지금 보여 주는 색**을 따른다 — 링 **두께**가 바뀌므로 색만으로
+              // 알리지 않는다. 저장된 색을 기준으로 하면 방금 누른 칸이 표시되지 않는다.
+              aria-pressed={shown === swatch}
               className={`h-6 cursor-pointer rounded-md ring-offset-1 ring-offset-popover ${focusRing} ${
-                current === swatch ? 'ring-2 ring-foreground' : 'ring-1 ring-foreground/15'
+                shown === swatch ? 'ring-2 ring-foreground' : 'ring-1 ring-foreground/15'
               }`}
               style={{ backgroundColor: swatch }}
               onClick={() => {
-                setDraft(null);
-                commit(swatch);
-                setOpen(false);
+                setDraft(swatch);
+                setPaletteTick((n) => n + 1);
               }}
             />
           ))}
