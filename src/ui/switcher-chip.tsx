@@ -8,7 +8,18 @@ import { focusRing } from './tokens';
  * 토글 상태를 표현하는 Chip과 달리 "지금 보고 있는 것"의 선택을 표현한다.
  */
 const switcherChip = cva(
-  `flex w-full shrink-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-xs whitespace-nowrap transition-colors ${focusRing}`,
+  /*
+   * `text-start`가 **버튼의 UA 기본 `text-align: center`를 되돌린다.**
+   *
+   * 이 칩은 `flex`라 자식들의 자리는 flex가 정하지만, `text-align`은 그 아래로 상속된다 —
+   * 폭을 채우는 텍스트 자식이 생기는 순간 글자가 가운데로 간다. 실제로 프로필 이름에
+   * `w-full`이 붙자(잘림을 성립시키려면 폭이 매여야 한다) 글자가 상자 왼쪽 128px이 아니라
+   * 163.84px에서 시작했다(실측).
+   *
+   * 이름 쪽에만 고치지 않는 이유: 다음에 폭을 채우는 텍스트를 넣는 사람이 같은 자리를
+   * 다시 밟는다. `left`가 아니라 `start`인 것은 방향을 문서에 맡기기 위해서다.
+   */
+  `flex w-full shrink-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-start text-xs whitespace-nowrap transition-colors ${focusRing}`,
   {
     variants: {
       /*

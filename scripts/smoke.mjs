@@ -2157,6 +2157,29 @@ try {
       };
     });
 
+    /*
+     * **이름 글자가 왼쪽에서 시작한다.**
+     *
+     * 칩은 `<button>`이고 버튼의 UA 기본은 `text-align: center`다. 그 값은 아래로 상속되므로
+     * **폭을 채우는 텍스트 자식이 생기는 순간** 글자가 가운데로 간다 — 이름에 `w-full`이
+     * 붙자(잘림을 성립시키려면 폭이 매여야 한다) 글자가 상자 왼쪽 128px이 아니라 163.84px에서
+     * 시작했다(실측, 사용자 보고).
+     *
+     * 상자가 아니라 **글자의 좌표**를 잰다: span이 폭을 채우므로 상자 좌표는 정렬을 말하지
+     * 못한다. `Range`가 그리는 사각형이 실제로 그려진 글자의 자리다.
+     */
+    const nameAlignment = await popup.evaluate(() => {
+      const name = document.querySelector('[data-profile-list] li [data-profile-name]');
+      if (!name?.firstChild) return null;
+      const range = document.createRange();
+      range.selectNodeContents(name);
+      return {
+        box: Math.round(name.getBoundingClientRect().left * 100) / 100,
+        glyph: Math.round(range.getBoundingClientRect().left * 100) / 100,
+      };
+    });
+    const nameStartsAtLeft = nameAlignment !== null && Math.abs(nameAlignment.glyph - nameAlignment.box) < 1;
+
     // 더블클릭이 편집을 연다 — 연필과 **같은 것**을 연다(같은 입력이 뜬다).
     await popup.locator('[data-profile-list] li [data-profile-name]').first().dblclick();
     const dblOpensEditor = await popup
@@ -2169,14 +2192,16 @@ try {
     await popup.getByLabel('Profile name').press('Escape');
 
     record(
-      'N3c: 커서가 동작과 일치한다(스와치 pointer · 이름 text · 선택된 칩 default) + 이름 더블클릭이 편집을 연다',
+      'N3c: 커서가 동작과 일치하고 이름 글자가 왼쪽에서 시작하며 더블클릭이 편집을 연다',
       cursors.swatch === 'pointer' &&
         cursors.name === 'text' &&
         cursors.selectedChipPad === 'default' &&
         cursors.otherChipPad === 'pointer' &&
+        nameStartsAtLeft &&
         dblOpensEditor,
       `스와치=${cursors.swatch}, 이름=${cursors.name}, 선택된칩=${cursors.selectedChipPad}, ` +
-        `비선택칩=${cursors.otherChipPad}, 더블클릭 편집=${dblOpensEditor}`,
+        `비선택칩=${cursors.otherChipPad}, 이름 글자 ${nameAlignment?.glyph}/상자 ${nameAlignment?.box}, ` +
+        `더블클릭 편집=${dblOpensEditor}`,
     );
   }
 
