@@ -1281,7 +1281,7 @@ try {
   await popup.getByRole('button', { name: 'Pause' }).click();
   await pollSessionRuleCount(sw, 0);
   const pausedToast = await popup
-    .getByText('Paused. No modifications are applied right now.', { exact: true })
+    .getByText('Paused — no modifications applied.', { exact: true })
     .first()
     .waitFor({ timeout: 5000 })
     .then(
@@ -1290,7 +1290,7 @@ try {
     );
   // 배너였다면 `AlertBanner`가 그 문구를 들고 서 있다 — 토스트는 잠시 뒤 스스로 사라진다.
   const bannerGone = await pollUntil(
-    () => popup.getByText('Paused. No modifications are applied right now.').count(),
+    () => popup.getByText('Paused — no modifications applied.').count(),
     (n) => n === 0,
     12_000,
     500,
@@ -1299,8 +1299,7 @@ try {
   await popup.reload();
   await popup.getByRole('button', { name: 'Resume' }).waitFor({ timeout: 5000 });
   await popup.waitForTimeout(700);
-  const quietOnReopen =
-    (await popup.getByText('Paused. No modifications are applied right now.').count()) === 0;
+  const quietOnReopen = (await popup.getByText('Paused — no modifications applied.').count()) === 0;
   await popup.getByRole('button', { name: 'Resume' }).click();
   await pollSessionRuleCount(sw, 1);
 
