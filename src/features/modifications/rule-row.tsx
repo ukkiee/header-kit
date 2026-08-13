@@ -1,5 +1,5 @@
 import { Check, Pencil, Regex, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useArmedConfirm } from '@/ui/use-armed-confirm';
 import type { Modification } from '@/core/schema';
 import { IconButton } from '@/ui/icon-button';
 import { ToggleSwitch } from '@/ui/toggle-switch';
@@ -38,6 +38,11 @@ export interface RuleRowProps {
   onToggleEnabled: (enabled: boolean) => void;
   onEdit: () => void;
   onRemove: () => void;
+  /**
+   * 목록에서 이 행이 선 **자리**. 바뀌면 삭제 무장이 풀린다 — 근거는 `useArmedConfirm`이
+   * 적는다. 목록 밖에서 홀로 그리는 카드(새 규칙 폼)는 넘기지 않아도 된다.
+   */
+  index?: number;
 }
 
 /**
@@ -55,25 +60,32 @@ export function RuleRow({
   onToggleEnabled,
   onEdit,
   onRemove,
+  index,
 }: RuleRowProps) {
   const t = useT();
-  // 되물음은 행마다 따로다 — 목록이 들면 어느 행이 무장했는지를 위에서 배선해야 한다.
-  const [confirming, setConfirming] = useState(false);
+  /*
+   * 되물음은 **행마다 따로**이고, 그 무장은 이 행의 **자리**에 매인다.
+   *
+   * `index`를 훅에 넘기는 것이 좌표 함정을 닫는 유일한 자리다: 무장한 행이 hoist나 다른
+   * 표면의 삭제로 위치를 옮기면 그 체크 버튼이 **다른 규칙의 삭제 버튼이 있던 좌표**로
+   * 들어오고, 그 자리를 한 번 누른 클릭이 엉뚱한 규칙을 지운다(실측). 자리가 바뀌면
+   * 무장부터 푼다.
+   */
+  const confirm = useArmedConfirm(index);
   const view = ruleView(modification, t);
   // 꺼졌거나 전역 정지 중이면 제목·뱃지가 흐려진다 — 지금 걸리는 규칙과 구별하기 위해서다.
   const dim = !modification.enabled || paused;
 
+  /*
+   * 행 구성이 **프로필 행과 같아졌다** (사용자 결정): 왼쪽부터 그립(카드가 든다) · 내용 ·
+   * 편집·삭제 · 켬/끔 스위치. 예전에는 스위치가 맨 왼쪽에 있고 편집·삭제만 오른쪽이었다.
+   *
+   * 두 목록이 같은 자리에 같은 것을 두는 값이 그 근거다 — 사이드바에서 배운 "오른쪽 끝이
+   * 켬/끔, 그 왼쪽이 손대는 것"이 본문에서도 그대로 통한다. 세로 정렬도 `items-center`로
+   * 바뀐다: 스위치가 제목 줄에 매여 있을 이유가 없어졌고, 그립이 이미 중앙에 선다.
+   */
   return (
-    <div className="group flex items-start gap-2.5 py-2">
-      {/* 스위치는 제목 줄 높이에 맞춘다 — 상단정렬 행에서 baseline 보정. */}
-      <div className="mt-0.5">
-        <ToggleSwitch
-          checked={modification.enabled}
-          onCheckedChange={onToggleEnabled}
-          aria-label={t('ariaEnableModification')}
-        />
-      </div>
-
+    <div className="flex items-center gap-2.5 py-2">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           <span className={`truncate text-sm font-medium ${dim ? 'text-muted-foreground' : ''}`}>
@@ -100,27 +112,50 @@ export function RuleRow({
       </div>
 
       {/*
-        편집·삭제는 **평소에도 보인다**(ui-review UI-03). 예전에는 opacity-0이라 호버 전에는
-        존재 자체가 드러나지 않았고, 규칙 편집이 이 앱의 핵심 동작인데 그 경로를 우연히
-        발견해야 했다 — 터치·펜에는 호버가 아예 없다.
+        편집·삭제는 **행에 닿아야 나타난다** (사용자 결정 — 프로필 행과 같은 규약).
 
-        그렇다고 완전히 또렷하게 두면 읽기 모드의 소음이 된다(ADR 0006의 "읽기 요약 행"
-        의도). 그래서 기본은 60%로 낮춰 존재만 알리고, 호버·포커스에서 100%가 된다.
+        예전에는 평소에도 60%로 보였다(ui-review UI-03). 그 근거는 "규칙 편집이 이 앱의 핵심
+        동작인데 경로를 우연히 발견해야 한다"였는데, 두 목록이 다른 규약을 쓰는 값을 치르고
+        있었다 — 사이드바에서 배운 것이 본문에서 통하지 않는다. 발견 문제는 **연필이 사라진
+        것이 아니라 행에 닿으면 선다**로 풀린다(호버·포커스 둘 다 건다: 호버로만 드러내면
+        키보드·터치에서는 도달할 수 없는 버튼이 된다).
 
-        **폼이 열려 있는 동안은 예외다**: 눌린 상태를 흐리게 두면 어느 행이 열려 있는지
-        아이콘만 봐서는 알 수 없어 story 4가 성립하지 않는다.
+        **폼이 열려 있거나 삭제가 무장한 동안은 예외다**: 그때 흐려지면 지금 무엇을 하는
+        중인지가 화면에서 반쯤 사라진다.
       */}
       <div
-        className={`flex shrink-0 items-center gap-1 self-center transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 ${
-          editing || confirming ? 'opacity-100' : 'opacity-60'
+        className={`flex shrink-0 items-center gap-1 transition-opacity ${
+          editing || confirm.armed
+            ? 'opacity-100'
+            : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
         }`}
+        /*
+         * 마우스가 떠나면 무장을 푼다 — **마우스일 때만.** 펜은 버튼을 떠나도 `pointerleave`가
+         * 오지 않고(실측), 터치는 `pointerup` 직후에 와서 무장과 실행 사이에 떨어진다. 그 둘까지
+         * 이 핸들러에 맡기면 2단 확인이 스케줄링 순서에 매달린다. 나머지 입력 방식의 바닥은
+         * 훅의 시간 초과가 깐다.
+         */
+        onPointerLeave={(event) => {
+          if (event.pointerType === 'mouse') confirm.disarm();
+        }}
+        onBlur={(event) => {
+          // 연필과 휴지통 **사이**의 포커스 이동은 떠난 것이 아니다.
+          const next = event.relatedTarget;
+          if (next instanceof Node && event.currentTarget.contains(next)) return;
+          confirm.disarm();
+        }}
       >
         <IconButton
           label={t('edit')}
           icon={Pencil}
           aria-pressed={editing}
           className={editing ? 'bg-secondary text-foreground' : ''}
-          onClick={onEdit}
+          // 같은 행의 다른 조작은 삭제 무장을 푼다 — 두 가지가 동시에 무장해 있지 않게 한다
+          // (프로필 행의 `openRename`이 같은 규약이다).
+          onClick={() => {
+            confirm.disarm();
+            onEdit();
+          }}
         />
         {/*
           삭제는 **두 번 눌러야 지워진다** (ADR 0017 재개정, ui-refine 07을 뒤집는다).
@@ -128,30 +163,26 @@ export function RuleRow({
           2단 확인인데 규칙 삭제만 달랐고, 규약이 갈리면 어느 클릭이 되돌릴 수 없는지를
           매번 다시 배워야 한다. 아이콘이 **모양으로도** 바뀐다(휴지통 → 체크).
 
-          **여기에는 포인터가 떠나면 풀리는 장치가 없다** — 프로필 행과 갈리는 자리이고,
-          그 근거는 삭제 아이콘이 **늘 보인다**는 것이다(ui-review UI-03). 프로필 쪽이 그
-          장치를 두는 이유는 버튼이 평소에 숨기 때문이다: 무장한 채 **보이지 않는** 행이
-          남으면 다음에 우연히 닿은 한 번의 클릭이 지운다. 여기서는 무장이 체크 아이콘으로
-          화면에 서 있으므로 숨은 덫이 되지 않는다 — 백업 히스토리 행이 같은 이유로 같다.
-
-          되물음은 **행마다 따로**다. 둘을 무장해도 각자의 아이콘이 체크로 서 있어, 다음
-          클릭이 무엇을 지울지가 그 아이콘 위치로 읽힌다.
+          무장이 스스로 풀리는 규약과 그 근거는 `useArmedConfirm`이 갖는다.
         */}
         <IconButton
-          label={confirming ? t('ariaConfirmDeleteRule') : t('menuDelete')}
-          tooltip={confirming ? t('confirmDeleteRule') : t('menuDelete')}
-          icon={confirming ? Check : Trash2}
+          label={confirm.armed ? t('ariaConfirmDeleteRule') : t('menuDelete')}
+          tooltip={confirm.armed ? t('confirmDeleteRule') : t('menuDelete')}
+          icon={confirm.armed ? Check : Trash2}
           tone="danger"
-          onClick={() => {
-            if (!confirming) {
-              setConfirming(true);
-              return;
-            }
-            setConfirming(false);
-            onRemove();
-          }}
+          onClick={() => confirm.press(onRemove)}
         />
       </div>
+
+      {/* 켬/끔은 **오른쪽 끝**이다 — 프로필 행과 같은 자리(사용자 결정). */}
+      <ToggleSwitch
+        checked={modification.enabled}
+        onCheckedChange={(enabled) => {
+          confirm.disarm();
+          onToggleEnabled(enabled);
+        }}
+        aria-label={t('ariaEnableModification')}
+      />
     </div>
   );
 }

@@ -1258,12 +1258,49 @@ try {
   await seedProfiles([baseProfile('p-ux', 'Ux', [hdr({ id: 'm1', name: 'X-Ux', value: '1' })])]);
   await pollSessionRuleCount(sw, 1);
   await popup.reload();
+  /*
+   * 정지를 켜는 **그 순간**에 토스트가 한 번 뜨고, 전폭 경고 배너는 **없다** (사용자 결정).
+   *
+   * 배너는 정지 내내 자리를 차지했다 — 정지는 끝나는 시점이 정해지지 않은 상태라 그 자리가
+   * 영구였다. 정지를 말하는 채널은 그것 말고도 넷이다(재생 아이콘 + 눌린 면 · 흐려진 헤더
+   * 제목 · 상태 요약의 낱말 · 프로필 행 메타). 배너만이 하던 일은 **바뀌는 순간을 알리는
+   * 것**이고 그건 한 번이면 된다.
+   *
+   * 둘을 함께 잰다. 토스트만 재면 배너가 남아 있어도 초록이고, 배너 부재만 재면 아무것도
+   * 알리지 않는 상태가 통과한다. 그리고 **다시 열면 토스트가 없다**는 것까지 본다 — 첫
+   * 관측은 전이가 아니므로, 이미 정지 중인 화면을 열 때마다 쪽지가 뜨면 그건 배너의 재발이다.
+   */
   await popup.getByRole('button', { name: 'Pause' }).click();
   await pollSessionRuleCount(sw, 0);
+  const pausedToast = await popup
+    .getByText('Paused. No modifications are applied right now.', { exact: true })
+    .first()
+    .waitFor({ timeout: 5000 })
+    .then(
+      () => true,
+      () => false,
+    );
+  // 배너였다면 `AlertBanner`가 그 문구를 들고 서 있다 — 토스트는 잠시 뒤 스스로 사라진다.
+  const bannerGone = await pollUntil(
+    () => popup.getByText('Paused. No modifications are applied right now.').count(),
+    (n) => n === 0,
+    12_000,
+    500,
+  );
+  // 이미 정지 중인 화면을 다시 열면 알리지 않는다 — 계속되던 상태이지 방금 일어난 일이 아니다.
+  await popup.reload();
+  await popup.getByRole('button', { name: 'Resume' }).waitFor({ timeout: 5000 });
+  await popup.waitForTimeout(700);
+  const quietOnReopen =
+    (await popup.getByText('Paused. No modifications are applied right now.').count()) === 0;
+  await popup.getByRole('button', { name: 'Resume' }).click();
+  await pollSessionRuleCount(sw, 1);
+
   record(
-    'L1: Pause 단축키 등록 + set-paused가 전체 중단',
-    shortcutRegistered,
-    `toggle-pause 등록=${shortcutRegistered}, 규칙=0`,
+    'L1: Pause 단축키 등록 + set-paused가 전체 중단 · 정지는 토스트로 한 번만 알린다(배너 없음)',
+    shortcutRegistered && pausedToast && bannerGone === 0 && quietOnReopen,
+    `toggle-pause 등록=${shortcutRegistered}, 규칙=0, 토스트=${pausedToast}, ` +
+      `남은 문구=${bannerGone}, 다시 열 때 조용함=${quietOnReopen}`,
   );
 
   /*
@@ -2883,7 +2920,7 @@ try {
   await waitFormClosed();
   const editIcon = popup.getByRole('button', { name: 'Edit', exact: true }).first();
   const iconOpacity = () => editIcon.evaluate((el) => getComputedStyle(el.parentElement).opacity);
-  const row = popup.locator('.group').filter({ has: editIcon }).first();
+  const row = popup.locator('[data-rule-card]').filter({ has: editIcon }).first();
   const opacityIdle = await iconOpacity();
   await row.hover();
   const opacityRowHover = await pollUntil(iconOpacity, (v) => v === '1', 3000, 100);
@@ -2903,7 +2940,16 @@ try {
    * 페이지 전역에서 첫 스위치를 잡으면 프로필 열의 토글이라, 거기서 Tab 해도 이 행의 편집
    * 아이콘에 닿지 않는다.
    */
-  await row.getByRole('switch').first().focus();
+  /*
+   * 시작점이 **그립**이다. 예전에는 그 행의 스위치에서 Tab 했는데, 스위치가 행의 맨 왼쪽에
+   * 있어 다음 초점이 편집 아이콘이었기 때문이다. 지금은 스위치가 **오른쪽 끝**이라(프로필
+   * 행과 같은 자리) 거기서 Tab 하면 다음 행으로 넘어간다. 카드 안의 초점 순서는
+   * 그립 → 편집 → 삭제 → 스위치다.
+   */
+  await row
+    .getByRole('button', { name: /^Reorder / })
+    .first()
+    .focus();
   await popup.keyboard.press('Tab');
   const tooltipOnFocus = await popup
     .getByRole('tooltip')
@@ -2913,15 +2959,20 @@ try {
       () => true,
       () => false,
     );
-  // 계약이 바뀌었다 — 예전에는 idle이 **0**(호버 전에는 아예 안 보임)이었다. 그때는
-  // 편집·삭제가 존재한다는 사실 자체를 호버로만 알 수 있었고, 호버가 없는 입력(터치·펜)과
-  // 처음 쓰는 사용자에게는 규칙 편집 경로가 발견 불가였다 (ui-review UI-03).
-  //
-  // 이제 기본 0.6으로 존재만 알리고 호버·포커스에서 1이 된다. **0이 아니라는 것**이 계약의
-  // 핵심이라 값을 그대로 못박는다 — 다시 0으로 돌아가면 여기서 실패한다.
+  /*
+   * **계약이 다시 뒤집혔다** (사용자 결정) — 규칙 행의 편집·삭제는 이제 **프로필 행과 같이**
+   * 행에 닿아야 나타난다(idle 0).
+   *
+   * 이 자리는 그 반대를 쟀었다. ui-review UI-03이 idle 0을 0.6으로 올린 근거는 "규칙 편집이
+   * 핵심 동작인데 호버로만 발견된다"였는데, 그 대가로 두 목록의 규약이 갈렸다 — 사이드바에서
+   * 배운 것이 본문에서 통하지 않는다. 발견 문제는 호버·포커스 **둘 다** 거는 것으로 남고
+   * (키보드·터치에서 도달 불가가 되지 않는다), 값이 0이라는 것이 지금의 계약이다.
+   *
+   * 값을 그대로 못박는 이유는 그대로다: 규약이 또 갈리면 여기서 먼저 빨강이 난다.
+   */
   record(
-    'N17a: 행 액션 — 평소 은은히 보이고 호버·포커스에 또렷 + 아이콘 툴팁',
-    opacityIdle === '0.6' && opacityRowHover === '1' && tooltipOnHover && tooltipOnFocus,
+    'N17a: 행 액션 — 행에 닿아야 나타나고(프로필 행과 같은 규약) 아이콘 툴팁이 호버·포커스에 열린다',
+    opacityIdle === '0' && opacityRowHover === '1' && tooltipOnHover && tooltipOnFocus,
     `idle=${opacityIdle}, row-hover=${opacityRowHover}, tooltip-hover=${tooltipOnHover}, tooltip-focus=${tooltipOnFocus}`,
   );
 
@@ -3527,6 +3578,75 @@ try {
       'N20b: 되물음은 행마다 따로 — 한 행을 무장해도 옆 행의 한 번 클릭은 지우지 않는다',
       armedCount === 1 && stillPlain === 1 && rulesLeft === 2,
       `무장한 행=${armedCount}, 평상 행=${stillPlain}, 남은 규칙=${rulesLeft}`,
+    );
+  }
+
+  // 이 시나리오의 지역 이름을 블록으로 닫는다 — 스모크 본문은 한 스코프라 이름이 겹친다.
+  {
+    /*
+     * N20c: **무장은 스스로 풀린다** — 자리가 바뀌면, Escape를 누르면, 시간이 지나면.
+     *
+     * 이 셋이 없던 시절의 결함이 사용자 보고로 들어왔고("한 번 누르고 끝까지 안 누르면 계속
+     * 무장"), 조사에서 그 대가가 **덫**이라는 것이 실측으로 드러났다: 무장한 행에서 다른 행의
+     * 편집을 열면 hoist가 순서를 바꿔 그 체크 버튼이 y=170에서 y=811로(팝업은 580px) 밀려나고,
+     * 다른 표면이 앞 규칙을 지우면 무장한 체크가 **다른 규칙의 삭제 버튼이 있던 좌표로 들어와**
+     * 한 번의 클릭이 엉뚱한 규칙을 지웠다.
+     *
+     * 그래서 셋을 **함께** 잰다. 자리 이동 해제만이 그 덫을 닫고, 시간 초과만이 입력 방식을
+     * 가리지 않으며(펜은 `pointerleave`가 아예 오지 않는다 — 실측), Escape는 알고 누르는
+     * 사람에게 즉시 길을 준다. 하나라도 빠지면 남는 구멍이 서로 다르다.
+     */
+    await seedProfiles([
+      baseProfile('p-dis', 'Dis', [
+        hdr({ id: 'm1', name: 'X-Dis-1', value: '1' }),
+        hdr({ id: 'm2', name: 'X-Dis-2', value: '2' }),
+      ]),
+    ]);
+    await popup.reload();
+    // 지연 청크 도착을 기다린다 — 도착이 행을 리마운트해 무장을 지운다(N20a와 같은 배리어).
+    await popup.waitForSelector('[data-rule-list="sortable"]', { timeout: 10_000 });
+    const armedCount = () => popup.getByRole('button', { name: 'Confirm delete', exact: true }).count();
+    const arm = async () => {
+      await popup.getByRole('button', { name: 'Delete', exact: true }).first().click();
+      await popup
+        .getByRole('button', { name: 'Confirm delete', exact: true })
+        .first()
+        .waitFor({ timeout: 5000 });
+    };
+
+    // (a) **자리가 바뀌면 풀린다.** 다른 행의 편집을 열면 그 규칙이 맨 위로 hoist된다.
+    await arm();
+    await popup.getByRole('button', { name: 'Edit', exact: true }).nth(1).click();
+    const afterHoist = await pollUntil(armedCount, (n) => n === 0, 5000, 100);
+    // 폼을 닫아 원래 순서로 되돌린다 — 다음 갈래가 같은 조건에서 시작해야 한다.
+    await popup.getByRole('button', { name: 'Cancel' }).click();
+    await pollUntil(
+      () => popup.getByRole('button', { name: 'Cancel' }).count(),
+      (n) => n === 0,
+      5000,
+      100,
+    );
+
+    // (b) **Escape가 푼다.**
+    await arm();
+    await popup.keyboard.press('Escape');
+    const afterEscape = await pollUntil(armedCount, (n) => n === 0, 5000, 100);
+
+    // (c) **시간이 지나면 스스로 풀린다.** 값을 여기 세지 않는다 — 라벨이 평상으로 돌아오는
+    // 것을 관측으로 기다린다(맨 `waitForTimeout`은 관측이 아니라 가정이다).
+    await arm();
+    const afterTimeout = await pollUntil(armedCount, (n) => n === 0, 25_000, 500);
+
+    // 셋 어느 경로로도 규칙은 지워지지 않았다 — 해제는 **안전한 쪽으로만** 되돌린다.
+    const rulesLeft = await sw.evaluate(async () => {
+      const { state } = await chrome.storage.local.get('state');
+      return state.profiles[0].modifications.length;
+    });
+
+    record(
+      'N20c: 무장은 스스로 풀린다 — 자리 이동·Escape·시간 초과 셋 다, 그리고 아무것도 지우지 않는다',
+      afterHoist === 0 && afterEscape === 0 && afterTimeout === 0 && rulesLeft === 2,
+      `자리이동 뒤=${afterHoist}, Escape 뒤=${afterEscape}, 시간초과 뒤=${afterTimeout}, 남은 규칙=${rulesLeft}`,
     );
   }
 
@@ -5572,9 +5692,10 @@ try {
 
   // 펼쳐진 카드의 테두리·배경이 접힌 카드와 다르다 (story 6) — 둘 다 달라야 한다.
   const cardStyles = await popup.evaluate(() => {
-    const cards = [...document.querySelectorAll('[class*="rounded-lg"][class*="border"]')].filter((el) =>
-      el.querySelector('.group'),
-    );
+    // 카드는 **표지로** 집는다(`data-rule-card`) — 예전에는 `.group`을 품은 `rounded-lg
+    // border` 요소로 집었는데, 그 클래스가 행에서 카드로 옮겨 가자 선택자가 빈 배열을
+    // 돌려주며 이 검사가 조용히 무음이 됐다(실측). 스타일 클래스는 구조 표지가 아니다.
+    const cards = [...document.querySelectorAll('[data-rule-card]')];
     return cards.map((el) => {
       const cs = getComputedStyle(el);
       return { border: cs.borderTopColor, bg: cs.backgroundColor };
@@ -7051,6 +7172,37 @@ try {
   const survivedFirstClick =
     stateAfterFirst.profiles.some((p) => p.name === RESET_MARKER) && dumpAfterFirst.includes(RESET_MARKER);
 
+  /*
+   * **되물음은 이 패널에서도 하나뿐이고, 스스로 풀린다.**
+   *
+   * 예전에는 행 삭제·클라우드 삭제·전체 초기화가 각자 상태를 들어 **셋이 동시에 무장할 수
+   * 있었다**(실측: "전부 지울까요?"와 "클라우드에서 지울까요?"가 나란히 선 화면). 지금은 슬롯
+   * 하나라 다른 것을 무장시키면 앞의 것이 풀린다 — 다음 클릭이 무엇을 실행할지 화면에 선
+   * 되물음 하나가 답한다.
+   *
+   * 클라우드 삭제 버튼은 잔재가 없으면 `disabled`라 누를 수 없다. 그때는 이 갈래를 재지 못하고,
+   * **잰 척하지 않는다** — 아래 증거 문자열이 눌렀는지 여부를 그대로 적는다.
+   */
+  const cloudButton = popup.getByRole('button', { name: 'Delete cloud backups' });
+  const cloudPressable = await cloudButton.isEnabled();
+  let slotHoldsOne = null;
+  if (cloudPressable) {
+    await cloudButton.click();
+    slotHoldsOne =
+      (await popup.getByRole('button', { name: 'Delete from cloud?' }).count()) === 1 &&
+      (await popup.getByRole('button', { name: 'Erase everything?' }).count()) === 0;
+    // 초기화를 다시 무장한다 — 아래 2단계가 그 상태에서 이어진다.
+    await popup.keyboard.press('Escape');
+    await pollUntil(
+      () => popup.getByRole('button', { name: 'Delete from cloud?' }).count(),
+      (n) => n === 0,
+      5000,
+      100,
+    );
+    await popup.getByRole('button', { name: 'Reset everything' }).click();
+    await popup.getByRole('button', { name: 'Erase everything?' }).waitFor({ timeout: 5000 });
+  }
+
   // 2단계: 확인 클릭에서만 실행된다.
   await popup.getByRole('button', { name: 'Erase everything?' }).click();
   const stateAfterConfirm = await pollUntil(readState, (s) => s?.profiles?.length === 1, 15000, 200);
@@ -7073,10 +7225,14 @@ try {
     'N39: 2단계 전체 초기화 — 확인 전에는 무사, 확인 후 상태·두 저장소의 백업이 비워진다',
     confirmVisible &&
       survivedFirstClick &&
+      // 못 잰 경우(`null`)는 통과시키되 아래 증거가 그 사실을 적는다 — 재지 않은 것을
+      // 초록으로 세지 않고, 잰 경우에 거짓이면 여기서 빨강이 난다.
+      slotHoldsOne !== false &&
       defaults &&
       !dumpAfterConfirm.includes(RESET_MARKER) &&
       rulesAfter === 0,
     `1클릭: 확인버튼=${confirmVisible}, 표식 생존=${survivedFirstClick} · ` +
+      `되물음 슬롯 하나=${slotHoldsOne === null ? '못 잼(클라우드 버튼 비활성)' : slotHoldsOne} · ` +
       `2클릭: 프로필 ${stateAfterConfirm.profiles.length}개(${stateAfterConfirm.profiles[0]?.name}), ` +
       `theme=${stateAfterConfirm.theme}, badge=${stateAfterConfirm.badgeVisible}, sync=${stateAfterConfirm.syncBackup}, ` +
       `표식 잔재=${dumpAfterConfirm.includes(RESET_MARKER)}, 세션 규칙=${rulesAfter}`,

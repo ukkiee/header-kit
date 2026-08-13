@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { IconButton, IconTooltipProvider } from '@/ui/icon-button';
 import { MotionProvider } from '@/ui/motion-provider';
 import { MotionView } from '@/ui/motion-view';
@@ -100,6 +100,40 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
 
   const toast = useToastManager();
 
+  /*
+   * 언어 판단을 **이른 반환보다 위로** 올린다 — 아래 정지 토스트가 상태가 없는 동안에도
+   * 걸려 있어야 하고(훅은 조건부로 부를 수 없다), 그 토스트가 카탈로그를 거쳐야 하기 때문이다.
+   * 저장된 선호가 아직 없으면 `pickLocale`이 브라우저 UI 언어로 떨어진다.
+   */
+  const locale = pickLocale(localeSources.override, state?.locale, localeSources.uiLanguage);
+
+  /**
+   * 정지가 **켜지는 순간에 한 번** 알린다 (사용자 결정 — 전폭 경고 배너를 대신한다).
+   *
+   * 배너는 정지 내내 자리를 차지했다. 정지는 끝나는 시점이 정해지지 않은 상태라 그 자리가
+   * 영구였는데, 정지를 말하는 채널은 그것 말고도 넷이 더 있다(일시정지 버튼의 재생 아이콘과
+   * 눌린 면 · 흐려진 헤더 제목 · 상태 요약의 `일시정지` 낱말 · 프로필 행 메타의 글리프와
+   * 낱말). 배너만이 하던 일은 **바뀌는 순간을 알리는 것**이고, 그것은 한 번이면 된다.
+   *
+   * **첫 관측은 전이가 아니다.** 이미 정지 중인 채로 팝업을 열면 토스트를 띄우지 않는다 —
+   * 그건 방금 일어난 일이 아니라 계속되던 상태이고, 위 넷이 이미 말하고 있다.
+   *
+   * **재개는 알리지 않는다.** 규칙이 다시 걸리는 것은 배지 수가 돌아오는 것으로 곧바로
+   * 보이고, 되돌아온 정상을 굳이 쪽지로 말할 이유가 없다.
+   *
+   * 단축키(`Alt+Shift+P`)로 켠 정지도 여기로 온다 — 화면이 열려 있으면 상태 변경이
+   * `onStateChanged`를 타고 도착하기 때문이다.
+   */
+  const wasPaused = useRef<boolean | null>(null);
+  const paused = state?.paused ?? null;
+  useEffect(() => {
+    if (paused === null) return;
+    const previous = wasPaused.current;
+    wasPaused.current = paused;
+    if (previous !== false || !paused) return;
+    toast.add({ title: t(locale, 'pausedNote') });
+  }, [paused, toast, locale]);
+
   if (!state)
     return loadError ? (
       <AlertBanner severity="danger" role="alert">
@@ -107,7 +141,6 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
       </AlertBanner>
     ) : null;
 
-  const locale = pickLocale(localeSources.override, state.locale, localeSources.uiLanguage);
   // 화면이 쓰는 언어와 **언어 칩이 짚는 값**은 다른 질문이다 — 칩은 오버라이드를 보지 않는다.
   const localePreference = pickLocalePreference(state.locale, localeSources.uiLanguage);
   const effectiveSelectedId = reconcileSelection(selectedId, state.profiles);
@@ -257,7 +290,12 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
    *
    * 정지 중 강조는 `variant="default"`(채운 파랑) 대신 **눌린 아이콘 버튼**으로 말한다 —
    * 규칙 행의 편집 아이콘이 폼을 연 동안 쓰는 그 표시와 같다(`aria-pressed` + 채운 면).
-   * 정지는 그 밖에도 두 곳에서 더 말한다: 전폭 경고 배너와 흐려진 헤더 제목.
+   *
+   * **전폭 경고 배너는 사라졌다** (사용자 결정). 정지는 끝나는 시점이 정해지지 않은 상태라
+   * 그 배너가 내내 자리를 차지했는데, 정지를 말하는 채널은 그것 말고도 넷이 더 있다:
+   * 이 버튼(재생 아이콘 + `aria-pressed` + 채운 면) · 흐려진 헤더 제목 · 상태 요약의
+   * `일시정지` 낱말 · 프로필 행 메타의 정지 글리프와 낱말. 배너가 하던 일 중 남는 것은
+   * **바뀌는 순간을 알리는 것**뿐이고, 그것은 토스트가 한 번 하면 된다(아래 effect).
    */
   const pauseButton = (
     <IconButton
@@ -301,7 +339,6 @@ export function App({ surface = 'popup' }: { surface?: AppSurface }) {
           </Button>
         </AlertBanner>
       )}
-      {state.paused && <AlertBanner severity="warn">{t(locale, 'pausedNote')}</AlertBanner>}
       {commandError && (
         <AlertBanner severity="danger" role="alert">
           {commandError}

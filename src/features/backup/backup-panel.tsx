@@ -22,6 +22,7 @@ import { IconButton } from '@/ui/icon-button';
 import { Pill } from '@/ui/pill';
 import { ToggleSwitch } from '@/ui/toggle-switch';
 import { useToastManager } from '@/ui/toast';
+import { useArmedConfirmSlot } from '@/ui/use-armed-confirm';
 import { useT } from '@/ui/i18n-context';
 
 export interface BackupPanelProps {
@@ -99,15 +100,16 @@ function resetFailureDetail(error: string | undefined, t: Translator): string {
 type CloudPresence = 'unknown' | 'present' | 'none';
 
 /**
- * 확인 중인 행과 동작 — **한 번에 하나뿐**이다 (티켓 12). 행마다 확인 상태를 따로 들면
- * 두 확인이 나란히 켜져, 다음 클릭이 무엇을 실행할지 화면만 봐서는 모른다. 하나만 담기
- * 때문에 다른 파괴적 동작을 켜는 것이 앞의 확인을 그대로 취소한다.
+ * 이 패널의 파괴적 동작 셋을 가리키는 값 — **한 무장을 셋이 나눠 갖는다.**
  *
- * **복원은 여기 없다.** 되물음 대신 실행 취소 토스트를 쓰기로 바뀌었기 때문이다(아래
- * `restore` 주석) — 남은 것은 삭제뿐이라 지금은 한 값짜리 유니온이지만, 두 번째 파괴적
- * 동작이 생기면 여기로 돌아온다.
+ * "한 번에 하나뿐"은 원래 히스토리 행들 사이에서만 참이었고, 클라우드 삭제와 전체 초기화는
+ * 각자 자기 상태를 들고 있어 **셋이 동시에 무장할 수 있었다**(실측: "전부 지울까요?"와
+ * "클라우드에서 지울까요?"가 나란히 선 화면). 슬롯 하나로 합치면 그 자리가 사라진다 —
+ * 다음 클릭이 무엇을 실행할지 화면에 선 되물음 하나가 답한다.
+ *
+ * **복원은 여기 없다.** 되물음 대신 실행 취소 토스트를 쓰기 때문이다(아래 `restore` 주석).
  */
-type Confirming = { id: string; action: 'delete' };
+type ConfirmTarget = `snapshot:${string}` | 'cloud' | 'reset';
 
 export function BackupPanel({
   syncBackup,
@@ -137,10 +139,14 @@ export function BackupPanel({
    */
   const toast = useToastManager();
   const [snapshots, setSnapshots] = useState<SnapshotStatus[]>([]);
-  const [confirming, setConfirming] = useState<Confirming | null>(null);
+  /**
+   * 되물음 하나 — 셋이 나눠 갖는다. 시간이 지나면 스스로 풀리고 Escape로도 풀린다
+   * (근거는 `useArmedConfirm`). 그 자동 해제가 없던 시절에는 무장한 채 잊힌 버튼이
+   * 무기한 남았고, 특히 탭 화면은 팝업과 달리 닫히지 않아 며칠을 살 수 있었다.
+   */
+  const confirm = useArmedConfirmSlot<ConfirmTarget>();
   const [error, setError] = useState<string | null>(null);
   const [cloudPresence, setCloudPresence] = useState<CloudPresence>('unknown');
-  const [confirmingClear, setConfirmingClear] = useState(false);
   /**
    * 알림은 **목록**이다 (티켓 02에서 이월).
    *
@@ -154,8 +160,6 @@ export function BackupPanel({
    * 남아 있어야 하고, 한 번의 복원이 여러 개를 낸다. 그래서 이것만 목록으로 남는다.
    */
   const [notices, setNotices] = useState<string[]>([]);
-  /** 전체 초기화의 2단계 확인 (R-3) — 파괴적이므로 한 번 더 눌러야 실행된다. */
-  const [confirmingReset, setConfirmingReset] = useState(false);
   /** 삭제 후 잔존 여부를 다시 읽게 하는 카운터 — 화면이 지운 사실을 스스로 확인한다. */
   const [cloudRevision, setCloudRevision] = useState(0);
 
@@ -180,11 +184,6 @@ export function BackupPanel({
   }, [loadCloudPresence, cloudRevision, target, snapshots]);
 
   const deleteCloud = async () => {
-    if (!confirmingClear) {
-      setConfirmingClear(true);
-      return;
-    }
-    setConfirmingClear(false);
     setNotices([]);
 
     const result = await settledMutation(clearCloud);
@@ -205,11 +204,6 @@ export function BackupPanel({
    * 사용자가 할 일은 "다시 누르기" 하나다(되돌리기가 아니다).
    */
   const resetEverything = async () => {
-    if (!confirmingReset) {
-      setConfirmingReset(true);
-      return;
-    }
-    setConfirmingReset(false);
     setNotices([]);
 
     const result = await onCommand({ type: 'full-reset' });
@@ -219,9 +213,8 @@ export function BackupPanel({
     void loadSnapshots(target).then(setSnapshots, (reason) => setError(reasonText(reason)));
   };
 
-  /** 이 행의 이 동작이 지금 확인 대기인가 — 다른 행·다른 동작이 켜지면 자동으로 거짓이 된다. */
-  const isConfirming = (entry: SnapshotStatus, action: Confirming['action']) =>
-    confirming?.id === entry.id && confirming.action === action;
+  /** 이 행이 지금 확인 대기인가 — 다른 행·다른 동작이 켜지면 슬롯이 하나라 저절로 거짓이 된다. */
+  const snapshotTarget = (entry: SnapshotStatus): ConfirmTarget => `snapshot:${entry.id}`;
 
   /**
    * 한 스냅샷만 지운다 (티켓 12) — 복원과 같은 2단계 확인을 거친다. 첫 클릭은 확인만 켜고,
@@ -229,11 +222,6 @@ export function BackupPanel({
    * 지워진 것처럼 사라지지 않는다.
    */
   const removeSnapshot = async (entry: SnapshotStatus) => {
-    if (!isConfirming(entry, 'delete')) {
-      setConfirming({ id: entry.id, action: 'delete' });
-      return;
-    }
-    setConfirming(null);
     // 앞선 복원의 공지를 먼저 지운다 — 남겨 두면 이번 실패 배너 옆에 지난 복원의 설명이
     // 그대로 서서, 이번 동작이 낸 말처럼 읽힌다.
     setNotices([]);
@@ -259,7 +247,7 @@ export function BackupPanel({
    * 이 패널은 그것을 보지 못한다 — 스냅샷을 쥔 쪽이 토스트도 띄우는 것이 맞다.
    */
   const restore = async (entry: SnapshotStatus) => {
-    setConfirming(null);
+    confirm.disarm();
     setNotices([]);
 
     const decoded = await loadSnapshotText(entry, target);
@@ -343,13 +331,13 @@ export function BackupPanel({
         {/* 클라우드 삭제는 스위치와 분리된 명시적 동작이다 — 자체 확인을 거친다. */}
         <div className="flex justify-end">
           <Button
-            variant={confirmingClear ? 'destructive' : 'ghost'}
+            variant={confirm.isArmed('cloud') ? 'destructive' : 'ghost'}
             size="sm"
             disabled={cloudPresence === 'none'}
-            aria-label={confirmingClear ? t('confirmDeleteCloudBackups') : t('deleteCloudBackups')}
-            onClick={() => void deleteCloud()}
+            aria-label={confirm.isArmed('cloud') ? t('confirmDeleteCloudBackups') : t('deleteCloudBackups')}
+            onClick={() => confirm.press('cloud', () => void deleteCloud())}
           >
-            {confirmingClear ? t('confirmDeleteCloudBackups') : t('deleteCloudBackups')}
+            {confirm.isArmed('cloud') ? t('confirmDeleteCloudBackups') : t('deleteCloudBackups')}
           </Button>
         </div>
       </SectionCard>
@@ -392,12 +380,16 @@ export function BackupPanel({
                     이름 둘은 바뀌지 않는다 — 스모크가 그 이름으로 이 버튼을 찾는다. */}
                 <IconButton
                   label={
-                    isConfirming(snapshot, 'delete') ? t('ariaConfirmDeleteBackup') : t('ariaDeleteBackup')
+                    confirm.isArmed(snapshotTarget(snapshot))
+                      ? t('ariaConfirmDeleteBackup')
+                      : t('ariaDeleteBackup')
                   }
-                  tooltip={isConfirming(snapshot, 'delete') ? t('confirmDeleteBackup') : t('menuDelete')}
-                  icon={isConfirming(snapshot, 'delete') ? Check : Trash2}
+                  tooltip={
+                    confirm.isArmed(snapshotTarget(snapshot)) ? t('confirmDeleteBackup') : t('menuDelete')
+                  }
+                  icon={confirm.isArmed(snapshotTarget(snapshot)) ? Check : Trash2}
                   tone="danger"
-                  onClick={() => void removeSnapshot(snapshot)}
+                  onClick={() => confirm.press(snapshotTarget(snapshot), () => void removeSnapshot(snapshot))}
                 />
               </li>
             ))}
@@ -412,12 +404,12 @@ export function BackupPanel({
         <p className="text-muted-foreground">{t('resetRetryNote')}</p>
         <div className="flex justify-end">
           <Button
-            variant={confirmingReset ? 'destructive' : 'ghost'}
+            variant={confirm.isArmed('reset') ? 'destructive' : 'ghost'}
             size="sm"
-            aria-label={confirmingReset ? t('confirmResetEverything') : t('resetEverything')}
-            onClick={() => void resetEverything()}
+            aria-label={confirm.isArmed('reset') ? t('confirmResetEverything') : t('resetEverything')}
+            onClick={() => confirm.press('reset', () => void resetEverything())}
           >
-            {confirmingReset ? t('confirmResetEverything') : t('resetEverything')}
+            {confirm.isArmed('reset') ? t('confirmResetEverything') : t('resetEverything')}
           </Button>
         </div>
       </SectionCard>
