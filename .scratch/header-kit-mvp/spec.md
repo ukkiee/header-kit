@@ -1,6 +1,6 @@
 # PRD: HeaderKit — 프로필 기반 HTTP 트래픽 수정 확장 (MVP)
 
-Status: ready-for-agent
+Status: done
 
 ## Problem Statement
 
