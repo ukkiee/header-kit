@@ -18,6 +18,7 @@
     "a11y-gate": "node scripts/a11y-gate.mjs",
     "core-line-budget": "node scripts/core-line-budget-gate.mjs",
     "overflow-gate": "node scripts/overflow-gate.mjs",
+    "truncation-gate": "node scripts/truncation-gate.mjs",
     "ui-perf": "node scripts/ui-perf.mjs",
     "test": "vitest run",
     "test:browser": "node scripts/browser-tests.mjs",

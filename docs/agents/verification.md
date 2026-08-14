@@ -66,6 +66,7 @@ bun run gate:ci           # CI가 도는 것과 정확히 같은 부분집합 �
 | `writer-lane-gate` | `bun run writer-lane-gate` | 레인 생성 자리 각 1 · 서비스워커 밖 번들에 표지 0 | hard | yes | build | never |
 | `manifest-gate` | `bun run manifest-gate` | 빌드된 매니페스트가 **게이트의 선언과 정확히 일치**: 최상위 키 집합 · 권한/호스트/선택 권한 목록 · MV3 · 최소 크롬 버전 · 프로덕션 CSP(`extension_pages`)에 `unsafe-eval` 없음 (선언의 정본은 스크립트). **"선언과 같다"를 증명하지 "이 표면이 옳다"를 증명하지 않는다** (후자는 `smoke`) | hard | yes | build | never |
 | `overflow-gate` | `bun run overflow-gate` | 최대 길이 이름을 심은 팝업에 **가로 오버플로 0px · 내부 가로 스크롤러 0개**. 훑기 전에 준비 표지 셋(심은 프로필이 전부 렌더 · 지연 목록 도착 · 폰트 적용)을 관측하고, 서지 않으면 **훑지 않고 FAIL** | hard | no — 실제 크롬을 띄운다 | build | never |
+| `truncation-gate` | `bun run truncation-gate` | **한 글자짜리 시드**로 띄운 팝업의 다섯 자리(프로필·백업·설정·규칙 폼·정지 토스트) × 두 로케일에서 **잘린 카탈로그 문구 0종**. 시드가 짧으므로 잘린 채 남는 것은 사용자 데이터가 아니라 앱이 스스로 하는 말이다. 준비 표지 셋은 `overflow-gate`와 같고, 서지 않으면 **훑지 않고 FAIL** | hard | no — 실제 크롬을 띄운다 | build | never |
 | `test-browser` | `bun run test:browser` | 이 집합의 픽스처 전부 통과. **집합의 정본은 이름 규약(`*.browser.test.mjs`)이고** 그 분류는 레지스트리의 `browser` 칸에서 파생된다 — 여기에 파일이나 개수를 세어 두지 않는다. 규약이 보수적이라 이 집합의 일부는 **실제로 브라우저를 띄우지 않는다**(인자 계약처럼 기동 전에 죽는 경로) | hard | no — 실제 크롬을 띄운다 | build | never |
 | `ui-perf` | `bun run ui-perf` | 팝업 시작 지표가 같은 기기 기준선 대비 상한 안. **자문 행 — 기준선 기기 밖에서는 완료를 가로막지 않는다** (수치는 기기 의존적이라 다른 기기의 빨강은 코드가 아니라 기기를 말한다) | advisory | no — 기기 기준선에 매여 러너 하드웨어가 바뀔 때마다 거짓 실패를 낸다 | build | never |
 | `smoke` | `bun run smoke` | 실브라우저 시나리오 전부 통과 | hard | no — 실제 크롬을 띄운다 | build | never |
@@ -699,6 +700,20 @@ exit 1이지만 상태 줄이 없고 스택 트레이스만 남는다(실측). �
 
 `overflow-gate`는 준비 표지 셋과 넘침 판정을 실제 브라우저 픽스처가 문다(`test-browser` 행이
 그것을 돌린다).
+
+`truncation-gate`도 같은 자리에 선다(`scripts/truncation-gate.browser.test.mjs`) — **변조 스윕의
+대상이 아니다.** 스윕은 `browser: no`인 게이트만 덮고, 이 게이트는 판정이 실제 렌더에 매여 있다.
+픽스처 여섯이 그 자리를 대신한다: 통과 · **문구를 길게 만들면 FAIL**(칸을 좁히는 것이 아니라
+카탈로그 문구 자체를 늘린다 — 앞의 것은 "스캐너가 돈다"만 증명한다) · 빈 화면이면 훑지 않고 FAIL ·
+폰트 부재 · **훑어야 할 자리에 닿지 못하면 FAIL**(정지 토스트는 직접 띄워야 서므로, 그 버튼을
+놓친 게이트가 나머지만 훑고 초록을 찍는 것을 이 픽스처가 막는다) · 산출물 부재.
+
+이 게이트가 잡을 수 있었던 결함 둘이 실제로 있었고 **둘 다 사람 눈이 유일한 방어였다**: 정지
+토스트가 `일시정지 중입니다. 지금은 어떤 수정도 적용되…`로 잘렸고, 프로필 행 메타의
+`0 rules · not applied`는 87px 칸에 107px을 요구해 **규칙 0개인 갓 만든 프로필이 처음부터**
+잘려 있었다. `overflow-gate`가 그것을 재지 못하는 이유는 구조적이다 — 그 게이트가 세는 것은 가로
+오버플로와 가로 스크롤러인데, `text-overflow: ellipsis`는 오버플로를 **흡수하는** 쪽이라 넘친
+문구가 그 판정에 나타나지 않는다.
 
 `smoke-barriers`에는 이제 판정을 뒤집는 픽스처가 있다(`scripts/audit-smoke-barriers.test.mjs`).
 이 감사는 **대상 파일을 인자로 받으므로** 실제 `smoke.mjs` 없이 관계를 하나씩 깨뜨릴 수 있다 —

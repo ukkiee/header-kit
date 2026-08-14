@@ -44,6 +44,7 @@ gate: bundle-gate      | bundle-gate      | hard     | yes | build | no  | token
 gate: writer-lane-gate | writer-lane-gate | hard     | yes | build | no  | token | never
 gate: manifest-gate    | manifest-gate    | hard     | yes | build | no  | token | never
 gate: overflow-gate    | overflow-gate    | hard     | no  | build | yes | token | never
+gate: truncation-gate  | truncation-gate  | hard     | no  | build | yes | token | never
 gate: test-browser     | test:browser     | hard     | no  | build | yes | exit  | never
 gate: ui-perf          | ui-perf          | advisory | no  | build | yes | token | never
 gate: smoke            | smoke            | hard     | no  | build | yes | token | never
