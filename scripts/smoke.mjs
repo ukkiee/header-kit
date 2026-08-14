@@ -1864,10 +1864,11 @@ try {
   /*
    * N1b: 사이드바 항목이 on/off 상태를 반영한다 (aria-label = 도트와 같은 소스).
    *
-   * 낱말이 `on`/`off`에서 `applied`/`not applied`로 바뀐 것은 티켓 04다 — 같은 낱말이
-   * 이제 행 메타에 **보이기도** 하므로, 이름과 보이는 라벨이 갈라지지 않게 한 벌만 쓴다.
+   * 낱말이 `on`/`off`에서 `applied`/`not applied`로 바뀐 것은 티켓 04이고, 꺼짐 쪽이 다시
+   * `off`로 돌아온 것은 **폭 때문**이다(`i18n.ts`의 그 주석이 수치를 갖는다). 같은 낱말이
+   * 행 메타에 **보이기도** 하므로, 이름과 보이는 라벨이 갈라지지 않게 한 벌만 쓴다.
    */
-  const betaOff = await popup.getByRole('button', { name: 'Select profile Beta (not applied)' }).isVisible();
+  const betaOff = await popup.getByRole('button', { name: 'Select profile Beta (off)' }).isVisible();
   await popup.getByRole('switch', { name: 'Toggle Beta' }).click();
   const betaOn = await popup
     .getByRole('button', { name: 'Select profile Beta (applied)' })
@@ -5656,7 +5657,7 @@ try {
         const meta = r.querySelector('[data-profile-meta]');
         /*
          * **메타가 이름 아래 줄에 선다** — 이름의 아래변보다 메타의 윗변이 아래다. 한 줄로
-         * 되돌리면 가장 긴 문구(`12 rules · not applied`)가 264px 열에서 이름을 예닐곱 자로
+         * 되돌리면 가장 긴 문구(`12 rules · paused`)가 264px 열에서 이름을 예닐곱 자로
          * 눌러 버리고, 목록에서 프로필을 짚는 단서가 바로 그 이름이다 (티켓 04).
          */
         const name = r.querySelector('[data-profile-name]');
@@ -5708,8 +5709,8 @@ try {
     'N41e: 프로필 행 — `N개 규칙 · 적용` + 정지 표시(형태·낱말·접근성 이름), 정지는 표시만',
     rowsRunning[0]?.aria === 'Select profile CountA (applied)' &&
       rowsRunning[0]?.mark === '2 rules · applied' &&
-      rowsRunning[1]?.aria === 'Select profile CountB (not applied)' &&
-      rowsRunning[1]?.mark === '0 rules · not applied' &&
+      rowsRunning[1]?.aria === 'Select profile CountB (off)' &&
+      rowsRunning[1]?.mark === '0 rules · off' &&
       rowsPaused.every((r) => r.glyph) &&
       rowsPaused[0]?.mark === '2 rules · paused' &&
       rowsPaused[1]?.mark === '0 rules · paused' &&

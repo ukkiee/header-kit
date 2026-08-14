@@ -80,8 +80,13 @@ describe('profileRowMetaText — 프로필 행 메타', () => {
     expect(profileRowMetaText(status({ enabledModificationCount: 1 }), at('ko'))).toBe('규칙 1개 · 적용');
   });
 
-  it('꺼진 프로필은 미적용이라 말한다', () => {
-    expect(profileRowMetaText(status({ state: 'off' }), at('en'))).toBe('3 rules · not applied');
+  /*
+   * en이 `not applied`가 아니라 `off`인 것은 **폭 때문**이다 — 87px 칸에 107px을 요구해
+   * 가장 흔한 상태 하나가 늘 잘려 있었다. 수치는 `i18n.ts`의 그 주석이 갖는다. ko는 자기
+   * 폭에 들어가므로 `미적용` 그대로다.
+   */
+  it('꺼진 프로필은 꺼졌다고 말한다', () => {
+    expect(profileRowMetaText(status({ state: 'off' }), at('en'))).toBe('3 rules · off');
     expect(profileRowMetaText(status({ state: 'off' }), at('ko'))).toBe('규칙 3개 · 미적용');
   });
 
@@ -105,7 +110,7 @@ describe('profileRowMetaText — 프로필 행 메타', () => {
 
   it('0도 그대로 말한다', () => {
     expect(profileRowMetaText(status({ enabledModificationCount: 0, state: 'off' }), at('en'))).toBe(
-      '0 rules · not applied',
+      '0 rules · off',
     );
   });
 });

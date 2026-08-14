@@ -337,7 +337,16 @@ const en = {
    * — 저장된 active는 그대로이고 표시만 정지다.
    */
   profileStateOn: 'applied',
-  profileStateOff: 'not applied',
+  /*
+   * **`not applied`가 아니라 `off`인 이유는 폭이다.** 메타가 서는 칸은 87px인데
+   * `0 rules · not applied`는 107px을 요구했다(실측) — 가장 흔한 상태 하나가 늘 잘려 있었다.
+   * 칩 좌우 여백을 8→6px로 줄여도 91px이라 여백으로는 닫히지 않고, `inactive`(89px)조차
+   * 2px 모자란다. `off`는 61px이라 규칙 수가 두 자리가 되어도(68px) 남는다.
+   *
+   * ko(`미적용`)는 자기 폭에 들어가므로 그대로다 — 로케일마다 글자 폭이 다르니 한쪽이
+   * 넘친다고 다른 쪽까지 줄일 이유가 없다.
+   */
+  profileStateOff: 'off',
   profileStatePaused: 'paused',
   /** 프로필 행 메타의 앞자리 — 그 프로필에 들어 있는 **켜진** 규칙 수 (스펙 story 42). */
   profileRule: '{count} rule',
